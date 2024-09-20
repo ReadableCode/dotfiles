@@ -1,0 +1,17 @@
+---
+- name: Add PPA
+  ansible.builtin.apt_repository:
+    repo: ppa:alessandro-strada/ppa
+    state: present
+  become: true
+
+- name: install google-drive-ocamlfuse (apt)
+  apt:
+    name: "google-drive-ocamlfuse"
+    state: present
+  become: yes
+
+- name: Create ~/GoogleDrive directory
+  file:
+    path: ~/GoogleDrive
+    state: directory

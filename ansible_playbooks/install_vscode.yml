@@ -1,0 +1,41 @@
+---
+- name: install dependencies (apt)
+  tasks:
+    - name: install dependencies
+      apt:
+        name:
+          - ca-certificates
+          - apt-transport-https
+          - gconf2
+          - libasound2
+          - libgtk2.0-0
+          - libxss1
+          - libxcb-dri3-0
+          - libdrm2
+          - libgbm1
+          - libxshmfence1
+        state: present
+      become: true
+
+    - name: install key (apt)
+      apt_key:
+        url: 'https://packages.microsoft.com/keys/microsoft.asc'
+        state: present
+      become: true
+
+    - name: install VS Code repo (apt)
+      become: yes
+      apt_repository:
+        repo: deb [arch=amd64] https://packages.microsoft.com/repos/code stable main
+        filename: vscode
+        state: present
+      become: true
+
+    - name: install VS Code (apt)
+      become: yes
+      apt:
+        name:
+          - code
+        state: latest
+        update_cache: true
+      become: true

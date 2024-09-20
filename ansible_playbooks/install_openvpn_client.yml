@@ -1,0 +1,25 @@
+---
+- name: install openvpn_client
+  become: true
+  tasks:
+    - name: Install apt-transport-https
+      ansible.builtin.apt:
+        state: latest
+        update_cache: true
+
+    - name: Add Apt signing key
+      ansible.builtin.apt_key:
+        url: "https://swupdate.openvpn.net/repos/openvpn-repo-pkg-key.pub"
+        state: present
+
+    - name: Add repository into sources list
+      ansible.builtin.apt_repository:
+        repo: 'deb https://swupdate.openvpn.net/community/openvpn3/repos impish main'
+        state: present
+        filename: /etc/apt/sources.list.d/openvpn3.list
+
+    - name: Install openvpn_client
+      ansible.builtin.apt:
+        name: "openvpn3"
+        state: latest
+        update_cache: true
