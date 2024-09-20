@@ -1,0 +1,28 @@
+---
+- name: install latest python modules on work_linux
+  hosts: "work_linux"
+  tasks:
+    - name: install work python modules
+      ansible.builtin.pip:
+        name:
+          - pygsheets
+          - psycopg2-binary
+          - numpy
+          - requests
+          - datetime
+          - pandas
+          - matplotlib
+          - ipykernel
+          - tabulate
+          - impyla
+          - openpyxl
+          - pydrive
+          - looker_sdk
+          - snowflake-connector-python==2.7.6
+          - picos
+          - pyodbc
+          - gspread
+          - XlsxWriter
+          - python-dotenv
+          - boto3
+          - pyarrow

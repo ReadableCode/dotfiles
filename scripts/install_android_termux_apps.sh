@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# If ../app_lists/android_termux_apps_personal.txt doesnt exist
-if [ ! -f ../app_lists/android_termux_apps_personal.txt ]; then
-    echo "The file ../app_lists/android_termux_apps_personal.txt does not exist. Exiting..."
+# If ../app_lists/android_termux_apps.txt doesnt exist
+if [ ! -f ../app_lists/android_termux_apps.txt ]; then
+    echo "The file ../app_lists/android_termux_apps.txt does not exist. Exiting..."
     exit 1
 fi
 
@@ -10,9 +10,9 @@ fi
 # Update and upgrade packages
 pkg update -y && pkg upgrade -y
 
-# Read the list of applications from the android_termux_apps_personal.txt file
+# Read the list of applications from the android_termux_apps.txt file
 # Adjust the path to the file as needed
-mapfile -t apps < <(cat ../app_lists/android_termux_apps_personal.txt | tr -d '\r')
+mapfile -t apps < <(cat ../app_lists/android_termux_apps.txt | tr -d '\r')
 
 # Print the list of applications being installed (for debugging)
 echo "Installing the following applications: ${apps[@]}"

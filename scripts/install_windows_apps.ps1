@@ -24,7 +24,7 @@ if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
 }
 
 # Read the list of applications from the windows_apps.txt file in the parent directory
-$apps = Get-Content -Path ..\app_lists\windows_apps_personal.txt
+$apps = Get-Content -Path ..\app_lists\windows_apps.txt
 
 foreach ($app in $apps) {
     # Check if the application is already installed

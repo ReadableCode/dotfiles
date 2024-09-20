@@ -1,0 +1,30 @@
+---
+- name: ping linux hosts
+  hosts:
+    - linux_workstations
+    - raspbian
+    - octopis
+    - work_linux
+    - macs
+  tasks:
+    - name: ping linux hosts
+      ping:
+      
+- name: ping windows hosts
+  hosts:
+    - windows_workstations
+    - rebeca_windows
+  tasks:
+    - name: ping windows hosts
+      win_ping:
+      
+- name: ping hosts without python
+  hosts:
+    - unraid
+  gather_facts: false
+  tasks:
+    - name: ping the device
+      raw: ping -c 4 {{ ansible_host }}
+      register: ping_result
+      changed_when: false
+      no_log: true

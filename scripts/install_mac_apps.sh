@@ -31,7 +31,7 @@ brew upgrade --cask
 brew cleanup
 
 # Install non-GUI Apps
-app_list_path="../app_lists/mac_apps_personal.txt"
+app_list_path="../app_lists/mac_apps.txt"
 
 while IFS= read -r app
 do
@@ -44,7 +44,7 @@ do
 done < "$app_list_path"
 
 # Install GUI Apps
-app_list_path="../app_lists/mac_apps_personal_cask.txt"
+app_list_path="../app_lists/mac_apps_cask.txt"
 
 while IFS= read -r app
 do
