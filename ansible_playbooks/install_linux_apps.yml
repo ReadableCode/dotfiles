@@ -1,0 +1,20 @@
+---
+- name: Install personal Linux apps on Raspbian
+  hosts: raspbian
+  become: yes
+  vars:
+    linux_apps: "{{ lookup('file', '../../app_lists/linux_apps.txt').splitlines() }}"
+  tasks:
+    - name: Install Linux apps
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ linux_apps }}"
+    - name: Install Google Chrome on Linux hosts
+      include_tasks: install_google_chrome.yml
+    - name: Install VS Code on Linux hosts
+      include_tasks: install_vscode.yml
+    - name: Install Google Drive Ocamlfuse on Linux hosts
+      include_tasks: install_google_drive_ocamlfuse.yml
+    - name: Install OpenVPN client on Linux hosts
+      include_tasks: install_openvpn_client.yml

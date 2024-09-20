@@ -1,0 +1,11 @@
+---
+- name: Install Windows apps on Windows workstations
+  hosts: windows_workstations
+  vars:
+    windows_apps: "{{ lookup('file', '../../app_lists/windows_apps.txt').splitlines() }}"
+  tasks:
+    - name: Install Windows apps
+      ansible.windows.win_package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ windows_apps }}"

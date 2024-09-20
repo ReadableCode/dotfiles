@@ -2,7 +2,7 @@
 - name: Install latest apps on all macs
   hosts: macs
   vars:
-    personal_mac_apps: "{{ lookup('file', '../../app_lists/personal_mac_apps.txt').splitlines() }}"
+    mac_apps: "{{ lookup('file', '../../app_lists/mac_apps.txt').splitlines() }}"
   tasks:
     - name: Install Xcode command line tools
       command: xcode-select --install
@@ -23,8 +23,8 @@
         creates: /usr/local/bin/brew
       when: homebrew_check.rc != 0
 
-    - name: Install personal Mac apps
+    - name: Install Mac apps
       homebrew:
         name: "{{ item }}"
         state: latest
-      loop: "{{ personal_mac_apps }}"
+      loop: "{{ mac_apps }}"

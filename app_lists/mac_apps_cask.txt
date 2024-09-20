@@ -17,3 +17,4 @@ rectangle
 bitwarden
 plex
 messenger
+slack

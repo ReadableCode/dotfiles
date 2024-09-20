@@ -1,0 +1,9 @@
+---
+- name: Install all apps
+  import_playbook: install_windows_apps.yml
+
+- name: Install personal Linux apps on Raspbian
+  import_playbook: install_linux_apps.yml
+
+- name: Install personal Mac apps
+  import_playbook: install_mac_apps.yml
