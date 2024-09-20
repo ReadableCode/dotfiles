@@ -28,12 +28,12 @@
 
 ## Install Apps
 
-### Automatically Install Chocolatey and Install Apps From: [windows_apps_personal.txt](../app_lists/windows_apps_personal.txt)
+### Automatically Install Chocolatey and Install Apps From: [windows_apps.txt](../app_lists/windows_apps.txt)
 
 * Open powershell as admin in the directory where you have the script saved and run command to use bootstrap script to install apps:
 
   ```bash
-  .\install_windows_apps_personal.ps1
+  .\install_windows_apps.ps1
   ```
 
 ### Just Install Chocolatey
@@ -177,7 +177,7 @@ winget
 * run the playbook to install ansible apps for windows from the ansible server:
 
   ```bash
-  ansible-playbook playbooks/install_windows_apps.yml --ask-become-pass -i ./inventory/hosts_personal
+  ansible-playbook playbooks/install_windows_apps.yml --ask-become-pass -i ./inventory/hosts
   ```
 
 ## Syncthing Setup
