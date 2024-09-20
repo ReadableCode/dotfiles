@@ -1,0 +1,14 @@
+neofetch
+iperf3
+speedtest-cli
+git-all
+python3
+python3-pip
+htop
+net-tools
+tmux
+tree
+gh
+neovim
+ncdu
+tldr

@@ -1,0 +1,11 @@
+git
+python
+tree
+pylint
+black
+node
+barrier
+gh
+neovim
+tldr
+neofetch
