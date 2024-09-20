@@ -1,0 +1,152 @@
+{
+  // Theme
+  "workbench.colorTheme": "Dracula",
+  // SSH
+  "remote.SSH.remotePlatform": {
+    "HelloFreshJason": "linux",
+    "nukbuntu": "linux",
+    "raspberrypi4": "linux",
+    "JasonZephyrus": "windows",
+    "Shelly": "windows",
+    "HelloFreshJasonZFold4": "linux",
+    "Spectre": "windows",
+    "EliteDesk": "linux",
+    "hellofreshjason": "linux",
+    "elitedesk": "linux",
+    "HelloFreshJasonIP": "linux",
+    "192.168.86.4": "linux"
+  },
+  "remote.SSH.useLocalServer": true,
+  // Git
+  "git.autofetch": true,
+  "git.confirmSync": false,
+  "git.openRepositoryInParentFolders": "always",
+  "git.alwaysShowStagedChangesResourceGroup": true,
+  "git.autoStash": true,
+  "git.replaceTagsWhenPull": true,
+  "githubPullRequests.ignoredPullRequestBranches": ["master"],
+  //Git Poliot and Suggestions
+  "editor.inlineSuggest.enabled": true,
+  "editor.suggest.matchOnWordStartOnly": false,
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": true,
+    "markdown": true,
+    "scminput": false,
+    "yaml": true,
+    "python": true
+  },
+  "github.copilot.advanced": {},
+  "github.copilot-labs.showTestGenerationLenses": true,
+  "inlineChat.mode": "preview",
+  // Auto Formatting
+  "editor.formatOnPaste": true,
+  "editor.formatOnSave": true,
+  "notebook.formatOnSave.enabled": true,
+  "notebook.formatOnCellExecution": true,
+  "files.eol": "\n",
+  "editor.trimAutoWhitespace": false,
+  // Auto Formatting - Deault Formatters
+  "editor.defaultFormatter": "ms-python.black-formatter",
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
+    "editor.tabSize": 2
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[terraform]": {
+    "editor.defaultFormatter": "hashicorp.terraform"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[sql]": {
+    "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
+  },
+  "[dot]": {
+    "editor.defaultFormatter": "tintinweb.graphviz-interactive-preview",
+    "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000
+  },
+  // Auto Formatting - Black / Flake8
+  "black-formatter.importStrategy": "fromEnvironment",
+  "flake8.importStrategy": "useBundled",
+  "python.formatting.provider": "black",
+  "python.formatting.blackPath": "black",
+  "python.formatting.blackArgs": ["--fast"],
+  // Auto Formatting - isort
+  "python.sortImports.path": "isort",
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "always"
+  },
+  "python.sortImports.args": ["--profile", "black"],
+  "isort.args": ["--profile", "black"],
+  // Auto Formatting - Prettier-SQL
+  "Prettier-SQL.denseOperators": true,
+  "Prettier-SQL.keywordCase": "upper",
+  "Prettier-SQL.SQLFlavourOverride": "snowflake",
+  // TODO Tree
+  "todo-tree.general.rootFolder": "${workspaceFolder}",
+  "todo-tree.tree.showCountsInTree": true,
+  "todo-tree.regex.regexCaseSensitive": false,
+  "todo-tree.general.showActivityBarBadge": true,
+  "todo-tree.general.statusBar": "top three",
+  // Notebooks
+  "jupyter.interactiveWindow.creationMode": "perFile",
+  "jupyter.askForKernelRestart": false,
+  "jupyter.interactiveWindow.textEditor.executeSelection": true,
+  "notebook.outline.showCodeCells": true,
+  "notebook.consolidatedRunButton": true,
+  "notebook.compactView": false,
+  "notebook.lineNumbers": "on",
+  "notebook.showFoldingControls": "always",
+  "notebook.output.textLineLimit": 20000,
+  "notebook.output.scrolling": true,
+  "interactiveWindow.alwaysScrollOnNewCell": true,
+  // Editor View
+  "editor.stickyScroll.maxLineCount": 10,
+  "editor.stickyScroll.enabled": true,
+  "editor.minimap.showSlider": "always",
+  "editor.minimap.size": "fill",
+  "editor.bracketPairColorization.enabled": true,
+  "editor.semanticHighlighting.enabled": true,
+  "editor.wordWrap": "on",
+  "editor.accessibilitySupport": "off",
+  "editor.renderWhitespace": "all",
+  "window.zoomLevel": 1,
+  "diffEditor.useInlineViewWhenSpaceIsLimited": false,
+  "diffEditor.ignoreTrimWhitespace": false,
+  // File Handling
+  "files.autoSave": "onFocusChange",
+  "workbench.editorAssociations": {
+    "*.ipynb": "jupyter-notebook",
+    "*.csv": "gc-excelviewer-csv-editor"
+  },
+  "files.associations": {
+    "*.md": "markdown"
+  },
+  "files.maxMemoryForLargeFilesMB": 12000,
+  "workbench.editorLargeFileConfirmation": 50,
+  "files.exclude": {
+    "**/.DS_Store": false,
+    "**/.git": false,
+    "**/.hg": false,
+    "**/.svn": false,
+    "**/CVS": false,
+    "**/Thumbs.db": false
+  },
+  "markdown.mermaidConfig": {
+    "maxTextSize": 9000000
+  },
+  // Terminal
+  "python.terminal.executeInFileDir": true,
+  "terminal.integrated.enableMultiLinePasteWarning": "never",
+  "powershell.cwd": "c:\\Users\\jason\\OneDrive\\Documents\\Technology\\GitHub",
+  // Security
+  "security.workspace.trust.enabled": false,
+  "github.copilot.editor.enableAutoCompletions": true,
+  "interactiveWindow.executeWithShiftEnter": true
+}
