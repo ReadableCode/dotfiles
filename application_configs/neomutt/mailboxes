@@ -1,0 +1,15 @@
+"Main mailbox (INBOX)"
++inbox
+
+"Sent folder"
++[Gmail]/Sent Mail
+
+"Drafts folder"
++[Gmail]/Drafts
+
+"Spam folder"
++[Gmail]/Spam
+
+"Trash folder"
++[Gmail]/Trash
+

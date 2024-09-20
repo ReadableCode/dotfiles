@@ -1,0 +1,23 @@
+# Source .env file for credentials
+
+source /home/jason/.imap_auth
+source /home/jason/.config/neomutt/color.neomuttrc
+
+# Incoming mail (IMAP) settings
+
+# for live connection:
+# set folder = "imaps://imap.gmail.com/"
+# for looking at local mailbox:
+set folder = "~/Mail/gmail/"
+
+set spoolfile = "+INBOX"
+set postponed = "+[Gmail]/Drafts"
+
+# Other settings
+
+set header_cache = "~/.cache/neomutt"
+set message_cachedir = "~/.cache/neomutt"
+
+# Set editor for composing emails (optional)
+
+set editor = "nvim"
