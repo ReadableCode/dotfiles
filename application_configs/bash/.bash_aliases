@@ -27,8 +27,8 @@ alias linux='cd ~/Documents/Technology/Linux/'
 alias githubdir='cd $gitDir'
 alias datatoolpack='cd $gitDir/Data_Tool_Pack/'
 alias finance='cd $gitDir/na-finops/'
-alias hfpulls='bash $gitDir/dotfiles/scripts/git_pull_hf_repos.sh'
-alias hfvpncheck='bash $gitDir/dotfiles/scripts/check_hf_vpn.sh'
+alias hfpulls='bash $gitDir/na-finops/scripts/git_pull_hf_repos.sh'
+alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
 
 ### Script Shortcuts ###
