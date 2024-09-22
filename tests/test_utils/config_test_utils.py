@@ -13,7 +13,10 @@ grandparent_dir = os.path.dirname(parent_dir)
 great_grandparent_dir = os.path.dirname(grandparent_dir)
 
 data_dir = os.path.join(grandparent_dir, "data")
+odl_dir = os.path.join(data_dir, "odl")
+highjump_comparison_dir = os.path.join(data_dir, "highjump_comparison")
 report_dir = os.path.join(grandparent_dir, "reports")
+trigger_dir = os.path.join(grandparent_dir, "triggers")
 log_dir = os.path.join(grandparent_dir, "logs")
 src_dir = os.path.join(grandparent_dir, "src")
 src_utils_dir = os.path.join(src_dir, "utils")
@@ -22,10 +25,13 @@ email_attachment_dir = os.path.join(data_dir, "email_attachments")
 
 directories = [
     data_dir,
+    trigger_dir,
     log_dir,
     src_dir,
     src_utils_dir,
     drive_download_cache_dir,
+    odl_dir,
+    highjump_comparison_dir,
     report_dir,
     email_attachment_dir,
 ]
