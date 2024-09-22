@@ -1,0 +1,107 @@
+{
+  "folders": [
+    {
+      "path": "na-finops"
+    },
+    {
+      "path": "na-fin-data-streamlit"
+    },
+    {
+      "path": "na-faba"
+    },
+    {
+      "path": "hellofresh_credentials"
+    },
+    {
+      "path": "Data_Tool_Pack"
+    },
+    {
+      "path": "Project_Template"
+    },
+    {
+      "path": "AHK_Sheet_ID_Shortcut"
+    },
+    {
+      "path": "dotfiles"
+    },
+    {
+      "path": "snowflake-automation"
+    },
+    {
+      "path": "us-ops-analytics-schemachange"
+    },
+    {
+      "path": "github-automation"
+    },
+    {
+      "path": "us-ops-fulfillment-planning"
+    },
+    {
+      "path": "limesync-onboarding"
+    },
+    {
+      "path": "bi-infrastructure"
+    },
+    {
+      "path": "infrastructure-tags"
+    },
+    {
+      "path": "airflow-community"
+    },
+    {
+      "path": "datasets-automation"
+    },
+    {
+      "path": "streamlit-onboarding"
+    },
+    {
+      "path": "hf-kubernetes"
+    },
+    {
+      "path": "datasets-automation-community"
+    },
+    {
+      "path": "us-ops-packaging-scripts"
+    },
+    {
+      "path": "photon-access-control"
+    },
+    {
+      "path": "gbi-pc2-reliance"
+    }
+  ],
+  "settings": {
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "#6f9d7b",
+      "titleBar.inactiveBackground": "#6f9d7b"
+    },
+    "todo-tree.filtering.includeGlobs": [
+      "**/Data_Tool_Pack/src/**",
+      "**/na-finops/src/**",
+      "**/na-finops/docs/**"
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "bierner.markdown-mermaid",
+      "dracula-theme.theme-dracula",
+      "eamodio.gitlens",
+      "esbenp.prettier-vscode",
+      "github.copilot",
+      "grapecity.gc-excelviewer",
+      "gruntfuggly.todo-tree",
+      "inferrinizzard.prettier-sql-vscode",
+      "mechatroner.rainbow-csv",
+      "mhutchie.git-graph",
+      "ms-python.black-formatter",
+      "ms-python.flake8",
+      "ms-python.gather",
+      "ms-python.isort",
+      "ms-python.vscode-pylance",
+      "ms-toolsai.jupyter",
+      "ms-vscode-remote.remote-ssh",
+      "tomoki1207.pdf",
+      "tintinweb.graphviz-interactive-preview"
+    ]
+  }
+}
