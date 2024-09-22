@@ -102,15 +102,19 @@ function wslbashintodistro {
 ### AI ###
 
 
-function startstablediffusion2 {
+function startstablediffusion {
     $scriptPath = "~\GitHub\stable-diffusion-webui\webui.bat"
     $scriptDir = Split-Path $scriptPath
-    Set-Location $scriptDir
 
-    # Read the .env file and get the password
-    $envFilePath = "./.env"
+    # Define the path to the .env file
+    $envFilePath = "$gitDir\dotfiles\.env"
+
+    # Read the .env file and extract the password
     $envContent = Get-Content $envFilePath | Where-Object { $_ -match "^GRADIO_AUTH_PASSWORD=" }
     $password = $envContent -replace "GRADIO_AUTH_PASSWORD=", ""
+
+    # Change location to the script directory
+    Set-Location $scriptDir
 
     & $scriptPath --listen --gradio-auth jason:$password
 }
@@ -118,12 +122,16 @@ function startstablediffusion2 {
 function startstablediffusionamd {
     $scriptPath = "~\GitHub\stable-diffusion-webui-amdgpu\webui.bat"
     $scriptDir = Split-Path $scriptPath
-    Set-Location $scriptDir
 
-    # Read the .env file and get the password
-    $envFilePath = "./.env"
+    # Define the path to the .env file
+    $envFilePath = "$gitDir\dotfiles\.env"
+
+    # Read the .env file and extract the password
     $envContent = Get-Content $envFilePath | Where-Object { $_ -match "^GRADIO_AUTH_PASSWORD=" }
     $password = $envContent -replace "GRADIO_AUTH_PASSWORD=", ""
+
+    # Change location to the script directory
+    Set-Location $scriptDir
 
     & $scriptPath --listen --gradio-auth jason:$password --skip-torch-cuda-test --no-half --use-directml --lowvram
 }
