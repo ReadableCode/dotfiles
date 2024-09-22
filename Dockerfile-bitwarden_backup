@@ -1,0 +1,43 @@
+FROM node:latest
+
+# Install Python and pip
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+
+# Set the working directory
+WORKDIR /dotfiles
+
+# Create a Python virtual environment and activate it
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy your Python requirements file
+COPY requirements.txt .
+
+# Install Python dependencies in the virtual environment
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Install Bitwarden CLI
+RUN npm install -g @bitwarden/cli
+
+# Set environment variables for Bitwarden API and Identity URLs
+# ENV BW_API_URL=https://bitwardentunnel.tinkernet.me/
+# ENV BW_IDENTITY_URL=https://bitwardentunnel.tinkernet.me/
+
+# Set environment variables for Bitwarden API and Identity URLs
+ARG BITWARDEN_URL
+ENV BW_API_URL=$BITWARDEN_URL
+ENV BW_IDENTITY_URL=$BITWARDEN_URL
+
+# Set environment variable host hostname
+ARG HOSTNAME
+ENV HOSTNAME=$HOSTNAME
+
+# Declare a volume for data
+VOLUME ["/dotfiles/data"]
+
+# Copy your application files
+COPY . .
+
+# Run your Python script when the container starts
+CMD ["python3", "src/bitwarden.py"]
+
