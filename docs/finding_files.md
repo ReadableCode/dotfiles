@@ -105,13 +105,13 @@
 * Find Them:
 
     ```bash
-    find . \( -name "*sync-conflict*" -o -name "*~syncthing*" \)
+    find . \( -name "*sync-conflict*" -o -name "*~syncthing*" -o -name "*-Yoga7i*" -o -name "*-JasonZephyrus*" -o -name "*-RyzenWhite*" \)
     ```
 
 * Delete Them:
 
     ```bash
-    find . \( -name "*sync-conflict*" -o -name "*~syncthing*" \) -delete
+    find . \( -name "*sync-conflict*" -o -name "*~syncthing*" -o -name "*-Yoga7i*" -o -name "*-JasonZephyrus*" -o -name "*-RyzenWhite*" \) -delete
     ```
 
 ## find empty README.md files
