@@ -52,6 +52,12 @@
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
   },
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format",
+    "editor.detectIndentation": false,
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4 // You can change this to your preferred tab size
+  },
   "[markdown]": {
     "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
     "editor.tabSize": 2
