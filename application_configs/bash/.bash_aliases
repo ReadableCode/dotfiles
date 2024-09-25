@@ -1,17 +1,15 @@
 ### Variables ###
 
 if [ -d "$HOME/GitHub/" ]; then
-    gitDir="$HOME/GitHub/"
+	gitDir="$HOME/GitHub/"
 elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
-    gitDir="$HOME/HelloFresh/GDrive/Projects/"
+	gitDir="$HOME/HelloFresh/GDrive/Projects/"
 fi
 # echo "gitDir is: $gitDir"
-
 
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
-
 
 ### Aliases ###
 
@@ -19,34 +17,30 @@ alias editaliases='nvim ~/.bash_aliases'
 alias cataliases='cat ~/.bash_aliases'
 alias srcaliases='source ~/.bashrc'
 
-
 ### Directory Shortcuts ###
 
 alias myscripts='cd $gitDir/dotfiles/scripts/'
 alias linux='cd ~/Documents/Technology/Linux/'
 alias githubdir='cd $gitDir'
-alias datatoolpack='cd $gitDir/Data_Tool_Pack/'
+alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
 alias finance='cd $gitDir/na-finops/'
 alias hfpulls='bash $gitDir/na-finops/scripts/git_pull_hf_repos.sh'
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
-
 ### Script Shortcuts ###
 
 alias todo='python3 $gitDir/Terminal_To_Do/src/main.py'
-alias deploytools='python3 $gitDir/Data_Tool_Pack/src/deploy_tools.py'
+alias deploytools='python3 $gitDir/Data_Tool_Pack_Py/src/deploy_tools.py'
 alias ourcashprojection='python3 $gitDir/Our_Cash/src/finance_projection.py'
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
-
 
 ### Program Shortcuts ###
 
 alias speed='speedtest-cli'
 alias windirstat='ncdu'
 alias mountcheck='mount | grep "sd"'
-
 
 ### Python Shortcuts ###
 
@@ -55,33 +49,30 @@ alias pipenvdeactivate='deactivate'
 
 alias startcodeserver='code-server serve-local --host 0.0.0.0 --without-connection-token'
 function startjupyterlab {
-    # Change to the directory defined by gitDir
-    cd $gitDir
+	# Change to the directory defined by gitDir
+	cd $gitDir
 
-    # Run the jupyter lab command
-    jupyter lab --ip=0.0.0.0 --port=8181
+	# Run the jupyter lab command
+	jupyter lab --ip=0.0.0.0 --port=8181
 }
-
 
 ### AI Shortcuts ###
 
 function startollama {
-    if command -v ollama >/dev/null 2>&1; then
-        ollama serve
-    else
-        echo "ollama is not installed. Install it by running:"
-        echo "curl https://ollama.ai/install.sh | sh"
-    fi
+	if command -v ollama >/dev/null 2>&1; then
+		ollama serve
+	else
+		echo "ollama is not installed. Install it by running:"
+		echo "curl https://ollama.ai/install.sh | sh"
+	fi
 }
 alias pullollamamodels='ollama pull llama2-uncensored'
 alias runollama='ollama run llama2-uncensored'
 alias stopollama='kill $(pgrep -f "ollama serve")'
 
-
 ### GPU Shortcuts ###
 
 alias gpustatus='watch -n 0.5 nvidia-smi'
-
 
 ### VPN Shortcuts ###
 
@@ -90,12 +81,10 @@ alias vpnhellov2='sudo openvpn --config ~/hellofresh.ovpn --daemon hellofresh-op
 alias vpnhome='openvpn3 session-start --config ~/asusrouter.ovpn'
 alias killvpn='sudo kill $(pgrep openvpn)'
 
-
 ### Google Shortcuts ###
 
-alias unmountgoogle='umount ~/GoogleDrive' 
+alias unmountgoogle='umount ~/GoogleDrive'
 alias mountgoogle='google-drive-ocamlfuse ~/GoogleDrive'
-
 
 ### SSH Shortcuts ###
 
@@ -146,4 +135,3 @@ alias ssh11='ssh HelloFreshJason'
 
 # Android #
 alias sshtabs7p='ssh u0_a1053@GalaxyTabS7P -p 8022'
-
