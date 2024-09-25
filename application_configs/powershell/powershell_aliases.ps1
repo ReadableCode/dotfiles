@@ -76,7 +76,7 @@ function editaliases {
 
 function deploytools {
     # run script at gitDir/Terminal_To_Do/src/main.py
-    python $(Join-Path $gitDir 'Data_Tool_Pack\src\deploy_tools.py')
+    python $(Join-Path $gitDir 'Data_Tool_Pack_Py\src\deploy_tools.py')
 }
 
 function todo {
