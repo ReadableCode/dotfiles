@@ -18,7 +18,7 @@ docker run -v ${PWD}:/content/ -p 8000:8000 -w /content/ -it na-finops-mkdocs se
 docker run -v $(pwd):/content/ -p 8000:8000 -w /content/ -it na-finops-mkdocs serve -a 0.0.0.0:8000
 ```
 
-## Build the mkdocs as an output: Site directory and pdf file
+## Build the mkdocs as an output: Site directory and PDF file
 
 ```bash
 # build the mkdocs as an output
