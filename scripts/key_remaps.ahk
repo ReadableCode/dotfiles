@@ -1,5 +1,5 @@
 ; Remap Caps Lock to Escape
-CapsLock::Esc
+; CapsLock::Esc
 
 ; Remap Delete to Alt
-Del::Alt
+; Del::Alt
