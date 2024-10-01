@@ -41,14 +41,16 @@ function run_python_script() {
 
 			# Deactivate the environment afterward
 			deactivate
+			return 0
 		else
-			echo "No active Pipenv environment found, make sure you have run 'pipenv install'"
-			return 1
+			echo "No active Pipenv environment found, attempting to run with system Python."
 		fi
 	else
-		echo "Pipenv is not installed. Please install it using 'pip install pipenv'"
-		return 1
+		echo "Pipenv is not installed. Running the script with system Python."
 	fi
+
+	# Run the script using the system Python as a fallback
+	python3 "$script_path"
 }
 
 function deploytools() {
