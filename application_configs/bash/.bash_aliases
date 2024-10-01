@@ -7,6 +7,58 @@ elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
 fi
 # echo "gitDir is: $gitDir"
 
+### Functions ###
+
+function run_python_script() {
+	# Check if a file path argument is provided
+	if [ -z "$1" ]; then
+		echo "Usage: run_python_script <python_script_path>"
+		return 1
+	fi
+
+	echo "Running Python script: $1"
+
+	# Extract the directory from the provided file path
+	script_path="$1"
+	script_dir=$(dirname "$script_path")
+
+	# Change to the script directory
+	echo "Changing to script directory: $script_dir"
+	cd "$script_dir" || return
+
+	# Check if the Pipenv environment is installed
+	if command -v pipenv >/dev/null 2>&1; then
+		pipenv_venv=$(pipenv --venv 2>/dev/null)
+
+		if [ -n "$pipenv_venv" ]; then
+			echo "Pipenv environment detected at: $pipenv_venv"
+
+			# Activate the Pipenv environment explicitly
+			source "$pipenv_venv/bin/activate"
+
+			# Run the script using the Pipenv environment
+			python3 "$script_path"
+
+			# Deactivate the environment afterward
+			deactivate
+		else
+			echo "No active Pipenv environment found, make sure you have run 'pipenv install'"
+			return 1
+		fi
+	else
+		echo "Pipenv is not installed. Please install it using 'pip install pipenv'"
+		return 1
+	fi
+}
+
+function deploytools() {
+	if [ -z "$gitDir" ]; then
+		echo "gitDir is not set"
+		return 1
+	fi
+	run_python_script "$gitDir/Data_Tool_Pack_Py/src/deploy_tools.py"
+}
+
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
@@ -30,7 +82,6 @@ alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 ### Script Shortcuts ###
 
 alias todo='python3 $gitDir/Terminal_To_Do/src/main.py'
-alias deploytools='python3 $gitDir/Data_Tool_Pack_Py/src/deploy_tools.py'
 alias ourcashprojection='python3 $gitDir/Our_Cash/src/finance_projection.py'
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
