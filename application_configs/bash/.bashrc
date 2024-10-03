@@ -8,16 +8,22 @@ case $- in
       *) return;;
 esac
 
-# don't put duplicate lines or lines starting with space in the history.
-# See bash(1) for more options
-HISTCONTROL=ignoreboth
 
-# append to the history file, don't overwrite it
+############################################################
+## History
+############################################################
+
+# When you exit a shell, the history from that session is appended to
+# ~/.bash_history.  Without this, you might very well lose the history of entire
+# sessions (weird that this is not enabled by default).
 shopt -s histappend
 
-# for setting history length see HISTSIZE and HISTFILESIZE in bash(1)
-HISTSIZE=1000
-HISTFILESIZE=2000
+export HISTIGNORE="&:pwd:ls:ll:lal:[bf]g:exit:rm*:sudo rm*"
+# remove duplicates from the history (when a new item is added)
+export HISTCONTROL=erasedups
+# increase the default size from only 1,000 items
+export HISTSIZE=10000
+export HISTFILESIZE=1000000
 
 # check the window size after each command and, if necessary,
 # update the values of LINES and COLUMNS.
