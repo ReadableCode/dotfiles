@@ -60,6 +60,7 @@ Here are the revised instructions that include installing Python from the Window
 
    ```bash
    pip install pipenv
+   # It may ask for installing a version of python with pyenv, say yes
    ```
 
 * Add pipenv to path
@@ -165,7 +166,70 @@ Please note that Python 3.10 may already be installed on your Debian system by d
    pip install pipenv
    ```
 
-## Setting up and using Virtual Environments for Python
+## Setting up and using Virtual Environments for Python: pyenv
+
+* This enables installing multiple versions of python on the same system
+
+* Install pyenv:
+
+  * On Linux:
+  
+      ```bash
+      sudo apt update
+      sudo apt install -y \
+      build-essential \
+      libbz2-dev \
+      libncurses-dev \
+      libffi-dev \
+      libreadline-dev \
+      libssl-dev \
+      zlib1g-dev \
+      libsqlite3-dev \
+      tk-dev \
+      libgdbm-dev \
+      libdb-dev \
+      libexpat1-dev \
+      liblzma-dev \
+      libgmp-dev \
+      libcurl4-openssl-dev \
+      uuid-dev \
+      curl
+      ```
+
+      ```bash
+      curl https://pyenv.run | bash
+      ```
+
+  * Add the following to your shell config file (e.g., ~/.bashrc or ~/.zshrc):
+
+      ```bash
+      export PYENV_ROOT="$HOME/.pyenv"
+      export PATH="$PYENV_ROOT/bin:$PATH"
+      eval "$(pyenv init --path)"
+      eval "$(pyenv init -)"
+      ```
+
+  * Restart your terminal or run the following command to apply the changes:
+
+      ```bash
+      source ~/.bashrc
+      ```
+
+  * Check if pyenv is available on the terminal
+
+      ```bash
+      pyenv --version
+      ```
+
+  * To install a version of python, run:
+
+      ```bash
+      pyenv install 3.10.0
+      ```
+
+## Setting up and using Virtual Environments for Python: venv
+
+* This is an alternative to pipenv not to pyenv
 
 * On Windows (PowerShell):
 
@@ -208,15 +272,3 @@ Please note that Python 3.10 may already be installed on your Debian system by d
       ```bash
       deactivate
       ```
-
-## Pyenv
-
-* If having issues with pyenv you might have to add the following to .bashrc or run them:
-
-```bash
-if having issues with pyenv, uncomment the following lines
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv init -)"
-```
