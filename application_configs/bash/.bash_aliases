@@ -1,3 +1,10 @@
+### Pyenv Setup ###
+
+export PYENV_ROOT="$HOME/.pyenv"
+export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init --path)"
+eval "$(pyenv init -)"
+
 ### Variables ###
 
 if [ -d "$HOME/GitHub/" ]; then
@@ -61,6 +68,14 @@ function deploytools() {
 	run_python_script "$gitDir/Data_Tool_Pack_Py/src/deploy_tools.py"
 }
 
+function todo() {
+	if [ -z "$gitDir" ]; then
+		echo "gitDir is not set"
+		return 1
+	fi
+	run_python_script "$gitDir/Terminal_To_Do/src/main.py"
+}
+
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
@@ -83,7 +98,6 @@ alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
 ### Script Shortcuts ###
 
-alias todo='python3 $gitDir/Terminal_To_Do/src/main.py'
 alias ourcashprojection='python3 $gitDir/Our_Cash/src/finance_projection.py'
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
