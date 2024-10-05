@@ -76,6 +76,14 @@ function todo() {
 	run_python_script "$gitDir/Terminal_To_Do/src/main.py"
 }
 
+function ourcashprojection() {
+	if [ -z "$gitDir" ]; then
+		echo "gitDir is not set"
+		return 1
+	fi
+	run_python_script "$gitDir/Our_Cash/src/finance_projection.py"
+}
+
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
@@ -98,7 +106,6 @@ alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
 ### Script Shortcuts ###
 
-alias ourcashprojection='python3 $gitDir/Our_Cash/src/finance_projection.py'
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
