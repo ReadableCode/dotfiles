@@ -8,7 +8,7 @@ export PYENV_ROOT="$HOME/.pyenv"
 if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
     echo "Running in WSL, checking if pyenv is installed"
     
-    if command -v pyenv &> /dev/null; then
+    if [ -d "$PYENV_ROOT" ] && [ -x "$PYENV_ROOT/bin/pyenv" ]; then
         echo "Pyenv is installed, setting up pyenv for WSL"
 
         BIN_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/bin"
