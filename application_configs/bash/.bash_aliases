@@ -1,80 +1,77 @@
 ### Detect Paths ###
 
 set_git_dir() {
-    if [ -d "$HOME/GitHub/" ]; then
-        gitDir="$HOME/GitHub/"
-    elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
-        gitDir="$HOME/HelloFresh/GDrive/Projects/"
-    else
-        echo "No suitable git directory found"
-        gitDir=""
-    fi
+	if [ -d "$HOME/GitHub/" ]; then
+		gitDir="$HOME/GitHub/"
+	elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
+		gitDir="$HOME/HelloFresh/GDrive/Projects/"
+	else
+		echo "No suitable git directory found"
+		gitDir=""
+	fi
 }
 
 ### Terminal Type ###
 
 # Detect the type of terminal: WSL, Linux, or macOS
 detect_terminal_type() {
-    if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
-        echo "Running in WSL"
-        TERMINAL_TYPE="WSL"
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-        echo "Running on Linux"
-        TERMINAL_TYPE="Linux"
-    elif [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "Running on macOS"
-        TERMINAL_TYPE="macOS"
-    else
-        echo "Unknown system, skipping pyenv setup"
-        TERMINAL_TYPE="Unknown"
-    fi
+	if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
+		echo "Running in WSL"
+		TERMINAL_TYPE="WSL"
+	elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+		echo "Running on Linux"
+		TERMINAL_TYPE="Linux"
+	elif [[ "$OSTYPE" == "darwin"* ]]; then
+		echo "Running on macOS"
+		TERMINAL_TYPE="macOS"
+	else
+		echo "Unknown system, skipping pyenv setup"
+		TERMINAL_TYPE="Unknown"
+	fi
 }
 
-
 ### Pyenv Setup ###
-
 
 # Initialize pyenv based on the terminal type
 setup_pyenv() {
 	export PYENV_ROOT="$HOME/.pyenv"
 
-    if [[ "$TERMINAL_TYPE" == "WSL" ]]; then
-        echo "Checking if pyenv is installed in WSL"
-        
-        if [ -d "$PYENV_ROOT" ] && [ -x "$PYENV_ROOT/bin/pyenv" ]; then
-            echo "Pyenv is installed, setting up pyenv for WSL"
-            
-            BIN_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/bin"
-            BIN_NEW="$PYENV_ROOT/bin"
-            SHIMS_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/shims"
-            SHIMS_NEW="$PYENV_ROOT/shims"
+	if [[ "$TERMINAL_TYPE" == "WSL" ]]; then
+		echo "Checking if pyenv is installed in WSL"
 
-            # Replace the Windows pyenv-win paths with the Linux pyenv paths
-            export PATH=$(echo $PATH | sed "s@$BIN_OLD@$BIN_NEW@" | sed "s@$SHIMS_OLD@$SHIMS_NEW@")
+		if [ -d "$PYENV_ROOT" ] && [ -x "$PYENV_ROOT/bin/pyenv" ]; then
+			echo "Pyenv is installed, setting up pyenv for WSL"
 
-            # Initialize pyenv for WSL
-            eval "$(pyenv init -)"
-        else
-            echo "Pyenv is not installed in WSL, skipping pyenv setup"
-        fi
+			BIN_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/bin"
+			BIN_NEW="$PYENV_ROOT/bin"
+			SHIMS_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/shims"
+			SHIMS_NEW="$PYENV_ROOT/shims"
 
-    elif [[ "$TERMINAL_TYPE" == "Linux" || "$TERMINAL_TYPE" == "macOS" ]]; then
-        echo "Checking if pyenv is installed on $TERMINAL_TYPE"
+			# Replace the Windows pyenv-win paths with the Linux pyenv paths
+			export PATH=$(echo $PATH | sed "s@$BIN_OLD@$BIN_NEW@" | sed "s@$SHIMS_OLD@$SHIMS_NEW@")
 
-        if command -v pyenv &> /dev/null; then
-            echo "Pyenv is installed, setting up pyenv for $TERMINAL_TYPE"
+			# Initialize pyenv for WSL
+			eval "$(pyenv init -)"
+		else
+			echo "Pyenv is not installed in WSL, skipping pyenv setup"
+		fi
 
-            export PATH="$PYENV_ROOT/bin:$PATH"
-            eval "$(pyenv init --path)"
-            eval "$(pyenv init -)"
-        else
-            echo "Pyenv is not installed on $TERMINAL_TYPE, skipping pyenv setup"
-        fi
-    else
-        echo "No pyenv setup for unknown system"
-    fi
+	elif [[ "$TERMINAL_TYPE" == "Linux" || "$TERMINAL_TYPE" == "macOS" ]]; then
+		echo "Checking if pyenv is installed on $TERMINAL_TYPE"
+
+		if command -v pyenv &>/dev/null; then
+			echo "Pyenv is installed, setting up pyenv for $TERMINAL_TYPE"
+
+			export PATH="$PYENV_ROOT/bin:$PATH"
+			eval "$(pyenv init --path)"
+			eval "$(pyenv init -)"
+		else
+			echo "Pyenv is not installed on $TERMINAL_TYPE, skipping pyenv setup"
+		fi
+	else
+		echo "No pyenv setup for unknown system"
+	fi
 }
-
 
 ### Functions ###
 
@@ -146,7 +143,6 @@ function ourcashprojection() {
 	run_python_script "$gitDir/Our_Cash/src/finance_projection.py"
 }
 
-
 ### Run Functions ###
 
 # Call the git directory detection function
@@ -157,7 +153,6 @@ detect_terminal_type
 
 # Call the pyenv setup function
 setup_pyenv
-
 
 ### Command Shortcuts ###
 
