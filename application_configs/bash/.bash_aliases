@@ -1,9 +1,47 @@
 ### Pyenv Setup ###
 
+### Pyenv Setup ###
+
 export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-eval "$(pyenv init -)"
+
+# Detect if running in WSL
+if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
+    echo "Running in WSL, checking if pyenv is installed"
+    
+    if command -v pyenv &> /dev/null; then
+        echo "Pyenv is installed, setting up pyenv for WSL"
+
+        BIN_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/bin"
+        BIN_NEW="$PYENV_ROOT/bin"
+        SHIMS_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/shims"
+        SHIMS_NEW="$PYENV_ROOT/shims"
+
+        # Replace the Windows pyenv-win paths with the Linux pyenv paths
+        export PATH=$(echo $PATH | sed "s@$BIN_OLD@$BIN_NEW@" | sed "s@$SHIMS_OLD@$SHIMS_NEW@")
+
+        # Initialize pyenv for WSL
+        eval "$(pyenv init -)"
+    else
+        echo "Pyenv is not installed in WSL, skipping pyenv setup"
+    fi
+
+else
+    echo "Not running in WSL, checking if pyenv is installed"
+
+    if command -v pyenv &> /dev/null; then
+        echo "Pyenv is installed, setting up pyenv for Linux"
+
+        export PATH="$PYENV_ROOT/bin:$PATH"
+        eval "$(pyenv init --path)"
+
+        # Initialize pyenv for Linux
+        eval "$(pyenv init -)"
+    else
+        echo "Pyenv is not installed in Linux, skipping pyenv setup"
+    fi
+fi
+
+
 
 ### Variables ###
 
