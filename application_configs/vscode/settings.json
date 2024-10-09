@@ -24,9 +24,7 @@
   "git.alwaysShowStagedChangesResourceGroup": true,
   "git.autoStash": true,
   "git.replaceTagsWhenPull": true,
-  "githubPullRequests.ignoredPullRequestBranches": [
-    "master"
-  ],
+  "githubPullRequests.ignoredPullRequestBranches": ["master"],
   //Git Poliot and Suggestions
   "editor.inlineSuggest.enabled": true,
   "editor.suggest.matchOnWordStartOnly": false,
@@ -88,22 +86,14 @@
   "flake8.importStrategy": "useBundled",
   "python.formatting.provider": "black",
   "python.formatting.blackPath": "black",
-  "python.formatting.blackArgs": [
-    "--fast"
-  ],
+  "python.formatting.blackArgs": ["--fast"],
   // Auto Formatting - isort
   "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
     "source.organizeImports": "always"
   },
-  "python.sortImports.args": [
-    "--profile",
-    "black"
-  ],
-  "isort.args": [
-    "--profile",
-    "black"
-  ],
+  "python.sortImports.args": ["--profile", "black"],
+  "isort.args": ["--profile", "black"],
   // Auto Formatting - Prettier-SQL
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
@@ -171,5 +161,8 @@
   "github.copilot.editor.enableAutoCompletions": true,
   "interactiveWindow.executeWithShiftEnter": true,
   "github.copilot.preferredAccount": "ReadableCode",
-  "notebook.defaultFormatter": "ms-python.black-formatter"
+  "notebook.defaultFormatter": "ms-python.black-formatter",
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.inlayHints.variableTypes": true
 }
