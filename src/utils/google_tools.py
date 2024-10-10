@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import time
+from typing import Optional
 
 import pandas as pd
 import pygsheets
@@ -33,47 +34,63 @@ if os.path.exists(dotenv_path):
 # %%
 # Google Credentials #
 
-service_account_env_key = "GOOGLE_SERVICE_ACCOUNT"
+SERVICE_ACCOUNT_ENV_KEY = "GOOGLE_SERVICE_ACCOUNT"
 json_file_path = os.path.join(
     grandparent_dir,
     "service_account_credentials.json",
 )
+service_account_env_data = os.getenv(SERVICE_ACCOUNT_ENV_KEY)
+service_account_env_data_json = None
+service_account_email = None
 
-if os.getenv(service_account_env_key) is not None:
+if service_account_env_data is not None:
     print_logger(
-        "Found environment variable for service account with key: "
-        + service_account_env_key
+        f"Found environment variable for service account with key: {SERVICE_ACCOUNT_ENV_KEY}"
     )
-    raw_json = os.getenv(service_account_env_key)
 
     try:
-        service_account_email = json.loads(raw_json)["client_email"]
-        fixed_json = raw_json
+        if service_account_env_data:
+            service_account_env_data_json = json.loads(service_account_env_data)
+        else:
+            raise ValueError(
+                f"Environment variable {SERVICE_ACCOUNT_ENV_KEY} is not set or empty"
+            )
     except json.JSONDecodeError as e:
         print_logger(
-            f"JSONDecodeError: {e} with reading json from environment variable, trying to repair"
+            f"JSONDecodeError: {e} with reading json from environment variable, trying to repair and reload"
         )
-        fixed_json = raw_json.replace("\n", "\\n")
-        service_account_email = json.loads(fixed_json)["client_email"]
+        if service_account_env_data is not None:
+            service_account_env_data = service_account_env_data.replace("\n", "\\n")
+            service_account_env_data_json = json.loads(service_account_env_data)
+        else:
+            raise ValueError(
+                f"Environment variable {SERVICE_ACCOUNT_ENV_KEY} is not set or empty"
+            )
 
         # fix environment variable without modifying the .env file
-        os.environ[service_account_env_key] = fixed_json
+        os.environ[SERVICE_ACCOUNT_ENV_KEY] = service_account_env_data
 
 elif os.path.exists(json_file_path):
     print_logger(
-        f"No environment varible with key: {service_account_env_key}, Found json credentails at: {json_file_path}"
+        f"No environment varible with key: {SERVICE_ACCOUNT_ENV_KEY}, Found json credentails at: {json_file_path}"
     )
-    fixed_json = open(json_file_path).read()
-    service_account_email = json.loads(fixed_json)["client_email"]
+    service_account_env_data = open(json_file_path).read()
+    service_account_env_data_json = json.loads(service_account_env_data)
 
     # add environment variable without modifying the .env file
-    os.environ[service_account_env_key] = fixed_json
+    os.environ[SERVICE_ACCOUNT_ENV_KEY] = service_account_env_data
 
+else:
+    raise ValueError(
+        f"No environment varible with key: {SERVICE_ACCOUNT_ENV_KEY}, and no json credentails at: {json_file_path}"
+    )
+
+service_account_email = service_account_env_data_json["client_email"]
 print_logger(f"google_service_account email: {service_account_email}")
 
-print_logger("Using service account credentials from environment")
+# Create a connection to Google Sheets
 gc = pygsheets.authorize(
-    service_account_env_var=service_account_env_key,
+    service_account_env_var=SERVICE_ACCOUNT_ENV_KEY,
 )
 
 
@@ -357,100 +374,90 @@ def get_book_with_create(bookName, parent_folder_id=None, template_id=None):
     return Workbook
 
 
-def get_book_sheet(bookName, sheetName, retries=3):
+def get_book_sheet(bookName, sheetName, retries=3) -> pygsheets.Worksheet:
     """
-    Returns a Worksheet object from a Google Sheet
-        using the sheet name and the spreadsheet name.
+    Returns a Worksheet object from a Google Sheet using the sheet name and the spreadsheet name.
     If a cached connection exists, it will be used instead of creating a new one.
 
-    Parameters:
-    -----------
-    bookName: str, the name of the Google Sheet.
-    sheetName: str, the name of the sheet within the Google Sheet.
-    retries: int, the maximum number of retries in case of failure (default is 3).
+    Args:
+        bookName (str): The name of the Google Sheet.
+        sheetName (str): The name of the sheet within the Google Sheet.
+        retries (int, optional): The maximum number of retries in case of failure. Defaults to 3.
 
     Returns:
-    -----------
-    a Worksheet object.
+        pygsheets.Worksheet: A Worksheet object from the specified Google Sheet.
 
     Raises:
-    -----------
-    Exception if the maximum number of retries is exceeded.
+        Exception: If the maximum number of retries is exceeded.
     """
+
     global dict_connected_sheets
 
-    retries_left = retries
-
-    while retries_left > 0:
-        if f"{bookName} : {sheetName}" in dict_connected_sheets.keys():
+    while retries > 0:
+        # Check if the connection is already cached
+        if f"{bookName} : {sheetName}" in dict_connected_sheets:
             Worksheet = dict_connected_sheets[f"{bookName} : {sheetName}"]
             print_logger(
                 f"Using cached connection to {bookName} : {sheetName}", level="debug"
             )
             return Worksheet
-        else:
-            try:
-                Workbook = get_book(bookName)
-                Worksheet = Workbook.worksheet_by_title(sheetName)
-                dict_connected_sheets[f"{bookName} : {sheetName}"] = Worksheet
+
+        try:
+            # Open a new connection and cache it
+            Workbook = get_book(bookName)
+            Worksheet = Workbook.worksheet_by_title(sheetName)
+            dict_connected_sheets[f"{bookName} : {sheetName}"] = Worksheet
+            print_logger(
+                f"Opening new connection to {bookName} : {sheetName}", level="debug"
+            )
+            return Worksheet
+
+        except Exception as e:
+            retries -= 1
+            if retries > 0:
                 print_logger(
-                    f"Opening new connection to {bookName} : {sheetName}", level="debug"
+                    f"Error: {e}. Retrying {retries} more time(s).",
+                    level="warning",
                 )
-                return Worksheet
-            except Exception as e:
-                retries_left -= 1
-                if retries_left > 0:
-                    print_logger(
-                        f"Error: {e}. Retrying {retries_left} more time(s).",
-                        level="warning",
-                    )
-                else:
-                    raise e
+
+    # Raise exception when retries are exhausted
+    raise Exception(
+        f"Failed to get the sheet {sheetName} from book {bookName} after {retries} retries."
+    )
 
 
 def get_book_sheet_df(
-    bookName,
-    sheetName,
-    start=None,
-    end=None,
-    index_column=None,
-    value_render="FORMATTED_VALUE",
-    numerize=True,
-    max_retries=3,
-):
+    bookName: str,
+    sheetName: str,
+    start: Optional[str] = None,  # Allows None or str
+    end: Optional[str] = None,  # Allows None or str
+    index_column: Optional[int] = None,  # Allows None or int
+    value_render: pygsheets.ValueRenderOption = pygsheets.ValueRenderOption.FORMATTED_VALUE,
+    numerize: bool = True,
+    max_retries: int = 3,
+) -> pd.DataFrame:
     """
-    Returns a pandas DataFrame object from a Google Sheet
-        using the sheet name and the spreadsheet name.
+    Returns a pandas DataFrame object from a Google Sheet using the sheet name and the spreadsheet name.
     If a cached connection exists, it will be used instead of creating a new one.
 
-    Parameters:
-    -----------
-    bookName: str, the name of the Google Sheet.
-    sheetName: str, the name of the sheet within the Google Sheet.
-    start: str, the top left cell of the range to retrieve data from (default is None).
-    end: str, the bottom right cell of the range
-        to retrieve data from (default is None).
-    index_column: int, the index of the column to
-        use as the DataFrame index (default is None).
-    value_render: str, the value render option to use (default is "FORMATTED_VALUE").
-        FORMATTED_VALUE: the values will be calculated &
-            formatted in the reply according to the cell's formatting.
-        UNFORMATTED_VALUE: the values will be numerized, but values will be unformatted.
-        FORMULA: the values will not be calculated. The reply will include the formulas.
-    numerize: bool, whether to convert numeric values to float (default is True).
-    max_retries: int, the maximum number of retries in case of failure (default is 3).
+    Args:
+        bookName (str): The name of the Google Sheet.
+        sheetName (str): The name of the sheet within the Google Sheet.
+        start (Optional[str]): The top left cell of the range to retrieve data from (default is None).
+        end (Optional[str]): The bottom right cell of the range to retrieve data from (default is None).
+        index_column (Optional[int]): The index of the column to use as the DataFrame index (default is None).
+        value_render (ValueRenderOption): The value render option to use (default is FORMATTED_VALUE).
+        numerize (bool): Whether to convert numeric values to float (default is True).
+        max_retries (int): The maximum number of retries in case of failure (default is 3).
 
     Returns:
-    -----------
-    a pandas DataFrame object.
+        pandas.DataFrame: A DataFrame object with data from the Google Sheet.
 
     Raises:
-    -----------
-    Exception if the maximum number of retries is exceeded.
+        Exception: If the maximum number of retries is exceeded.
     """
-    retries_left = max_retries
 
-    while retries_left > 0:
+    while max_retries > 0:
         try:
             worksheet = get_book_sheet(bookName, sheetName, max_retries)
 
@@ -462,15 +469,21 @@ def get_book_sheet_df(
                 numerize=numerize,
             )
 
+            # If get_as_df returns False, return an empty DataFrame
+            if df is False:
+                raise Exception("Failed to get the sheet as a DataFrame, not linked")
+
             return df
         except Exception as e:
-            retries_left -= 1
-            if retries_left > 0:
+            max_retries -= 1
+            if max_retries > 0:
                 print_logger(
-                    f"Error: {e}. Retrying {retries_left} more time(s).", level="error"
+                    f"Error: {e}. Retrying {max_retries} more time(s).", level="error"
                 )
-            else:
-                raise e
+
+    raise Exception(
+        f"Failed to get the sheet {sheetName} from book {bookName} after {max_retries} retries."
+    )
 
 
 def get_book_sheet_values(

@@ -31,7 +31,7 @@ if os.path.exists(dotenv_path):
 GOOGLE_DRIVE_FOLDER_ID_REPORT = os.getenv("GOOGLE_DRIVE_FOLDER_ID_REPORT", None)
 if GOOGLE_DRIVE_FOLDER_ID_REPORT is not None:
     print_logger(
-        f"Found environment variable for google drive folder id with key: {GOOGLE_DRIVE_FOLDER_ID_REPORT}"
+        f"Found environment variable for google drive report folder id with key: {GOOGLE_DRIVE_FOLDER_ID_REPORT}"
     )
 
 
@@ -44,48 +44,64 @@ ls_files_downloaded_this_run = []
 # %%
 # Google Credentials #
 
-service_account_env_key = "GOOGLE_SERVICE_ACCOUNT"
+SERVICE_ACCOUNT_ENV_KEY = "GOOGLE_SERVICE_ACCOUNT"
 json_file_path = os.path.join(
     grandparent_dir,
     "service_account_credentials.json",
 )
+service_account_env_data = os.getenv(SERVICE_ACCOUNT_ENV_KEY)
+service_account_env_data_json = None
+service_account_email = None
 
-if os.getenv(service_account_env_key) is not None:
+if service_account_env_data is not None:
     print_logger(
-        f"Found environment variable for service account with key: {service_account_env_key}"
+        f"Found environment variable for service account with key: {SERVICE_ACCOUNT_ENV_KEY}"
     )
-    raw_json = os.getenv(service_account_env_key)
 
     try:
-        service_account_email = json.loads(raw_json)["client_email"]
-        fixed_json = raw_json
+        if service_account_env_data:
+            service_account_env_data_json = json.loads(service_account_env_data)
+        else:
+            raise ValueError(
+                f"Environment variable {SERVICE_ACCOUNT_ENV_KEY} is not set or empty"
+            )
     except json.JSONDecodeError as e:
         print_logger(
-            f"JSONDecodeError: {e} with reading json from environment variable, trying to repair"
+            f"JSONDecodeError: {e} with reading json from environment variable, trying to repair and reload"
         )
-        fixed_json = raw_json.replace("\n", "\\n")
-        service_account_email = json.loads(fixed_json)["client_email"]
+        if service_account_env_data is not None:
+            service_account_env_data = service_account_env_data.replace("\n", "\\n")
+            service_account_env_data_json = json.loads(service_account_env_data)
+        else:
+            raise ValueError(
+                f"Environment variable {SERVICE_ACCOUNT_ENV_KEY} is not set or empty"
+            )
 
         # fix environment variable without modifying the .env file
-        os.environ[service_account_env_key] = fixed_json
+        os.environ[SERVICE_ACCOUNT_ENV_KEY] = service_account_env_data
 
 elif os.path.exists(json_file_path):
     print_logger(
-        f"No environment varible with key: {service_account_env_key}, Found json credentails at: {json_file_path}"
+        f"No environment varible with key: {SERVICE_ACCOUNT_ENV_KEY}, Found json credentails at: {json_file_path}"
     )
-    fixed_json = open(json_file_path).read()
-    service_account_email = json.loads(fixed_json)["client_email"]
+    service_account_env_data = open(json_file_path).read()
+    service_account_env_data_json = json.loads(service_account_env_data)
 
     # add environment variable without modifying the .env file
-    os.environ[service_account_env_key] = fixed_json
+    os.environ[SERVICE_ACCOUNT_ENV_KEY] = service_account_env_data
 
+else:
+    raise ValueError(
+        f"No environment varible with key: {SERVICE_ACCOUNT_ENV_KEY}, and no json credentails at: {json_file_path}"
+    )
+
+service_account_email = service_account_env_data_json["client_email"]
 print_logger(f"google_service_account email: {service_account_email}")
 
-print_logger("Using service account credentials from environment variable")
 # create credentials from google service account info
 google_service_account_credentials = (
     service_account.Credentials.from_service_account_info(
-        json.loads(os.getenv(service_account_env_key), strict=False),
+        service_account_env_data_json,
         scopes=["https://www.googleapis.com/auth/drive"],
     )
 )
@@ -130,6 +146,7 @@ def get_drive_file_id_from_folder_id_path(folder_id, ls_file_path, is_folder=Fal
             f"Scanning folder {folder_name} with ID {curr_dir_id}", level="debug"
         )
 
+        results = None  # Initialize results to None
         file_found = False  # Initialize a flag variable to False
 
         while not file_found:
@@ -171,7 +188,7 @@ def get_drive_file_id_from_folder_id_path(folder_id, ls_file_path, is_folder=Fal
         )
     else:
         query = (
-            f"name='{filename}' and '{curr_dir_id}' in parents and trashed=false"
+            f"name='{filename}' and '{curr_dir_id}' in parents and trashed=false "
             "and mimeType!='application/vnd.google-apps.folder'"
         )
     results = (
@@ -332,28 +349,28 @@ def download_and_get_drive_file_path(
         os.path.join(drive_download_cache_dir_to_use, root_folder_id, *ls_file_path)
     )
     if dest_file_path in ls_files_downloaded_this_run:
-        print_logger(f"File already downloaded this run: {ls_file_path}")
+        print_logger(f"File already downloaded this run: {dest_file_path}")
         return dest_file_path
-    print_logger(f"dest_file_path: {dest_file_path}")
 
-    if not os.path.exists(dest_file_path) or force_download:
-        print_logger(f"Downloading file: {ls_file_path}")
-        drive_file_id = get_drive_file_id_from_folder_id_path(
-            root_folder_id, ls_file_path
+    if (not force_download) and (os.path.exists(dest_file_path)):
+        print_logger(
+            f"File already exists and force_download is false: {dest_file_path}"
         )
+        return dest_file_path
 
-        # make dest dirs if they dont exist
-        dest_dir = os.path.dirname(dest_file_path)
-        print_logger(f"dest_dir: {dest_dir}")
-        if not os.path.exists(dest_dir):
-            print_logger(f"Making dir: {dest_dir}")
-            os.makedirs(dest_dir)
+    print_logger(f"Downloading file: {ls_file_path}")
+    drive_file_id = get_drive_file_id_from_folder_id_path(root_folder_id, ls_file_path)
 
-        # download the file from google drive
-        download_file_by_id(drive_file_id, dest_file_path)
-        print_logger(f"Downloaded file: {ls_file_path}")
-    else:
-        print_logger(f"File already exists: {ls_file_path}")
+    # make dest dirs if they dont exist
+    dest_dir = os.path.dirname(dest_file_path)
+    print_logger(f"dest_dir: {dest_dir}")
+    if not os.path.exists(dest_dir):
+        print_logger(f"Making dir: {dest_dir}")
+        os.makedirs(dest_dir)
+
+    # download the file from google drive
+    download_file_by_id(drive_file_id, dest_file_path)
+    print_logger(f"Downloaded file: {ls_file_path}")
 
     return dest_file_path
 
