@@ -676,10 +676,22 @@ def WriteToSheets(  # noqa: C901
     for i in range(retries):
         try:
             Workbook = get_book(bookName)
-
+            # get available sheets
+            ls_sheets = Workbook.worksheets()
+            ls_sheet_names = [sheet.title for sheet in ls_sheets]
+            if sheetName not in ls_sheet_names:
+                print_logger(
+                    f"Sheet {sheetName} not found in book {bookName}, creating new sheet",
+                    level="warning",
+                )
+                Workbook.add_worksheet(sheetName)
             try:
                 Worksheet = get_book_sheet(bookName, sheetName)
-            except pygsheets.WorksheetNotFound:
+            except Exception as e:
+                print_logger(
+                    f"Sheet {sheetName} not found in book {bookName}, creating new sheet because {e}",
+                    level="warning",
+                )
                 Workbook.add_worksheet(sheetName)
                 Worksheet = get_book_sheet(bookName, sheetName)
 
