@@ -137,10 +137,18 @@ def create_message(
     to,
     subject,
     message_text,
-    ls_attachment_path=[],
-    cc=[],
-    bcc=[],
+    ls_attachment_path=None,
+    cc=None,
+    bcc=None,
+    reply_to=None,
 ):
+    if ls_attachment_path is None:
+        ls_attachment_path = []  # Initialize an empty list if not provided
+    if cc is None:
+        cc = []
+    if bcc is None:
+        bcc = []
+
     message = MIMEMultipart()
     message["to"] = ", ".join(to)
     message["from"] = formataddr((sender_name, sender_email))
@@ -152,9 +160,16 @@ def create_message(
     if bcc:
         message["bcc"] = ", ".join(bcc)
 
+    # Set the reply-to header if provided (support list of addresses)
+    if reply_to:
+        if isinstance(reply_to, list):
+            message["Reply-To"] = ", ".join(reply_to)
+        else:
+            message["Reply-To"] = reply_to
+
     message.attach(MIMEText(message_text, "html"))  # Set the MIME type to HTML
 
-    if len(ls_attachment_path) > 0:
+    if ls_attachment_path:
         for attachment_path in ls_attachment_path:
             attachment = create_attachment(attachment_path)
             message.attach(attachment)
@@ -169,11 +184,23 @@ def send_email(
     subject,
     message_text,
     account_type="default",
-    ls_attachment_path=[],
-    cc=[],
-    bcc=[],
+    ls_attachment_path=None,  # Avoid mutable default argument
+    cc=None,
+    bcc=None,
+    reply_to=None,
 ):
+    # Ensure default values for mutable arguments
+    if ls_attachment_path is None:
+        ls_attachment_path = []
+    if cc is None:
+        cc = []
+    if bcc is None:
+        bcc = []
+
+    # Get Gmail service using the account type
     service = get_gmail_service(account_type=account_type)
+
+    # Create the message with attachments, CC, BCC, and Reply-To
     message = create_message(
         sender_name,
         sender_email,
@@ -183,7 +210,10 @@ def send_email(
         ls_attachment_path,
         cc,
         bcc,
+        reply_to,
     )
+
+    # Send the message
     send_message(service, "me", message)
 
 

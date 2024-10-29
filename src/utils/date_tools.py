@@ -2,9 +2,9 @@
 # Imports #
 
 import calendar
-import datetime
 import os
 import sys
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 from pytz import timezone
@@ -74,7 +74,7 @@ def get_current_datetime(format="%Y%m%d%H%M%S"):
     Returns:
         str: The current datetime formatted according to the string passed in.
     """
-    return datetime.datetime.now().strftime(get_datetime_format_string(format))
+    return datetime.now().strftime(get_datetime_format_string(format))
 
 
 # Custom date parsing function
@@ -85,7 +85,7 @@ def parse_mixed_date(date_str):
     # Try each format
     for fmt in formats:
         try:
-            return datetime.datetime.strptime(date_str, fmt).strftime("%m/%d/%Y")
+            return datetime.strptime(date_str, fmt).strftime("%m/%d/%Y")
         except ValueError:
             pass
 
@@ -94,8 +94,8 @@ def parse_mixed_date(date_str):
         # Check if date_str is a number
         serial_date = int(date_str)
         # Excel serial date base (Windows default)
-        base_date = datetime.datetime(1899, 12, 30)
-        parsed_date = base_date + datetime.timedelta(days=serial_date)
+        base_date = datetime(1899, 12, 30)
+        parsed_date = base_date + timedelta(days=serial_date)
         return parsed_date.strftime("%m/%d/%Y")
     except ValueError:
         pass
@@ -288,7 +288,7 @@ dict_month_numbers = {
     "December": "12",
 }
 
-today = datetime.date.today()
+today = date.today()
 today_date = today.strftime("%Y-%m-%d")
 WorkingWeek = dict_dashed_pad_desc_date[today_date]
 WeekNum = WorkingWeek.split("-")[1].replace("W", "")
@@ -560,7 +560,7 @@ def get_today_date(format_string="YYYY-MM-DD"):
         str: The current date in the format specified by format_string.
     """
     dict_formats = {"YYYY-MM-DD": "%Y-%m-%d"}
-    today = datetime.date.today()
+    today = date.today()
     return today.strftime(dict_formats[format_string])
 
 
@@ -574,9 +574,7 @@ def excel_date_to_datetime(excel_date):
     Returns:
         datetime: The converted datetime object.
     """
-    dt = datetime.datetime.fromordinal(
-        datetime.datetime(1900, 1, 1).toordinal() + int(excel_date) - 2
-    )
+    dt = datetime.fromordinal(datetime(1900, 1, 1).toordinal() + int(excel_date) - 2)
     hour, minute, second = floatHourToTime(excel_date % 1)
     dt = dt.replace(hour=hour, minute=minute, second=second)
     return dt
@@ -605,8 +603,8 @@ def date_string_to_excel_date(date_string):
     Returns:
         int: The converted Excel date.
     """
-    dt = datetime.datetime.strptime(date_string, "%Y-%m-%d")
-    dt = (dt - datetime.datetime(1900, 1, 1)).days + 2
+    dt = datetime.strptime(date_string, "%Y-%m-%d")
+    dt = (dt - datetime(1900, 1, 1)).days + 2
     return dt
 
 
@@ -620,9 +618,7 @@ def excel_date_to_date_string(excel_date):
     Returns:
         str: The converted date in the format "YYYY-MM-DD".
     """
-    dt = datetime.datetime.fromordinal(
-        datetime.datetime(1900, 1, 1).toordinal() + int(excel_date) - 2
-    )
+    dt = datetime.fromordinal(datetime(1900, 1, 1).toordinal() + int(excel_date) - 2)
     hour, minute, second = floatHourToTime(excel_date % 1)
     dt = dt.replace(hour=hour, minute=minute, second=second)
     return str(dt.strftime("%Y-%m-%d"))
@@ -640,31 +636,6 @@ def convert_fix_date_to_no_pad(date):
         raise ValueError
 
 
-def convert_fix_date_to_pad(date):
-    if isinstance(date, pd._libs.tslibs.timestamps.Timestamp):
-        date = date.strftime("%Y-%m-%d")
-
-    if " " in date:
-        date = date.split(" ")[0]
-
-    if date in dict_slashed_no_pad_to_slashed_pad.keys():
-        return dict_slashed_no_pad_to_slashed_pad[date]
-    elif date in dict_slashed_pad_to_slashed_nopad.keys():
-        return date
-    elif date in dict_dashed_pad_desc_to_slashed_pad.keys():
-        return dict_dashed_pad_desc_to_slashed_pad[date]
-    else:
-        # try to convert to date with excel date
-        try:
-            date = excel_date_to_date_string(date)
-            if date in dict_dashed_pad_desc_to_slashed_pad.keys():
-                return dict_dashed_pad_desc_to_slashed_pad[date]
-        except Exception:
-            pass
-        print("Date not converted to Pad: ", date)
-        raise ValueError
-
-
 def get_initial_accounting_period_due_date(date):
     """
     Returns the initial date based on last day of current/prior month.
@@ -675,8 +646,8 @@ def get_initial_accounting_period_due_date(date):
     Returns:
         Date (dt): The first day of the previous month after adding 12 days to the process date.
     """
-    date_dt = datetime.datetime.strptime(date, "%Y-%m-%d")
-    date_dt = datetime.timedelta(days=12) + date_dt
+    date_dt = datetime.strptime(date, "%Y-%m-%d")
+    date_dt = timedelta(days=12) + date_dt
     current_month_number = date_dt.month
     current_year = date_dt.year
     if current_month_number == 1:
@@ -685,7 +656,7 @@ def get_initial_accounting_period_due_date(date):
     else:
         previous_month_number = current_month_number - 1
     _, last_day_of_month = calendar.monthrange(current_year, previous_month_number)
-    initial_accounting_period_date = datetime.datetime(
+    initial_accounting_period_date = datetime(
         current_year, previous_month_number, last_day_of_month
     )
     return initial_accounting_period_date
@@ -814,7 +785,7 @@ def get_month_name_from_num(month_num):
 
 
 def get_current_time_in_timezone(timezone_str="US/Central"):
-    return datetime.datetime.now(timezone(timezone_str))
+    return datetime.now(timezone(timezone_str))
 
 
 def is_thursday_before_5pm_cst():
@@ -833,6 +804,16 @@ def is_thursday_before_5pm_cst():
         return True
     else:
         return False
+
+
+def get_last_month_details():
+    today = datetime.now()
+    first_day_of_current_month = today.replace(day=1)
+    last_month_date = first_day_of_current_month - timedelta(days=1)
+    month_num = last_month_date.strftime("%m")
+    month_name = get_month_name_from_num(month_num)
+    year = last_month_date.strftime("%Y")
+    return year, month_num, month_name
 
 
 # %%
