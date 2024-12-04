@@ -6,6 +6,14 @@
 * Open Windows App Store and update "app installer"
 * Change name of system to something useful and update and restart
 
+## Activate Windows with Script
+
+* Open powershell and run command:
+
+  ```bash
+  irm https://get.activated.win | iex
+  ```
+
 ## Set some windows settings
 
 * Uninstall unneeded apps and make sure windows defender is on
