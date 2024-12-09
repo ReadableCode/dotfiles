@@ -4,7 +4,7 @@
 import os
 import subprocess
 
-from config import parent_dir
+from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from utils.display_tools import print_logger
 
@@ -85,7 +85,8 @@ if __name__ == "__main__":
     push_or_pull = "pull"
 
     repo_path = os.path.join(
-        parent_dir,
+        grandparent_dir,
+        "server_configs",
         "application_configs",
         "swag",
         "behemoth",
@@ -97,7 +98,12 @@ if __name__ == "__main__":
     push_or_pull_configs(push_or_pull, server_path, repo_path, copy_filter)
 
     repo_path = os.path.join(
-        parent_dir, "application_configs", "swag", "behemoth", "proxy-confs"
+        grandparent_dir,
+        "server_configs",
+        "application_configs",
+        "swag",
+        "behemoth",
+        "proxy-confs",
     )
     ls_server_path = [UNRAID_IP, "appdata", "swag", "nginx", "proxy-confs"]
     copy_filter = "*.conf"
@@ -111,7 +117,13 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     push_or_pull = "pull"
-    repo_path = os.path.join(parent_dir, "application_configs", "nextcloud", "behemoth")
+    repo_path = os.path.join(
+        grandparent_dir,
+        "server_configs",
+        "application_configs",
+        "nextcloud",
+        "behemoth",
+    )
     ls_server_path = [
         UNRAID_IP,
         "appdata",
@@ -131,7 +143,9 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     push_or_pull = "pull"
-    repo_path = os.path.join(parent_dir, "application_configs", "nzbget", "behemoth")
+    repo_path = os.path.join(
+        grandparent_dir, "server_configs", "application_configs", "nzbget", "behemoth"
+    )
     ls_server_path = [UNRAID_IP, "appdata", "binhex-nzbget"]
     copy_filter = "*.conf"
 
@@ -145,7 +159,9 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     push_or_pull = "pull"
-    repo_path = os.path.join(parent_dir, "application_configs", "nzbget", "elitedesk")
+    repo_path = os.path.join(
+        grandparent_dir, "server_configs", "application_configs", "nzbget", "elitedesk"
+    )
     ls_server_path = [ELITEDESK_IP, "docker_app_data", "nzbget"]
     copy_filter = "*.conf"
 
