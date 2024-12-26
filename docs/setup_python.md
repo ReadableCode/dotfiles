@@ -193,6 +193,7 @@ Please note that Python 3.10 may already be installed on your Debian system by d
       libgmp-dev \
       libcurl4-openssl-dev \
       uuid-dev \
+      tk-dev \
       curl
       ```
 
