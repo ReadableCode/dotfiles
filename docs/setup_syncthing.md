@@ -120,12 +120,18 @@ sudo apt install syncthing
 ## Configure Syncthing
 
 * Set up ignore and unignore if needed:
-  * Just tech documents:
+  * Important Note: in line comments do not work in .syncignore # like this will ruin the line
+  
+  * Just non git tracked data in GitHub:
   
       ```bash
-      !/Technology/Linux
-      !/Technology/GitHub
-      !/Downloads
+      // Switches, change these depending on system
+      !**/data/
+
+      // Keep these because they are not committed and are needed on any project
+      !**/.env
+      !**/hellofres_credentials/
+      !**/personal_credentials/
       *
       ```
 
