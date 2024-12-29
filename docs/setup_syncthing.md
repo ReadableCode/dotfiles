@@ -129,6 +129,7 @@ sudo apt install syncthing
       !**/data/
 
       // Keep these because they are not committed and are needed on any project
+      !**/*.code-workspace
       !**/.env
       !**/hellofres_credentials/
       !**/personal_credentials/
