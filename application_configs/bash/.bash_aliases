@@ -163,6 +163,7 @@ alias ll='ls -AlhF'
 alias editaliases='nvim ~/.bash_aliases'
 alias cataliases='cat ~/.bash_aliases'
 alias srcaliases='source ~/.bashrc'
+alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 
 ### Directory Shortcuts ###
 
