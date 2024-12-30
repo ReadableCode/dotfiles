@@ -9,3 +9,6 @@ gh
 neovim
 tldr
 neofetch
+btop
+htop
+fzf

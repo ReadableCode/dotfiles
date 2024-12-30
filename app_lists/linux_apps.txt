@@ -27,3 +27,4 @@ tldr
 tmux
 tree
 unixodbc
+fzf
