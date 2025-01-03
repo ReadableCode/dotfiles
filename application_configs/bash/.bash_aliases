@@ -160,6 +160,10 @@ alias ll='ls -AlhF'
 
 ### Aliases ###
 
+if command -v batcat &>/dev/null; then
+	alias cat='batcat'
+fi
+
 alias editaliases='nvim ~/.bash_aliases'
 alias cataliases='cat ~/.bash_aliases'
 alias srcaliases='source ~/.bashrc'

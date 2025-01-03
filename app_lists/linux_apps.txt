@@ -28,3 +28,4 @@ tmux
 tree
 unixodbc
 fzf
+bat

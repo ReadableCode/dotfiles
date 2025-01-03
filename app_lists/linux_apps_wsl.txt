@@ -12,3 +12,5 @@ gh
 neovim
 ncdu
 tldr
+fzf
+bat
