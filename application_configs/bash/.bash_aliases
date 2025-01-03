@@ -273,10 +273,10 @@ alias ssh4='ssh pi@raspberrypi4a'
 alias ssh5='ssh pi@raspberrypi4'
 alias ssh6='ssh jason@EliteDesk'
 alias ssh7='ssh jason@nukbuntu'
-alias ssh8='ssh Pavilioni5'
-alias ssh9='ssh Optiplex9020'
+alias ssh8='ssh jason@Pavilioni5'
+alias ssh9='ssh jason@Optiplex9020'
 alias ssh10='ssh jason@MacbookPro12'
-alias ssh11='ssh HelloFreshJason'
+alias ssh11='ssh jason@192.168.86.4'
 
 # Android #
 alias sshtabs7p='ssh u0_a1053@GalaxyTabS7P -p 8022'
