@@ -2,6 +2,8 @@
 
 ## Setting Up Python Using uv
 
+- [https://github.com/astral-sh/uv](https://github.com/astral-sh/uv)
+
 ### Install uv on Windows
 
 - Install with script:
@@ -22,4 +24,52 @@ choco install uv
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+### Install a version of python
+
+- Use uv to install a version of python:
+
+```bash
+uv python install 3.10.12
+```
+
+## Managing Dpendencies
+
+- Init a project:
+
+```bash
+uv init
+```
+
+- If you have a pyproject.toml file, you can sync the dependencies from the requirements with the venv:
+
+```bash
+uv sync
+```
+
+- To add a package to the project:
+
+```bash
+uv add <package name>
+```
+
+- To remove a package from the project:
+
+```bash
+uv remove <package name>
+```
+
+- To see a tree of dependencies:
+
+```bash
+uv tree
+```
+
+### Converting a pipenv project to uv
+
+- If you have a requirements.txt file, you can sync the dependencies from the requirements with the venv:
+
+```bash
+uv add -r requirements.txt
 ```
