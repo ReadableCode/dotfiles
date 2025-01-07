@@ -139,47 +139,57 @@ function ll {
     Get-ChildItem -Force
 }
 
-# replace cat with bat if bat is installed
-$batSource = (get-command bat).Source
-if ($null -ne $batSource) {
-  if (test-path alias:/cat) { remove-item -force alias:/cat }
-
-  function cat {
-    param(
-      [Parameter(Mandatory,ValueFromPipeline)][System.IO.FileInfo[]]$Path,
-      [switch]$Diff,
-      [string]$Language,
-      [string][ValidateSet("unicode","caret")]$NonPrintableNotation,
-      [string][ValidateSet("auto","always","never")]$Paging,
-      [switch]$ShowAll,
-      [string[]][ValidateSet("default","full","auto","plain","changes","header","header-filename","header-filesize","grid","rule","numbers","snip")]$Style
-    )
-
-    begin {
-      $batArgs = [System.Collections.ArrayList]@()
-    }
-    process {
-      $Path | ForEach-Object {
-        $fullPath = Resolve-Path $_ -ErrorAction Continue
-        if ($null -ne $fullPath) {
-          $batArgs.AddRange([Array]$fullPath)
-        }
-      }
-    }
-    end {
-      if ($batArgs.Count -eq 0)         { return }
-      if ($batArgs.Count -gt 1)         { $batArgs.AddRange(@("--style", "header-filename,grid")) }
-      if ($Diff)                        { $batArgs.Add("--diff") }
-      if ("" -ne $Language)             { $batArgs.AddRange(@("--language", $Language)) }
-      if ("" -ne $NonPrintableNotation) { $batArgs.AddRange(@("--nonprintable-notation", $NonPrintableNotation)) }
-      if ("" -ne $Paging)               { $batArgs.AddRange(@("--paging", $Paging)) }
-      if ($ShowAll)                     { $batArgs.Add("--show-all") }
-      if ($Style.Count -gt 0)           { $batArgs.AddRange(@("--style", [string]::Join(",", $Style))) }
-
-      & $batSource $batArgs
-    }
-  }
+# Check if 'bat' is installed before proceeding
+$batSource = $null
+try {
+    $batSource = (get-command bat).Source
+} catch {
+    Write-Host "'bat' is not installed, proceeding with default behavior." -ForegroundColor Yellow
 }
+
+# Only proceed with overriding 'cat' if 'bat' is installed
+if ($null -ne $batSource) {
+    if (test-path alias:/cat) { remove-item -force alias:/cat }
+
+    function cat {
+        param(
+            [Parameter(Mandatory,ValueFromPipeline)][System.IO.FileInfo[]]$Path,
+            [switch]$Diff,
+            [string]$Language,
+            [string][ValidateSet("unicode","caret")]$NonPrintableNotation,
+            [string][ValidateSet("auto","always","never")]$Paging,
+            [switch]$ShowAll,
+            [string[]][ValidateSet("default","full","auto","plain","changes","header","header-filename","header-filesize","grid","rule","numbers","snip")]$Style
+        )
+
+        begin {
+            $batArgs = [System.Collections.ArrayList]@()
+        }
+        process {
+            $Path | ForEach-Object {
+                $fullPath = Resolve-Path $_ -ErrorAction Continue
+                if ($null -ne $fullPath) {
+                    $batArgs.AddRange([Array]$fullPath)
+                }
+            }
+        }
+        end {
+            if ($batArgs.Count -eq 0)         { return }
+            if ($batArgs.Count -gt 1)         { $batArgs.AddRange(@("--style", "header-filename,grid")) }
+            if ($Diff)                        { $batArgs.Add("--diff") }
+            if ("" -ne $Language)             { $batArgs.AddRange(@("--language", $Language)) }
+            if ("" -ne $NonPrintableNotation) { $batArgs.AddRange(@("--nonprintable-notation", $NonPrintableNotation)) }
+            if ("" -ne $Paging)               { $batArgs.AddRange(@("--paging", $Paging)) }
+            if ($ShowAll)                     { $batArgs.Add("--show-all") }
+            if ($Style.Count -gt 0)           { $batArgs.AddRange(@("--style", [string]::Join(",", $Style))) }
+
+            & $batSource $batArgs
+        }
+    }
+} else {
+    Write-Host "No 'cat' replacement, continuing with default behavior." -ForegroundColor Green
+}
+
 
 
 function openbranchdiffs {
