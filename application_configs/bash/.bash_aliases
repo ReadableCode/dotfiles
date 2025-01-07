@@ -1,17 +1,4 @@
-### Detect Paths ###
-
-set_git_dir() {
-	if [ -d "$HOME/GitHub/" ]; then
-		gitDir="$HOME/GitHub/"
-	elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
-		gitDir="$HOME/HelloFresh/GDrive/Projects/"
-	else
-		echo "No suitable git directory found"
-		gitDir=""
-	fi
-}
-
-### Terminal Type ###
+### Terminal Config ###
 
 # Detect the type of terminal: WSL, Linux, or macOS
 detect_terminal_type() {
@@ -30,50 +17,40 @@ detect_terminal_type() {
 	fi
 }
 
-### Pyenv Setup ###
+detect_terminal_type
 
-# Initialize pyenv based on the terminal type
-setup_pyenv() {
-	export PYENV_ROOT="$HOME/.pyenv"
+alias editaliases='nvim ~/.bash_aliases'
 
-	if [[ "$TERMINAL_TYPE" == "WSL" ]]; then
-		echo "Checking if pyenv is installed in WSL"
+alias cataliases='cat ~/.bash_aliases'
 
-		if [ -d "$PYENV_ROOT" ] && [ -x "$PYENV_ROOT/bin/pyenv" ]; then
-			echo "Pyenv is installed, setting up pyenv for WSL"
+alias srcaliases='source ~/.bashrc'
 
-			BIN_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/bin"
-			BIN_NEW="$PYENV_ROOT/bin"
-			SHIMS_OLD="/mnt/c/Users/$USER/.pyenv/pyenv-win/shims"
-			SHIMS_NEW="$PYENV_ROOT/shims"
+### Paths ###
 
-			# Replace the Windows pyenv-win paths with the Linux pyenv paths
-			export PATH=$(echo $PATH | sed "s@$BIN_OLD@$BIN_NEW@" | sed "s@$SHIMS_OLD@$SHIMS_NEW@")
-
-			# Initialize pyenv for WSL
-			eval "$(pyenv init -)"
-		else
-			echo "Pyenv is not installed in WSL, skipping pyenv setup"
-		fi
-
-	elif [[ "$TERMINAL_TYPE" == "Linux" || "$TERMINAL_TYPE" == "macOS" ]]; then
-		echo "Checking if pyenv is installed on $TERMINAL_TYPE"
-
-		if command -v pyenv &>/dev/null; then
-			echo "Pyenv is installed, setting up pyenv for $TERMINAL_TYPE"
-
-			export PATH="$PYENV_ROOT/bin:$PATH"
-			eval "$(pyenv init --path)"
-			eval "$(pyenv init -)"
-		else
-			echo "Pyenv is not installed on $TERMINAL_TYPE, skipping pyenv setup"
-		fi
+set_git_dir() {
+	if [ -d "$HOME/GitHub/" ]; then
+		gitDir="$HOME/GitHub/"
+	elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
+		gitDir="$HOME/HelloFresh/GDrive/Projects/"
 	else
-		echo "No pyenv setup for unknown system"
+		echo "No suitable git directory found"
+		gitDir=""
 	fi
 }
 
-### Functions ###
+set_git_dir
+
+alias myscripts='cd $gitDir/dotfiles/scripts/'
+alias linux='cd ~/Documents/Technology/Linux/'
+alias githubdir='cd $gitDir'
+alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
+alias finance='cd $gitDir/na-finops/'
+
+### Python ###
+
+alias venvactivate='source ./venv/bin/activate'
+
+alias venvdeactivate='deactivate'
 
 function run_python_script() {
 	# Check if a file path argument is provided
@@ -92,27 +69,21 @@ function run_python_script() {
 	echo "Changing to script directory: $script_dir"
 	cd "$script_dir" || return
 
-	# Check if the Pipenv environment is installed
-	if command -v pipenv >/dev/null 2>&1; then
-		pipenv_venv=$(pipenv --venv 2>/dev/null)
+	# Check if the venv folder exists in the project directory
+	if [ -d "./venv" ]; then
+		echo "Project venv detected at: ./venv"
 
-		if [ -n "$pipenv_venv" ]; then
-			echo "Pipenv environment detected at: $pipenv_venv"
+		# Activate the venv environment
+		source ./venv/bin/activate
 
-			# Activate the Pipenv environment explicitly
-			source "$pipenv_venv/bin/activate"
+		# Run the script using the venv environment
+		python3 "$script_path"
 
-			# Run the script using the Pipenv environment
-			python3 "$script_path"
-
-			# Deactivate the environment afterward
-			deactivate
-			return 0
-		else
-			echo "No active Pipenv environment found, attempting to run with system Python."
-		fi
+		# Deactivate the environment afterward
+		deactivate
+		return 0
 	else
-		echo "Pipenv is not installed. Running the script with system Python."
+		echo "No project venv found. Running the script with system Python."
 	fi
 
 	# Run the script using the system Python as a fallback
@@ -135,47 +106,24 @@ function todo() {
 	run_python_script "$gitDir/Terminal_To_Do/src/main.py"
 }
 
-function ourcashprojection() {
-	if [ -z "$gitDir" ]; then
-		echo "gitDir is not set"
-		return 1
-	fi
-	run_python_script "$gitDir/Our_Cash/src/finance_projection.py"
-}
-
-### Run Functions ###
-
-# Call the git directory detection function
-set_git_dir
-
-# Call the detection function
-detect_terminal_type
-
-# Call the pyenv setup function
-setup_pyenv
-
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
 
-### Aliases ###
+function alias_cat_to_bat() {
+	if command -v bat &>/dev/null; then
+		echo "'bat' is installed. Aliasing 'cat' to 'bat'."
+		alias cat='bat'
+	elif command -v batcat &>/dev/null; then
+		echo "'batcat' is installed. Aliasing 'cat' to 'batcat'."
+		alias cat='batcat'
+	else
+		echo "'bat' or 'batcat' is not installed. No alias created."
+	fi
+}
 
-if command -v batcat &>/dev/null; then
-	alias cat='batcat'
-fi
-
-alias editaliases='nvim ~/.bash_aliases'
-alias cataliases='cat ~/.bash_aliases'
-alias srcaliases='source ~/.bashrc'
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 
-### Directory Shortcuts ###
-
-alias myscripts='cd $gitDir/dotfiles/scripts/'
-alias linux='cd ~/Documents/Technology/Linux/'
-alias githubdir='cd $gitDir'
-alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
-alias finance='cd $gitDir/na-finops/'
 alias hfpulls='bash $gitDir/na-finops/scripts/git_pull_hf_repos.sh'
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
@@ -191,12 +139,10 @@ alias speed='speedtest-cli'
 alias windirstat='ncdu'
 alias mountcheck='mount | grep "sd"'
 
-### Python Shortcuts ###
-
-alias pipenvactivate='source $(pipenv --venv)/bin/activate'
-alias pipenvdeactivate='deactivate'
+### Servers ###
 
 alias startcodeserver='code-server serve-local --host 0.0.0.0 --without-connection-token'
+
 function startjupyterlab {
 	# Change to the directory defined by gitDir
 	cd $gitDir
@@ -215,8 +161,11 @@ function startollama {
 		echo "curl https://ollama.ai/install.sh | sh"
 	fi
 }
+
 alias pullollamamodels='ollama pull llama2-uncensored'
+
 alias runollama='ollama run llama2-uncensored'
+
 alias stopollama='kill $(pgrep -f "ollama serve")'
 
 ### GPU Shortcuts ###
@@ -268,19 +217,6 @@ alias sshhellowin='ssh HELLOFRESH\\16937827583938060798@HelloFreshWindows'
 
 # GinaMary #
 alias sshginamary='ssh gaddy_five@ginagaddysimac'
-
-# Power Order Linux #
-alias ssh1='ssh pi@raspberrypi0'
-alias ssh2='ssh pi@raspberrypi3'
-alias ssh3='ssh pi@raspberrypi3a'
-alias ssh4='ssh pi@raspberrypi4a'
-alias ssh5='ssh pi@raspberrypi4'
-alias ssh6='ssh jason@EliteDesk'
-alias ssh7='ssh jason@nukbuntu'
-alias ssh8='ssh jason@Pavilioni5'
-alias ssh9='ssh jason@Optiplex9020'
-alias ssh10='ssh jason@MacbookPro12'
-alias ssh11='ssh jason@192.168.86.4'
 
 # Android #
 alias sshtabs7p='ssh u0_a1053@GalaxyTabS7P -p 8022'

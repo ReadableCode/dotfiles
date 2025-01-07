@@ -24,8 +24,7 @@ plex
 powertoys
 procexp
 putty
-python3
-python310
+bat
 slack
 steam
 synctrayzor
@@ -41,3 +40,4 @@ vscode
 windirstat
 wireguard
 wiztree
+uv
