@@ -30,3 +30,5 @@ triggers/*
 done_message_ids.txt
 gmail_oauth*.json
 gmail_token*.json
+*.egg-info/
+.venv
