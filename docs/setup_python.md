@@ -68,8 +68,24 @@ uv tree
 
 ### Converting a pipenv project to uv
 
+- Add a section to any existing pyproject.toml file for the project:
+
+```toml
+[project]
+name = "dotfiles"
+version = "0.1.0"
+description = "dotfiles"
+requires-python = ">=3.10,<3.11"
+```
+
 - If you have a requirements.txt file, you can sync the dependencies from the requirements with the venv:
 
 ```bash
 uv add -r requirements.txt
+```
+
+- Add the .gitignore items below:
+
+```bash
+*.egg-info/
 ```
