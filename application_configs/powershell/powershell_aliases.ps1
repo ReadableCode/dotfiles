@@ -139,10 +139,10 @@ function ll {
     Get-ChildItem -Force
 }
 
-# Check if 'bat' is installed before proceeding
+# Check if 'bat' is installed by checking if the executable exists
 $batSource = $null
 try {
-    $batSource = (get-command bat).Source
+    $batSource = (Get-Command bat -ErrorAction Stop).Source
 } catch {
     Write-Host "'bat' is not installed, proceeding with default behavior." -ForegroundColor Yellow
 }
