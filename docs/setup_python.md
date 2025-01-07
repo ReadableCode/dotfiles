@@ -88,4 +88,5 @@ uv add -r requirements.txt
 
 ```bash
 *.egg-info/
+.venv
 ```
