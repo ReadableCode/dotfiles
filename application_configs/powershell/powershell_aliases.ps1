@@ -50,10 +50,6 @@ function editaliases {
     nvim $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
-function srcaliases {
-    . (Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
-}
-
 
 ### Paths ###
 
