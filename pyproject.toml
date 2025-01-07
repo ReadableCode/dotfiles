@@ -1,3 +1,31 @@
+[project]
+name = "dotfiles"
+version = "0.1.0"
+description = "dotfiles"
+requires-python = ">=3.10,<3.11"
+dependencies = [
+    "datetime>=5.5",
+    "google-api-python-client>=2.157.0",
+    "google-auth>=2.37.0",
+    "google-auth-oauthlib>=1.2.1",
+    "impyla>=0.19.0",
+    "ipykernel>=6.29.5",
+    "jupyterlab>=4.3.4",
+    "matplotlib>=3.10.0",
+    "numpy>=2.2.1",
+    "openpyxl>=3.1.5",
+    "pandas>=2.2.3",
+    "paramiko>=3.5.0",
+    "pydrive>=1.3.1",
+    "pygsheets>=2.0.6",
+    "python-dotenv>=1.0.1",
+    "requests>=2.32.3",
+    "scp>=0.15.0",
+    "streamlit>=1.41.1",
+    "tabulate>=0.9.0",
+    "watchdog>=6.0.0",
+]
+
 [tool.flake8]
 max-line-length = 120
 max-complexity = 15
@@ -13,7 +41,6 @@ sections= ["FUTURE", "STDLIB", "THIRDPARTY", "FIRSTPARTY", "LOCALFOLDER"]
 known_first_party = ["dotenv", "test_tools"]
 no_lines_before = ["FIRSTPARTY"]
 force_sort_within_sections = false
-
 
 [tool.mypy]
 ignore_missing_imports = true
