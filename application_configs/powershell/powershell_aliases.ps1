@@ -43,16 +43,17 @@
 ### Terminal Config ###
 
 function cataliases {
-    Get-Content $(Join-Path $gitDir '\dotfiles\application_configs\powershell\powershell_aliases.ps1')
+    Get-Content $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
 function editaliases {
-    nvim $(Join-Path $gitDir '\dotfiles\application_configs\powershell\powershell_aliases.ps1')
+    nvim $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
 function srcaliases {
-    . $(Join-Path $gitDir '\dotfiles\application_configs\powershell\powershell_aliases.ps1')
+    . (Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
+
 
 ### Paths ###
 
@@ -76,7 +77,19 @@ function finance { Set-Location (Join-Path $gitDir 'na-finops') }
 
 ### Python ###
 
-function venvactivate { .\.venv\Scripts\Activate.ps1 }
+function venvactivate {
+    # Set the path to the virtual environment's Activate.ps1 script
+    $venvPath = Join-Path (Get-Location) '.venv\Scripts\activate.ps1'
+
+    # Check if the script exists
+    if (Test-Path $venvPath) {
+        Write-Host "Activating virtual environment..." -ForegroundColor Green
+        # Source the script to activate the environment
+        & $venvPath
+    } else {
+        Write-Host "Virtual environment activation script not found at: $venvPath" -ForegroundColor Red
+    }
+}
 
 function venvdeactivate { deactivate }
 
