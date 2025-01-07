@@ -76,7 +76,7 @@ function finance { Set-Location (Join-Path $gitDir 'na-finops') }
 
 ### Python ###
 
-function venvactivate { . ./venv/Scripts/Activate.ps1 }
+function venvactivate { .\.venv\Scripts\Activate.ps1 }
 
 function venvdeactivate { deactivate }
 
@@ -104,7 +104,7 @@ function run-python-script {
         Write-Host "Project venv detected at: ./venv"
 
         # Activate the venv environment
-        . ./venv/Scripts/Activate.ps1
+        .\.venv\Scripts\Activate.ps1
 
         # Run the script using the venv environment
         python $scriptPath
