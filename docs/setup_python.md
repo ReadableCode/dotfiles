@@ -18,7 +18,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 choco install uv
 ```
 
-### Install uv on MacOS or Linux
+### Install uv on macOS or Linux
 
 - Install with script:
 
