@@ -65,25 +65,28 @@ function run_python_script() {
 	script_path="$1"
 	script_dir=$(dirname "$script_path")
 
+	# Move up one directory level to check for the .venv folder
+	venv_dir="$(dirname "$script_dir")/.venv"
+
 	# Change to the script directory
 	echo "Changing to script directory: $script_dir"
 	cd "$script_dir" || return
 
-	# Check if the venv folder exists in the project directory
-	if [ -d "./venv" ]; then
-		echo "Project venv detected at: ./venv"
+	# Check if the .venv folder exists in the parent directory
+	if [ -d "$venv_dir" ]; then
+		echo "Project .venv detected at: $venv_dir"
 
-		# Activate the venv environment
-		source ./venv/bin/activate
+		# Activate the .venv environment
+		source "$venv_dir/bin/activate"
 
-		# Run the script using the venv environment
+		# Run the script using the .venv environment
 		python3 "$script_path"
 
 		# Deactivate the environment afterward
 		deactivate
 		return 0
 	else
-		echo "No project venv found. Running the script with system Python."
+		echo "No project .venv found in parent directory. Running the script with system Python."
 	fi
 
 	# Run the script using the system Python as a fallback
