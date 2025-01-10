@@ -37,7 +37,6 @@ vnc-connect
 vnc-viewer
 vortex
 vscode
-windirstat
 wireguard
 wiztree
 uv
