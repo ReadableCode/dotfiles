@@ -48,7 +48,7 @@ alias finance='cd $gitDir/na-finops/'
 
 ### Python ###
 
-alias venvactivate='source ./venv/bin/activate'
+alias venvactivate='source ./.venv/bin/activate'
 
 alias venvdeactivate='deactivate'
 
