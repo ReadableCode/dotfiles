@@ -96,3 +96,5 @@ uv add -r requirements.txt
 ```bash
 rm Pipfile Pipfile.lock requirements.txt
 ```
+
+- Remove pipenv environments from the system
