@@ -126,7 +126,8 @@ sudo apt install syncthing
   
       ```bash
       // Switches, change these depending on system
-      !**/data/
+      // Include `data` folder in each top-level project folder
+      !*/data/
 
       // Keep these because they are not committed and are needed on any project
       !**/*.code-workspace
