@@ -90,3 +90,9 @@ uv add -r requirements.txt
 *.egg-info/
 .venv
 ```
+
+- Remove the pipfile, pipfile.lock and requirements.txt files:
+
+```bash
+rm Pipfile Pipfile.lock requirements.txt
+```
