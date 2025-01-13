@@ -253,3 +253,22 @@ clasp login # will need gui access to the machine
 ## Syncthing Setup
 
 * Follow instructions in [setup_syncthing.md](./setup_syncthing.md)
+
+## Enable or Disable Swap on Ubuntu
+
+* Check if swap is enabled:
+
+  ```bash
+  sudo swapon --show
+  ```
+
+* Change swap allocation:
+
+```bash
+sudo swapoff /swapfile
+sudo fallocate -l 32G /swapfile # change size as needed
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+swapon --show
+```
