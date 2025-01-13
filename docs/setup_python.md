@@ -66,6 +66,18 @@ uv remove <package name>
 uv tree
 ```
 
+- To activate on a terminal in Windows:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+- To activate on a terminal in Linux or macOS:
+
+```bash
+source ./.venv/bin/activate
+```
+
 ### Converting a pipenv project to uv
 
 - Add a section to any existing pyproject.toml file for the project:
