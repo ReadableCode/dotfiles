@@ -19,47 +19,6 @@ detect_terminal_type() {
 
 detect_terminal_type
 
-# Colors for prompt
-RESET="\[\033[0m\]"
-BOLD="\[\033[1m\]"
-RED="\[\033[31m\]"
-GREEN="\[\033[32m\]"
-YELLOW="\[\033[33m\]"
-BLUE="\[\033[34m\]"
-MAGENTA="\[\033[35m\]"
-CYAN="\[\033[36m\]"
-
-# Git branch prompt function
-git_branch() {
-	# Check if we are in a Git repository
-	if git rev-parse --is-inside-work-tree &>/dev/null; then
-		# Get the current branch name
-		local branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
-		echo "${YELLOW}(${branch})${RESET}"
-	fi
-}
-
-# Customize the PS1 prompt with colors
-if [[ $TERMINAL_TYPE == "macOS" || $TERMINAL_TYPE == "Linux" || $TERMINAL_TYPE == "WSL" ]]; then
-	# Try to include git-prompt.sh if available
-	if [[ -f /usr/local/etc/bash_completion.d/git-prompt.sh ]]; then
-		source /usr/local/etc/bash_completion.d/git-prompt.sh
-		PS1="${BOLD}${GREEN}\u${RESET}@${CYAN}\h${RESET}:${BLUE}\w${RESET}$(__git_ps1 " ${YELLOW}(%s)${RESET}")\$ "
-	elif [[ -f /usr/share/git-core/contrib/completion/git-prompt.sh ]]; then
-		source /usr/share/git-core/contrib/completion/git-prompt.sh
-		PS1="${BOLD}${GREEN}\u${RESET}@${CYAN}\h${RESET}:${BLUE}\w${RESET}$(__git_ps1 " ${YELLOW}(%s)${RESET}")\$ "
-	else
-		# Fallback to custom git_branch function
-		PS1="${BOLD}${GREEN}\u${RESET}@${CYAN}\h${RESET}:${BLUE}\w ${RESET}$(git_branch)\$ "
-	fi
-else
-	# Default prompt if system type is unknown
-	PS1="${BOLD}${GREEN}\u${RESET}@${CYAN}\h${RESET}:${BLUE}\w\$ "
-fi
-
-# Reload Bash profile if sourced
-echo "Terminal configured for $TERMINAL_TYPE"
-
 alias editaliases='nvim ~/.bash_aliases'
 
 alias cataliases='cat ~/.bash_aliases'
