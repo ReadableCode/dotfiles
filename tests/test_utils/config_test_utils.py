@@ -13,7 +13,7 @@ grandparent_dir = os.path.dirname(parent_dir)
 great_grandparent_dir = os.path.dirname(grandparent_dir)
 
 data_dir = os.path.join(grandparent_dir, "data")
-odl_dir = os.path.join(data_dir, "odl")
+odl_dir = os.path.join(data_dir, "odls")
 highjump_comparison_dir = os.path.join(data_dir, "highjump_comparison")
 report_dir = os.path.join(grandparent_dir, "reports")
 trigger_dir = os.path.join(grandparent_dir, "triggers")
