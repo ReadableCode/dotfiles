@@ -59,8 +59,11 @@ def generate_docs_for_directory(directory, output_dir, dry_run=False):
                     .replace("Url", "URL")
                     .replace("Pdf", "PDF")
                 )
+                # Only remove the .py extension at the end of the file
                 module_rel_path_dot_notation = (
-                    module_rel_path.replace(os.sep, ".").lstrip(".").replace(".py", "")
+                    module_rel_path.replace(os.sep, ".")
+                    .lstrip(".")
+                    .rsplit(".py", 1)[0]  # Ensure only the .py extension is removed
                 )
                 module_path = os.path.join(file).rstrip(".py")
                 os.makedirs(os.path.dirname(output_file_path), exist_ok=True)
