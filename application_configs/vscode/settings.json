@@ -28,15 +28,6 @@
   //Git Poliot and Suggestions
   "editor.inlineSuggest.enabled": true,
   "editor.suggest.matchOnWordStartOnly": false,
-  "github.copilot.enable": {
-    "*": true,
-    "plaintext": true,
-    "markdown": true,
-    "scminput": false,
-    "yaml": true,
-    "python": true,
-    "rust": false
-  },
   "github.copilot.advanced": {},
   "github.copilot-labs.showTestGenerationLenses": true,
   "inlineChat.mode": "preview",
@@ -115,7 +106,7 @@
   "notebook.showFoldingControls": "always",
   "notebook.output.textLineLimit": 20000,
   "notebook.output.scrolling": true,
-  "interactiveWindow.alwaysScrollOnNewCell": true,
+  "interactiveWindow.alwaysScrollOnNewCell": false,
   // Editor View
   "editor.stickyScroll.maxLineCount": 10,
   "editor.stickyScroll.enabled": true,
@@ -123,7 +114,7 @@
   "editor.minimap.size": "fill",
   "editor.bracketPairColorization.enabled": true,
   "editor.semanticHighlighting.enabled": true,
-  "editor.wordWrap": "on",
+  "editor.wordWrap": "off",
   "editor.accessibilitySupport": "off",
   "editor.renderWhitespace": "all",
   "window.zoomLevel": 1,
@@ -164,5 +155,7 @@
   "notebook.defaultFormatter": "ms-python.black-formatter",
   "python.analysis.inlayHints.functionReturnTypes": true,
   "python.analysis.typeCheckingMode": "standard",
-  "python.analysis.inlayHints.variableTypes": true
+  "python.analysis.inlayHints.variableTypes": true,
+  "scm.repositories.sortOrder": "path",
+  "scm.repositories.visible": 100
 }
