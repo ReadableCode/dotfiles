@@ -157,5 +157,6 @@
   "python.analysis.typeCheckingMode": "standard",
   "python.analysis.inlayHints.variableTypes": true,
   "scm.repositories.sortOrder": "path",
-  "scm.repositories.visible": 100
+  "scm.repositories.visible": 100,
+  "github.copilot.nextEditSuggestions.enabled": true
 }
