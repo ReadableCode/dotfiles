@@ -158,5 +158,5 @@
   "python.analysis.inlayHints.variableTypes": true,
   "scm.repositories.sortOrder": "path",
   "scm.repositories.visible": 100,
-  "github.copilot.nextEditSuggestions.enabled": true
+  "github.copilot.nextEditSuggestions.enabled": false
 }
