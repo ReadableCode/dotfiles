@@ -257,9 +257,13 @@ def get_file_list_from_folder_id_file_path(root_folder_id, ls_file_path):
 
     ls_directory_path = ls_file_path
 
-    folder_id = get_drive_file_id_from_folder_id_path(
-        root_folder_id, ls_directory_path, is_folder=True
-    )
+    if len(ls_directory_path) == 0:
+        folder_id = root_folder_id
+    else:
+
+        folder_id = get_drive_file_id_from_folder_id_path(
+            root_folder_id, ls_directory_path, is_folder=True
+        )
 
     ls_files_dict = get_file_list_from_folder_id(folder_id)
 
@@ -415,6 +419,29 @@ def get_file_name(file_id):
     file_name = file_metadata.get("name", "Unknown")
     print(f"File/Folder Name: {file_name}")
     return file_name
+
+
+def get_parents_of_item(file_id):
+    """
+    Retrieves the parent folders of a file or folder in Google Drive.
+
+    Args:
+        drive_service (googleapiclient.discovery.Resource): The Google Drive service object.
+        file_id (str): The ID of the file or folder.
+
+    Returns:
+        list: A list of parent folder IDs.
+    """
+
+    # Retrieve the file metadata
+    file_metadata = (
+        drive_service.files().get(fileId=file_id, fields="parents").execute()
+    )
+
+    # Get the parent folder IDs
+    parent_ids = file_metadata.get("parents", [])
+    print(f"Parent Folder IDs: {parent_ids}")
+    return parent_ids
 
 
 def check_file_capabilities(file_id):
