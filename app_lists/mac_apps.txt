@@ -9,6 +9,7 @@ gh
 neovim
 tldr
 neofetch
-btop
-htop
 fzf
+htop
+btop
+iperf3
