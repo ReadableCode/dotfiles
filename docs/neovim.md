@@ -23,7 +23,7 @@ pkg install neovim
   - `cd $env:USERPROFILE\AppData\Local`
   - `mkdir nvim`
   - `cd nvim`
-  - `cmd /c mklink init.vim ~\GitHub\dotfiles\application_configs\nvim\init.vim`
+  - `cmd /c mklink C:\Users\jason\AppData\Local\nvim\init.vim C:\Users\jason\GitHub\dotfiles\application_configs\nvim\init.vim`
   - OR
   - `cmd /c mklink init.vim C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\nvim\init.vim`
 
@@ -43,8 +43,7 @@ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs https://raw.g
 ### Install vim-plug for managing Neovim plugins on Windows
 
 ```bash
-iwr -useb https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim | `
-    ni -Path "$env:LOCALAPPDATA\nvim-data\site\autoload\plug.vim" -Force
+iwr -useb https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim | ni -Path "$env:LOCALAPPDATA\nvim-data\site\autoload\plug.vim" -Force
 ```
 
 ### Load the vim-plug plugin manager

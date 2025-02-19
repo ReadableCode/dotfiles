@@ -4,7 +4,7 @@
 "   cd $env:USERPROFILE\AppData\Local
 "   mkdir nvim
 "   cd nvim
-"   cmd /c mklink init.vim C:\Users\jason\GitHub\dotfiles\application_configs\nvim\init.vim
+"   cmd /c mklink C:\Users\jason\AppData\Local\nvim\init.vim C:\Users\jason\GitHub\dotfiles\application_configs\nvim\init.vim
 "   OR
 "   cmd /c mklink init.vim C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\nvim\init.vim
 
@@ -13,13 +13,13 @@
 "   You can run this command in your terminal to install vim-plug:
 "   curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 " Windows
-"   iwr -useb https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim | ni "$(@($env:XDG_DATA_HOME, $env:LOCALAPPDATA)[$null -eq $env:XDG_DATA_HOME])/nvim-data/site/autoload/plug.vim" -Force
+"   iwr -useb https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim | ni -Path "$env:LOCALAPPDATA\nvim-data\site\autoload\plug.vim" -Force
 
 " Load the vim-plug plugin manager
 " open Neovim and run :PlugInstall to install the plugins
 
 " Specify the plugin manager to begin managing
-call plug#begin('~/.config/nvim/plugged')
+call plug#begin(stdpath('data') . '/plugged')
 
 " Define the plugins you want to install
 Plug 'preservim/nerdtree'
