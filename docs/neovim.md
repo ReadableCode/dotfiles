@@ -26,7 +26,7 @@ pkg install neovim
   - `cmd /c mklink init.vim ~\GitHub\dotfiles\application_configs\nvim\init.vim`
   - OR
   - `cmd /c mklink init.vim C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\nvim\init.vim`
-  
+
 ### Deploying Configuration on Linux
 
 - For linux this file needs to be symlinked to ~/.config/nvim/
