@@ -116,6 +116,20 @@ chmod +x ~/.config/autostart/start_x0vncserver.desktop
 sudo netstat -tuln | grep 5900
 ```
 
-## Windows
+## Windows (using tight vnc instead)
 
-### Install Tiger VNC Windows
+### Set up Chocolatey using doc
+
+- [Chocolatey](./setup_windows_chocolatey.md)
+
+### Install Tight VNC Windows
+
+```powershell
+choco install tightvnc
+```
+
+- Open the application from the start menu `TightVNC Control Interface`
+
+- Set a primary password, be careful as it will stop accepting new characters
+
+- Connect using a VNC Client and this machine's IP Address
