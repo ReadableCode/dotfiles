@@ -13,6 +13,7 @@ grandparent_dir = os.path.dirname(parent_dir)
 great_grandparent_dir = os.path.dirname(grandparent_dir)
 
 data_dir = os.path.join(parent_dir, "data")
+schema_dir = os.path.join(parent_dir, "schemas")
 log_dir = os.path.join(parent_dir, "logs")
 docs_dir = os.path.join(parent_dir, "docs")
 src_dir = os.path.join(parent_dir, "src")
