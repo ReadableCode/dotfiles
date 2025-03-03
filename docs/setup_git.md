@@ -24,13 +24,13 @@
 
   * If chocolatey is not installed, follow the instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
   
-  * Run the following command to install git:
+  * Run the following command to install Git:
 
     ```bash
     choco install git.install
     ```
 
-* Run the following command to install git:
+* Run the following command to install Git:
 
     ```bash
     winget install Git.Git
@@ -44,7 +44,7 @@
   sudo apt install -y git-all
   ```
 
-* To verify git is installed, run the following command:
+* To verify Git is installed, run the following command:
 
   ```bash
   git --version
@@ -52,7 +52,7 @@
 
 ### Install Git on macOS
 
-* Git is installed in macOS by default but the first git command you run may error with the message:
+* Git is installed in macOS by default but the first Git command you run may error with the message:
   
     ```bash
     No Developer Tools were found
@@ -64,9 +64,9 @@
 
 ### Set Up Git on Windows
 
-* Open git bash: right click on desktop or in the empty space in a folder you want your code in and select "Git Bash Here"
+* Open Git bash: right click on desktop or in the empty space in a folder you want your code in and select "Git Bash Here"
   * On windows 11 you will need to click "Show More Options"
-* Run the following commands (one line at a time) to set up git:
+* Run the following commands (one line at a time) to set up Git:
 
   ```bash
   git config --global user.email "emailaddress@gmail.com"
@@ -121,7 +121,7 @@
 
 ### Windows
 
-* copy public key from target and put it on github.com using git bash
+* copy public key from target and put it on GitHub using Git bash
 
     ```bash
     cd ~
@@ -146,7 +146,7 @@
     ssh-keygen -t rsa -b 4096 # press enter to accept defaults
     ```
 
-* Run the following command and copy just the key to github.com:
+* Run the following command and copy just the key to GitHub:
 
     ```bash
     cat ~/.ssh/id_rsa.pub
@@ -179,15 +179,15 @@
   ssh-keygen # press enter to accept defaults
   ```
   
-* Run the following command and copy just the key to github.com:
+* Run the following command and copy just the key to GitHub:
 
   ```bash
   cat ~/.ssh/id_rsa.pub
   ```
 
-## Put the public SSH key to Github.com
+## Put the public SSH key to GitHub
 
-* add key to github:
+* add key to GitHub:
   * <https://github.com/settings/keys>
   * click "New SSH Key"
   * paste key into "Key" field
@@ -202,13 +202,13 @@
 
   ```bash
   git init
-  git remote add origin <link copied from github>
+  git remote add origin <link copied from GitHub>
   git pull origin master
   ```
 
 ## Resolve Common Problems
 
-### Git diff and git status don't show the updated files as changed
+### Git diff and Git status don't show the updated files as changed
 
 * To check for non-obviouse changes:
 
