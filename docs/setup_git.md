@@ -143,7 +143,7 @@
 * if .pub key doesn't exist:
 
     ```bash
-    ssh-keygen # press enter to accept defaults
+    ssh-keygen -t rsa -b 4096 # press enter to accept defaults
     ```
 
 * Run the following command and copy just the key to github.com:
