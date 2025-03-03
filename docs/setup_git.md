@@ -196,7 +196,7 @@
 
 ## Clone into an existing folder
 
-* open terminal or git bash and navigate to the folder you want to clone into
+* open terminal or Git bash and navigate to the folder you want to clone into
 
 * Run the following command to clone the repository:
 
