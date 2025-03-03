@@ -194,6 +194,18 @@
   * click "Add SSH Key"
   * Enable SSO if needed
 
+## Clone into an existing folder
+
+* open terminal or git bash and navigate to the folder you want to clone into
+
+* Run the following command to clone the repository:
+
+  ```bash
+  git init
+  git remote add origin <link copied from github>
+  git pull origin master
+  ```
+
 ## Resolve Common Problems
 
 ### Git diff and git status don't show the updated files as changed
