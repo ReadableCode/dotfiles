@@ -251,7 +251,9 @@ winget
     ```
 
   * Open Ubuntu and set up user and password
-  
+
+* If issues, may need to enable Windows features for "Virtual Machine Platform" and "Windows Hypervisor Platform"
+
 ## VNC-Connect
 
 * If not using bootstrap script, install vnc-connect with winget:
