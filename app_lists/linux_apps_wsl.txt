@@ -13,4 +13,3 @@ neovim
 ncdu
 tldr
 fzf
-bat
