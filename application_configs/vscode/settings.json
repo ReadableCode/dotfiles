@@ -28,8 +28,6 @@
   //Git Poliot and Suggestions
   "editor.inlineSuggest.enabled": true,
   "editor.suggest.matchOnWordStartOnly": false,
-  "github.copilot.advanced": {},
-  "github.copilot-labs.showTestGenerationLenses": true,
   "inlineChat.mode": "preview",
   // Auto Formatting
   "editor.formatOnPaste": true,
@@ -149,14 +147,20 @@
   "powershell.cwd": "c:\\Users\\jason\\GitHub",
   // Security
   "security.workspace.trust.enabled": false,
-  "github.copilot.editor.enableAutoCompletions": true,
   "interactiveWindow.executeWithShiftEnter": true,
-  "github.copilot.preferredAccount": "ReadableCode",
   "notebook.defaultFormatter": "ms-python.black-formatter",
   "python.analysis.inlayHints.functionReturnTypes": true,
   "python.analysis.typeCheckingMode": "standard",
   "python.analysis.inlayHints.variableTypes": true,
   "scm.repositories.sortOrder": "path",
   "scm.repositories.visible": 100,
-  "github.copilot.nextEditSuggestions.enabled": false
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": true,
+    "markdown": true,
+    "scminput": false,
+    "yaml": true,
+    "python": true,
+    "rust": false
+  }
 }
