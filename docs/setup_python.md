@@ -110,3 +110,41 @@ rm Pipfile Pipfile.lock requirements.txt
 ```
 
 - Remove pipenv environments from the system
+
+## Installing Python Directly on Windows
+
+- Visit the official Python site at python.org and navigate to the downloads section.
+
+- Click on the "Downloads" tab and choose Python 3.xx for Windows.
+
+- Download the Python 3.xx installer appropriate for your system architecture (32-bit or 64-bit).
+
+- Run the downloaded installer and follow the installation wizard. Make sure to select the option to customize the installation.
+
+- In the customization options, enable the "Add Python to PATH" checkbox. This will add Python to the system's PATH for easy accessibility.
+
+- Continue with the installation process and complete the installation.
+
+### Enabling Long Path Support on Windows (if not done with installer)
+
+- Open a PowerShell or Command Prompt window as an administrator.
+
+- Run the following command to enable long path support in the Windows registry:
+
+   ```bash
+   reg add HKLM\SYSTEM\CurrentControlSet\Control\FileSystem /v LongPathsEnabled /t REG_DWORD /d 1 /f
+   ```
+
+   This command enables long path support for the system.
+
+### Verifying Python Installation on Windows (if not done with installer)
+
+- Open a new command prompt or PowerShell window.
+
+- Verify that Python 3.xx is installed correctly by running the following command:
+
+   ```bash
+   python --version
+   ```
+
+   This command should display the installed Python version as "Python 3.xx.x".
