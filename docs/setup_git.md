@@ -201,9 +201,20 @@
 * Run the following command to clone the repository:
 
   ```bash
+  # Initialize Git if not already initialized
   git init
-  git remote add origin <link copied from GitHub>
-  git pull origin master
+  
+  # Add the remote repository (skip if already set)
+  git remote add origin <repo-url>
+  
+  # Fetch the remote branches without modifying local files
+  git fetch origin
+  
+  # Create and checkout the 'master' branch from remote without overwriting files
+  git checkout -b master origin/master --track
+  
+  # Pull the latest changes from the remote master branch
+  git pull
   ```
 
 ## Resolve Common Problems
