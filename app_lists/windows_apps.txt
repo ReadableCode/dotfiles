@@ -24,7 +24,6 @@ plex
 powertoys
 procexp
 putty
-bat
 slack
 steam
 synctrayzor

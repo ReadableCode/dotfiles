@@ -113,18 +113,6 @@ function todo() {
 
 alias ll='ls -AlhF'
 
-function alias_cat_to_bat() {
-	if command -v bat &>/dev/null; then
-		echo "'bat' is installed. Aliasing 'cat' to 'bat'."
-		alias cat='bat'
-	elif command -v batcat &>/dev/null; then
-		echo "'batcat' is installed. Aliasing 'cat' to 'batcat'."
-		alias cat='batcat'
-	else
-		echo "'bat' or 'batcat' is not installed. No alias created."
-	fi
-}
-
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 
 alias hfpulls='bash $gitDir/na-finops/scripts/git_pull_hf_repos.sh'
