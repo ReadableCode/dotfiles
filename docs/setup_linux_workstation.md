@@ -208,7 +208,7 @@ clasp login # will need gui access to the machine
   ```bash
   DEBUG=YES
   AuthUser=emailaddress@gmail.com
-  AuthPass=###password (and enable less secure apps) or app password if two factor###
+  AuthPass=###password (and enable less secure apps) or app password if two factor no quotes around it, removve spaces from app password if included by google###
   FromLineOverride=YES
   mailhub=smtp.gmail.com:587
   UseSTARTTLS=YES

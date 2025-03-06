@@ -122,8 +122,9 @@
   // File Handling
   "files.autoSave": "onFocusChange",
   "workbench.editorAssociations": {
+    "*.copilotmd": "vscode.markdown.preview.editor",
     "*.ipynb": "jupyter-notebook",
-    "*.csv": "gc-excelviewer-csv-editor"
+    "*.csv": "default"
   },
   "files.associations": {
     "*.md": "markdown"
