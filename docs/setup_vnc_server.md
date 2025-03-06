@@ -4,7 +4,7 @@
 
 ## Linux
 
-### Install Tiger VNC Linux
+### Install Tiger VNC on Linux
 
 ```bash
 sudo apt update
@@ -116,13 +116,11 @@ chmod +x ~/.config/autostart/start_x0vncserver.desktop
 sudo netstat -tuln | grep 5900
 ```
 
-## Windows (using tight vnc instead)
+## Install TightVNC on Windows
 
-### Set up Chocolatey using doc
+- Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
 
-- [Chocolatey](./setup_windows_chocolatey.md)
-
-### Install Tight VNC Windows
+- Install TightVNC using Chocolatey:
 
 ```powershell
 choco install tightvnc

@@ -23,10 +23,17 @@
   ```
   
   To finish installaion:
-  - open Visual Studio Installer
-  - press Modify
-  - check Desktop Development with C++
-  - press Modify
+  - Visual Studio Build Tools window may open:
+    - If it does:
+      - select "Desktop Development with C++"
+      - press Install
+      - wait for installation to finish
+      - close the window
+    - If it does not:
+      - open Visual Studio Installer
+      - press Modify
+      - check Desktop Development with C++
+      - press Modify
   
   - Will need to close and reopen all VSCode windows to make sure the powershell window can access cargo and rustc.
 
