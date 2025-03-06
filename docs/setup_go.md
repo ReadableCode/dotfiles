@@ -47,6 +47,8 @@
 
 ## Run Directly from Source
 
+- cd into the src diretory where the hello.go file is located
+
 - Run the program by executing the following command:
 
   ```bash
@@ -57,7 +59,7 @@
 
 - To build it and run the executable:
 
-  - cd to directory where the hello.go file is located
+  - cd into the src directory where the hello.go file is located
 
   ```bash
   go build hello.go
@@ -73,5 +75,5 @@
   - Running on Windows
   
     ```bash
-    ./hello.exe
+    .\hello.exe
     ```
