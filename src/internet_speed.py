@@ -8,11 +8,11 @@ import pandas as pd
 from config import data_dir, parent_dir
 
 # %%
-# Load the CSV file
+# Load the CSV file #
 
-
+base_dir = os.path.join(parent_dir, "data")
 csv_file = os.path.join(
-    os.path.expanduser("~"), "GitHub", "dotfiles", "data", "speed.csv"
+    base_dir, "speed.csv"
 )
 df = pd.read_csv(csv_file)
 
