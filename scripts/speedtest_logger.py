@@ -1,13 +1,11 @@
-#!/usr/bin/env python3
-
 # %%
 # Imports #
 
-
 import csv
 import os
-import speedtest
 from datetime import datetime
+
+import speedtest
 from config_scripts import parent_dir
 
 # %%
@@ -35,18 +33,25 @@ try:
     # Append data to CSV
     with open(log_file, "a", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ping, download, upload])
+        writer.writerow(
+            [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ping, download, upload]
+        )
 
     # Print latest entry to console
     print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{ping},{download},{upload}")
 
     # Log debug info
     with open(debug_log, "a") as f:
-        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Speedtest ran, logged to {log_file}\n")
+        f.write(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Speedtest ran, logged to {log_file}\n"
+        )
 
 except Exception as e:
     with open(debug_log, "a") as f:
-        f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Speedtest failed: {e}\n")
+        f.write(
+            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Speedtest failed: {e}\n"
+        )
     print(f"Speedtest failed: {e}")
+
 
 # %%

@@ -5,15 +5,12 @@ import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from config import data_dir, parent_dir
+from config import data_dir
 
 # %%
 # Load the CSV file #
 
-base_dir = os.path.join(parent_dir, "data")
-csv_file = os.path.join(
-    base_dir, "speed.csv"
-)
+csv_file = os.path.join(data_dir, "speed.csv")
 df = pd.read_csv(csv_file)
 
 # Convert 'Timestamp' to datetime format
