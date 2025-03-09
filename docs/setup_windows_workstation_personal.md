@@ -29,6 +29,10 @@
 * Set up clipboard history by pressing win+v
   * Turn on clipboard history by searching for clipboard in the windows button and turning it on
   * Turn on sync across devices if desired
+* Show file extensions
+  * Open file explorer and click on view and check file name extensions
+* Show hidden files
+  * Open file explorer and click on view and check hidden items
 * Sign into OneDrive
   * Turn on selective sync and download wanted files (do this before moving targets to onedrive)
 * Move docs and pictures locations to OneDrive
