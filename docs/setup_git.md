@@ -227,6 +227,12 @@
   git status -vvv
   ```
 
+* Use `git add --renormalize .` to fix the issue if the difference is due to line endings:
+
+  ```bash
+  git add --renormalize .
+  ```
+
 * Run the following command to fix the issue temporarily:
 
   ```bash
