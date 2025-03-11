@@ -109,11 +109,11 @@ function run-python-script {
     Set-Location -Path $scriptDir
 
     # Check if the venv folder exists in the project directory
-    if (Test-Path "./venv") {
+    if (Test-Path "..\.venv") {
         Write-Host "Project venv detected at: ./venv"
 
         # Activate the venv environment
-        .\.venv\Scripts\Activate.ps1
+        ..\.venv\Scripts\Activate.ps1
 
         # Run the script using the venv environment
         python $scriptPath
