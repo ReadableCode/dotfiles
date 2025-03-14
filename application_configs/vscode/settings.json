@@ -164,5 +164,6 @@
     "yaml": true,
     "python": true,
     "rust": false
-  }
+  },
+  "go.toolsManagement.autoUpdate": true
 }
