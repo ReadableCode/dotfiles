@@ -36,10 +36,13 @@
   "notebook.formatOnCellExecution": true,
   "files.eol": "\n",
   "editor.trimAutoWhitespace": false,
-  // Auto Formatting - Deault Formatters
-  "editor.defaultFormatter": "ms-python.black-formatter",
+  // Auto Formatting - Language Specific
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true
   },
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format",
