@@ -19,30 +19,46 @@ var skipDirs = []string{"personal_credentials", "hellofresh_credentials", "na-fi
 func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, verbose bool) {
 	defer wg.Done()
 
-	if verbose {
-		fmt.Println("[STARTING] Pulling repo:", repo)
+	absRepo, err := filepath.Abs(repo)
+	if err != nil {
+		errors <- fmt.Sprintf("[ERROR] Failed to resolve path: %s", repo)
+		return
 	}
 
-	cmd := exec.Command("git", "-C", repo, "pull")
+	if verbose {
+		fmt.Println("[STARTING] Pulling repo:", absRepo)
+	}
+
+	cmd := exec.Command("git", "-C", absRepo, "pull")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	if err != nil {
-		errors <- fmt.Sprintf("[FAILED] %s: %s", repo, strings.TrimSpace(stderr.String()))
+	err = cmd.Run()
+	output := strings.TrimSpace(stdout.String())
+	errorMsg := strings.TrimSpace(stderr.String())
+
+	// **Detect authentication failure** (this string is returned by Git)
+	if strings.Contains(errorMsg, "Username for 'https://github.com'") || strings.Contains(errorMsg, "fatal: could not read Username") {
+		errors <- fmt.Sprintf("[AUTH REQUIRED] %s (Skipping)", absRepo)
 		return
 	}
 
-	output := strings.TrimSpace(stdout.String())
+	// **Log other Git errors**
+	if err != nil {
+		errors <- fmt.Sprintf("[FAILED] %s: %s", absRepo, errorMsg)
+		return
+	}
+
+	// **Log successful results**
 	if output == "Already up to date." {
-		results <- fmt.Sprintf("[NO CHANGES] %s", repo)
+		results <- fmt.Sprintf("[NO CHANGES] %s", absRepo)
 	} else {
-		results <- fmt.Sprintf("[UPDATED] %s:\n%s", repo, output)
+		results <- fmt.Sprintf("[UPDATED] %s:\n%s", absRepo, output)
 	}
 
 	if verbose {
-		fmt.Println("[DONE] Finished pulling repo:", repo)
+		fmt.Println("[DONE] Finished pulling repo:", absRepo)
 	}
 }
 
