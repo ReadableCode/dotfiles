@@ -13,7 +13,7 @@ import (
 )
 
 // List of directories to skip
-var skipDirs = []string{"skip_this_repo", "ignore_this_one"}
+var skipDirs = []string{"server_configs"}
 
 // Run `git pull` on a repo and capture results
 func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string) {
@@ -95,6 +95,8 @@ func main() {
 	}
 
 	var repos []string
+	notGitRepos := make(chan string, len(repoPaths))
+
 	for _, path := range repoPaths {
 		stat, err := os.Stat(path)
 		if err != nil {
@@ -110,7 +112,7 @@ func main() {
 				// Single Git repo case
 				repos = append(repos, path)
 			} else {
-				fmt.Println("[ERROR] Provided directory is not a git repo. Use -r for recursive search:", path)
+				notGitRepos <- path
 			}
 		} else {
 			fmt.Println("[ERROR] Skipping non-directory:", path)
@@ -151,7 +153,9 @@ func main() {
 	close(results)
 	close(errors)
 	close(skipped)
+	close(notGitRepos)
 
+	// Output results
 	fmt.Println("=== Pull Results ===")
 	for res := range results {
 		fmt.Println(res)
@@ -165,5 +169,10 @@ func main() {
 	fmt.Println("\n=== Skipped ===")
 	for skip := range skipped {
 		fmt.Println(skip)
+	}
+
+	fmt.Println("\n=== Not a Git Repo ===")
+	for notRepo := range notGitRepos {
+		fmt.Println(notRepo)
 	}
 }
