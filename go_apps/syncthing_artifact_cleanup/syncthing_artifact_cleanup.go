@@ -6,10 +6,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
-// Directories and files to match
+// Patterns to match
 var dirPatterns = []string{
 	"__pycache__", ".venv", "venv", "node_modules", ".mypy_cache",
 	"target", "dist", "build", "builds", ".buildozer",
@@ -22,7 +23,16 @@ var filePatterns = []string{
 	"sync-conflict", "~syncthing",
 }
 
-// Windows-specific function to force delete
+// Ensure all files inside a directory are writable before deletion
+func makeFilesWritable(path string) error {
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command("icacls", path, "/grant", "Everyone:F", "/T", "/C", "/Q")
+		return cmd.Run()
+	}
+	return os.Chmod(path, 0777)
+}
+
+// Force delete directory using Windows command
 func forceDeleteWindows(path string) error {
 	cmd := exec.Command("cmd", "/c", "rmdir", "/s", "/q", path)
 	cmd.Stdout = os.Stdout
@@ -102,13 +112,18 @@ func main() {
 					fmt.Println("Failed to delete:", file, err)
 				}
 			}
+
 			// Delete directories
 			for _, dir := range foundDirs {
+				// Ensure all files inside are writable
+				makeFilesWritable(dir)
+
 				err := os.RemoveAll(dir)
 				if err != nil {
 					fmt.Println("os.RemoveAll failed, trying Windows rmdir:", dir)
 					err = forceDeleteWindows(dir)
 				}
+
 				if err != nil {
 					fmt.Println("Failed to delete:", dir, err)
 				} else {
