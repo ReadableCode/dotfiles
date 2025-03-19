@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 )
@@ -74,37 +75,46 @@ func contains(slice []string, item string) bool {
 }
 
 func main() {
-	// Accept arguments: path to repos and a recursive flag
-	repoPath := flag.String("path", "", "Path to a repo, multiple space-separated repos, or a directory")
+	// Accept multiple paths with -path flag
+	var repoPaths []string
+	flag.Func("path", "Specify one or more paths to repos (space-separated or multiple -path flags)", func(s string) error {
+		if runtime.GOOS == "windows" {
+			repoPaths = append(repoPaths, strings.Split(s, ";")...) // Handle Windows `;` separation
+		} else {
+			repoPaths = append(repoPaths, strings.Fields(s)...) // Handle Linux/macOS space-separated paths
+		}
+		return nil
+	})
+
 	recursive := flag.Bool("r", false, "Enable recursive search for git repos in the directory")
 	flag.Parse()
 
-	if *repoPath == "" {
-		fmt.Println("[ERROR] Please provide a path using -path")
+	if len(repoPaths) == 0 {
+		fmt.Println("[ERROR] Please provide at least one path using -path")
 		os.Exit(1)
 	}
 
 	var repos []string
-	stat, err := os.Stat(*repoPath)
-	if err != nil {
-		fmt.Println("[ERROR] Invalid path:", *repoPath)
-		os.Exit(1)
-	}
-
-	if stat.IsDir() {
-		if *recursive {
-			// Recursive directory search
-			repos = findGitRepos(*repoPath)
-		} else if isGitRepo(*repoPath) {
-			// Single Git repo case
-			repos = append(repos, *repoPath)
-		} else {
-			fmt.Println("[ERROR] Provided directory is not a git repo. Use -r for recursive search.")
-			os.Exit(1)
+	for _, path := range repoPaths {
+		stat, err := os.Stat(path)
+		if err != nil {
+			fmt.Println("[ERROR] Invalid path:", path)
+			continue
 		}
-	} else {
-		// Treat as space-separated list
-		repos = strings.Fields(*repoPath)
+
+		if stat.IsDir() {
+			if *recursive {
+				// Recursive directory search
+				repos = append(repos, findGitRepos(path)...)
+			} else if isGitRepo(path) {
+				// Single Git repo case
+				repos = append(repos, path)
+			} else {
+				fmt.Println("[ERROR] Provided directory is not a git repo. Use -r for recursive search:", path)
+			}
+		} else {
+			fmt.Println("[ERROR] Skipping non-directory:", path)
+		}
 	}
 
 	if len(repos) == 0 {
