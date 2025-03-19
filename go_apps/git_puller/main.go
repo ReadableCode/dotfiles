@@ -69,26 +69,25 @@ func findGitRepos(baseDir string, maxDepth int, verbose bool) []string {
 			return filepath.SkipDir
 		}
 
-		// **Ignore non-directory files (e.g., `.DS_Store`, `.ipynb_checkpoints`)**
+		// **Ignore non-directory files**
 		if !info.IsDir() {
 			return nil
 		}
 
-		// Check if we found a Git repo
-		if filepath.Base(path) == ".git" {
-			repoPath := filepath.Dir(path) // Parent directory is the actual Git repo
+		// **Check if this is a Git repo before applying depth limit**
+		if isGitRepo(path) {
 			if verbose {
-				fmt.Println("[FOUND] Git repo detected:", repoPath)
+				fmt.Println("[FOUND] Git repo detected:", path)
 			}
-			repos = append(repos, repoPath)
-			return filepath.SkipDir // Stop processing inside `.git`
+			repos = append(repos, path)
+			return filepath.SkipDir // Stop scanning inside this repo
 		}
 
-		// **Only enforce depth limit on subdirectories, not top-level ones**
+		// **Only enforce depth limit for non-Git directories**
 		currentDepth := strings.Count(path, string(filepath.Separator))
 		if maxDepth > 0 && (currentDepth-baseDepth) >= maxDepth {
 			if verbose {
-				fmt.Println("[DEPTH LIMIT] Reached max depth at:", path)
+				fmt.Println("[DEPTH LIMIT] Stopping at:", path)
 			}
 			return filepath.SkipDir
 		}
@@ -103,7 +102,7 @@ func findGitRepos(baseDir string, maxDepth int, verbose bool) []string {
 	return repos
 }
 
-// Check if a directory is a Git repo (alternative quick check)
+// Check if a directory is a Git repo
 func isGitRepo(path string) bool {
 	_, err := os.Stat(filepath.Join(path, ".git"))
 	return err == nil
@@ -133,7 +132,7 @@ func main() {
 
 	recursive := flag.Bool("r", false, "Enable recursive search for git repos in the directory")
 	verbose := flag.Bool("v", false, "Enable verbose output (logs when starting/ending a repo)")
-	depth := flag.Int("depth", 2, "Recursion depth when using -r (default: 1, -1 for unlimited)")
+	depth := flag.Int("depth", 1, "Recursion depth when using -r (default: 1, -1 for unlimited)")
 	flag.Parse()
 
 	if len(repoPaths) == 0 {
