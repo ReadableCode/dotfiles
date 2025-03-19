@@ -13,11 +13,15 @@ import (
 )
 
 // List of directories to skip
-var skipDirs = []string{"server_configs"}
+var skipDirs = []string{"personal_credentials", "hellofresh_credentials"}
 
 // Run `git pull` on a repo and capture results
-func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string) {
+func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, verbose bool) {
 	defer wg.Done()
+
+	if verbose {
+		fmt.Println("[STARTING] Pulling repo:", repo)
+	}
 
 	cmd := exec.Command("git", "-C", repo, "pull")
 	var stdout, stderr bytes.Buffer
@@ -36,29 +40,70 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 	} else {
 		results <- fmt.Sprintf("[UPDATED] %s:\n%s", repo, output)
 	}
+
+	if verbose {
+		fmt.Println("[DONE] Finished pulling repo:", repo)
+	}
 }
 
-// Detect all repos recursively in a given directory
-func findGitRepos(baseDir string) []string {
+// Find all Git repositories in a directory with a specified depth
+func findGitRepos(baseDir string, maxDepth int, verbose bool) []string {
 	var repos []string
-	filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+	baseDepth := strings.Count(baseDir, string(filepath.Separator))
+
+	if verbose {
+		fmt.Println("[SCANNING] Searching for Git repositories in:", baseDir)
+	}
+
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
+			fmt.Println("[ERROR] Accessing:", path, err)
 			return nil
 		}
+
 		// Skip explicitly listed directories
 		if contains(skipDirs, filepath.Base(path)) {
+			if verbose {
+				fmt.Println("[SKIPPING] Ignoring:", path)
+			}
 			return filepath.SkipDir
 		}
-		// Check if this is a git repo
-		if info.IsDir() && isGitRepo(path) {
-			repos = append(repos, path)
+
+		// **Ignore non-directory files (e.g., `.DS_Store`, `.ipynb_checkpoints`)**
+		if !info.IsDir() {
+			return nil
 		}
+
+		// Check if we found a Git repo
+		if filepath.Base(path) == ".git" {
+			repoPath := filepath.Dir(path) // Parent directory is the actual Git repo
+			if verbose {
+				fmt.Println("[FOUND] Git repo detected:", repoPath)
+			}
+			repos = append(repos, repoPath)
+			return filepath.SkipDir // Stop processing inside `.git`
+		}
+
+		// **Only enforce depth limit on subdirectories, not top-level ones**
+		currentDepth := strings.Count(path, string(filepath.Separator))
+		if maxDepth > 0 && (currentDepth-baseDepth) >= maxDepth {
+			if verbose {
+				fmt.Println("[DEPTH LIMIT] Reached max depth at:", path)
+			}
+			return filepath.SkipDir
+		}
+
 		return nil
 	})
+
+	if err != nil {
+		fmt.Println("[ERROR] Failed to scan directory:", baseDir, err)
+	}
+
 	return repos
 }
 
-// Check if a directory is a Git repo
+// Check if a directory is a Git repo (alternative quick check)
 func isGitRepo(path string) bool {
 	_, err := os.Stat(filepath.Join(path, ".git"))
 	return err == nil
@@ -87,6 +132,8 @@ func main() {
 	})
 
 	recursive := flag.Bool("r", false, "Enable recursive search for git repos in the directory")
+	verbose := flag.Bool("v", false, "Enable verbose output (logs when starting/ending a repo)")
+	depth := flag.Int("depth", 2, "Recursion depth when using -r (default: 1, -1 for unlimited)")
 	flag.Parse()
 
 	if len(repoPaths) == 0 {
@@ -106,8 +153,9 @@ func main() {
 
 		if stat.IsDir() {
 			if *recursive {
-				// Recursive directory search
-				repos = append(repos, findGitRepos(path)...)
+				// Recursive directory search with depth limit
+				foundRepos := findGitRepos(path, *depth, *verbose)
+				repos = append(repos, foundRepos...)
 			} else if isGitRepo(path) {
 				// Single Git repo case
 				repos = append(repos, path)
@@ -118,6 +166,8 @@ func main() {
 			fmt.Println("[ERROR] Skipping non-directory:", path)
 		}
 	}
+
+	close(notGitRepos)
 
 	if len(repos) == 0 {
 		fmt.Println("[ERROR] No valid Git repos found")
@@ -146,14 +196,13 @@ func main() {
 		}
 
 		wg.Add(1)
-		go gitPull(repo, &wg, results, errors)
+		go gitPull(repo, &wg, results, errors, *verbose)
 	}
 
 	wg.Wait()
 	close(results)
 	close(errors)
 	close(skipped)
-	close(notGitRepos)
 
 	// Output results
 	fmt.Println("=== Pull Results ===")

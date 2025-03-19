@@ -21,5 +21,5 @@ go run main.go -path "C:\Users\jason\GitHub\dotfiles" -path "C:\Users\jason\GitH
 - A root directory can be specified, if some are not git repos they will be skipped and put in a section of repos that were skipped
 
 ```bash
-go run main.go -path "C:\Users\jason\GitHub" -r
+go run main.go -path "C:\Users\jason\GitHub" -r -v
 ```
