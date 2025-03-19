@@ -143,7 +143,14 @@ func main() {
 	var repos []string
 	notGitRepos := make(chan string, len(repoPaths))
 
-	for _, path := range repoPaths {
+	for i, path := range repoPaths {
+		absPath, err := filepath.Abs(path) // Convert relative to absolute
+		if err != nil {
+			fmt.Println("[ERROR] Invalid path:", path)
+			continue
+		}
+		repoPaths[i] = absPath
+
 		stat, err := os.Stat(path)
 		if err != nil {
 			fmt.Println("[ERROR] Invalid path:", path)
