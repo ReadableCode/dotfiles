@@ -115,7 +115,67 @@ alias ll='ls -AlhF'
 
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 
-alias hfpulls='bash $gitDir/na-finops/scripts/git_pull_hf_repos.sh'
+hfgitpullall() {
+	# Define the repositories
+	repos=(
+		"airflow-automation"
+		"airflow-community"
+		"bi-infrastructure"
+		"datasets-automation-community"
+		"datasets-automation"
+		"gbi-pc2-reliance"
+		"github-automation"
+		"hf-kubernetes"
+		"infrastructure-tags"
+		"limesync-onboarding"
+		"photon-access-control"
+		"snowflake-automation"
+		"snowflake-onboarding-template"
+		"streamlit-onboarding"
+		"us-fpt-planning-suite"
+		"us-fpt-riptide"
+		"us-ops-analytics-schemachange"
+		"us-ops-fulfillment-planning"
+		"us-ops-packaging-scripts"
+		"us-scm-morning-reporting"
+		"vault-namespace-automation"
+	)
+
+	# Remove trailing slash from gitDir if present
+	gitDir="${gitDir%/}"
+
+	# Start building the command array
+	cmd=("go" "run" "$gitDir/dotfiles/go_apps/git_puller/main.go")
+
+	# Track if any valid repositories were found
+	repo_found=false
+
+	# Add valid repositories as -path arguments
+	for repo in "${repos[@]}"; do
+		# print directory checking
+		echo "Checking directory: $gitDir/$repo"
+
+		# Check if the repository directory exists
+		if [ -d "$gitDir/$repo" ]; then
+			cmd+=("-path" "$gitDir/$repo")
+			repo_found=true
+		fi
+	done
+
+	# Log the final command before execution
+	echo "Git Directory: $gitDir"
+	echo "Command: ${cmd[*]}"
+
+	# Run the command only if there are valid paths
+	if [ "$repo_found" = false ]; then
+		echo "[ERROR] No valid Git repositories found."
+		return 1
+	fi
+
+	# Execute the built command
+	"${cmd[@]}" -v
+}
+
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
 ### Script Shortcuts ###
