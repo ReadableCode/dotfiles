@@ -63,7 +63,7 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 }
 
 // Find all Git repositories in a directory with a specified depth
-func findGitRepos(baseDir string, maxDepth int, skipped chan<- string, notGitRepos chan<- string, verbose bool) []string {
+func findGitRepos(baseDir string, maxDepth int, skipped *[]string, notGitRepos *[]string, verbose bool) []string {
 	var repos []string
 	baseDepth := strings.Count(baseDir, string(filepath.Separator))
 
@@ -77,13 +77,11 @@ func findGitRepos(baseDir string, maxDepth int, skipped chan<- string, notGitRep
 			return nil
 		}
 
+		absPath, _ := filepath.Abs(path)
+
 		// Skip explicitly listed directories
 		if contains(skipDirs, filepath.Base(path)) {
-			absPath, _ := filepath.Abs(path)
-			skipped <- fmt.Sprintf("[SKIPPED] %s (In skip list)", absPath)
-			if verbose {
-				fmt.Println("[SKIPPING] Ignoring:", absPath)
-			}
+			*skipped = append(*skipped, fmt.Sprintf("[SKIPPED] %s (In skip list)", absPath))
 			return filepath.SkipDir
 		}
 
@@ -95,21 +93,20 @@ func findGitRepos(baseDir string, maxDepth int, skipped chan<- string, notGitRep
 		// Check if this is a Git repo before applying depth limit
 		if isGitRepo(path) {
 			if verbose {
-				fmt.Println("[FOUND] Git repo detected:", path)
+				fmt.Println("[FOUND] Git repo detected:", absPath)
 			}
-			repos = append(repos, path)
+			repos = append(repos, absPath)
 			return filepath.SkipDir // Stop scanning inside this repo
 		}
 
 		// If it's a directory and not a Git repo, log it
-		absPath, _ := filepath.Abs(path)
-		notGitRepos <- fmt.Sprintf("[NOT A REPO] %s", absPath)
+		*notGitRepos = append(*notGitRepos, fmt.Sprintf("[NOT A REPO] %s", absPath))
 
 		// Enforce depth limit for non-Git directories
 		currentDepth := strings.Count(path, string(filepath.Separator))
 		if maxDepth > 0 && (currentDepth-baseDepth) >= maxDepth {
 			if verbose {
-				fmt.Println("[DEPTH LIMIT] Stopping at:", path)
+				fmt.Println("[DEPTH LIMIT] Stopping at:", absPath)
 			}
 			return filepath.SkipDir
 		}
@@ -163,8 +160,8 @@ func main() {
 	}
 
 	var repos []string
-	skipped := make(chan string, len(repoPaths)*5) // Increased buffer
-	notGitRepos := make(chan string, len(repoPaths)*5)
+	var skipped []string
+	var notGitRepos []string
 
 	for _, path := range repoPaths {
 		absPath, err := filepath.Abs(path)
@@ -179,30 +176,37 @@ func main() {
 			continue
 		}
 
-		// Skip explicitly listed directories
 		if contains(skipDirs, filepath.Base(absPath)) {
-			skipped <- fmt.Sprintf("[SKIPPED] %s (In skip list)", absPath)
-			if *verbose {
-				fmt.Println("[SKIPPING] Ignoring:", absPath)
-			}
+			skipped = append(skipped, fmt.Sprintf("[SKIPPED] %s (In skip list)", absPath))
 			continue
 		}
 
 		if stat.IsDir() {
 			if *recursive {
-				foundRepos := findGitRepos(absPath, *depth, skipped, notGitRepos, *verbose)
+				foundRepos := findGitRepos(absPath, *depth, &skipped, &notGitRepos, *verbose)
 				repos = append(repos, foundRepos...)
 			} else if isGitRepo(absPath) {
 				repos = append(repos, absPath)
 			} else {
-				notGitRepos <- fmt.Sprintf("[NOT A REPO] %s", absPath)
+				notGitRepos = append(notGitRepos, fmt.Sprintf("[NOT A REPO] %s", absPath))
 			}
 		} else {
 			fmt.Println("[ERROR] Skipping non-directory:", absPath)
 		}
 	}
 
-	// Prepare channels for results
+	// Print skipped and non-repo directories before pulling
+	fmt.Println("\n=== Skipped Directories ===")
+	for _, skip := range skipped {
+		fmt.Println(skip)
+	}
+
+	fmt.Println("\n=== Not a Git Repo ===")
+	for _, notRepo := range notGitRepos {
+		fmt.Println(notRepo)
+	}
+
+	// Run Git pull on valid repos
 	var wg sync.WaitGroup
 	results := make(chan string, len(repos))
 	errors := make(chan string, len(repos))
@@ -213,15 +217,11 @@ func main() {
 	}
 
 	wg.Wait()
-
-	// Close all channels after goroutines finish
 	close(results)
 	close(errors)
-	close(skipped)
-	close(notGitRepos)
 
-	// Output results
-	fmt.Println("=== Pull Results ===")
+	// Output results properly
+	fmt.Println("\n=== Pull Results ===")
 	for res := range results {
 		fmt.Println(res)
 	}
@@ -229,15 +229,5 @@ func main() {
 	fmt.Println("\n=== Errors ===")
 	for err := range errors {
 		fmt.Println(err)
-	}
-
-	fmt.Println("\n=== Skipped ===")
-	for skip := range skipped {
-		fmt.Println(skip)
-	}
-
-	fmt.Println("\n=== Not a Git Repo ===")
-	for notRepo := range notGitRepos {
-		fmt.Println(notRepo)
 	}
 }
