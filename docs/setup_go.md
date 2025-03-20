@@ -23,7 +23,7 @@
 
 ## Testing and Finishing Installation
 
-- If using VSCode, install the Go extension by searching for `@id:golang.go` in the extensions tab.
+- If using Visual Studio Code, install the Go extension by searching for `@id:golang.go` in the extensions tab.
 
 - Close and reopen the terminal to make sure installation is successful and then run the folling commands to verify the version of Go:
 
