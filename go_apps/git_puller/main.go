@@ -195,18 +195,7 @@ func main() {
 		}
 	}
 
-	// Print skipped and non-repo directories before pulling
-	fmt.Println("\n=== Skipped Directories ===")
-	for _, skip := range skipped {
-		fmt.Println(skip)
-	}
-
-	fmt.Println("\n=== Not a Git Repo ===")
-	for _, notRepo := range notGitRepos {
-		fmt.Println(notRepo)
-	}
-
-	// Run Git pull on valid repos
+	// Run Git pull on valid repos first before printing skipped
 	var wg sync.WaitGroup
 	results := make(chan string, len(repos))
 	errors := make(chan string, len(repos))
@@ -220,7 +209,17 @@ func main() {
 	close(results)
 	close(errors)
 
-	// Output results properly
+	// Print everything in the correct order
+	fmt.Println("\n=== Skipped Directories ===")
+	for _, skip := range skipped {
+		fmt.Println(skip)
+	}
+
+	fmt.Println("\n=== Not a Git Repo ===")
+	for _, notRepo := range notGitRepos {
+		fmt.Println(notRepo)
+	}
+
 	fmt.Println("\n=== Pull Results ===")
 	for res := range results {
 		fmt.Println(res)
