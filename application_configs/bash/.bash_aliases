@@ -114,6 +114,7 @@ function todo() {
 alias ll='ls -AlhF'
 
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
+alias gitpullall='go run "$gitDir/dotfiles/go_apps/git_puller/main.go" -path "$gitDir" -r -v'
 
 hfgitpullall() {
 	# Define the repositories
