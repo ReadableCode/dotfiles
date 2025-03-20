@@ -5,16 +5,32 @@ import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from config import data_dir
+from config import grandparent_dir
+
+
+# %%
+# Variables #
+
+base_dir = os.path.join(grandparent_dir, "Syncthing_Synced", "dotfiles_data")
+os.makedirs(base_dir, exist_ok=True)
+
+csv_file = os.path.join(base_dir, "speed.csv")
+
 
 # %%
 # Load the CSV file #
 
-csv_file = os.path.join(data_dir, "speed.csv")
 df = pd.read_csv(csv_file)
+
+# %%
+# Data Cleaning #
 
 # Convert 'Timestamp' to datetime format
 df["Timestamp"] = pd.to_datetime(df["Timestamp"])
+
+
+# %%
+# Data Processing #
 
 # Plot the data
 plt.figure(figsize=(10, 5))

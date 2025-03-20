@@ -6,12 +6,12 @@ import os
 from datetime import datetime
 
 import speedtest
-from config_scripts import parent_dir
+from config_scripts import parent_dir, grandparent_dir
 
 # %%
 # Variables #
 
-base_dir = os.path.join(parent_dir, "data")
+base_dir = os.path.join(grandparent_dir, "Syncthing_Synced", "dotfiles_data")
 os.makedirs(base_dir, exist_ok=True)
 
 log_file = os.path.join(base_dir, "speed.csv")
