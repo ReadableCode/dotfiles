@@ -173,55 +173,55 @@ function openbranchdiffs {
 }
 
 function gitpullall {
-	$binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
-	& $binary -path $gitDir -r
+    $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
+    & $binary -path $gitDir -r
 }
 
 function hfgitpullall {
-	$repos = @(
-		"airflow-automation",
-		"airflow-community",
-		"bi-infrastructure",
-		"datasets-automation-community",
-		"datasets-automation",
-		"gbi-pc2-reliance",
-		"github-automation",
-		"hf-kubernetes",
-		"infrastructure-tags",
-		"limesync-onboarding",
-		"photon-access-control",
-		"snowflake-automation",
-		"snowflake-onboarding-template",
-		"streamlit-onboarding",
-		"us-fpt-planning-suite",
-		"us-fpt-riptide",
-		"us-ops-analytics-schemachange",
-		"us-ops-fulfillment-planning",
-		"us-ops-packaging-scripts",
-		"us-scm-morning-reporting",
-		"vault-namespace-automation"
-	)
+    $repos = @(
+        "airflow-automation",
+        "airflow-community",
+        "bi-infrastructure",
+        "datasets-automation-community",
+        "datasets-automation",
+        "gbi-pc2-reliance",
+        "github-automation",
+        "hf-kubernetes",
+        "infrastructure-tags",
+        "limesync-onboarding",
+        "photon-access-control",
+        "snowflake-automation",
+        "snowflake-onboarding-template",
+        "streamlit-onboarding",
+        "us-fpt-planning-suite",
+        "us-fpt-riptide",
+        "us-ops-analytics-schemachange",
+        "us-ops-fulfillment-planning",
+        "us-ops-packaging-scripts",
+        "us-scm-morning-reporting",
+        "vault-namespace-automation"
+    )
 
-	$gitDir = $gitDir.TrimEnd('\')
-	$binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
+    $gitDir = $gitDir.TrimEnd('\')
+    $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
 
-	$cmd = @($binary)
-	$repo_found = $false
+    $cmd = @($binary)
+    $repo_found = $false
 
-	foreach ($repo in $repos) {
-		$repoPath = Join-Path $gitDir $repo
-		if (Test-Path $repoPath -PathType Container) {
-			$cmd += @("-path", $repoPath)
-			$repo_found = $true
-		}
-	}
+    foreach ($repo in $repos) {
+        $repoPath = Join-Path $gitDir $repo
+        if (Test-Path $repoPath -PathType Container) {
+            $cmd += @("-path", $repoPath)
+            $repo_found = $true
+        }
+    }
 
-	if (-not $repo_found) {
-		Write-Host "[ERROR] No valid Git repositories found."
-		return
-	}
+    if (-not $repo_found) {
+        Write-Host "[ERROR] No valid Git repositories found."
+        return
+    }
 
-	& $cmd
+    & $cmd[0] $cmd[1..($cmd.Count - 1)]
 }
 
 
