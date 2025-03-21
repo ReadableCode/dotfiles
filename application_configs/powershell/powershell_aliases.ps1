@@ -82,7 +82,8 @@ function venvactivate {
         Write-Host "Activating virtual environment..." -ForegroundColor Green
         # Source the script to activate the environment
         & $venvPath
-    } else {
+    }
+    else {
         Write-Host "Virtual environment activation script not found at: $venvPath" -ForegroundColor Red
     }
 }
@@ -121,7 +122,8 @@ function run-python-script {
         # Deactivate the environment afterward
         deactivate
         return 0
-    } else {
+    }
+    else {
         Write-Host "No project venv found. Running the script with system Python."
     }
 
@@ -169,6 +171,59 @@ function openbranchdiffs {
     # Open each changed file in VSCode
     $changedFiles | ForEach-Object { code $_ }
 }
+
+function gitpullall {
+	$binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
+	& $binary -path $gitDir -r
+}
+
+function hfgitpullall {
+	$repos = @(
+		"airflow-automation",
+		"airflow-community",
+		"bi-infrastructure",
+		"datasets-automation-community",
+		"datasets-automation",
+		"gbi-pc2-reliance",
+		"github-automation",
+		"hf-kubernetes",
+		"infrastructure-tags",
+		"limesync-onboarding",
+		"photon-access-control",
+		"snowflake-automation",
+		"snowflake-onboarding-template",
+		"streamlit-onboarding",
+		"us-fpt-planning-suite",
+		"us-fpt-riptide",
+		"us-ops-analytics-schemachange",
+		"us-ops-fulfillment-planning",
+		"us-ops-packaging-scripts",
+		"us-scm-morning-reporting",
+		"vault-namespace-automation"
+	)
+
+	$gitDir = $gitDir.TrimEnd('\')
+	$binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
+
+	$cmd = @($binary)
+	$repo_found = $false
+
+	foreach ($repo in $repos) {
+		$repoPath = Join-Path $gitDir $repo
+		if (Test-Path $repoPath -PathType Container) {
+			$cmd += @("-path", $repoPath)
+			$repo_found = $true
+		}
+	}
+
+	if (-not $repo_found) {
+		Write-Host "[ERROR] No valid Git repositories found."
+		return
+	}
+
+	& $cmd
+}
+
 
 ### Servers ###
 
