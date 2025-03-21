@@ -13,7 +13,7 @@ import (
 )
 
 // List of directories to skip
-var skipDirs = []string{"personal_credentials", "hellofresh_credentials", "na-finops", "na-faba", "na-fin-data-streamlit", "FABA_Final_Project"}
+var skipDirs = []string{"personal_credentials", "hellofresh_credentials"}
 
 // Run `git pull` on a repo and capture results
 func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, noChanges chan<- string, verbose bool) {
