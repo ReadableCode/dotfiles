@@ -114,7 +114,7 @@ function todo() {
 alias ll='ls -AlhF'
 
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
-alias gitpullall='$gitDir/dotfiles/go_apps/git_puller/git_puller -path "$gitDir" -r -v'
+alias gitpullall='chmod +x "$gitDir/dotfiles/go_apps/git_puller/git_puller"; "$gitDir/dotfiles/go_apps/git_puller/git_puller" -path "$gitDir" -r'
 
 hfgitpullall() {
 	repos=(
@@ -142,27 +142,25 @@ hfgitpullall() {
 	)
 
 	gitDir="${gitDir%/}"
-	cmd=("$gitDir/dotfiles/go_apps/git_puller/git_puller")
+	binary="$gitDir/dotfiles/go_apps/git_puller/git_puller"
+	chmod +x "$binary"
 
+	cmd=("$binary")
 	repo_found=false
 
 	for repo in "${repos[@]}"; do
-		echo "Checking directory: $gitDir/$repo"
 		if [ -d "$gitDir/$repo" ]; then
 			cmd+=("-path" "$gitDir/$repo")
 			repo_found=true
 		fi
 	done
 
-	echo "Git Directory: $gitDir"
-	echo "Command: ${cmd[*]}"
-
 	if [ "$repo_found" = false ]; then
 		echo "[ERROR] No valid Git repositories found."
 		return 1
 	fi
 
-	"${cmd[@]}" -v
+	"${cmd[@]}"
 }
 
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
