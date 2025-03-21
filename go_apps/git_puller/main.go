@@ -16,7 +16,7 @@ import (
 var skipDirs = []string{"personal_credentials", "hellofresh_credentials", "na-finops", "na-faba", "na-fin-data-streamlit", "FABA_Final_Project"}
 
 // Run `git pull` on a repo and capture results
-func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, verbose bool) {
+func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, noChanges chan<- string, verbose bool) {
 	defer wg.Done()
 
 	absRepo, err := filepath.Abs(repo)
@@ -52,7 +52,7 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 
 	// Log successful results
 	if output == "Already up to date." {
-		results <- fmt.Sprintf("[NO CHANGES] %s", absRepo)
+		noChanges <- fmt.Sprintf("[NO CHANGES] %s", absRepo)
 	} else {
 		results <- fmt.Sprintf("[UPDATED] %s:\n%s", absRepo, output)
 	}
@@ -199,15 +199,17 @@ func main() {
 	var wg sync.WaitGroup
 	results := make(chan string, len(repos))
 	errors := make(chan string, len(repos))
+	noChanges := make(chan string, len(repos))
 
 	for _, repo := range repos {
 		wg.Add(1)
-		go gitPull(repo, &wg, results, errors, *verbose)
+		go gitPull(repo, &wg, results, errors, noChanges, *verbose)
 	}
 
 	wg.Wait()
 	close(results)
 	close(errors)
+	close(noChanges)
 
 	// Print everything in the correct order
 	fmt.Println("\n=== Skipped Directories ===")
@@ -223,6 +225,11 @@ func main() {
 	fmt.Println("\n=== Pull Results ===")
 	for res := range results {
 		fmt.Println(res)
+	}
+
+	fmt.Println("\n=== No Changes ===")
+	for noChange := range noChanges {
+		fmt.Println(noChange)
 	}
 
 	fmt.Println("\n=== Errors ===")

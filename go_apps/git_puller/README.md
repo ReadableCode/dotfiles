@@ -1,6 +1,6 @@
 # Git Puller
 
-## Usage
+## Usage - without compiling
 
 ### A single repo
 
@@ -22,4 +22,38 @@ go run main.go -path "C:\Users\jason\GitHub\dotfiles" -path "C:\Users\jason\GitH
 
 ```bash
 go run main.go -path "C:\Users\jason\GitHub" -r -v
+```
+
+## Usage - compiling
+
+### Compiling on Windows
+
+```bash
+# for windows
+go build -o git_puller.exe main.go
+# for linux
+$env:GOOS="linux"; $env:GOARCH="amd64"; go build -o git_puller main.go; Remove-Item Env:GOOS, Env:GOARCH
+```
+
+### Compiling on Linux
+
+```bash
+# for windows
+GOOS=windows GOARCH=amd64 go build -o git_puller.exe main.go
+# for linux
+go build -o git_puller main.go
+```
+
+### Usage from compiled binary
+
+#### On Windows
+
+```bash
+.\git_puller -path "C:\Users\jason\GitHub\dotfiles" -v
+```
+
+#### On Linux
+
+```bash
+./git_puller -path "/home/jason/GitHub/dotfiles" -v
 ```
