@@ -30,4 +30,4 @@ MAILTO=jasonwchristiansen@gmail.com
 30 0 * * * cd /home/jason/GitHub/dotfiles/scripts/; sh /home/jason/GitHub/dotfiles/scripts/crontab_extractor.sh >> /home/jason/GitHub/dotfiles/logs/cronlog_crontab_extractor.log
 
 
-*/15 * * * * /bin/bash -c 'source /home/jason/GitHub/dotfiles/.venv/bin/activate && /home/jason/GitHub/dotfiles/.venv/bin/python3 /home/jason/GitHub/dotfiles/scripts/speedtest_logger.py' >> /home/jason/GitHub/dotfiles/logs/speedtest_cron.log 2>&1
+*/15 * * * * /home/jason/GitHub/dotfiles/.venv/bin/python3 /home/jason/GitHub/dotfiles/scripts/speedtest_logger.py >> /home/jason/GitHub/dotfiles/logs/speedtest_cron.log 2> /tmp/speedtest_error.log || cat /tmp/speedtest_error.log | mail -s "Cron Job Failed" jasonwchristiansen@gmail.com
