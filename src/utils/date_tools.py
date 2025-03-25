@@ -43,8 +43,12 @@ def get_datetime_format_string(format):
         return "%Y%m%d"
     elif format == "%H%M%S" or format == "HHMMSS" or format == "time_number":
         return "%H%M%S"
-    elif format == "%Y-%m-%d %H:%M:%S" or format == "readable":
-        return "%Y-%m-%d %H:%M:%S"
+    elif (
+        format == "%Y-%m-%d %H:%M:%S"
+        or format == "%Y-%m-%d %H:%M:%S %Z"
+        or format == "readable"
+    ):
+        return "%Y-%m-%d %H:%M:%S %Z"
     elif format == "%Y-%m-%d" or format == "YYYY-MM-DD":
         return "%Y-%m-%d"
     elif format == "%H:%M" or format == "hour_mins":
@@ -58,7 +62,7 @@ def get_datetime_format_string(format):
 
 def get_current_datetime(format="%Y%m%d%H%M%S"):
     """
-    Returns the current datetime in the specified format string.
+    Returns the current datetime in the specified format string, always in CST timezone.
 
     Args:
         format (str): The format option for the datetime string
@@ -74,7 +78,10 @@ def get_current_datetime(format="%Y%m%d%H%M%S"):
     Returns:
         str: The current datetime formatted according to the string passed in.
     """
-    return datetime.now().strftime(get_datetime_format_string(format))
+    cst = timezone("America/Chicago")
+    now_cst = datetime.now().astimezone(cst)
+
+    return now_cst.strftime(get_datetime_format_string(format))
 
 
 # Custom date parsing function

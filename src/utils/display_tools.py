@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+import pytz
 from dotenv import load_dotenv
 from tabulate import tabulate
 
@@ -87,11 +88,12 @@ def df_to_string(df):
 
 def print_logger(message, level="info", as_break=False):
     """
-    Prints a message with a preceding timestamp.
+    Prints a message with a preceding timestamp in CST timezone.
 
     Args:
         message (str): The message to print.
         level (str): The level of the message (e.g., "INFO", "WARNING", "ERROR").
+        as_break (bool): Whether to print the message in a separated block.
 
     Returns:
         None
@@ -103,9 +105,14 @@ def print_logger(message, level="info", as_break=False):
         "error": 2,
         "critical": 1,
     }
+
+    # Convert UTC to CST
+    cst = pytz.timezone("America/Chicago")
+    now_cst = datetime.datetime.now(datetime.timezone.utc).astimezone(cst)
+
     if dict_levels[level.lower()] <= dict_levels[LOG_LEVEL]:
         print_message = (
-            f"{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+            f"{now_cst.strftime('%Y-%m-%d %H:%M:%S %Z')}"  # Includes CST timezone
             f" - {level.upper()} - {message}"
         )
         if not as_break:
