@@ -217,6 +217,22 @@
   git pull
   ```
 
+## Cloning from a local directory
+
+* You can clone from a local or accessible remote directory and treat it as a Git remote. This is useful for private data (e.g., secrets) you don’t want on GitHub.
+
+```bash
+git clone 192.168.xx.xx:/mnt/user/GitHub/test_clone_local
+# or to use a different user
+git clone root@192.168.xx.xx:/mnt/user/GitHub/test_clone_local
+```
+
+* To allow pushing to a non-bare repo, run this in the target repo:
+
+```bash
+git config receive.denyCurrentBranch updateInstead
+```
+
 ## Resolve Common Problems
 
 ### Git diff and Git status don't show the updated files as changed

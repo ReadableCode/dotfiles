@@ -143,3 +143,78 @@ sudo apt install syncthing
       !Plex Versions/**
       *
       ```
+
+## Removing Syncthing
+
+### Remove Syncthing on Windows
+
+* Stop the service in synctrayzor
+* Uninstall synctrayzor with the add/remove programs menu
+* Delete all config data (optional)
+
+```bash
+Remove-Item -Recurse -Force "$env:LOCALAPPDATA\Syncthing"
+Remove-Item -Recurse -Force "$env:APPDATA\Syncthing"
+Remove-Item -Recurse -Force "$env:USERPROFILE\.config\syncthing" -ErrorAction SilentlyContinue
+```
+
+### Remove Syncthing on Linux
+
+* Check to make sure of the service name
+
+```bash
+systemctl --user list-units --type=service
+# or
+systemctl list-units --type=service | grep syncthing
+```
+
+* Stop the service
+
+```bash
+sudo systemctl stop syncthing@jason.service
+sudo systemctl disable syncthing@jason.service
+# or if on pi
+sudo systemctl stop syncthing@pi.service
+sudo systemctl disable syncthing@pi.service
+```
+
+* Kill the application
+
+```bash
+pkill syncthing
+```
+
+* Remove the app
+
+```bash
+sudo apt remove --purge syncthing -y
+```
+
+* Remove the configs
+
+```bash
+rm -rf ~/.config/syncthing
+rm -rf ~/.local/share/syncthing
+```
+
+### Remove Syncthing on macOS
+
+* Stop the service
+
+```bash
+pkill Syncthing
+# make sure its gone
+launchctl list | grep syncthing
+```
+
+* Remove the app
+
+```bash
+sudo rm -rf /Applications/Syncthing.app
+```
+
+* Remove the configs
+
+```bash
+rm -rf ~/Library/Application\ Support/Syncthing
+```
