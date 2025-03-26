@@ -116,53 +116,6 @@ alias ll='ls -AlhF'
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 alias gitpullall='chmod +x "$gitDir/dotfiles/go_apps/git_puller/git_puller"; "$gitDir/dotfiles/go_apps/git_puller/git_puller" -path "$gitDir" -r'
 
-hfgitpullall() {
-	repos=(
-		"airflow-automation"
-		"airflow-community"
-		"bi-infrastructure"
-		"datasets-automation-community"
-		"datasets-automation"
-		"gbi-pc2-reliance"
-		"github-automation"
-		"hf-kubernetes"
-		"infrastructure-tags"
-		"limesync-onboarding"
-		"photon-access-control"
-		"snowflake-automation"
-		"snowflake-onboarding-template"
-		"streamlit-onboarding"
-		"us-fpt-planning-suite"
-		"us-fpt-riptide"
-		"us-ops-analytics-schemachange"
-		"us-ops-fulfillment-planning"
-		"us-ops-packaging-scripts"
-		"us-scm-morning-reporting"
-		"vault-namespace-automation"
-	)
-
-	gitDir="${gitDir%/}"
-	binary="$gitDir/dotfiles/go_apps/git_puller/git_puller"
-	chmod +x "$binary"
-
-	cmd=("$binary")
-	repo_found=false
-
-	for repo in "${repos[@]}"; do
-		if [ -d "$gitDir/$repo" ]; then
-			cmd+=("-path" "$gitDir/$repo")
-			repo_found=true
-		fi
-	done
-
-	if [ "$repo_found" = false ]; then
-		echo "[ERROR] No valid Git repositories found."
-		return 1
-	fi
-
-	"${cmd[@]}"
-}
-
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
 ### Script Shortcuts ###
