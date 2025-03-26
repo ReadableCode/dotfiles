@@ -50,6 +50,7 @@ go build -o git_puller main.go
 
 ```bash
 .\git_puller -path "C:\Users\jason\GitHub\dotfiles" -v
+.\git_puller -path "C:\Users\jason\GitHub" -v -r
 ```
 
 #### On Linux

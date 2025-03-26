@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,9 +12,6 @@ import (
 	"strings"
 	"sync"
 )
-
-// List of directories to skip
-var skipDirs = []string{"personal_credentials", "hellofresh_credentials"}
 
 // Run `git pull` on a repo and capture results
 func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, noChanges chan<- string, verbose bool) {
@@ -44,13 +42,11 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 		return
 	}
 
-	// Log other Git errors
 	if err != nil {
 		errors <- fmt.Sprintf("[FAILED] %s: %s", absRepo, errorMsg)
 		return
 	}
 
-	// Log successful results
 	if output == "Already up to date." {
 		noChanges <- fmt.Sprintf("[NO CHANGES] %s", absRepo)
 	} else {
@@ -63,7 +59,7 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 }
 
 // Find all Git repositories in a directory with a specified depth
-func findGitRepos(baseDir string, maxDepth int, skipped *[]string, notGitRepos *[]string, verbose bool) []string {
+func findGitRepos(baseDir string, maxDepth int, skipped *[]string, notGitRepos *[]string, verbose bool, dynamicSkips []string) []string {
 	var repos []string
 	baseDepth := strings.Count(baseDir, string(filepath.Separator))
 
@@ -80,8 +76,8 @@ func findGitRepos(baseDir string, maxDepth int, skipped *[]string, notGitRepos *
 		absPath, _ := filepath.Abs(path)
 
 		// Skip explicitly listed directories
-		if contains(skipDirs, filepath.Base(path)) {
-			*skipped = append(*skipped, fmt.Sprintf("[SKIPPED] %s (In skip list)", absPath))
+		if contains(dynamicSkips, filepath.Base(path)) {
+			*skipped = append(*skipped, fmt.Sprintf("[SKIPPED] %s (In dynamic skip list)", absPath))
 			return filepath.SkipDir
 		}
 
@@ -137,10 +133,41 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
+func readSkipList(baseDir string) []string {
+	filePath := filepath.Join(baseDir, ".skiprepos")
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil
+	}
+	defer file.Close()
+
+	var filtered []string
+	buf := make([]byte, 4096)
+	var content strings.Builder
+	for {
+		n, err := file.Read(buf)
+		if err != nil && err != io.EOF {
+			return nil
+		}
+		if n == 0 {
+			break
+		}
+		content.Write(buf[:n])
+	}
+
+	lines := strings.Split(content.String(), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed != "" {
+			filtered = append(filtered, trimmed)
+		}
+	}
+	return filtered
+}
+
 func main() {
-	// Accept multiple paths with -path flag
 	var repoPaths []string
-	flag.Func("path", "Specify one or more paths to repos (space-separated or multiple -path flags)", func(s string) error {
+	flag.Func("path", "Specify one or more paths to repos", func(s string) error {
 		if runtime.GOOS == "windows" {
 			repoPaths = append(repoPaths, strings.Split(s, ";")...) // Handle Windows `;` separation
 		} else {
@@ -170,32 +197,25 @@ func main() {
 			continue
 		}
 
-		stat, err := os.Stat(path)
-		if err != nil {
-			fmt.Println("[ERROR] Invalid path:", absPath)
+		stat, err := os.Stat(absPath)
+		if err != nil || !stat.IsDir() {
+			fmt.Println("[ERROR] Skipping invalid or non-directory:", absPath)
 			continue
 		}
 
-		if contains(skipDirs, filepath.Base(absPath)) {
-			skipped = append(skipped, fmt.Sprintf("[SKIPPED] %s (In skip list)", absPath))
-			continue
-		}
-
-		if stat.IsDir() {
-			if *recursive {
-				foundRepos := findGitRepos(absPath, *depth, &skipped, &notGitRepos, *verbose)
-				repos = append(repos, foundRepos...)
-			} else if isGitRepo(absPath) {
+		var dynamicSkips []string
+		if *recursive {
+			dynamicSkips = readSkipList(absPath)
+			repos = append(repos, findGitRepos(absPath, *depth, &skipped, &notGitRepos, *verbose, dynamicSkips)...)
+		} else {
+			if isGitRepo(absPath) {
 				repos = append(repos, absPath)
 			} else {
 				notGitRepos = append(notGitRepos, fmt.Sprintf("[NOT A REPO] %s", absPath))
 			}
-		} else {
-			fmt.Println("[ERROR] Skipping non-directory:", absPath)
 		}
 	}
 
-	// Run Git pull on valid repos first before printing skipped
 	var wg sync.WaitGroup
 	results := make(chan string, len(repos))
 	errors := make(chan string, len(repos))
@@ -211,7 +231,6 @@ func main() {
 	close(errors)
 	close(noChanges)
 
-	// Print everything in the correct order
 	fmt.Println("\n=== Skipped Directories ===")
 	for _, skip := range skipped {
 		fmt.Println(skip)
