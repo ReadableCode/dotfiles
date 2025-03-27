@@ -33,6 +33,8 @@ go run main.go -path "C:\Users\jason\GitHub" -r -v
 go build -o git_puller.exe main.go
 # for linux
 $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o git_puller main.go; Remove-Item Env:GOOS, Env:GOARCH
+# for raspberry pi (arm) in output
+$env:GOOS="linux"; $env:GOARCH="arm"; go build -o git_puller_arm main.go; Remove-Item Env:GOOS, Env:GOARCH
 ```
 
 ### Compiling on Linux
@@ -42,6 +44,8 @@ $env:GOOS="linux"; $env:GOARCH="amd64"; go build -o git_puller main.go; Remove-I
 GOOS=windows GOARCH=amd64 go build -o git_puller.exe main.go
 # for linux
 go build -o git_puller main.go
+# for raspberry pi (arm) in output
+GOOS=linux GOARCH=arm go build -o git_puller_arm main.go
 ```
 
 ### Usage from compiled binary
@@ -56,5 +60,8 @@ go build -o git_puller main.go
 #### On Linux
 
 ```bash
-./git_puller -path "/home/jason/GitHub/dotfiles" -v
+# linux (not raspberry pi)
+chmod +x git_puller && ./git_puller -path "/home/jason/GitHub/dotfiles" -v
+# raspberry pi
+chmod +x git_puller_arm && ./git_puller_arm -path "/home/pi/GitHub" -v -r
 ```

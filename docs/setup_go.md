@@ -1,6 +1,6 @@
 # Setup Go
 
-## Setup on Linux
+## Setup on Linux (not raspberry pi)
 
 - Using apt
 
@@ -10,6 +10,35 @@
   sudo apt update
   sudo apt install golang
   ```
+
+## Setup on Raspberry Pi
+
+- Installing from apt will get you an odler version without support for new features
+
+- Uninstall the apt version first
+
+  ```bash
+  sudo apt remove golang
+  sudo rm -rf /usr/local/go
+  ```
+
+- To install the latest version, download the latest version from the official website
+
+- Open terminal and run the following commands:
+
+```bash
+cd && wget https://go.dev/dl/go1.22.2.linux-armv6l.tar.gz
+sudo tar -C /usr/local -xzf go1.22.2.linux-armv6l.tar.gz
+```
+
+- Add the following to the end of the `~/.profile` file:
+
+```bash
+nvim ~/.profile
+export PATH=/usr/local/go/bin:$PATH
+source ~/.profile
+go version
+```
 
 ## Setup on Windows
 
