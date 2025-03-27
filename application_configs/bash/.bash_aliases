@@ -114,7 +114,18 @@ function todo() {
 alias ll='ls -AlhF'
 
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
-alias gitpullall='chmod +x "$gitDir/dotfiles/go_apps/git_puller/git_puller"; "$gitDir/dotfiles/go_apps/git_puller/git_puller" -path "$gitDir" -r'
+
+
+function gitpullall {
+	arch=$(uname -m)
+	bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
+	if [[ "$arch" == arm* || "$arch" == aarch64 ]]; then
+		bin="${bin}_arm"
+	fi
+	chmod +x "$bin"
+	"$bin" -path "$gitDir" -r
+}
+
 
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
