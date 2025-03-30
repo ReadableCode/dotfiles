@@ -168,5 +168,15 @@
     "python": true,
     "rust": false
   },
-  "go.toolsManagement.autoUpdate": true
+  "go.toolsManagement.autoUpdate": true,
+  "python.analysis.exclude": [
+    "**/.venv",
+    "**/data",
+    "*/node_modules",
+    "**/.git",
+    "**/__pycache__"
+  ],
+  "python.analysis.enableEditableInstalls": false,
+  "python.analysis.enableExperimentalServer": false,
+  "python.analysis.enablePytestSupport": false
 }
