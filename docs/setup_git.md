@@ -227,7 +227,7 @@ git clone 192.168.xx.xx:/mnt/user/GitHub/test_clone_local
 git clone root@192.168.xx.xx:/mnt/user/GitHub/test_clone_local
 ```
 
-* To allow pushing to a non-bare repo, run this in the target repo:
+* To allow pushing to a non-bare repository, run this in the target repository:
 
 ```bash
 git config receive.denyCurrentBranch updateInstead
