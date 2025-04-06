@@ -171,10 +171,17 @@
   "go.toolsManagement.autoUpdate": true,
   "python.analysis.exclude": [
     "**/.venv",
+    "**/.mypy_cache",
     "**/data",
-    "*/node_modules",
     "**/.git",
-    "**/__pycache__"
+    "**/.github",
+    "**/__pycache__",
+    "**/node_modules",
+    "**/Syncthing_Synced",
+    "**/dist",
+    "**/build",
+    "**/Lib/**",
+    "**/site-packages/**"
   ],
   "python.analysis.enableEditableInstalls": false,
   "python.analysis.enableExperimentalServer": false,
