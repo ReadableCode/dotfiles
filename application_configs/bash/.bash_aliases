@@ -44,7 +44,12 @@ alias myscripts='cd $gitDir/dotfiles/scripts/'
 alias linux='cd ~/Documents/Technology/Linux/'
 alias githubdir='cd $gitDir'
 alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
+
+# HelloFresh #
 alias finance='cd $gitDir/na-finops/'
+alias kubelogs='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_follow_logs.sh'
+alias kubebash='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_bash.sh'
+alias kubedelete='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_delete.sh'
 
 ### Python ###
 
@@ -115,7 +120,6 @@ alias ll='ls -AlhF'
 
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 
-
 function gitpullall {
 	arch=$(uname -m)
 	bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
@@ -125,7 +129,6 @@ function gitpullall {
 	chmod +x "$bin"
 	"$bin" -path "$gitDir" -r
 }
-
 
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
