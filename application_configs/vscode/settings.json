@@ -173,6 +173,7 @@
     "**/.venv",
     "**/.mypy_cache",
     "**/data",
+    "**/health_data",
     "**/.git",
     "**/.github",
     "**/__pycache__",
