@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "dotfiles"
 requires-python = ">=3.10,<3.11"
 dependencies = [
+    "boto3>=1.37.31",
     "datetime>=5.5",
     "google-api-python-client>=2.157.0",
     "google-auth>=2.37.0",
