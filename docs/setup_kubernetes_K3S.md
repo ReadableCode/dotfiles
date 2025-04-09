@@ -72,3 +72,28 @@ kubectl get pods
 # Test the service
 curl http://<any-node-ip>:31000
 ```
+
+## Set up NFS strorage (unsecure and will be available to all machines on the network)
+
+- Install NFS server on the first machine
+
+```bash
+sudo apt install nfs-kernel-server
+```
+
+- Create a directory for the NFS share
+
+```bash
+sudo mkdir -p /mnt/nfs_share
+```
+
+- Edit the exports file to add the share
+
+```bash
+sudo nano /etc/exports
+```
+- Add the following line to the end of the file
+
+```bash
+/mnt/nfs_share *(rw,sync,no_subtree_check,no_root_squash)
+```
