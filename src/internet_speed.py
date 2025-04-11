@@ -5,22 +5,36 @@ import os
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from config import grandparent_dir
-
+from config import data_dir
+from src.utils.display_tools import pprint_df
+from src.utils.s3_tools import download_file_from_s3  # noqa F401
 
 # %%
 # Variables #
 
-base_dir = os.path.join(grandparent_dir, "Syncthing_Synced", "dotfiles_data")
-os.makedirs(base_dir, exist_ok=True)
+STORAGE_BUCKET_NAME = "dotfiles"
 
-csv_file = os.path.join(base_dir, "speed.csv")
 
+log_file = os.path.join(data_dir, "speed.csv")
+# Download the CSV file if it exists
+download_file_from_s3(
+    STORAGE_BUCKET_NAME,
+    os.path.basename(log_file),
+    log_file,
+)
 
 # %%
 # Load the CSV file #
 
-df = pd.read_csv(csv_file)
+df = pd.read_csv(log_file)
+# set columns
+df.columns = [
+    "Timestamp",
+    "Ping (ms)",
+    "Download (Mbps)",
+    "Upload (Mbps)",
+]
+pprint_df(df.tail(20))
 
 # %%
 # Data Cleaning #
