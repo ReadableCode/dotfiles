@@ -40,7 +40,7 @@ k3s kubectl get nodes
 ### Get Token and IP address
 
 ```bash
-# Get the token for joining other nodes
+# Get the token other nodes will need in order to join
 sudo cat /var/lib/rancher/k3s/server/node-token
 # Get the IP address of the first machine
 hostname -I | awk '{print $1}'
