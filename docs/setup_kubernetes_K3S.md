@@ -31,6 +31,8 @@ export K3S_KUBECONFIG_MODE="644"
 curl -sfL https://get.k3s.io | sh -
 ```
 
+- If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/docker_container_registry_local.md)
+
 ### Check K3S status
 
 ```bash
@@ -56,6 +58,9 @@ export K3S_KUBECONFIG_MODE="644"
 curl -sfL https://get.k3s.io | K3S_URL=https://<IP>:6443 K3S_TOKEN=<TOKEN> sh -
 ```
 
+- If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/docker_container_registry_local.md)
+
+
 ## Deploy HelloWorld
 
 - Create a file like this one: [../application_configs/k3s/helloworld.yaml](../application_configs/k3s/helloworld.yaml)
@@ -72,6 +77,12 @@ kubectl get pods
 # Test the service
 curl http://<any-node-ip>:31000
 ```
+
+
+## Deploy an image to local container registry for K3S to use
+
+- See detailed instructions in [Local Registries](../docs/docker_container_registry_local.md)
+
 
 ## Set up NFS strorage (unsecure and will be available to all machines on the network)
 
