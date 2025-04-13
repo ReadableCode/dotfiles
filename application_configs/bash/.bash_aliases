@@ -132,6 +132,12 @@ function gitpullall {
 
 alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
 
+### Kubectl ###
+
+alias k="kubectl"
+alias kgp="kubectl get pods -o wide"
+alias kgn="kubectl get nodes -o wide"
+
 ### Script Shortcuts ###
 
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
