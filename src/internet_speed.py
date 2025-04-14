@@ -42,46 +42,54 @@ pprint_df(df.tail(20))
 # Convert 'Timestamp' to datetime format
 df["Timestamp"] = pd.to_datetime(df["Timestamp"])
 
-
 # %%
 # Data Processing #
 
-# Plot the data
-plt.figure(figsize=(10, 5))
-plt.plot(
-    df["Timestamp"],
-    df["Ping (ms)"],
-    label="Ping (ms)",
-    linestyle="dashed",
-    marker="o",
-    color="red",
-)
-plt.plot(
-    df["Timestamp"],
-    df["Download (Mbps)"],
-    label="Download (Mbps)",
-    linestyle="-",
-    marker="s",
-    color="blue",
-)
-plt.plot(
-    df["Timestamp"],
-    df["Upload (Mbps)"],
-    label="Upload (Mbps)",
-    linestyle="-.",
-    marker="^",
-    color="green",
-)
 
-# Format the graph
-plt.xlabel("Time")
-plt.ylabel("Speed / Ping")
-plt.title("Internet Speed Over Time")
-plt.legend()
-plt.xticks(rotation=45)
-plt.grid(True)
+def plot_and_show(df):
+    # Plot the data
+    plt.figure(figsize=(10, 5))
+    plt.plot(
+        df["Timestamp"],
+        df["Ping (ms)"],
+        label="Ping (ms)",
+        linestyle="dashed",
+        marker="o",
+        color="red",
+    )
+    plt.plot(
+        df["Timestamp"],
+        df["Download (Mbps)"],
+        label="Download (Mbps)",
+        linestyle="-",
+        marker="s",
+        color="blue",
+    )
+    plt.plot(
+        df["Timestamp"],
+        df["Upload (Mbps)"],
+        label="Upload (Mbps)",
+        linestyle="-.",
+        marker="^",
+        color="green",
+    )
 
-# Show the plot
-plt.show()
+    # Format the graph
+    plt.xlabel("Time")
+    plt.ylabel("Speed / Ping")
+    plt.title("Internet Speed Over Time")
+    plt.legend()
+    plt.xticks(rotation=45)
+    plt.grid(True)
+
+    # Show the plot
+    plt.show()
+
+
+print("Plotting the entire dataset...")
+plot_and_show(df)
+
+print("Plotting the last 50 entries...")
+plot_and_show(df.tail(50))
 
 # %%
