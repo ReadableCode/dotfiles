@@ -20,7 +20,7 @@ cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory
 
 ## Install Kubernetes on first machine
 
-### Install K3S 
+### Install K3S
 
 ```bash
 # Make sure curl is installed
@@ -60,7 +60,6 @@ curl -sfL https://get.k3s.io | K3S_URL=https://<IP>:6443 K3S_TOKEN=<TOKEN> sh -
 
 - If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/docker_container_registry_local.md)
 
-
 ## Deploy HelloWorld
 
 - Create a file like this one: [../application_configs/k3s/helloworld.yaml](../application_configs/k3s/helloworld.yaml)
@@ -78,11 +77,43 @@ kubectl get pods
 curl http://<any-node-ip>:31000
 ```
 
-
 ## Deploy an image to local container registry for K3S to use
 
 - See detailed instructions in [Local Registries](../docs/docker_container_registry_local.md)
 
+## Create secrets from an .env file
+
+- cd to the directory where the .env file is located
+
+```bash
+# Check the file
+cat .env
+# Create the secret
+kubectl create secret generic <secret-name> --from-env-file=.env
+# Check the secret
+kubectl get secret <secret-name> -o yaml
+# Check the secret in a more readable format
+kubectl get secret <secret-name> -o jsonpath="{.data}" | jq -r 'to_entries | map("\(.key)=\(.value|@base64d)") | .[]'
+```
+
+- You can now reference this secret and deploy it into a pod in its configuration file like this:
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: <pod-name>
+spec:
+  containers:
+    - name: <container-name>
+      image: <image-name>
+      env:
+        - name: <env-var-name>
+          valueFrom:
+            secretKeyRef:
+              name: <secret-name>
+              key: <key-name>
+```
 
 ## Set up NFS strorage (unsecure and will be available to all machines on the network)
 
@@ -103,6 +134,7 @@ sudo mkdir -p /mnt/nfs_share
 ```bash
 sudo nano /etc/exports
 ```
+
 - Add the following line to the end of the file
 
 ```bash
