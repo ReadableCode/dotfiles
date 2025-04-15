@@ -89,30 +89,59 @@ curl http://<any-node-ip>:31000
 # Check the file
 cat .env
 # Create the secret
-kubectl create secret generic <secret-name> --from-env-file=.env
+kubectl create secret generic my-env-secrets --from-env-file=.env
 # Check the secret
-kubectl get secret <secret-name> -o yaml
-# Check the secret in a more readable format
-kubectl get secret <secret-name> -o jsonpath="{.data}" | jq -r 'to_entries | map("\(.key)=\(.value|@base64d)") | .[]'
+kubectl get secret my-env-secrets -o yaml
 ```
 
 - You can now reference this secret and deploy it into a pod in its configuration file like this:
 
 ```yaml
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: <pod-name>
+  name: busybox
 spec:
-  containers:
-    - name: <container-name>
-      image: <image-name>
-      env:
-        - name: <env-var-name>
-          valueFrom:
-            secretKeyRef:
-              name: <secret-name>
-              key: <key-name>
+  replicas: 1
+  selector:
+    matchLabels:
+      app: busybox
+  template:
+    metadata:
+      labels:
+        app: busybox
+    spec:
+      containers:
+        - name: busybox-container
+          image: busybox
+          command:
+            [
+              "sh",
+              "-c",
+              "echo UNRAID_IP=$UNRAID_IP && echo S3_ENDPOINT=$S3_ENDPOINT && sleep 3600",
+            ]
+          envFrom:
+            - secretRef:
+                name: my-env-secrets
+
+```
+
+- From the directory where the file is located, run the following command to deploy the file:
+
+```bash
+kubectl apply -f busybox.yaml
+```
+
+- Check the status of the pod:
+
+```bash
+kubectl get pods
+```
+
+- Check the logs of the pod:
+
+```bash
+kubectl logs busybox-<pod-id>
 ```
 
 ## Set up NFS strorage (unsecure and will be available to all machines on the network)
