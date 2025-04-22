@@ -3,6 +3,7 @@
 
 import csv
 import os
+import time
 from datetime import datetime
 
 import speedtest
@@ -55,6 +56,7 @@ for attempt in range(3):
             f.write(
                 f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Download attempt {attempt + 1} failed: {e}\n"
             )
+        time.sleep(5)
 
 
 # %%
@@ -100,6 +102,7 @@ try:
                 f.write(
                     f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Upload attempt {attempt + 1} failed: {e}\n"
                 )
+            time.sleep(5)
 
 except Exception as e:
     with open(debug_log, "a") as f:
@@ -118,6 +121,7 @@ except Exception as e:
                 f.write(
                     f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Upload attempt {attempt + 1} failed: {e}\n"
                 )
+                time.sleep(5)
 
 
 # %%
