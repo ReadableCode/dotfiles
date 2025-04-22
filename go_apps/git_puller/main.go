@@ -14,7 +14,16 @@ import (
 )
 
 // Run `git pull` on a repo and capture results
-func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan<- string, noChanges chan<- string, verbose bool) {
+func gitPull(
+	repo string,
+	wg *sync.WaitGroup,
+	results chan<- string,
+	pulled chan<- string,
+	errors chan<- string,
+	noChanges chan<- string,
+	verbose bool,
+) {
+	// Defer the WaitGroup Done call to ensure it runs after the function completes
 	defer wg.Done()
 
 	absRepo, err := filepath.Abs(repo)
@@ -27,6 +36,7 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 		fmt.Println("[STARTING] Pulling repo:", absRepo)
 	}
 
+	// run the git command with -C to change to the repo directory
 	cmd := exec.Command("git", "-C", absRepo, "pull")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -51,6 +61,7 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 		noChanges <- fmt.Sprintf("[NO CHANGES] %s", absRepo)
 	} else {
 		results <- fmt.Sprintf("[UPDATED] %s:\n%s", absRepo, output)
+		pulled <- fmt.Sprintf("[PULLED] %s", absRepo)
 	}
 
 	if verbose {
@@ -59,7 +70,14 @@ func gitPull(repo string, wg *sync.WaitGroup, results chan<- string, errors chan
 }
 
 // Find all Git repositories in a directory with a specified depth
-func findGitRepos(baseDir string, maxDepth int, skipped *[]string, notGitRepos *[]string, verbose bool, dynamicSkips []string) []string {
+func findGitRepos(
+	baseDir string,
+	maxDepth int,
+	skipped *[]string,
+	notGitRepos *[]string,
+	verbose bool,
+	dynamicSkips []string,
+) []string {
 	var repos []string
 	baseDepth := strings.Count(baseDir, string(filepath.Separator))
 
@@ -218,27 +236,24 @@ func main() {
 
 	var wg sync.WaitGroup
 	results := make(chan string, len(repos))
+	pulled := make(chan string, len(repos))
 	errors := make(chan string, len(repos))
 	noChanges := make(chan string, len(repos))
 
 	for _, repo := range repos {
 		wg.Add(1)
-		go gitPull(repo, &wg, results, errors, noChanges, *verbose)
+		go gitPull(repo, &wg, results, pulled, errors, noChanges, *verbose)
 	}
 
 	wg.Wait()
 	close(results)
+	close(pulled)
 	close(errors)
 	close(noChanges)
 
-	fmt.Println("\n=== Skipped Directories ===")
-	for _, skip := range skipped {
-		fmt.Println(skip)
-	}
-
-	fmt.Println("\n=== Not a Git Repo ===")
-	for _, notRepo := range notGitRepos {
-		fmt.Println(notRepo)
+	fmt.Println("\n=== No Changes ===")
+	for noChange := range noChanges {
+		fmt.Println(noChange)
 	}
 
 	fmt.Println("\n=== Pull Results ===")
@@ -246,9 +261,19 @@ func main() {
 		fmt.Println(res)
 	}
 
-	fmt.Println("\n=== No Changes ===")
-	for noChange := range noChanges {
-		fmt.Println(noChange)
+	fmt.Println("\n=== Skipped Directories ===")
+	for _, skip := range skipped {
+		fmt.Println(skip)
+	}
+
+	fmt.Println("\n=== Pulled Repos ===")
+	for pulledRepo := range pulled {
+		fmt.Println(pulledRepo)
+	}
+
+	fmt.Println("\n=== Not a Git Repo ===")
+	for _, notRepo := range notGitRepos {
+		fmt.Println(notRepo)
 	}
 
 	fmt.Println("\n=== Errors ===")
