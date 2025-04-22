@@ -159,15 +159,6 @@
   "scm.repositories.sortOrder": "path",
   "scm.repositories.visible": 100,
   "github.copilot.nextEditSuggestions.enabled": false,
-  "github.copilot.enable": {
-    "*": true,
-    "plaintext": true,
-    "markdown": true,
-    "scminput": false,
-    "yaml": true,
-    "python": true,
-    "rust": false
-  },
   "go.toolsManagement.autoUpdate": true,
   "python.analysis.exclude": [
     "**/.venv/**",
