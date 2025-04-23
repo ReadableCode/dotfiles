@@ -211,7 +211,7 @@ def query_speedtest_results_df():
 
 
 def get_speedtest_results():
-    current_dt = get_current_datetime(format="%Y%m%d%H%M%S")
+    current_dt = get_current_datetime(format="readable")
     print(f"Running speedtest at {current_dt}")
     num_tries = 3
     for try_num in range(num_tries):
