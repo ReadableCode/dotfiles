@@ -1,18 +1,16 @@
 # %%
 # Imports #
 
-import csv
 import os
-import time
-from datetime import datetime
 
+import config_scripts  # noqa: F401
 import pandas as pd
 import psycopg2
 import speedtest
-from config_scripts import data_dir
 from psycopg2 import pool
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from dotenv import load_dotenv
+from src.utils.date_tools import get_current_datetime
 from src.utils.display_tools import pprint_df, pprint_ls
 
 # %%
@@ -213,7 +211,8 @@ def query_speedtest_results_df():
 
 
 def get_speedtest_results():
-    print(f"Running speedtest at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    current_dt = get_current_datetime(format="%Y%m%d%H%M%S")
+    print(f"Running speedtest at {current_dt}")
     num_tries = 3
     for try_num in range(num_tries):
         try:
@@ -225,7 +224,7 @@ def get_speedtest_results():
 
             print(f"Ping: {ping}, Download: {download}, Upload: {upload}")
             return {
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "timestamp": current_dt,
                 "ping_ms": ping,
                 "download_mbps": download,
                 "upload_mbps": upload,
