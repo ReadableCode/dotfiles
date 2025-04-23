@@ -24,11 +24,11 @@ To convert a Markdown file to a PDF file, run the following command:
 - Linux
 
 ```bash
-pandoc resume.md -o resume.pdf
+pandoc filename.md -o filename.pdf
 ```
 
 - Windows
 
 ```bash
-pandoc resume.md -o resume.pdf --pdf-engine=typst
+pandoc filename.md -o filename.pdf --pdf-engine=typst
 ```
