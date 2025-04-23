@@ -196,7 +196,7 @@ def query_speedtest_results_df():
             """
             SELECT timestamp, ping_ms, download_mbps, upload_mbps
             FROM speedtest_results
-            ORDER BY timestamp DESC
+            ORDER BY timestamp ASC
             """
         )
         rows = pg_cursor.fetchall()
