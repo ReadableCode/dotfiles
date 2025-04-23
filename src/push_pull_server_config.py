@@ -79,6 +79,50 @@ def push_or_pull_configs(push_or_pull, server_path, repo_path, copy_filter):
 
 
 # %%
+# elitedesk: swag #
+
+if __name__ == "__main__":
+    push_or_pull = "pull"
+
+    repo_path = os.path.join(
+        grandparent_dir, "server_configs", "application_configs", "swag", "elitedesk"
+    )
+    ls_server_path = [ELITEDESK_IP, "docker_app_data", "swag", "nginx"]
+    copy_filter = "ssl.conf"
+    server_path = get_mapped_server_path(ls_server_path)
+    push_or_pull_configs(push_or_pull, server_path, repo_path, copy_filter)
+
+    repo_path = os.path.join(
+        grandparent_dir,
+        "server_configs",
+        "application_configs",
+        "swag",
+        "elitedesk",
+        "proxy-confs",
+    )
+    ls_server_path = [ELITEDESK_IP, "docker_app_data", "swag", "nginx", "proxy-confs"]
+    copy_filter = "*.conf"
+    server_path = get_mapped_server_path(ls_server_path)
+    push_or_pull_configs(push_or_pull, server_path, repo_path, copy_filter)
+
+
+# %%
+# elitedesk: nzbget #
+
+if __name__ == "__main__":
+    push_or_pull = "pull"
+    repo_path = os.path.join(
+        grandparent_dir, "server_configs", "application_configs", "nzbget", "elitedesk"
+    )
+    ls_server_path = [ELITEDESK_IP, "docker_app_data", "nzbget"]
+    copy_filter = "*.conf"
+
+    server_path = get_mapped_server_path(ls_server_path)
+
+    push_or_pull_configs(push_or_pull, server_path, repo_path, copy_filter)
+
+
+# %%
 # behemoth: swag #
 
 if __name__ == "__main__":
@@ -147,22 +191,6 @@ if __name__ == "__main__":
         grandparent_dir, "server_configs", "application_configs", "nzbget", "behemoth"
     )
     ls_server_path = [UNRAID_IP, "appdata", "binhex-nzbget"]
-    copy_filter = "*.conf"
-
-    server_path = get_mapped_server_path(ls_server_path)
-
-    push_or_pull_configs(push_or_pull, server_path, repo_path, copy_filter)
-
-
-# %%
-# elitedesk: nzbget #
-
-if __name__ == "__main__":
-    push_or_pull = "pull"
-    repo_path = os.path.join(
-        grandparent_dir, "server_configs", "application_configs", "nzbget", "elitedesk"
-    )
-    ls_server_path = [ELITEDESK_IP, "docker_app_data", "nzbget"]
     copy_filter = "*.conf"
 
     server_path = get_mapped_server_path(ls_server_path)
