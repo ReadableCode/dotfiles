@@ -6,122 +6,265 @@ import os
 import time
 from datetime import datetime
 
+import pandas as pd
+import psycopg2
 import speedtest
 from config_scripts import data_dir
-from src.utils.s3_tools import (  # noqa F401
-    download_file_from_s3,
-    ensure_bucket_exists,
-    upload_file_to_s3,
-)
+from psycopg2 import pool
+from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from dotenv import load_dotenv
+from src.utils.display_tools import pprint_df, pprint_ls
 
 # %%
 # Variables #
 
-STORAGE_BUCKET_NAME = "dotfiles"
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+dotenv_path = os.path.join(project_root, ".env")
+print(dotenv_path)
+if os.path.exists(dotenv_path):
+    load_dotenv(dotenv_path)
 
-log_file = os.path.join(data_dir, "speed.csv")
-debug_log = os.path.join(data_dir, "speedtest_debug.log")
+POSTGRES_URL = os.getenv("POSTGRES_URL")
+POSTGRES_USER = os.getenv("POSTGRES_USER")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT")
+POSTGRES_DB = "internet_speed"
+POSTGRES_TABLE_NAME = "speedtest_results"
 
 
 # %%
-# Script #
+# Postgres Functions #
 
 
-# %%
-# S3 Integration #
-
-for attempt in range(3):
+def list_all_databases():
+    conn = psycopg2.connect(
+        host=POSTGRES_URL,
+        port=POSTGRES_PORT,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        dbname="postgres",  # connect to the default database
+    )
     try:
-        # Ensure the bucket exists
-        ensure_bucket_exists(STORAGE_BUCKET_NAME)
+        cur = conn.cursor()
+        cur.execute("SELECT datname FROM pg_database WHERE datistemplate = false;")
+        return [row[0] for row in cur.fetchall()]
+    finally:
+        cur.close()
+        conn.close()
 
-        # Download the CSV file if it exists
-        download_file_from_s3(
-            STORAGE_BUCKET_NAME,
-            os.path.basename(log_file),
-            log_file,
-        )
 
-        # Download the debug log file if it exists
-        download_file_from_s3(
-            STORAGE_BUCKET_NAME,
-            os.path.basename(debug_log),
-            debug_log,
+def ensure_database_exists(dbname):
+    conn = psycopg2.connect(
+        host=POSTGRES_URL,
+        port=POSTGRES_PORT,
+        user=POSTGRES_USER,
+        password=POSTGRES_PASSWORD,
+        dbname="postgres",  # connect to a guaranteed database
+    )
+    conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+    cur = conn.cursor()
+    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s;", (dbname,))
+    exists = cur.fetchone()
+    if not exists:
+        print(f"Creating database: {dbname}")
+        cur.execute(f'CREATE DATABASE "{dbname}";')
+    else:
+        print(f"Database already exists: {dbname}")
+    cur.close()
+    conn.close()
+
+
+# Initialize the connection pool (adjust minconn and maxconn as needed)
+POSTGRES_POOL = pool.SimpleConnectionPool(
+    minconn=1,
+    maxconn=20,  # Limit connections to avoid resource waste
+    host=POSTGRES_URL,
+    user=POSTGRES_USER,
+    password=POSTGRES_PASSWORD,
+    dbname=POSTGRES_DB,
+    port=POSTGRES_PORT,
+)
+
+
+def get_connection():
+    """Get a connection from the pool."""
+    return POSTGRES_POOL.getconn()
+
+
+def release_connection(conn):
+    """Release a connection back to the pool."""
+    POSTGRES_POOL.putconn(conn)
+
+
+def list_schemas():
+    pg_conn = get_connection()
+    pg_cursor = pg_conn.cursor()
+
+    try:
+        pg_cursor.execute("SELECT schema_name FROM information_schema.schemata;")
+        schemas = [row[0] for row in pg_cursor.fetchall()]
+        return schemas
+    finally:
+        pg_cursor.close()
+        release_connection(pg_conn)
+
+
+def list_tables():
+    conn = get_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_type = 'BASE TABLE';
+        """
         )
-        break  # Exit the loop if download is successful
-    except Exception as e:
-        print(f"Download attempt {attempt + 1} failed: {e}")
-        with open(debug_log, "a") as f:
-            f.write(
-                f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Download attempt {attempt + 1} failed: {e}\n"
+        return [row[0] for row in cur.fetchall()]
+    finally:
+        cur.close()
+        release_connection(conn)
+
+
+def ensure_table_exists():
+    pg_conn = get_connection()
+    pg_cursor = pg_conn.cursor()
+
+    # Create authors table
+    pg_cursor.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {POSTGRES_TABLE_NAME} (
+            timestamp TIMESTAMP WITHOUT TIME ZONE PRIMARY KEY,
+            ping_ms REAL,
+            download_mbps REAL,
+            upload_mbps REAL
+        );
+        """
+    )
+
+    pg_conn.commit()
+    pg_cursor.close()
+    pg_conn.close()
+
+    print("Tables ensured.")
+
+
+def insert_speedtest_results(records: list):
+    """
+    Insert one or more speedtest result dicts into the specified PostgreSQL table.
+
+    Each dict must contain: timestamp, ping_ms, download_mbps, upload_mbps
+    """
+    print("Logging results:")
+    pprint_ls(records, "Results List")
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        values = [
+            (
+                rec["timestamp"],
+                rec["ping_ms"],
+                rec["download_mbps"],
+                rec["upload_mbps"],
             )
-        time.sleep(5)
+            for rec in records
+        ]
+
+        cur.executemany(
+            f"""
+            INSERT INTO {POSTGRES_TABLE_NAME} (timestamp, ping_ms, download_mbps, upload_mbps)
+            VALUES (%s, %s, %s, %s)
+            """,
+            values,
+        )
+        conn.commit()
+    finally:
+        cur.close()
+        release_connection(conn)
+
+
+def query_speedtest_results_df():
+    pg_conn = get_connection()
+    pg_cursor = pg_conn.cursor()
+
+    try:
+        pg_cursor.execute(
+            """
+            SELECT timestamp, ping_ms, download_mbps, upload_mbps
+            FROM speedtest_results
+            ORDER BY timestamp DESC
+            """
+        )
+        rows = pg_cursor.fetchall()
+        return pd.DataFrame(
+            rows, columns=["timestamp", "ping_ms", "download_mbps", "upload_mbps"]
+        )
+    finally:
+        pg_cursor.close()
+        release_connection(pg_conn)
 
 
 # %%
-# Script #
+# New Speedtest #
 
-# Run Speedtest
-print(f"Running speedtest at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-try:
-    st = speedtest.Speedtest()
-    st.get_best_server()
-    ping = round(st.results.ping, 2)
-    download = round(st.download() / 1_000_000, 2)  # Convert to Mbps
-    upload = round(st.upload() / 1_000_000, 2)  # Convert to Mbps
 
-    # Append data to CSV
-    with open(log_file, "a", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(
-            [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ping, download, upload]
-        )
-
-    # Print latest entry to console
-    print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')},{ping},{download},{upload}")
-
-    # Log debug info
-    with open(debug_log, "a") as f:
-        f.write(
-            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Speedtest ran, logged to {log_file}\n"
-        )
-
-    for attempt in range(3):
+def get_speedtest_results():
+    print(f"Running speedtest at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    num_tries = 3
+    for try_num in range(num_tries):
         try:
-            # Upload the CSV file to S3
-            upload_file_to_s3(log_file, STORAGE_BUCKET_NAME, os.path.basename(log_file))
-            # Upload the debug log file to S3
-            upload_file_to_s3(
-                debug_log, STORAGE_BUCKET_NAME, os.path.basename(debug_log)
-            )
-            break  # Exit the loop if upload is successful
-        except Exception as e:
-            print(f"Upload attempt {attempt + 1} failed: {e}")
-            with open(debug_log, "a") as f:
-                f.write(
-                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Upload attempt {attempt + 1} failed: {e}\n"
-                )
-            time.sleep(5)
+            st = speedtest.Speedtest()
+            st.get_best_server()
+            ping = round(st.results.ping, 2)
+            download = round(st.download() / 1_000_000, 2)  # Convert to Mbps
+            upload = round(st.upload() / 1_000_000, 2)  # Convert to Mbps
 
-except Exception as e:
-    with open(debug_log, "a") as f:
-        f.write(
-            f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Speedtest failed: {e}\n"
-        )
-    print(f"Speedtest failed: {e}")
-    for attempt in range(3):
-        try:
-            # Upload the CSV file to S3
-            upload_file_to_s3(log_file, STORAGE_BUCKET_NAME, os.path.basename(log_file))
-            break  # Exit the loop if upload is successful
+            print(f"Ping: {ping}, Download: {download}, Upload: {upload}")
+            return {
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "ping_ms": ping,
+                "download_mbps": download,
+                "upload_mbps": upload,
+            }, True
         except Exception as e:
-            print(f"Upload attempt {attempt + 1} failed: {e}")
-            with open(debug_log, "a") as f:
-                f.write(
-                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Upload attempt {attempt + 1} failed: {e}\n"
-                )
-                time.sleep(5)
+            print(f"Failed to get speedtest results because: {e}")
+
+    print(f"Failed to get speedtest results after {num_tries}")
+    return {}, False
+
+
+# %%
+# Main #
+
+
+def main():
+    pprint_ls(list_all_databases(), "List of Databases")
+
+    ensure_database_exists(POSTGRES_DB)
+
+    pprint_ls(list_schemas(), "List of all Schemas in Database")
+
+    pprint_ls(list_tables(), "List of all Tables in Schema")
+
+    ensure_table_exists()
+
+    speedtest_results, success = get_speedtest_results()
+
+    if success:
+        insert_speedtest_results([speedtest_results])
+    else:
+        print("No results because of multiple failures, not logging")
+
+    print("Last 20 Results")
+    pprint_df(query_speedtest_results_df().tail(20))
+
+
+if __name__ == "__main__":
+    main()
 
 
 # %%
