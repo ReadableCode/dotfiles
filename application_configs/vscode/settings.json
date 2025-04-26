@@ -185,5 +185,6 @@
   },
   "python.analysis.enableEditableInstalls": false,
   "python.analysis.enableExperimentalServer": false,
-  "python.analysis.enablePytestSupport": false
+  "python.analysis.enablePytestSupport": false,
+  "python.analysis.nodeExecutable": "auto"
 }
