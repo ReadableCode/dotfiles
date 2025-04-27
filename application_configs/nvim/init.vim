@@ -18,7 +18,13 @@
 " Load the vim-plug plugin manager
 " open Neovim and run :PlugInstall to install the plugins
 
-" Specify the plugin manager to begin managing
+" Then do:
+" on windows will need to install node
+" winget install OpenJS.NodeJS
+" In Neovim, run :Mason
+" Press i to install pyright if it’s not already installed.
+" Restart your shell to take effect
+
 call plug#begin(stdpath('data') . '/plugged')
 
 " Define the plugins you want to install
@@ -26,8 +32,22 @@ Plug 'preservim/nerdtree'
 Plug 'ThePrimeagen/vim-be-good'
 Plug 'tpope/vim-fugitive'
 
+" Add needed plugins for LSPs
+Plug 'neovim/nvim-lspconfig'
+Plug 'williamboman/mason.nvim'
+Plug 'williamboman/mason-lspconfig.nvim'
+
 " End of the plugin section
 call plug#end()
+
+" Install for Mason to manage LSPs
+lua << EOF
+require("mason").setup()
+require("mason-lspconfig").setup()
+local lspconfig = require("lspconfig")
+lspconfig.pyright.setup {}
+EOF
+
 
 set relativenumber
 let NERDTreeShowHidden=1
