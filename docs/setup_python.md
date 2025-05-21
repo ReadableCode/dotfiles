@@ -106,10 +106,16 @@ uv add -r requirements.txt
 - Remove the pipfile, pipfile.lock and requirements.txt files:
 
 ```bash
-rm Pipfile Pipfile.lock requirements.txt
+rm Pipfile
+rm Pipfile.lock
+rm requirements.txt
 ```
 
 - Remove pipenv environments from the system
+
+```bash
+pipenv --rm
+```
 
 ## Installing Python Directly on Windows
 
