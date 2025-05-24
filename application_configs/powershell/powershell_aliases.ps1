@@ -275,13 +275,13 @@ function sshzephyrus { ssh jason@JasonZephyrus }
 function sshmac { ssh jason@MacbookPro12 }
 
 # Upstairs Rack #
-function sshelite { ssh jason@EliteDesk }
+function sshelite { ssh jason@192.168.86.179 }
 function sshnuk { ssh jason@nukbuntu }
 function sshopti { ssh jason@Optiplex9020 }
 function sshpav5 { ssh jason@Pavilioni5 }
 
 # Servers #
-function sshbehemoth { ssh root@behemoth }
+function sshbehemoth { ssh root@192.168.86.31 }
 
 # Appliancs #
 function sshpi4 { ssh pi@raspberrypi4 }
