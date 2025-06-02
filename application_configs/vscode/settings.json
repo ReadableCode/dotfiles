@@ -73,6 +73,9 @@
     "editor.defaultFormatter": "tintinweb.graphviz-interactive-preview",
     "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000
   },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   // Auto Formatting - Black / Flake8
   "black-formatter.importStrategy": "fromEnvironment",
   "flake8.importStrategy": "useBundled",
@@ -90,6 +93,8 @@
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
   "Prettier-SQL.SQLFlavourOverride": "snowflake",
+  // Auto formatting tsx prettier
+
   // TODO Tree
   "todo-tree.general.rootFolder": "${workspaceFolder}",
   "todo-tree.tree.showCountsInTree": true,
