@@ -192,5 +192,19 @@
   "python.analysis.enableExperimentalServer": false,
   "python.analysis.enablePytestSupport": false,
   "python.analysis.nodeExecutable": "auto",
-  "cSpell.userWords": ["hackathons"]
+  "cSpell.userWords": [
+    "hackathons",
+    "Alteryx",
+    "Christiansen",
+    "codebases",
+    "FABA",
+    "Knime",
+    "Mendix",
+    "Onboarded",
+    "Qlik",
+    "Streamlit"
+  ],
+  "cSpell.enabledFileTypes": {
+    "*": false
+  }
 }
