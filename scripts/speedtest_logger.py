@@ -5,13 +5,15 @@ import os
 
 import config_scripts  # noqa: F401
 import pandas as pd
-import psycopg2
 import speedtest
-from psycopg2 import pool
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from dotenv import load_dotenv
 from src.utils.date_tools import get_current_datetime
 from src.utils.display_tools import pprint_df, pprint_ls
+from src.utils.postgres_tools import (
+    ensure_database_exists,
+    get_pool,
+    list_all_databases,
+)
 
 # %%
 # Variables #
@@ -35,54 +37,15 @@ POSTGRES_TABLE_NAME = "speedtest_results"
 # Postgres Functions #
 
 
-def list_all_databases():
-    conn = psycopg2.connect(
-        host=POSTGRES_URL,
-        port=POSTGRES_PORT,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        dbname="postgres",  # connect to the default database
-    )
-    try:
-        cur = conn.cursor()
-        cur.execute("SELECT datname FROM pg_database WHERE datistemplate = false;")
-        return [row[0] for row in cur.fetchall()]
-    finally:
-        cur.close()
-        conn.close()
+list_all_databases_ls = list_all_databases()
+pprint_ls(list_all_databases_ls, "List of Databases")
 
 
-def ensure_database_exists(dbname):
-    conn = psycopg2.connect(
-        host=POSTGRES_URL,
-        port=POSTGRES_PORT,
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        dbname="postgres",  # connect to a guaranteed database
-    )
-    conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-    cur = conn.cursor()
-    cur.execute("SELECT 1 FROM pg_database WHERE datname = %s;", (dbname,))
-    exists = cur.fetchone()
-    if not exists:
-        print(f"Creating database: {dbname}")
-        cur.execute(f'CREATE DATABASE "{dbname}";')
-    else:
-        print(f"Database already exists: {dbname}")
-    cur.close()
-    conn.close()
+# %%
 
 
 # Initialize the connection pool (adjust minconn and maxconn as needed)
-POSTGRES_POOL = pool.SimpleConnectionPool(
-    minconn=1,
-    maxconn=20,  # Limit connections to avoid resource waste
-    host=POSTGRES_URL,
-    user=POSTGRES_USER,
-    password=POSTGRES_PASSWORD,
-    dbname=POSTGRES_DB,
-    port=POSTGRES_PORT,
-)
+POSTGRES_POOL = get_pool(POSTGRES_DB)
 
 
 def get_connection():
