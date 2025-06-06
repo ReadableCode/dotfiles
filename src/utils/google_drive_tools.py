@@ -1069,10 +1069,12 @@ def download_top_used_files_for_reupload_as_user(
         num_files=num_files, parent_folder_id=parent_folder_id
     )
     # remove items that dont end in .csv
-    print("Before filtering out non csvs:")
+    print("Before filtering out non csvs or excel:")
     pprint_dict(dict_items)
-    dict_items = [item for item in dict_items if item["name"].endswith(".csv")]
-    print("After filtering out non csvs:")
+    dict_items = [
+        item for item in dict_items if item["name"].endswith((".csv", ".xlsx"))
+    ]
+    print("After filtering out non csvs or excel:")
     pprint_dict(dict_items)
 
     base_path = os.path.join(
@@ -1085,7 +1087,11 @@ def download_top_used_files_for_reupload_as_user(
         file_id = dict_item["id"]
         file_name = dict_item["name"]
         print(f"Downloading filename: {file_name}")
-        download_file_by_id(file_id, os.path.join(base_path, file_name))
+        if not os.path.exists(os.path.join(base_path, file_name)):
+            # download the file to the base path
+            download_file_by_id(file_id, os.path.join(base_path, file_name))
+        else:
+            print("Skipping download already exists")
 
     if actually_delete_files:
         for dict_item in dict_items:
