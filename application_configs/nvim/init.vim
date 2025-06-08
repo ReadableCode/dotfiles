@@ -70,3 +70,7 @@ highlight DiffDelete cterm=bold ctermbg=NONE ctermfg=52 gui=bold guibg=NONE guif
 
 " Git diff side by side
 command! Gitdiff vertical Gdiffsplit
+
+" Make defaut line endings LF
+set fileformat=unix
+
