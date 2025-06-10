@@ -80,7 +80,13 @@ source ./.venv/bin/activate
 
 ### Converting a pipenv project to uv
 
-- Add a section to any existing pyproject.toml file for the project:
+- CD into the project directory and create a uv project:
+
+```bash
+uv init
+```
+
+- Or add a section to any existing pyproject.toml file for the project:
 
 ```toml
 [project]
