@@ -39,3 +39,4 @@ vscode
 wireguard
 wiztree
 uv
+rustdesk

@@ -269,7 +269,7 @@ function showwifi {
 ### SSH Shortcuts ###
 
 # Workstations #
-function sshryzenwhite { ssh jason@RyzenWhite }
+function sshryzenwhite { ssh jason@192.168.86.94 }
 function sshspectre { ssh jason@Spectre }
 function sshzephyrus { ssh jason@JasonZephyrus }
 function sshmac { ssh jason@MacbookPro12 }
