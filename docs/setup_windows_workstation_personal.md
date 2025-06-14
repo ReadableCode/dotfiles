@@ -113,6 +113,31 @@ winget
 
 * Follow instructions in [setup_windows_ssh_server.md](./setup_windows_ssh_server.md)
 
+## Terminal Configuration and Settings
+
+* Use gsudo to elevate commands in a normal powershell session:
+
+* Install gsudo with Chocolatey
+
+```bash
+# elevated powershell
+choco install gsudo
+```
+
+* Restart VSCode to bring in new system path
+
+* To elevate a command:
+
+```bash
+gsudo <command>
+```
+
+* To check if you are elevated
+
+```bash
+[bool]([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator") # returns true if elevated
+```
+
 ## Install and Set Up Programming Tools
 
 ### VSCode Setup
