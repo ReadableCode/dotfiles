@@ -14,6 +14,34 @@
   Set-ExecutionPolicy RemoteSigned
   ```
 
+## Source Powershell Profile
+
+* Find the location of your powershell profile by running:
+
+```bash
+# do not run in vscode terminal, run in powershell directly
+$PROFILE
+```
+
+* Find the location of the config you want to apply, for example:
+
+```bash
+# cd to this directory
+Resolve-Path ..\\application_configs\\powershell\\powershell_aliases.ps1
+```
+
+* Open the powershell profile file in a text editor:
+
+```bash
+notepad $PROFILE
+```
+
+* Add the following line to the end of the file:
+
+```bash
+. <resolved-path>
+```
+
 ## Activate Windows with Script if unliscensed
 
 * Open powershell and run command:
@@ -115,7 +143,7 @@ winget
 
 ## Terminal Configuration and Settings
 
-* Use gsudo to elevate commands in a normal powershell session:
+### Use gsudo to elevate commands in a normal powershell session
 
 * Install gsudo with Chocolatey
 
