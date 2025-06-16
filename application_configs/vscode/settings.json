@@ -163,7 +163,7 @@
   "python.analysis.inlayHints.variableTypes": true,
   "scm.repositories.sortOrder": "path",
   "scm.repositories.visible": 100,
-  "github.copilot.nextEditSuggestions.enabled": false,
+  "github.copilot.nextEditSuggestions.enabled": true,
   "go.toolsManagement.autoUpdate": true,
   "python.analysis.exclude": [
     "**/.venv/**",
