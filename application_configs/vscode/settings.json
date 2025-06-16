@@ -226,5 +226,8 @@
     "plaintext": true,
     "markdown": true,
     "scminput": false
-  }
+  },
+  "diffEditor.codeLens": true,
+  "diffEditor.experimental.showMoves": true,
+  "diffEditor.hideUnchangedRegions.contextLineCount": 10
 }
