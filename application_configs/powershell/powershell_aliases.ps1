@@ -8,6 +8,14 @@ function editaliases {
     nvim $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
+if (Test-Path "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe") {
+    if (Get-Alias diff -ErrorAction SilentlyContinue) {
+        Remove-Item alias:diff -Force
+    }
+    function diff {
+        & "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe" @args
+    }
+}
 
 ### Paths ###
 
