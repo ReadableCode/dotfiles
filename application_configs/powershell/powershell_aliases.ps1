@@ -17,6 +17,13 @@ if (Test-Path "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe") {
     }
 }
 
+function treed {
+    & "$env:SystemRoot\System32\tree.com" /f @args
+}
+
+Remove-Item alias:tree -ErrorAction SilentlyContinue
+Set-Alias tree treed
+
 ### Paths ###
 
 # $myDocumentsPath = [Environment]::GetFolderPath('MyDocuments')
