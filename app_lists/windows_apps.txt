@@ -42,3 +42,4 @@ uv
 rustdesk
 gsudo
 grep
+ffmpeg
