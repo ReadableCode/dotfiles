@@ -43,3 +43,4 @@ rustdesk
 gsudo
 grep
 ffmpeg
+hoppscotch
