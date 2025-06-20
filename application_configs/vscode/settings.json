@@ -228,5 +228,7 @@
   },
   "diffEditor.codeLens": true,
   "diffEditor.experimental.showMoves": true,
-  "diffEditor.hideUnchangedRegions.contextLineCount": 10
+  "diffEditor.hideUnchangedRegions.contextLineCount": 10,
+  "editor.cursorBlinking": "expand",
+  "editor.cursorSmoothCaretAnimation": "on"
 }
