@@ -230,5 +230,6 @@
   "diffEditor.experimental.showMoves": true,
   "diffEditor.hideUnchangedRegions.contextLineCount": 10,
   "editor.cursorBlinking": "expand",
-  "editor.cursorSmoothCaretAnimation": "on"
+  "editor.cursorSmoothCaretAnimation": "on",
+  "docker.extension.enableComposeLanguageServer": true
 }
