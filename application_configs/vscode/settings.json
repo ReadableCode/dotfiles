@@ -135,7 +135,9 @@
     "*.csv": "default"
   },
   "files.associations": {
-    "*.md": "markdown"
+    "*.md": "markdown",
+    "*.yaml": "yaml",
+    "templates/*.yaml": "helm"
   },
   "files.maxMemoryForLargeFilesMB": 12000,
   "workbench.editorLargeFileConfirmation": 50,
@@ -231,5 +233,6 @@
   "diffEditor.hideUnchangedRegions.contextLineCount": 10,
   "editor.cursorBlinking": "expand",
   "editor.cursorSmoothCaretAnimation": "on",
-  "docker.extension.enableComposeLanguageServer": true
+  "docker.extension.enableComposeLanguageServer": true,
+  "github.copilot.nextEditSuggestions.enabled": true
 }
