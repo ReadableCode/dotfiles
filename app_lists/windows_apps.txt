@@ -44,3 +44,4 @@ gsudo
 grep
 ffmpeg
 hoppscotch
+obs-studio
