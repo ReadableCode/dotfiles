@@ -44,8 +44,12 @@ call plug#end()
 lua << EOF
 require("mason").setup()
 require("mason-lspconfig").setup()
-local lspconfig = require("lspconfig")
-lspconfig.pyright.setup {}
+
+require("mason-lspconfig").setup_handlers {
+  function(server_name)
+    require("lspconfig")[server_name].setup {}
+  end
+}
 EOF
 
 
