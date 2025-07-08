@@ -13,3 +13,7 @@ neovim
 ncdu
 tldr
 fzf
+unzip
+curl
+go
+cargo

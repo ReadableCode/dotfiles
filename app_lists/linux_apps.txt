@@ -26,3 +26,7 @@ tmux
 tree
 unixodbc
 fzf
+unzip
+curl
+go
+cargo
