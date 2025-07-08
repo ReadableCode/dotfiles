@@ -15,5 +15,5 @@ tldr
 fzf
 unzip
 curl
-go
+golang-go
 cargo
