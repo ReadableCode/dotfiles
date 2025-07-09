@@ -233,6 +233,18 @@ git clone root@192.168.xx.xx:/mnt/user/GitHub/test_clone_local
 git config receive.denyCurrentBranch updateInstead
 ```
 
+## Using Separate Git Directories
+
+* Useful for putting code into a synced directory but keeping .git folder out of synced directory
+
+* If you want to use a separate Git directory (e.g., for a private repository), you can set it up as follows:
+
+  * cd to location where worktree will be
+
+  ```bash
+  git init --separate-git-dir path/to/folder/for/.git/contents
+  ```
+
 ## Resolve Common Problems
 
 ### Git diff and Git status don't show the updated files as changed
