@@ -245,6 +245,12 @@ git config receive.denyCurrentBranch updateInstead
   git init --separate-git-dir path/to/folder/for/.git/contents
   ```
 
+* Clone existing repository into the separate Git directory:
+
+  ```bash
+  git clone --separate-git-dir path/to/folder/for/.git/contents <repo-url>
+  ```
+
 ## Resolve Common Problems
 
 ### Git diff and Git status don't show the updated files as changed
