@@ -15,15 +15,26 @@
 " Windows
 "   iwr -useb https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim | ni -Path "$env:LOCALAPPDATA\nvim-data\site\autoload\plug.vim" -Force
 
+" If this file throws errors about "Error executing Lua...field 'uv' a nil value"
+"   then you need to install the latest version of Neovim using the ppa
+" sudo apt remove neovim
+" sudo add-apt-repository ppa:neovim-ppa/unstable -y
+" sudo apt update
+" sudo apt install neovim
+
 " Load the vim-plug plugin manager
 " open Neovim and run :PlugInstall to install the plugins
 
 " Then do:
-" on windows will need to install node
-" winget install OpenJS.NodeJS
-" In Neovim, run :Mason
-" Press i to install pyright if it’s not already installed.
-" Restart your shell to take effect
+" install node
+" For Linux:
+"   sudo apt update
+"   sudo apt install nodejs npm
+" For Windows:
+"   winget install OpenJS.NodeJS
+"   In Neovim, run :Mason
+"   Press i to install pyright if it’s not already installed.
+"   Restart your shell to take effect
 
 call plug#begin(stdpath('data') . '/plugged')
 
