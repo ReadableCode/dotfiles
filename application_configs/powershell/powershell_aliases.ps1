@@ -39,6 +39,7 @@ elseif (Test-Path 'C:\Users\16937827583938060798\HelloFreshProjects\') {
 # Write-Host "gitDir is: $gitDir"
 
 function githubdir { Set-Location $gitDir }
+function fourdir { Set-Location 'C:\Users\jason\OneDrive - Fourteen Foods\code' }
 
 # alias finance='cd ~/HelloFresh/GDrive/Projects/na-finops/'
 function finance { Set-Location (Join-Path $gitDir 'na-finops') }
