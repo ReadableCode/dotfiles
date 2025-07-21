@@ -1,0 +1,11 @@
+docker-desktop
+gh
+git.install
+googlechrome
+neovim
+nodejs-lts
+notepadplusplus
+virtualbox
+vscode
+uv
+grep
