@@ -11,10 +11,8 @@ messenger
 parsec
 plex
 powertoys
-
 procexp
 putty
-
 steam
 synctrayzor
 tailscale

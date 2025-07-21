@@ -9,3 +9,4 @@ virtualbox
 vscode
 uv
 grep
+python313
