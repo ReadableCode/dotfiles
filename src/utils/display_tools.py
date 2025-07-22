@@ -7,7 +7,6 @@ import os
 import sys
 
 import pytz
-from dotenv import load_dotenv
 from tabulate import tabulate
 
 # append grandparent
