@@ -30,6 +30,7 @@ dotenv_path = os.path.join(grandparent_dir, ".env")
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
+email_address_for_testing = os.getenv("EMAIL_ADDRESS_FOR_TESTING")
 
 # %%
 # Google Credentials #
@@ -363,8 +364,8 @@ def get_book_with_create(bookName, parent_folder_id=None, template_id=None):
 
     print_logger(f"Creating book: {bookName}", level="info")
     Workbook = gc.create(bookName, template=template_id, folder=parent_folder_id)
-    if template_id is not None:
-        Workbook.share("jason.christiansen@hellofresh.com", role="writer")
+    if template_id is not None and email_address_for_testing is not None:
+        Workbook.share(email_address_for_testing, role="writer")
     dict_connected_books[bookName] = Workbook
     dict_hardcoded_book_ids[bookName] = Workbook.id
     # append new sheet id to yaml
