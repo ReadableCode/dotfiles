@@ -263,7 +263,7 @@ git config receive.denyCurrentBranch updateInstead
 
 * Use input method of crlf and `git add --renormalize .` to fix the issue if the difference is due to line endings:
 
-  * To tell git to ignore line ending differences and use lf always:
+  * To tell Git to ignore line ending differences and use lf always:
 
   ```bash
   git config core.autocrlf input
