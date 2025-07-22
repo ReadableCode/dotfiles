@@ -14,14 +14,10 @@ from tabulate import tabulate
 if __name__ == "__main__":
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from utils.config_utils import grandparent_dir
+import utils.config_utils  # noqa F401
 
 # %%
 # Variables #
-
-dotenv_path = os.path.join(grandparent_dir, ".env")
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
 
 
 # if log level is defined in environment
