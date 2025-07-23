@@ -233,6 +233,17 @@ gsudo <command>
   Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All
   ```
 
+* If need to mount windows network drives in WSL
+
+  * Open WSL and run the following command to mount the drives:
+
+  ```bash
+  sudo mkdir -p /mnt/d
+  sudo mount -t drvfs D: /mnt/d
+  ```
+
+  * You can add this to your `.bashrc` or `.zshrc` file to automatically mount on startup.
+
 ## VNC
 
 ### VNC Connect (Viewer)
