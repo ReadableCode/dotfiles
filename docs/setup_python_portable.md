@@ -2,9 +2,7 @@
 
 ## Install portable python
 
-## Install portable git (if needed)
-
-[Setup Git Portable](./setup_git_portable.md)
+- Download and extract from [WinPython](https://github.com/winpython/winpython/wiki)
 
 ## Setup uv with portable python
 
@@ -19,7 +17,7 @@ C:/Users/jason.christiansen/userapps/WPy64-31350/python/python.exe -m pip instal
 C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts\uv.exe sync
 ```
 
-* Activate or select new python path:
+- Activate or select new python path:
 
 ```bash
 & .venv\Scripts\activate.ps1
