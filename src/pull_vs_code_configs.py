@@ -15,10 +15,13 @@ host_operating_system = "Windows" if os.name == "nt" else "Linux"
 if os.path.exists(os.path.join(grandparent_dir, "Our_Cash")):
     print_logger("Detected personal config")
     config_type = "personal"
+elif os.path.exists(os.path.join(os.path.join(grandparent_dir, "fourteen_foods.code-workspace"))):
+    config_type = "fourteen_foods"
 else:
     print_logger("Detected work config")
     config_type = "hellofresh"
 
+print(f"config_type: {config_type}")
 
 # %%
 # Copying Files #
@@ -28,6 +31,7 @@ def pull_workspace_config():
     ls_possible_locations = [
         os.path.join(grandparent_dir, "myworkspace.code-workspace"),
         os.path.join(grandparent_dir, "MyWorkspace.code-workspace"),
+        os.path.join(grandparent_dir, "fourteen_foods.code-workspace")
     ]
     for possible_location in ls_possible_locations:
         if os.path.isfile(possible_location):
