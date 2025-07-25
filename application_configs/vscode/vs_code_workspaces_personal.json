@@ -5,8 +5,16 @@
       "path": "dotfiles"
     },
     {
-      "name": "Data_Tool_Pack",
-      "path": "Data_Tool_Pack"
+      "name": "Documents",
+      "path": "Documents"
+    },
+    {
+      "name": "server_configs",
+      "path": "server_configs"
+    },
+    {
+      "name": "Data_Tool_Pack_Py",
+      "path": "Data_Tool_Pack_Py"
     },
     {
       "name": "Data_Tool_Pack_GO",
@@ -23,10 +31,6 @@
     {
       "name": "Something-Familiar",
       "path": "Something-Familiar"
-    },
-    {
-      "name": "Ani-Game",
-      "path": "Ani-Game"
     },
     {
       "name": "Terminal_To_Do",
@@ -57,24 +61,12 @@
       "path": "Sync_Plex"
     },
     {
-      "name": "Kivy_Test_Suite",
-      "path": "Kivy_Test_Suite"
-    },
-    {
-      "name": "Rust_Tutorial",
-      "path": "Rust_Tutorial"
-    },
-    {
       "name": "Docker",
       "path": "Docker"
     },
     {
       "name": "Cash_Flow_Commander",
       "path": "Cash_Flow_Commander"
-    },
-    {
-      "name": "Cash_Flow_Commander_Laura",
-      "path": "Cash_Flow_Commander_Laura"
     },
     {
       "name": "CrownCentral",
@@ -97,28 +89,48 @@
       "path": "readablecode.github.io"
     },
     {
-      "name": "na-finops",
+      "name": "advent_of_code",
+      "path": "advent_of_code"
+    },
+    {
+      "name": "duck_db_api",
+      "path": "duck_db_api"
+    },
+    {
+      "name": "3D_Models",
+      "path": "3D_Models"
+    },
+    {
+      "name": "Health_Data_Parser",
+      "path": "Health_Data_Parser"
+    },
+    {
+      "name": "Book-Bot",
+      "path": "Book-Bot"
+    },
+    {
+      "path": "a_girls_guide_to_georgetown"
+    },
+    {
+      "path": "go-data-inspector"
+    },
+    {
+      "path": "spark_testing"
+    },
+    {
+      "path": "website"
+    },
+    {
       "path": "na-finops"
     },
     {
-      "name": "na-fin-data-streamlit",
-      "path": "na-fin-data-streamlit"
-    },
-    {
-      "name": "na-faba",
       "path": "na-faba"
     },
     {
-      "name": "context-chatbot",
-      "path": "context-chatbot"
+      "path": "na-fin-data-streamlit"
     },
     {
-      "name": "stable-diffusion-webui",
-      "path": "stable-diffusion-webui"
-    },
-    {
-      "name": "stable-diffusion-webui-amdgpu",
-      "path": "stable-diffusion-webui-amdgpu"
+      "path": "na-fin-data-svcs"
     }
   ],
   "settings": {
@@ -127,7 +139,7 @@
       "titleBar.inactiveBackground": "#442757"
     },
     "todo-tree.filtering.includeGlobs": [
-      "**/Data_Tool_Pack/src/**",
+      "**/Data_Tool_Pack_Py/src/**",
       "**/dotfiles/src/**",
       "**/Our_Cash/src/**",
       "**/readablecode/**",
@@ -136,7 +148,17 @@
       "**/Docker/src/**",
       "**/Scan_Sorter/src/**",
       "**/AHK_Sheet_ID_Shortcut/src/**"
-    ]
+    ],
+    "github.copilot.enable": {
+      "*": true,
+      "plaintext": true,
+      "markdown": true,
+      "scminput": false,
+      "yaml": true,
+      "python": true,
+      "rust": false,
+      "golang": false
+    }
   },
   "extensions": {
     "recommendations": [
@@ -160,7 +182,10 @@
       "tomoki1207.pdf",
       "tintinweb.graphviz-interactive-preview",
       "rust-lang.rust-analyzer",
-      "golang.go"
+      "golang.go",
+      "ms-python.mypy-type-checker",
+      "foxundermoon.shell-format",
+      "mtsmfm.vscode-stl-viewer"
     ]
   }
 }

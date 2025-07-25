@@ -28,17 +28,6 @@
   //Git Poliot and Suggestions
   "editor.inlineSuggest.enabled": true,
   "editor.suggest.matchOnWordStartOnly": false,
-  "github.copilot.enable": {
-    "*": true,
-    "plaintext": true,
-    "markdown": true,
-    "scminput": false,
-    "yaml": true,
-    "python": true,
-    "rust": false
-  },
-  "github.copilot.advanced": {},
-  "github.copilot-labs.showTestGenerationLenses": true,
   "inlineChat.mode": "preview",
   // Auto Formatting
   "editor.formatOnPaste": true,
@@ -47,10 +36,19 @@
   "notebook.formatOnCellExecution": true,
   "files.eol": "\n",
   "editor.trimAutoWhitespace": false,
-  // Auto Formatting - Deault Formatters
-  "editor.defaultFormatter": "ms-python.black-formatter",
+  // Auto Formatting - Language Specific
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
+  },
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true
+  },
+  "[shellscript]": {
+    "editor.defaultFormatter": "foxundermoon.shell-format",
+    "editor.detectIndentation": false,
+    "editor.insertSpaces": false,
+    "editor.tabSize": 4 // You can change this to your preferred tab size
   },
   "[markdown]": {
     "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
@@ -65,6 +63,9 @@
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   "[sql]": {
     "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
   },
@@ -72,13 +73,15 @@
     "editor.defaultFormatter": "tintinweb.graphviz-interactive-preview",
     "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000
   },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
   // Auto Formatting - Black / Flake8
   "black-formatter.importStrategy": "fromEnvironment",
   "flake8.importStrategy": "useBundled",
   "python.formatting.provider": "black",
   "python.formatting.blackPath": "black",
   "python.formatting.blackArgs": ["--fast"],
-  "notebook.defaultFormatter": "ms-python.black-formatter",
   // Auto Formatting - isort
   "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
@@ -90,6 +93,8 @@
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
   "Prettier-SQL.SQLFlavourOverride": "snowflake",
+  // Auto formatting tsx prettier
+
   // TODO Tree
   "todo-tree.general.rootFolder": "${workspaceFolder}",
   "todo-tree.tree.showCountsInTree": true,
@@ -107,7 +112,7 @@
   "notebook.showFoldingControls": "always",
   "notebook.output.textLineLimit": 20000,
   "notebook.output.scrolling": true,
-  "interactiveWindow.alwaysScrollOnNewCell": true,
+  "interactiveWindow.alwaysScrollOnNewCell": false,
   // Editor View
   "editor.stickyScroll.maxLineCount": 10,
   "editor.stickyScroll.enabled": true,
@@ -115,7 +120,7 @@
   "editor.minimap.size": "fill",
   "editor.bracketPairColorization.enabled": true,
   "editor.semanticHighlighting.enabled": true,
-  "editor.wordWrap": "on",
+  "editor.wordWrap": "off",
   "editor.accessibilitySupport": "off",
   "editor.renderWhitespace": "all",
   "window.zoomLevel": 1,
@@ -125,11 +130,14 @@
   // File Handling
   "files.autoSave": "onFocusChange",
   "workbench.editorAssociations": {
+    "*.copilotmd": "vscode.markdown.preview.editor",
     "*.ipynb": "jupyter-notebook",
-    "*.csv": "gc-excelviewer-csv-editor"
+    "*.csv": "default"
   },
   "files.associations": {
-    "*.md": "markdown"
+    "*.md": "markdown",
+    "*.yaml": "yaml",
+    "templates/*.yaml": "helm"
   },
   "files.maxMemoryForLargeFilesMB": 12000,
   "workbench.editorLargeFileConfirmation": 50,
@@ -150,7 +158,81 @@
   "powershell.cwd": "c:\\Users\\jason\\GitHub",
   // Security
   "security.workspace.trust.enabled": false,
-  "github.copilot.editor.enableAutoCompletions": true,
   "interactiveWindow.executeWithShiftEnter": true,
-  "github.copilot.preferredAccount": "ReadableCode"
+  "notebook.defaultFormatter": "ms-python.black-formatter",
+  "python.analysis.inlayHints.functionReturnTypes": true,
+  "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.inlayHints.variableTypes": true,
+  "scm.repositories.sortOrder": "path",
+  "scm.repositories.visible": 100,
+  "go.toolsManagement.autoUpdate": true,
+  "python.analysis.exclude": [
+    "**/.venv/**",
+    "**/.mypy_cache/**",
+    "**/data/**",
+    "**/health_data/**",
+    "**/.git/**",
+    "**/.github/**",
+    "**/__pycache__/**",
+    "**/node_modules/**",
+    "**/Syncthing_Synced/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/Lib/**",
+    "**/site-packages/**",
+    "**/Samsung Health/**"
+  ],
+  "files.watcherExclude": {
+    "**/.venv/**": true,
+    "**/__pycache__/**": true,
+    "**/node_modules/**": true,
+    "**/health_data/**": true,
+    "**/Samsung Health/**": true
+  },
+  "python.analysis.enableEditableInstalls": false,
+  "python.analysis.enableExperimentalServer": false,
+  "python.analysis.enablePytestSupport": false,
+  "python.analysis.nodeExecutable": "auto",
+  "cSpell.userWords": [
+    "hackathons",
+    "Alteryx",
+    "Christiansen",
+    "codebases",
+    "FABA",
+    "Knime",
+    "Mendix",
+    "Onboarded",
+    "Qlik",
+    "Streamlit"
+  ],
+  "cSpell.enabledFileTypes": {
+    "*": false
+  },
+  "explorer.fileNesting.patterns": {
+    "*.ts": "${capture}.js",
+    "*.js": "${capture}.js.map, ${capture}.min.js, ${capture}.d.ts",
+    "*.jsx": "${capture}.js",
+    "*.tsx": "${capture}.ts",
+    "tsconfig.json": "tsconfig.*.json",
+    "package.json": "package-lock.json, yarn.lock, pnpm-lock.yaml, bun.lockb, bun.lock",
+    "*.sqlite": "${capture}.${extname}-*",
+    "*.db": "${capture}.${extname}-*",
+    "*.sqlite3": "${capture}.${extname}-*",
+    "*.db3": "${capture}.${extname}-*",
+    "*.sdb": "${capture}.${extname}-*",
+    "*.s3db": "${capture}.${extname}-*"
+  },
+  "github.copilot.enable": {
+    "*": true,
+    "plaintext": true,
+    "markdown": true,
+    "scminput": false
+  },
+  "diffEditor.codeLens": true,
+  "diffEditor.experimental.showMoves": true,
+  "diffEditor.hideUnchangedRegions.contextLineCount": 10,
+  "editor.cursorBlinking": "expand",
+  "editor.cursorSmoothCaretAnimation": "on",
+  "docker.extension.enableComposeLanguageServer": true,
+  "github.copilot.nextEditSuggestions.enabled": false
 }
