@@ -29,11 +29,13 @@ Set-Alias tree treed
 # $myDocumentsPath = [Environment]::GetFolderPath('MyDocuments')
 # Write-Host "myDocumentsPath is: $myDocumentsPath"
 
-if (Test-Path 'C:\Users\jason\GitHub\') {
-    $gitDir = 'C:\Users\jason\GitHub\'
+$basePath = "C:\Users\$env:USERNAME"
+
+if (Test-Path "$basePath\GitHub\") {
+    $gitDir = "$basePath\GitHub\"
 }
-elseif (Test-Path 'C:\Users\16937827583938060798\HelloFreshProjects\') {
-    $gitDir = 'C:\Users\16937827583938060798\HelloFreshProjects\'
+elseif (Test-Path "$basePath\HelloFreshProjects\") {
+    $gitDir = "$basePath\HelloFreshProjects\"
 }
 
 # Write-Host "gitDir is: $gitDir"

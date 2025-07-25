@@ -10,9 +10,15 @@
 
 * Open powershell as admin and run command:
 
-  ```bash
-  Set-ExecutionPolicy RemoteSigned
-  ```
+```bash
+Set-ExecutionPolicy RemoteSigned
+```
+
+* Or if don't have admin rights, open powershell and run command:
+
+```bash
+Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
+```
 
 ## Source Powershell Profile
 
@@ -34,6 +40,13 @@ Resolve-Path ..\\application_configs\\powershell\\powershell_aliases.ps1
 
 ```bash
 notepad $PROFILE
+```
+
+* If error that it cannot be opened:
+
+```powershell
+New-Item -ItemType Directory -Path (Split-Path -Parent $PROFILE) -Force
+Add-Content -Path $PROFILE -Value 'path you found earlier'
 ```
 
 * Add the following line to the end of the file:
