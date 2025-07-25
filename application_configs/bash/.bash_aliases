@@ -30,6 +30,8 @@ alias srcaliases='source ~/.bashrc'
 set_git_dir() {
 	if [ -d "$HOME/GitHub/" ]; then
 		gitDir="$HOME/GitHub/"
+	elif [ -d "$HOME/GitHubWSL/" ]; then
+		gitDir="$HOME/GitHubWSL/"
 	elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
 		gitDir="$HOME/HelloFresh/GDrive/Projects/"
 	else
