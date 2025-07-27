@@ -94,12 +94,6 @@ Office_Switch
 
 [networking:vars]
 
-[octopis]
-octopi
-
-[octopis:vars]
-ansible_user=pi
-
 [game_consoles]
 Switch
 RebecaSwitch
