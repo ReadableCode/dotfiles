@@ -309,10 +309,9 @@ git config receive.denyCurrentBranch updateInstead
   git pull
   ```
 
-### Convert repo to ssh instead of https
+### Convert repository to SSH instead of https
 
 ```bash
-# cd to the root of the repo
+# cd to the root of the repository
 sed -i -E 's/url = https:\/\/github\.com\/(.*)\.git/url = git@github.com:\1\.git/g' .git/config
 ```
-
