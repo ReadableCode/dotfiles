@@ -29,8 +29,8 @@ Set-Alias tree treed
 # $myDocumentsPath = [Environment]::GetFolderPath('MyDocuments')
 # Write-Host "myDocumentsPath is: $myDocumentsPath"
 
-$basePath = "C:\Users\$env:USERNAME"
-
+$basePath = $HOME
+Write-Host "basePath is: $basePath"
 if (Test-Path "$basePath\GitHub\") {
     $gitDir = "$basePath\GitHub\"
 }
