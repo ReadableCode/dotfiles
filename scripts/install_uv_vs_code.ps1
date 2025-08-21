@@ -38,40 +38,6 @@ function Test-CommandExists {
     return -not ($null -eq $command)
 }
 
-function Install-UV {
-    <#
-    .SYNOPSIS
-        Installs 'uv' if it's not already present on the system.
-    .DESCRIPTION
-        This function checks for the existence of the 'uv' command. If 'uv' is not found,
-        it downloads and executes the official 'uv' PowerShell installation script.
-    #>
-    Write-Host "Checking for 'uv' installation..." -ForegroundColor Cyan
-    if (Test-CommandExists -CommandName "uv") {
-        Write-Host "'uv' is already installed. Skipping installation." -ForegroundColor Green
-        return
-    }
-
-    Write-Host "'uv' not found. Attempting to install 'uv'..." -ForegroundColor Yellow
-    try {
-        # Execute the official UV PowerShell installer script
-        & { irm https://astral.sh/uv/install.ps1 | iex }
-
-        # Verify installation by trying to run uv --version
-        $uvVersionOutput = uv --version 2>$null
-        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($uvVersionOutput)) {
-            Write-Host "'uv' installed successfully!" -ForegroundColor Green
-            Write-Host "UV Version: $($uvVersionOutput)" -ForegroundColor Green
-        } else {
-            Write-Host "Installation command completed, but 'uv' command not found or verification failed." -ForegroundColor Yellow
-            Write-Host "You might need to restart your terminal or manually add 'uv' to PATH." -ForegroundColor Yellow
-        }
-    }
-    catch {
-        Write-Host "An error occurred during 'uv' installation: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "Please check internet connection or run as administrator if needed." -ForegroundColor Red
-    }
-}
 
 function Install-VSCode {
     <#
@@ -121,10 +87,52 @@ function Install-VSCode {
     }
 }
 
+function Install-UV {
+    <#
+    .SYNOPSIS
+        Installs 'uv' if it's not already present on the system.
+    .DESCRIPTION
+        This function checks for the existence of the 'uv' command. If 'uv' is not found,
+        it downloads and executes the official 'uv' PowerShell installation script.
+    #>
+    Write-Host "Checking for 'uv' installation..." -ForegroundColor Cyan
+    if (Test-CommandExists -CommandName "uv") {
+        Write-Host "'uv' is already installed. Skipping installation." -ForegroundColor Green
+        return
+    }
+
+    Write-Host "'uv' not found. Attempting to install 'uv'..." -ForegroundColor Yellow
+    try {
+        # Execute the official UV PowerShell installer script
+        & { irm https://astral.sh/uv/install.ps1 | iex }
+    
+        # Add UV bin path to PATH for this session
+        $uvBinDir = "$env:USERPROFILE\.cargo\bin"
+        if (Test-Path $uvBinDir -and -not ($env:PATH -split ";" | ForEach-Object { $_.Trim() }) -contains $uvBinDir) {
+            $env:PATH += ";$uvBinDir"
+        }
+
+        # Verify installation by trying to run uv --version
+        $uvVersionOutput = uv --version 2>$null
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($uvVersionOutput)) {
+            Write-Host "'uv' installed successfully!" -ForegroundColor Green
+            Write-Host "UV Version: $($uvVersionOutput)" -ForegroundColor Green
+        } else {
+            Write-Host "Installation command completed, but 'uv' command not found or verification failed." -ForegroundColor Yellow
+            Write-Host "You might need to restart your terminal or manually add 'uv' to PATH." -ForegroundColor Yellow
+        }
+    }
+    catch {
+        Write-Host "An error occurred during 'uv' installation: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "Please check internet connection or run as administrator if needed." -ForegroundColor Red
+    }
+}
+
+
 # --- Run the installation functions ---
 Write-Host "`n--- Starting Software Installation ---`n" -ForegroundColor White
 
-Install-UV
 Install-VSCode
+Install-UV
 
 Write-Host "`n--- All installation checks complete ---`n" -ForegroundColor White
