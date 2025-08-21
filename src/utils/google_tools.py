@@ -696,6 +696,9 @@ def WriteToSheets(  # noqa: C901
                 Workbook.add_worksheet(sheetName)
                 Worksheet = get_book_sheet(bookName, sheetName)
 
+            # clear the worksheet
+            Worksheet.clear(start="A1", end=None)
+
             if not indexes:
                 Worksheet.set_dataframe(df, (1, 1), fit=True, nan="")
             else:
