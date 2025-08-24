@@ -9,7 +9,7 @@ sudo apt install neovim
 # will need to upgrade if older version
 sudo apt upgrade neovim
 # install VimPlug
-curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs <https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim>
+curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
 # install node for Mason / LSP support
 sudo apt install nodejs
 # Run NeoVim and install the plugins
