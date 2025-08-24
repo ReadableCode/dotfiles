@@ -30,7 +30,6 @@ Set-Alias tree treed
 # Write-Host "myDocumentsPath is: $myDocumentsPath"
 
 $basePath = $HOME
-Write-Host "basePath is: $basePath"
 if (Test-Path "$basePath\GitHub\") {
     $gitDir = "$basePath\GitHub\"
 }
