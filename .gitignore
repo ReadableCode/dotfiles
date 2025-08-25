@@ -32,3 +32,5 @@ gmail_oauth*.json
 gmail_token*.json
 *.egg-info/
 .venv
+ssh_host*
+authorized_keys

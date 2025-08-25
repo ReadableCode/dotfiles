@@ -117,7 +117,10 @@
 ```bash
 cd $env:USERPROFILE\userapps\OpenSSH-Win64
 mkdir "$env:USERPROFILE\GitHub\dotfiles\application_configs\portable_sshd" -ea SilentlyContinue
-.\ssh-keygen.exe -t rsa -b 2048 -f "$env:USERPROFILE\GitHub\dotfiles\application_configs\portable_sshd\ssh_host_rsa_key" -N ""
+.\ssh-keygen.exe --% -t rsa -b 2048 -f "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key" -N ""
+New-Item -ItemType File -Path "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys" -Force | Out-Null
+icacls "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys" /inheritance:r /grant "jason.christiansen:(OI)(CI)F"
+icacls "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys" /inheritance:r /grant "jason.christiansen:F"
 ```
 
 * Create config file in same folder (portable_sshd): (will have to use direct paths, no ~ or $env)
@@ -129,4 +132,21 @@ PubkeyAuthentication yes
 PasswordAuthentication yes
 AuthorizedKeysFile C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
 Subsystem sftp C:/Users/jason.christiansen/userapps/OpenSSH-Win64/sftp-server.exe
+```
+
+* Generate keys on other machine, deploy to authorized_keys file
+
+* Launch sshd
+
+```bash
+cd $env:USERPROFILE\userapps\OpenSSH-Win64
+.\sshd.exe -f C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/sshd_config -D -E C:/Users/jason.christiansen/.portable-sshd.log
+# to check running
+netstat -ano | findstr :2222
+```
+
+* Connect to it from the host machine
+
+```bash
+ssh -p 2222 jason.christiansen@192.168.86.126
 ```
