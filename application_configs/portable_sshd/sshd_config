@@ -1,0 +1,6 @@
+Port 2222
+HostKey C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key
+PubkeyAuthentication yes
+PasswordAuthentication yes
+AuthorizedKeysFile C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
+Subsystem sftp C:/Users/jason.christiansen/userapps/OpenSSH-Win64/sftp-server.exe

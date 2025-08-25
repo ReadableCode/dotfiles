@@ -101,3 +101,32 @@
   net stop sshd
   net start sshd
   ```
+
+## Setting up portable SSH server on Windows (no admin)
+
+* Download portable openssh from:
+
+  ```bash
+  https://github.com/PowerShell/Win32-OpenSSH/releases
+  ```
+
+* Extract to folder like: C:\Users\jason.christiansen\userapps\OpenSSH-Win64
+
+* Generate keys and config in a user folder:
+
+```bash
+cd $env:USERPROFILE\userapps\OpenSSH-Win64
+mkdir "$env:USERPROFILE\GitHub\dotfiles\application_configs\portable_sshd" -ea SilentlyContinue
+.\ssh-keygen.exe -t rsa -b 2048 -f "$env:USERPROFILE\GitHub\dotfiles\application_configs\portable_sshd\ssh_host_rsa_key" -N ""
+```
+
+* Create config file in same folder (portable_sshd): (will have to use direct paths, no ~ or $env)
+
+```bash
+Port 2222
+HostKey C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key
+PubkeyAuthentication yes
+PasswordAuthentication yes
+AuthorizedKeysFile C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
+Subsystem sftp C:/Users/jason.christiansen/userapps/OpenSSH-Win64/sftp-server.exe
+```
