@@ -104,3 +104,21 @@
 1. Open VSCode: Launch VSCode on either Windows or Debian Linux.
 
 2. Open the Source Control view: Click on the icon with three horizontal lines and a curved arrow on the left sidebar or press `Ctrl+Shift+G` (Windows) or `Cmd+Shift+G` (Mac).
+
+## If using remote ssh connection with host machine without admin (portable git and python)
+
+* Set up vscode settings to map to non-system level git
+
+Edit the file at `C:\Users\jason.christiansen\.vscode-server\data\Machine\settings.json`
+
+* Add the following lines to the json file:
+
+```json
+{
+  "git.path": "C:/Users/jason.christiansen/userapps/PortableGit/bin/git.exe",
+  "terminal.integrated.env.windows": {
+    "PATH": "C:/Users/jason.christiansen/userapps/PortableGit/bin;C:/Users/jason.christiansen/userapps/PortableGit/usr/bin;${env:PATH}",
+    "GIT_SSH": "C:/Users/jason.christiansen/userapps/OpenSSH-Win64/ssh.exe"
+  }
+}
+```
