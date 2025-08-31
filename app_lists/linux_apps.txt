@@ -8,7 +8,7 @@ krb5-user
 libkrb5-dev
 mailutils
 ncdu
-neofetch
+fastfetch
 neovim
 net-tools
 npm

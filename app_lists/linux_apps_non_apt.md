@@ -10,6 +10,8 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
+- This is availble with dnf on Fedora so dont need install script
+
 ## VSCode on Fedora
 
 RHEL, Fedora, and CentOS based distributions
@@ -40,3 +42,45 @@ sudo yum install code # or code-insiders
 Note
 
 Due to the manual signing process and the publishing system we use, the yum repo could lag behind by up to three hours and not immediately get the latest version of VS Code
+
+## Parsec on Fedora
+
+- Install Flatpak support if needed
+
+```bash
+sudo dnf install flatpak
+```
+
+- Add Flathub (if not already added)
+
+```bash
+flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+```
+
+- Install Parsec
+
+```bash
+flatpak install flathub com.parsecgaming.parsec
+```
+
+- Install NVidia Drivers
+
+```bash
+sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda nvidia-settings
+sudo dnf install \
+  https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
+  https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+```
+
+- For Intel/AMD
+
+```bash
+flatpak install flathub org.freedesktop.Platform.VAAPI.Intel//23.08
+flatpak install flathub org.freedesktop.Platform.VAAPI.AMD//23.08
+```
+
+- For NVIDIA
+
+```bash
+flatpak install flathub org.freedesktop.Platform.GL.nvidia-$(nvidia-smi --query-gpu=driver_version --format=csv,noheader)//23.08
+```
