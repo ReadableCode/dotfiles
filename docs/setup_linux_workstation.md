@@ -272,3 +272,29 @@ sudo mkswap /swapfile
 sudo swapon /swapfile
 swapon --show
 ```
+
+## Using Fedora
+
+* update everything
+
+```bash
+sudo dnf upgrade --refresh
+```
+
+* search for a package
+
+```bash
+dnf search package-name
+```
+
+* install something
+
+```bash
+sudo dnf install package-name
+```
+
+* remove something
+
+```bash
+sudo dnf remove package-name
+```
