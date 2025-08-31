@@ -30,3 +30,6 @@ unzip
 curl
 golang-go
 cargo
+gnome-shell-extension-gsconnect
+scrcpy
+android-tools

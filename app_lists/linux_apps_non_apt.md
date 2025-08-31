@@ -98,3 +98,31 @@ flatpak install flathub org.freedesktop.Platform.GL.nvidia-$(nvidia-smi --query-
 ```
 
 - Restart your computer before it will take effect.
+
+## KDE Connect
+
+- is in dnf but needs to be enabled after installation
+
+```bash
+sudo dnf install gnome-shell-extension-gsconnect
+```
+
+- Need to log out and log back in for the changes to take effect.
+
+```bash
+gnome-extensions enable gsconnect@andyholmes.github.io
+```
+
+- Phone icon will appear in the system tray.
+
+## Discord
+
+```bash
+flatpak install -y flathub com.discordapp.Discord
+```
+
+## FB Messenger
+
+```bash
+flatpak install -y flathub com.sindresorhus.Caprine
+```
