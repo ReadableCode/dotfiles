@@ -298,3 +298,16 @@ sudo dnf install package-name
 ```bash
 sudo dnf remove package-name
 ```
+
+### Fedora todo
+
+* second monitor
+* deploy ssh keys
+* install list of apps
+* vnc server
+* external monitors as default, have to open and close after reboots or sleep
+* docker
+* mount network drives
+* tailscale
+* streamdeck
+* mouse button mapping
