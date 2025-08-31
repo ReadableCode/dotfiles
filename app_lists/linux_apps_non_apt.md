@@ -10,7 +10,19 @@
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-- This is availble with dnf on Fedora so dont need install script
+- This is availble with dnf on Fedora so dont need install script but ther are other steps
+
+```bash
+# 1) fix missing libcrypt.so.1
+sudo dnf install -y libxcrypt-compat
+
+# 2) (already installed 3.10.12) tell uv to use it in THIS repo
+uv python pin 3.10.12
+
+# 3) create/refresh venv + deps
+uv sync
+
+```
 
 ## VSCode on Fedora
 
@@ -84,3 +96,5 @@ flatpak install flathub org.freedesktop.Platform.VAAPI.AMD//23.08
 ```bash
 flatpak install flathub org.freedesktop.Platform.GL.nvidia-$(nvidia-smi --query-gpu=driver_version --format=csv,noheader)//23.08
 ```
+
+- Restart your computer before it will take effect.
