@@ -143,6 +143,9 @@ function ll {
     Get-ChildItem -Force
 }
 
+function which {
+    Get-Command $args
+}
 
 function openbranchdiffs {
     # Navigate to the root of the Git repository
