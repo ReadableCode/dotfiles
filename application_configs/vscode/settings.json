@@ -234,5 +234,17 @@
   "editor.cursorBlinking": "expand",
   "editor.cursorSmoothCaretAnimation": "on",
   "docker.extension.enableComposeLanguageServer": true,
-  "github.copilot.nextEditSuggestions.enabled": false
+  "github.copilot.nextEditSuggestions.enabled": false,
+  // Vim Settings
+  "vim.useSystemClipboard": true,
+  "vim.hlsearch": true,
+  "vim.incsearch": true,
+  "vim.smartRelativeLine": false,
+  // Vim keep vscode find, open, save, comment
+  "vim.handleKeys": {
+    "<C-f>": false, // keep ctrl-f for find
+    "<C-s>": false, // keep ctrl-s for save
+    "<C-p>": false, // keep ctrl-p for open file
+    "<C-/>": false // keep ctrl-/ for comment
+  }
 }
