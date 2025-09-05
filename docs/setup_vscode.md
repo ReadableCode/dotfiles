@@ -1,24 +1,24 @@
 # Setting up Visual Studio Code
 
-## Installing VSCode
+## Installing Visual Studio Code
 
 ### Windows
 
-1. Download VSCode: Visit the official Visual Studio Code site at [https://code.visualstudio.com/](https://code.visualstudio.com/) and download the installer for Windows.
+1. Download Visual Studio Code: Visit the official Visual Studio Code site at [https://code.visualstudio.com/](https://code.visualstudio.com/) and download the installer for Windows.
 
 2. Run the installer: Once the installer is downloaded, run it and follow the on-screen instructions to complete the installation.
 
-3. Launch VSCode: After the installation is complete, launch VSCode from the Start menu.
+3. Launch Visual Studio Code: After the installation is complete, launch Visual Studio Code from the Start menu.
 
 ### Debian Linux
 
-1. Install VSCode: Open a terminal and run the following commands to install VSCode on Debian Linux:
+1. Install Visual Studio Code: Open a terminal and run the following commands to install Visual Studio Code on Debian Linux:
 
     ```bash
     sudo snap install --classic code
     ```
 
-2. Launch VSCode: After the installation is complete, you can launch VSCode from the Applications menu or by running the `code` command in the terminal.
+2. Launch Visual Studio Code: After the installation is complete, you can launch Visual Studio Code from the Applications menu or by running the `code` command in the terminal.
 
 ### macOS
 
@@ -29,7 +29,7 @@
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
       ```
 
-  - If you have Homebrew installed, you can install VSCode by running the following command in the terminal:
+  - If you have Homebrew installed, you can install Visual Studio Code by running the following command in the terminal:
 
       ```bash
       brew install --cask visual-studio-code
@@ -39,7 +39,7 @@
 
 ## Linking Settings Files
 
-1. To link your settings file in a repository to VSCode
+1. To link your settings file in a repository to Visual Studio Code
 
     - Windows: Open powershell as administrator and run the following commands:
 
@@ -61,7 +61,7 @@
 
 ### Python
 
-1. Open VSCode: Launch VSCode on either Windows or Debian Linux.
+1. Open Visual Studio Code: Launch Visual Studio Code on either Windows or Debian Linux.
 
 2. Open the Extensions view: Click on the square icon on the left sidebar or press `Ctrl+Shift+X` (Windows) or `Cmd+Shift+X` (Mac).
 
@@ -71,7 +71,7 @@
 
 ### Pylance
 
-1. Open VSCode: Launch VSCode if it's not already open.
+1. Open Visual Studio Code: Launch Visual Studio Code if it's not already open.
 
 2. Open the Extensions view: Click on the square icon on the left sidebar or press `Ctrl+Shift+X` (Windows) or `Cmd+Shift+X` (Mac).
 
@@ -81,7 +81,7 @@
 
 ### Jupyter
 
-1. Open VSCode: Launch VSCode if it's not already open.
+1. Open Visual Studio Code: Launch Visual Studio Code if it's not already open.
 
 2. Open the Extensions view: Click on the square icon on the left sidebar or press `Ctrl+Shift+X` (Windows) or `Cmd+Shift+X` (Mac).
 
@@ -91,7 +91,7 @@
 
 ### Black Formatter
 
-1. Open VSCode: Launch VSCode if it's not already open.
+1. Open Visual Studio Code: Launch Visual Studio Code if it's not already open.
 
 2. Open the Extensions view: Click on the square icon on the left sidebar or press `Ctrl+Shift+X` (Windows) or `Cmd+Shift+X` (Mac).
 
@@ -101,17 +101,17 @@
 
 ## Signing in with GitHub
 
-1. Open VSCode: Launch VSCode on either Windows or Debian Linux.
+1. Open Visual Studio Code: Launch Visual Studio Code on either Windows or Debian Linux.
 
 2. Open the Source Control view: Click on the icon with three horizontal lines and a curved arrow on the left sidebar or press `Ctrl+Shift+G` (Windows) or `Cmd+Shift+G` (Mac).
 
-## If using remote ssh connection with host machine without admin (portable git and python)
+## If using remote SSH connection with host machine without admin (portable Git and python)
 
-* Set up vscode settings to map to non-system level git
+- Set up Visual Studio Code settings to map to non-system level Git
 
 Edit the file at `C:\Users\jason.christiansen\.vscode-server\data\Machine\settings.json`
 
-* Add the following lines to the json file:
+- Add the following lines to the json file:
 
 ```json
 {
