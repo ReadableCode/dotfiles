@@ -61,11 +61,18 @@ def get_gmail_service(account_type="default"):
     oauth_path = os.path.join(grandparent_dir, f"gmail_oauth_{account_type}.json")
     token_path = os.path.join(grandparent_dir, f"gmail_token_{account_type}.json")
 
-    if not (os.path.exists(oauth_path) and os.path.exists(token_path)):
+    oauth_exists = os.path.exists(oauth_path)
+    token_exists = os.path.exists(token_path)
+
+    if not oauth_exists or not token_exists:
         print_logger(
             f"oauth_path: {oauth_path} or token_path: {token_path} does not exist"
         )
         deploy_auth_files_from_env(account_type)
+    else:
+        print_logger(
+            f"oauth_path: {oauth_path} and token_path: {token_path} exist, using them"
+        )
 
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is created
