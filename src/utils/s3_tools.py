@@ -67,8 +67,10 @@ def upload_file_to_s3(local_file_path, bucket_name, s3_key):
     try:
         s3.upload_file(local_file_path, bucket_name, s3_key)
         print(f"File {local_file_path} uploaded to {bucket_name}/{s3_key}.")
+        return True
     except Exception as e:
         print(f"Error uploading file: {e}")
+        return False
 
 
 def download_file_from_s3(bucket_name, s3_key, local_file_path):
