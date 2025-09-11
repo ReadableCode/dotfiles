@@ -183,11 +183,20 @@
     "**/Samsung Health/**"
   ],
   "files.watcherExclude": {
-    "**/.venv/**": true,
-    "**/__pycache__/**": true,
-    "**/node_modules/**": true,
-    "**/health_data/**": true,
-    "**/Samsung Health/**": true
+    "**/.git": true,
+    "**/.venv": true,
+    "**/venv": true,
+    "**/__pycache__": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/build": true,
+    "**/.ruff_cache": true,
+    "**/health_data": true,
+    "**/.mypy_cache": true,
+    "**/.pytest_cache": true,
+    "**/target": true,
+    "**/Samsung Health": true,
+    "**/.cargo": true
   },
   "python.analysis.enableEditableInstalls": false,
   "python.analysis.enableExperimentalServer": false,
