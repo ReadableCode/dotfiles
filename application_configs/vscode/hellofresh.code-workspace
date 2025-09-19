@@ -1,0 +1,195 @@
+{
+  "folders": [
+    {
+      "name": "na-finops",
+      "path": "na-finops"
+    },
+    {
+      "name": "na-fin-data-streamlit",
+      "path": "na-fin-data-streamlit"
+    },
+    {
+      "name": "na-faba",
+      "path": "na-faba"
+    },
+    {
+      "name": "snowflake-db-finops-debit",
+      "path": "snowflake-db-finops-debit"
+    },
+    {
+      "name": "snowflake-db-finops-debit-sensitive",
+      "path": "snowflake-db-finops-debit-sensitive"
+    },
+    {
+      "name": "na-fin-data-svcs",
+      "path": "na-fin-data-svcs"
+    },
+    {
+      "name": "hellofresh_credentials",
+      "path": "hellofresh_credentials"
+    },
+    {
+      "name": "dotfiles",
+      "path": "dotfiles"
+    },
+    {
+      "name": "Data_Tool_Pack_Py",
+      "path": "Data_Tool_Pack_Py"
+    },
+    {
+      "name": "AHK_Sheet_ID_Shortcut",
+      "path": "AHK_Sheet_ID_Shortcut"
+    },
+    {
+      "name": "snowflake-onboarding-template",
+      "path": "snowflake-onboarding-template"
+    },
+    {
+      "name": "snowflake-automation",
+      "path": "snowflake-automation"
+    },
+    {
+      "name": "us-ops-analytics-schemachange",
+      "path": "us-ops-analytics-schemachange"
+    },
+    {
+      "name": "github-automation",
+      "path": "github-automation"
+    },
+    {
+      "name": "us-ops-fulfillment-planning",
+      "path": "us-ops-fulfillment-planning"
+    },
+    {
+      "name": "limesync-onboarding",
+      "path": "limesync-onboarding"
+    },
+    {
+      "name": "bi-infrastructure",
+      "path": "bi-infrastructure"
+    },
+    {
+      "name": "infrastructure-tags",
+      "path": "infrastructure-tags"
+    },
+    {
+      "name": "airflow-community",
+      "path": "airflow-community"
+    },
+    {
+      "name": "airflow-automation",
+      "path": "airflow-automation"
+    },
+    {
+      "name": "datasets-automation",
+      "path": "datasets-automation"
+    },
+    {
+      "name": "streamlit-onboarding",
+      "path": "streamlit-onboarding"
+    },
+    {
+      "name": "hf-kubernetes",
+      "path": "hf-kubernetes"
+    },
+    {
+      "name": "datasets-automation-community",
+      "path": "datasets-automation-community"
+    },
+    {
+      "name": "us-ops-packaging-scripts",
+      "path": "us-ops-packaging-scripts"
+    },
+    {
+      "name": "photon-access-control",
+      "path": "photon-access-control"
+    },
+    {
+      "name": "gbi-pc2-reliance",
+      "path": "gbi-pc2-reliance"
+    },
+    {
+      "name": "us-scm-morning-reporting",
+      "path": "us-scm-morning-reporting"
+    },
+    {
+      "name": "vault-namespace-automation",
+      "path": "vault-namespace-automation"
+    },
+    {
+      "name": "us-fpt-riptide",
+      "path": "us-fpt-riptide"
+    },
+    {
+      "path": "us-fpt-planning-suite"
+    },
+    {
+      "path": "jetstream-ci-scripts"
+    },
+    {
+      "path": "supplier-payments"
+    }
+  ],
+  "settings": {
+    "workbench.colorCustomizations": {
+      "titleBar.activeBackground": "#6f9d7b",
+      "titleBar.inactiveBackground": "#6f9d7b"
+    },
+    "todo-tree.filtering.includeGlobs": [
+      "**/Data_Tool_Pack_Py/src/**",
+      "**/na-finops/src/**",
+      "**/na-finops/docs/**"
+    ],
+    "scm.showHistoryGraph": false,
+    "task.autoDetect": "off",
+    "files.watcherExclude": {
+      "**/.venv/**": true
+    },
+    "[sql]": {
+      "editor.formatOnSave": false,
+      "editor.defaultFormatter": null
+    },
+    "github.copilot.enable": {
+      "*": true,
+      "plaintext": true,
+      "markdown": true,
+      "scminput": false,
+      "yaml": true,
+      "python": true,
+      "rust": false,
+      "golang": false
+    },
+    "sqlfluff.dialect": "snowflake",
+    "makefile.configureOnOpen": false,
+    "todo-tree.tree.scanMode": "workspace only"
+  },
+  "extensions": {
+    "recommendations": [
+      "bierner.markdown-mermaid",
+      "dracula-theme.theme-dracula",
+      "eamodio.gitlens",
+      "esbenp.prettier-vscode",
+      "github.copilot",
+      "grapecity.gc-excelviewer",
+      "gruntfuggly.todo-tree",
+      "inferrinizzard.prettier-sql-vscode",
+      "mechatroner.rainbow-csv",
+      "mhutchie.git-graph",
+      "ms-python.black-formatter",
+      "ms-python.flake8",
+      "ms-python.gather",
+      "ms-python.isort",
+      "ms-python.vscode-pylance",
+      "ms-toolsai.jupyter",
+      "ms-vscode-remote.remote-ssh",
+      "tomoki1207.pdf",
+      "ms-vscode.live-server",
+      "ms-python.mypy-type-checker",
+      "foxundermoon.shell-format",
+      "ms-vscode.makefile-tools",
+      "ms-vscode-remote.vscode-remote-extensionpack",
+      "golang.go",
+      "qwtel.sqlite-viewer"
+    ]
+  }
+}

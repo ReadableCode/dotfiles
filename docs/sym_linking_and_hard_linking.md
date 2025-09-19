@@ -20,6 +20,20 @@ ln -s /path/to/src/file
 
 ```
 
+### Hard linking on Linux
+
+- To Create at a specific directory
+
+Note: Target is the file that already exists, Path is the new hard link you are creating. The one that comes first is the target, the second is the new link.
+
+```bash
+ln /home/jason/HelloFresh/GDrive/Projects/hellofresh.code-workspace /home/jason/HelloFresh/GDrive/Projects/dotfiles/application_configs/vscode/hellofresh.code-workspace
+```
+
+```bash
+ln /home/jason/HelloFresh/GDrive/Projects/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
+```
+
 ## Windows
 
 ### Hard linking on Windows
@@ -31,7 +45,7 @@ Note: Target is the file that already exists, Path is the new hard link you are 
 ```bash
 New-Item -ItemType HardLink `
   -Path "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ryzen.code-workspace" `
-  -Target "C:\Users\jason\GitHub\myworkspace.code-workspace"
+  -Target "C:\Users\jason\GitHub\ryzen.code-workspace"
 ```
 
 ```bash
