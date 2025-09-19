@@ -1,22 +1,22 @@
 {
-	"folders": [
-		{
-			"name": "dotfiles_win",
-			"path": "dotfiles"
-		},
-		{
-			"path": "\\\\wsl.localhost\\Ubuntu-24.04\\home\\jason\\GitHubWSL\\dotfiles",
-			"name": "dotfiles_wsl"
-		},
-		{
-			"path": "fourteen_foods",
-			"name": "fourteen_foods_win"
-		},
-		{
-			"path": "\\\\wsl.localhost\\Ubuntu-24.04\\home\\jason\\GitHubWSL\\fourteen_foods",
-			"name": "fourteen_foods_wsl"
-		}
-	],
+  "folders": [
+    {
+      "name": "dotfiles_win",
+      "path": "dotfiles"
+    },
+    {
+      "path": "fourteen_foods",
+      "name": "fourteen_foods_win"
+    },
+    {
+      "path": "\\\\wsl.localhost\\Ubuntu-24.04\\home\\jason\\GitHubWSL\\dotfiles",
+      "name": "dotfiles_wsl"
+    },
+    {
+      "path": "\\\\wsl.localhost\\Ubuntu-24.04\\home\\jason\\GitHubWSL\\fourteen_foods",
+      "name": "fourteen_foods_wsl"
+    }
+  ],
   "settings": {
     "workbench.colorCustomizations": {
       "titleBar.activeBackground": "#6f709d",
@@ -24,7 +24,7 @@
     },
     "todo-tree.filtering.includeGlobs": [
       "**/Data_Tool_Pack/src/**",
-      "**/fourteen_foods/src/**",
+      "**/fourteen_foods/src/**"
     ]
   },
   "extensions": {
