@@ -74,11 +74,7 @@
     }
   ],
   "settings": {
-    "workbench.colorTheme": "Default Dark+",
-    "workbench.colorCustomizations": {
-      "titleBar.activeBackground": "#442757",
-      "titleBar.inactiveBackground": "#442757"
-    },
+    "workbench.colorTheme": "Solarized Dark",
     "todo-tree.filtering.includeGlobs": [
       "**/Data_Tool_Pack_Py/src/**",
       "**/dotfiles/src/**",
