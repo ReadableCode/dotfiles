@@ -50,6 +50,18 @@ New-Item -ItemType HardLink `
 
 ```bash
 New-Item -ItemType HardLink `
+  -Path "C:\Users\jason\GitHub\spectre.code-workspace" `
+  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\spectre.code-workspace"
+```
+
+```bash
+New-Item -ItemType HardLink `
+  -Path "C:\Users\jason\GitHub\ultrapocket.code-workspace" `
+  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ultrapocket.code-workspace"
+```
+
+```bash
+New-Item -ItemType HardLink `
   -Path "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\fourteen_foods.code-workspace" `
   -Target "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
 ```
