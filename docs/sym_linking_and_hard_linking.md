@@ -53,3 +53,9 @@ New-Item -ItemType HardLink `
   -Path "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\fourteen_foods.code-workspace" `
   -Target "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
 ```
+
+```bash
+New-Item -ItemType HardLink `
+  -Path "C:\Users\16937827583938060798\HelloFreshProjects\hellofresh.code-workspace" `
+  -Target "C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\vscode\hellofresh.code-workspace"
+```
