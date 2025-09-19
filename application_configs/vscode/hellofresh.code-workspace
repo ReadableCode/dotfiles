@@ -41,10 +41,6 @@
       "path": "AHK_Sheet_ID_Shortcut"
     },
     {
-      "name": "snowflake-onboarding-template",
-      "path": "snowflake-onboarding-template"
-    },
-    {
       "name": "snowflake-automation",
       "path": "snowflake-automation"
     },
@@ -57,77 +53,24 @@
       "path": "github-automation"
     },
     {
-      "name": "us-ops-fulfillment-planning",
-      "path": "us-ops-fulfillment-planning"
-    },
-    {
       "name": "limesync-onboarding",
       "path": "limesync-onboarding"
-    },
-    {
-      "name": "bi-infrastructure",
-      "path": "bi-infrastructure"
-    },
-    {
-      "name": "infrastructure-tags",
-      "path": "infrastructure-tags"
     },
     {
       "name": "airflow-community",
       "path": "airflow-community"
     },
     {
-      "name": "airflow-automation",
-      "path": "airflow-automation"
-    },
-    {
       "name": "datasets-automation",
       "path": "datasets-automation"
-    },
-    {
-      "name": "streamlit-onboarding",
-      "path": "streamlit-onboarding"
-    },
-    {
-      "name": "hf-kubernetes",
-      "path": "hf-kubernetes"
     },
     {
       "name": "datasets-automation-community",
       "path": "datasets-automation-community"
     },
     {
-      "name": "us-ops-packaging-scripts",
-      "path": "us-ops-packaging-scripts"
-    },
-    {
-      "name": "photon-access-control",
-      "path": "photon-access-control"
-    },
-    {
-      "name": "gbi-pc2-reliance",
-      "path": "gbi-pc2-reliance"
-    },
-    {
-      "name": "us-scm-morning-reporting",
-      "path": "us-scm-morning-reporting"
-    },
-    {
       "name": "vault-namespace-automation",
       "path": "vault-namespace-automation"
-    },
-    {
-      "name": "us-fpt-riptide",
-      "path": "us-fpt-riptide"
-    },
-    {
-      "path": "us-fpt-planning-suite"
-    },
-    {
-      "path": "jetstream-ci-scripts"
-    },
-    {
-      "path": "supplier-payments"
     }
   ],
   "settings": {
