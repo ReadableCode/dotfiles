@@ -33,3 +33,9 @@ New-Item -ItemType HardLink `
   -Path "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ryzen.code-workspace" `
   -Target "C:\Users\jason\GitHub\myworkspace.code-workspace"
 ```
+
+```bash
+New-Item -ItemType HardLink `
+  -Path "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\fourteen_foods.code-workspace" `
+  -Target "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
+```
