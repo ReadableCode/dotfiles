@@ -1,12 +1,12 @@
 {
   "folders": [
     {
-      "name": "dotfiles_win",
-      "path": "dotfiles"
+      "path": "dotfiles",
+      "name": "dotfiles"
     },
     {
       "path": "fourteen_foods",
-      "name": "fourteen_foods_win"
+      "name": "fourteen_foods"
     },
     {
       "path": "\\\\wsl.localhost\\Ubuntu-24.04\\home\\jason\\GitHubWSL\\dotfiles",
@@ -15,6 +15,12 @@
     {
       "path": "\\\\wsl.localhost\\Ubuntu-24.04\\home\\jason\\GitHubWSL\\fourteen_foods",
       "name": "fourteen_foods_wsl"
+    },
+    {
+      "path": "../OneDrive - Fourteen Foods/code/data"
+    },
+    {
+      "path": "../userapps"
     }
   ],
   "settings": {
@@ -34,9 +40,7 @@
       "eamodio.gitlens",
       "esbenp.prettier-vscode",
       "github.copilot",
-      "grapecity.gc-excelviewer",
       "gruntfuggly.todo-tree",
-      "inferrinizzard.prettier-sql-vscode",
       "mechatroner.rainbow-csv",
       "mhutchie.git-graph",
       "ms-python.black-formatter",

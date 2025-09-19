@@ -33,6 +33,10 @@
       "path": "Something-Familiar"
     },
     {
+      "name": "Ani-Game",
+      "path": "Ani-Game"
+    },
+    {
       "name": "Terminal_To_Do",
       "path": "Terminal_To_Do"
     },
@@ -59,6 +63,14 @@
     {
       "name": "Sync_Plex",
       "path": "Sync_Plex"
+    },
+    {
+      "name": "Kivy_Test_Suite",
+      "path": "Kivy_Test_Suite"
+    },
+    {
+      "name": "Rust_Tutorial",
+      "path": "Rust_Tutorial"
     },
     {
       "name": "Docker",
@@ -89,6 +101,30 @@
       "path": "readablecode.github.io"
     },
     {
+      "name": "fourteen_foods",
+      "path": "fourteen_foods"
+    },
+    {
+      "name": "na-finops",
+      "path": "na-finops"
+    },
+    {
+      "name": "na-fin-data-streamlit",
+      "path": "na-fin-data-streamlit"
+    },
+    {
+      "name": "na-fin-data-svcs",
+      "path": "na-fin-data-svcs"
+    },
+    {
+      "name": "na-faba",
+      "path": "na-faba"
+    },
+    {
+      "name": "context-chatbot",
+      "path": "context-chatbot"
+    },
+    {
       "name": "advent_of_code",
       "path": "advent_of_code"
     },
@@ -115,22 +151,10 @@
       "path": "go-data-inspector"
     },
     {
-      "path": "spark_testing"
+      "path": "hellofresh_credentials"
     },
     {
       "path": "website"
-    },
-    {
-      "path": "na-finops"
-    },
-    {
-      "path": "na-faba"
-    },
-    {
-      "path": "na-fin-data-streamlit"
-    },
-    {
-      "path": "na-fin-data-svcs"
     }
   ],
   "settings": {
@@ -149,16 +173,17 @@
       "**/Scan_Sorter/src/**",
       "**/AHK_Sheet_ID_Shortcut/src/**"
     ],
-    "github.copilot.enable": {
-      "*": true,
-      "plaintext": true,
-      "markdown": true,
-      "scminput": false,
-      "yaml": true,
-      "python": true,
-      "rust": false,
-      "golang": false
-    }
+    "cSpell.words": [
+      "Alteryx",
+      "Christiansen",
+      "codebases",
+      "FABA",
+      "Knime",
+      "Mendix",
+      "Onboarded",
+      "Qlik",
+      "Streamlit"
+    ]
   },
   "extensions": {
     "recommendations": [
