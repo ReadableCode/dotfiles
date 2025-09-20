@@ -1,0 +1,129 @@
+{
+  "folders": [
+    {
+      "name": "Docker",
+      "path": "Docker"
+    },
+    {
+      "name": "docker_app_data",
+      "path": "../docker_app_data"
+    },
+    {
+      "name": "server_configs",
+      "path": "server_configs"
+    },
+    {
+      "name": "dotfiles",
+      "path": "dotfiles"
+    },
+    {
+      "name": "Data_Tool_Pack_Py",
+      "path": "Data_Tool_Pack_Py"
+    },
+    {
+      "name": "Terminal_To_Do",
+      "path": "Terminal_To_Do"
+    },
+    {
+      "name": "Assistant",
+      "path": "Assistant"
+    },
+    {
+      "name": "Sync_Plex",
+      "path": "Sync_Plex"
+    },
+    {
+      "name": "personal_credentials",
+      "path": "personal_credentials"
+    },
+    {
+      "name": "readablecode",
+      "path": "readablecode"
+    },
+    {
+      "name": "readablecode.github.io",
+      "path": "readablecode.github.io"
+    },
+    {
+      "name": "duck_db_api",
+      "path": "duck_db_api"
+    },
+    {
+      "name": "Book-Bot",
+      "path": "Book-Bot"
+    },
+    {
+      "name": "a_girls_guide_to_georgetown",
+      "path": "a_girls_guide_to_georgetown"
+    },
+    {
+      "name": "go-data-inspector",
+      "path": "go-data-inspector"
+    },
+    {
+      "name": "website",
+      "path": "website"
+    },
+    {
+      "name": "charlie-personal-website",
+      "path": "charlie-personal-website"
+    },
+    {
+      "name": "CrownCentral",
+      "path": "CrownCentral"
+    }
+  ],
+  "settings": {
+    "workbench.colorTheme": "Solarized Dark",
+    "todo-tree.filtering.includeGlobs": [
+      "**/Data_Tool_Pack_Py/src/**",
+      "**/dotfiles/src/**",
+      "**/Our_Cash/src/**",
+      "**/readablecode/**",
+      "**/Assistant/src/**",
+      "**/Sync_Plex/src/**",
+      "**/Docker/src/**",
+      "**/Scan_Sorter/src/**",
+      "**/AHK_Sheet_ID_Shortcut/src/**"
+    ],
+    "cSpell.words": [
+      "Alteryx",
+      "Christiansen",
+      "codebases",
+      "FABA",
+      "Knime",
+      "Mendix",
+      "Onboarded",
+      "Qlik",
+      "Streamlit"
+    ]
+  },
+  "extensions": {
+    "recommendations": [
+      "bierner.markdown-mermaid",
+      "dracula-theme.theme-dracula",
+      "eamodio.gitlens",
+      "esbenp.prettier-vscode",
+      "github.copilot",
+      "grapecity.gc-excelviewer",
+      "gruntfuggly.todo-tree",
+      "inferrinizzard.prettier-sql-vscode",
+      "mechatroner.rainbow-csv",
+      "mhutchie.git-graph",
+      "ms-python.black-formatter",
+      "ms-python.flake8",
+      "ms-python.gather",
+      "ms-python.isort",
+      "ms-python.vscode-pylance",
+      "ms-toolsai.jupyter",
+      "ms-vscode-remote.remote-ssh",
+      "tomoki1207.pdf",
+      "tintinweb.graphviz-interactive-preview",
+      "rust-lang.rust-analyzer",
+      "golang.go",
+      "ms-python.mypy-type-checker",
+      "foxundermoon.shell-format",
+      "mtsmfm.vscode-stl-viewer"
+    ]
+  }
+}
