@@ -271,22 +271,24 @@ gsudo <command>
 
 ## Sleep Fixes
 
-* Check to isolate the issue (S3 missing)
+* Check what devices can wake from sleep with command:
 
 ```bash
-powercfg /a
+powercfg /devicequery wake_armed
 ```
 
-* Make sure s3 is diabled or this fix is unnecessary
+* Response should be something like:
 
-```bash
-New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "PlatformAoAcOverride" -PropertyType DWord -Value 0 -Force
+```plaintext
+Intel(R) Wi-Fi 6E AX211 160MHz
+USB4 Root Router (1.0)
+USB4 Root Router (1.0) (001)
 ```
 
-* Restart
-
-* Check to see if s3 is on and working
+* Disable devices from waking the computer with commands like:
 
 ```bash
-powercfg /a
+powercfg /devicedisablewake "Intel(R) Wi-Fi 6E AX211 160MHz"
+powercfg /devicedisablewake "USB4 Root Router (1.0)"
+powercfg /devicedisablewake "USB4 Root Router (1.0) (001)"
 ```

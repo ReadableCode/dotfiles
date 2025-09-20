@@ -5,10 +5,6 @@
       "path": "dotfiles"
     },
     {
-      "name": "Documents",
-      "path": "Documents"
-    },
-    {
       "name": "server_configs",
       "path": "server_configs"
     },
@@ -25,36 +21,12 @@
       "path": "Data_Tool_Pack_RS"
     },
     {
-      "name": "Our_Cash",
-      "path": "Our_Cash"
-    },
-    {
-      "name": "Something-Familiar",
-      "path": "Something-Familiar"
-    },
-    {
-      "name": "Ani-Game",
-      "path": "Ani-Game"
-    },
-    {
       "name": "Terminal_To_Do",
       "path": "Terminal_To_Do"
     },
     {
-      "name": "Gmail_Extractor",
-      "path": "Gmail_Extractor"
-    },
-    {
       "name": "AHK_Sheet_ID_Shortcut",
       "path": "AHK_Sheet_ID_Shortcut"
-    },
-    {
-      "name": "OSINT",
-      "path": "OSINT"
-    },
-    {
-      "name": "Scan_Sorter",
-      "path": "Scan_Sorter"
     },
     {
       "name": "Assistant",
@@ -65,14 +37,6 @@
       "path": "Sync_Plex"
     },
     {
-      "name": "Kivy_Test_Suite",
-      "path": "Kivy_Test_Suite"
-    },
-    {
-      "name": "Rust_Tutorial",
-      "path": "Rust_Tutorial"
-    },
-    {
       "name": "Docker",
       "path": "Docker"
     },
@@ -81,16 +45,8 @@
       "path": "Cash_Flow_Commander"
     },
     {
-      "name": "CrownCentral",
-      "path": "CrownCentral"
-    },
-    {
       "name": "personal_credentials",
       "path": "personal_credentials"
-    },
-    {
-      "name": "Project_Template",
-      "path": "Project_Template"
     },
     {
       "name": "readablecode",
@@ -121,24 +77,12 @@
       "path": "na-faba"
     },
     {
-      "name": "context-chatbot",
-      "path": "context-chatbot"
-    },
-    {
       "name": "advent_of_code",
       "path": "advent_of_code"
     },
     {
       "name": "duck_db_api",
       "path": "duck_db_api"
-    },
-    {
-      "name": "3D_Models",
-      "path": "3D_Models"
-    },
-    {
-      "name": "Health_Data_Parser",
-      "path": "Health_Data_Parser"
     },
     {
       "name": "Book-Bot",
