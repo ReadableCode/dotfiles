@@ -268,3 +268,25 @@ gsudo <command>
 ### VNC Server (Server)
 
 * Follow instructions in [setup_vnc_server.md](./setup_vnc_server.md)
+
+## Sleep Fixes
+
+* Check to isolate the issue (S3 missing)
+
+```bash
+powercfg /a
+```
+
+* Make sure s3 is diabled or this fix is unnecessary
+
+```bash
+New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name "PlatformAoAcOverride" -PropertyType DWord -Value 0 -Force
+```
+
+* Restart
+
+* Check to see if s3 is on and working
+
+```bash
+powercfg /a
+```
