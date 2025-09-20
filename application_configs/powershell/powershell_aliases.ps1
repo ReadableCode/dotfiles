@@ -294,7 +294,7 @@ function sshhello { ssh jason@192.168.86.4 }
 function sshhellowin { ssh HELLOFRESH\\16937827583938060798@HelloFreshWindows }
 
 # Fourteen Foods #
-function ssh14 { ssh jason.christiansen@192.168.86.126 }
+function ssh14 { ssh jason.christiansen@192.168.86.126 -p 2222 }
 
 # Android #
 function sshtabs7p { ssh u0_a1053@GalaxyTabS7P -p 8022 }
