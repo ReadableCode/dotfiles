@@ -11,4 +11,5 @@ uv
 grep
 python313
 glow
+fzf
 
