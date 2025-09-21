@@ -93,14 +93,17 @@
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
   "Prettier-SQL.SQLFlavourOverride": "snowflake",
-  // Auto formatting tsx prettier
-
   // TODO Tree
   "todo-tree.general.rootFolder": "${workspaceFolder}",
   "todo-tree.tree.showCountsInTree": true,
   "todo-tree.regex.regexCaseSensitive": false,
   "todo-tree.general.showActivityBarBadge": true,
   "todo-tree.general.statusBar": "top three",
+  "todo-tree.filtering.excludeGlobs": [
+    "**/node_modules/*/**",
+    "**/*.egg-info",
+    "**/todo.py"
+  ],
   // Notebooks
   "jupyter.interactiveWindow.creationMode": "perFile",
   "jupyter.askForKernelRestart": false,
