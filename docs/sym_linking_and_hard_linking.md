@@ -50,8 +50,8 @@ New-Item -ItemType HardLink `
 
 ```bash
 New-Item -ItemType HardLink `
-  -Path "C:\Users\jason\GitHub\spectre.code-workspace" `
-  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\spectre.code-workspace"
+  -Path "C:\Users\jason\GitHub\yoga.code-workspace" `
+  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\yoga.code-workspace"
 ```
 
 ```bash
