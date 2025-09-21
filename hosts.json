@@ -1,154 +1,117 @@
 {
-    "ryzenwhite": {
-        "username": "jason",
-        "hostname": "192.168.86.94",
-        "ips": [
-            "192.168.86.94"
-        ],
-        "category": "Workstations"
-    },
-    "spectre": {
-        "username": "jason",
-        "hostname": "Spectre",
-        "ips": [
-            "Spectre"
-        ],
-        "category": "Workstations"
-    },
-    "zephyrus": {
-        "username": "jason",
-        "hostname": "JasonZephyrus",
-        "ips": [
-            "JasonZephyrus"
-        ],
-        "category": "Workstations"
-    },
-    "mac": {
-        "username": "jason",
-        "hostname": "MacbookPro12",
-        "ips": [
-            "MacbookPro12"
-        ],
-        "category": "Workstations"
-    },
-    "elite": {
-        "username": "jason",
-        "hostname": "192.168.86.179",
-        "ips": [
-            "192.168.86.179"
-        ],
-        "category": "Upstairs Rack"
-    },
-    "nuk": {
-        "username": "jason",
-        "hostname": "nukbuntu",
-        "ips": [
-            "nukbuntu"
-        ],
-        "category": "Upstairs Rack"
-    },
-    "opti": {
-        "username": "jason",
-        "hostname": "Optiplex9020",
-        "ips": [
-            "Optiplex9020"
-        ],
-        "category": "Upstairs Rack"
-    },
-    "pav5": {
-        "username": "jason",
-        "hostname": "Pavilioni5",
-        "ips": [
-            "Pavilioni5"
-        ],
-        "category": "Upstairs Rack"
-    },
-    "behemoth": {
-        "username": "root",
-        "hostname": "192.168.86.31",
-        "ips": [
-            "192.168.86.31"
-        ],
-        "category": "Servers"
-    },
-    "pi4": {
-        "username": "pi",
-        "hostname": "raspberrypi4",
-        "ips": [
-            "raspberrypi4"
-        ],
-        "category": "Appliances"
-    },
-    "pi4a": {
-        "username": "pi",
-        "hostname": "raspberrypi4a",
-        "ips": [
-            "raspberrypi4a"
-        ],
-        "category": "Appliances"
-    },
-    "pi3": {
-        "username": "pi",
-        "hostname": "raspberrypi3",
-        "ips": [
-            "raspberrypi3"
-        ],
-        "category": "Appliances"
-    },
-    "pi3a": {
-        "username": "pi",
-        "hostname": "raspberrypi3a",
-        "ips": [
-            "raspberrypi3a"
-        ],
-        "category": "Appliances"
-    },
-    "pi0": {
-        "username": "pi",
-        "hostname": "raspberrypi0",
-        "ips": [
-            "raspberrypi0"
-        ],
-        "category": "Appliances"
-    },
-    "shelly": {
-        "username": "rebeca",
-        "hostname": "Shelly",
-        "ips": [
-            "Shelly"
-        ],
-        "category": "Rebeca"
-    },
-    "hello": {
-        "username": "jason",
-        "hostname": "192.168.86.4",
-        "ips": [
-            "192.168.86.4"
-        ],
-        "category": "HelloFresh"
-    },
-    "hellowin": {
-        "username": "HELLOFRESH\\16937827583938060798",
-        "hostname": "HelloFreshWindows",
-        "ips": [
-            "HelloFreshWindows"
-        ],
-        "category": "HelloFresh"
-    },
-    "ff14": {
-        "username": "jason.christiansen",
-        "hostname": "192.168.86.126",
-        "ips": [
-            "192.168.86.126"
-        ],
-        "category": "Fourteen Foods"
-    },
-    "tabs7p": {
-        "username": "u0_a1053",
-        "hostname": "GalaxyTabS7P",
-        "ips": [
-            "GalaxyTabS7P"
-        ],
-        "category": "Android"
-    }
+  "ryzenwhite": {
+    "username": "jason",
+    "hostname": "192.168.86.94",
+    "ips": ["192.168.86.94"],
+    "category": "Workstations"
+  },
+  "spectre": {
+    "username": "jason",
+    "hostname": "Spectre",
+    "ips": ["Spectre"],
+    "category": "Workstations"
+  },
+  "zephyrus": {
+    "username": "jason",
+    "hostname": "JasonZephyrus",
+    "ips": ["JasonZephyrus"],
+    "category": "Workstations"
+  },
+  "mac": {
+    "username": "jason",
+    "hostname": "MacbookPro12",
+    "ips": ["MacbookPro12"],
+    "category": "Workstations"
+  },
+  "elite": {
+    "username": "jason",
+    "hostname": "192.168.86.179",
+    "ips": ["192.168.86.179"],
+    "category": "Upstairs Rack"
+  },
+  "nuk": {
+    "username": "jason",
+    "hostname": "nukbuntu",
+    "ips": ["nukbuntu"],
+    "category": "Upstairs Rack"
+  },
+  "opti": {
+    "username": "jason",
+    "hostname": "Optiplex9020",
+    "ips": ["Optiplex9020"],
+    "category": "Upstairs Rack"
+  },
+  "pav5": {
+    "username": "jason",
+    "hostname": "Pavilioni5",
+    "ips": ["Pavilioni5"],
+    "category": "Upstairs Rack"
+  },
+  "behemoth": {
+    "username": "root",
+    "hostname": "192.168.86.31",
+    "ips": ["192.168.86.31"],
+    "category": "Servers"
+  },
+  "pi4": {
+    "username": "pi",
+    "hostname": "raspberrypi4",
+    "ips": ["raspberrypi4"],
+    "category": "Appliances"
+  },
+  "pi4a": {
+    "username": "pi",
+    "hostname": "raspberrypi4a",
+    "ips": ["raspberrypi4a"],
+    "category": "Appliances"
+  },
+  "pi3": {
+    "username": "pi",
+    "hostname": "raspberrypi3",
+    "ips": ["raspberrypi3"],
+    "category": "Appliances"
+  },
+  "pi3a": {
+    "username": "pi",
+    "hostname": "raspberrypi3a",
+    "ips": ["raspberrypi3a"],
+    "category": "Appliances"
+  },
+  "pi0": {
+    "username": "pi",
+    "hostname": "raspberrypi0",
+    "ips": ["raspberrypi0"],
+    "category": "Appliances"
+  },
+  "shelly": {
+    "username": "rebeca",
+    "hostname": "Shelly",
+    "ips": ["Shelly"],
+    "category": "Rebeca"
+  },
+  "hello": {
+    "username": "jason",
+    "hostname": "192.168.86.4",
+    "ips": ["192.168.86.4"],
+    "category": "HelloFresh"
+  },
+  "hellowin": {
+    "username": "HELLOFRESH\\16937827583938060798",
+    "hostname": "HelloFreshWindows",
+    "ips": ["HelloFreshWindows"],
+    "category": "HelloFresh"
+  },
+  "ff14": {
+    "username": "jason.christiansen",
+    "hostname": "192.168.86.126",
+    "ips": ["192.168.86.126"],
+    "ssh_port": 2222,
+    "category": "Fourteen Foods"
+  },
+  "tabs7p": {
+    "username": "u0_a1053",
+    "hostname": "GalaxyTabS7P",
+    "ips": ["GalaxyTabS7P"],
+    "category": "Android"
+  }
 }

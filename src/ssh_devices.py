@@ -1,12 +1,15 @@
 # %%
 # Imports #
 
+import json
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import pandas as pd
 import paramiko
-from config import grandparent_dir
+from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
+from utils.display_tools import pprint_df, pprint_dict, print_logger
 
 # %%
 # Variables #
@@ -16,6 +19,14 @@ if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
 ssh_password = os.getenv("SSH_PASSWORD")
+
+with open(os.path.join(parent_dir, "hosts.json"), "r") as f:
+    dict_systems = json.load(f)
+
+dict_commands = {
+    "cpu_usage": "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\\1/' | awk '{print 100 - $1}'",  # noqa E501
+    "free_disk_space": "df -h | grep '/dev/sda1' | awk '{print $4}'",
+}
 
 # if log level is defined in environment
 if "LOG_LEVEL" in os.environ:
@@ -28,11 +39,11 @@ else:
 # Functions #
 
 
-def run_command_on_host(host, username, password, command):
+def run_command_on_host(host, username, port, password, command):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(host, username=username, password=password)
+        ssh.connect(host, username=username, password=password, port=port, timeout=10)
 
         stdin, stdout, stderr = ssh.exec_command(command)
         cpu_usage = stdout.read().decode().strip()
@@ -42,85 +53,67 @@ def run_command_on_host(host, username, password, command):
         return host, str(e)
 
 
-def run_command_on_hosts(ls_hosts, ls_usernames, password, command):
-    results = {}
-    with ThreadPoolExecutor(max_workers=len(ls_hosts)) as executor:
-        futures = [
-            executor.submit(run_command_on_host, host, username, password, command)
-            for host, username in zip(ls_hosts, ls_usernames)
-        ]
-        for future in as_completed(futures):
-            host, cpu_usage = future.result()
-            results[host] = cpu_usage
-    return results
+def run_commands_on_hosts(dict_systems, dict_commands, password):
+    rows = []
+    if not dict_systems or not dict_commands:
+        return rows
+
+    max_workers = max(1, min(len(dict_systems), 16))
+    future_to_meta = {}
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for command_name, command_text in dict_commands.items():
+            for system_name, system_config in dict_systems.items():
+                host = system_config["hostname"]
+                user = system_config["username"]
+                port = system_config.get("ssh_port", 22)
+                meta = {
+                    "system_name": system_name,
+                    "hostname": host,
+                    "username": user,
+                    "port": port,
+                    "command_name": command_name,
+                }
+                fut = executor.submit(
+                    run_command_on_host, host, user, port, password, command_text
+                )
+                future_to_meta[fut] = meta
+
+        for fut in as_completed(future_to_meta):
+            meta = future_to_meta[fut]
+            output = fut.result()
+            rows.append(
+                {
+                    "hostname": meta["hostname"],
+                    "command": meta["command_name"],
+                    "system": meta["system_name"],
+                    "port": meta["port"],
+                    "username": meta["username"],
+                    "result": output,
+                }
+            )
+
+    return rows
 
 
 # %%
 # Main #
 
 if __name__ == "__main__":
-    # Define your hosts, username and password here
-    systems = [
-        {
-            "hostname": "EliteDesk",
-            "username": "jason",
-        },
-        {
-            "hostname": "Optiplex9020",
-            "username": "jason",
-        },
-        {
-            "hostname": "Pavilioni5",
-            "username": "jason",
-        },
-        {
-            "hostname": "raspberrypi0",
-            "username": "pi",
-        },
-        {
-            "hostname": "raspberrypi3",
-            "username": "pi",
-        },
-        {
-            "hostname": "raspberrypi3a",
-            "username": "pi",
-        },
-        {
-            "hostname": "raspberrypi4",
-            "username": "pi",
-        },
-        {
-            "hostname": "raspberrypi4a",
-            "username": "pi",
-        },
-        {
-            "hostname": "HelloFreshJason",
-            "username": "jason",
-        },
-    ]
+    # override host for testing
+    # keep_host = "192.168.86.31"
+    # dict_systems = {k: v for k, v in dict_systems.items() if v["hostname"] == keep_host}
 
-    # Cpu Usage
-    cpu_usage_command = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\\1/' | awk '{print 100 - $1}'"  # noqa E501
+    pprint_dict(dict_systems)
+    pprint_dict(dict_commands)
 
-    cpu_usages = run_command_on_hosts(
-        [system["hostname"] for system in systems],
-        [system["username"] for system in systems],
-        ssh_password,
-        cpu_usage_command,
+    rows = run_commands_on_hosts(dict_systems, dict_commands, ssh_password)
+
+    df = pd.DataFrame(
+        rows, columns=["hostname", "command", "system", "port", "username", "result"]
     )
-    for host, cpu_usage in cpu_usages.items():
-        print(f"{host}: {cpu_usage}% CPU usage")
 
-    # Disk Usage
-    free_disk_space_command = "df -h | grep '/dev/sda1' | awk '{print $4}'"
-    disk_usages = run_command_on_hosts(
-        [system["hostname"] for system in systems],
-        [system["username"] for system in systems],
-        ssh_password,
-        cpu_usage_command,
-    )
-    for host, disk_usage in disk_usages.items():
-        print(f"{host}: {disk_usage}% Disk usage")
+    pprint_df(df)
 
 
 # %%
