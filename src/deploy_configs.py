@@ -3,12 +3,14 @@
 
 import os
 import platform
+import shutil
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import paramiko
 from config import grandparent_dir
 from dotenv import load_dotenv
+from utils.host_tools import get_uppercase_hostname
 
 # %%
 # Variables #
@@ -27,6 +29,15 @@ elif system == "Darwin":
     print("Running on macOS")
 else:
     print(f"Running on an unknown system: {system}")
+
+
+# %%
+# Variables #
+
+HOSTNAME = get_uppercase_hostname()
+HOSTNAME_LOWER = HOSTNAME.lower()
+
+print(f"hostname: {HOSTNAME}")
 
 # %%
 # Functions #
@@ -75,7 +86,7 @@ def deploy_config(
         if backup_into_repo:
             timestamp = time.strftime("%Y%m%d-%H%M%S")
             backup_path = f"{repo_path}.backup.{timestamp}"
-            os.rename(repo_path, backup_path)
+            shutil.copy2(system_path, backup_path)
             print(f"Backed up {repo_path} to {backup_path}")
             os.rename(system_path, repo_path)
             print(f"Moved {system_path} to {repo_path}")
@@ -93,14 +104,11 @@ def deploy_config(
         print("Case 4: Neither repo nor system exist. No action taken.")
 
 
-system_path = "C:\\Users\\jason\\GitHub\\dotfiles\\data\\test_system_file.txt"
-repo_path = "C:\\Users\\jason\\GitHub\\dotfiles\\data\\test_repo_file.txt"
-
-
-deploy_config(repo_path, system_path, ingest_system_if_exists=True)
-
-
 # %%
+# Main #
+
+if __name__ == "__main__":
+    print("Deploying configs")
 
 
 # %%
