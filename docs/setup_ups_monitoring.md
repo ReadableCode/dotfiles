@@ -73,6 +73,9 @@ NOTIFYFLAG ONBATT EXEC
 NOTIFYFLAG ONLINE EXEC
 NOTIFYFLAG LOWBATT EXEC
 NOTIFYFLAG SHUTDOWN EXEC
+
+MONITOR cyberpower@localhost 1 root YOUR_PASSWORD master
+
 ```
 
 ### Map events to actions
@@ -85,22 +88,57 @@ CMDSCRIPT /etc/nut/upssched-cmd
 PIPEFN /var/run/nut/upssched.pipe
 LOCKFN /var/run/nut/upssched.lock
 
-# example behavior:
-# when going on battery, start a 30s timer named onbatt
+# --- Immediate notifications ---
+# Run the script right away when going on battery
+AT ONBATT * EXECUTE went-on-battery
+# Run the script right away when power returns
+AT ONLINE * EXECUTE power-restored
+
+# --- Timer logic (grace periods) ---
+# When going on battery, start a 30s timer named onbatt
 AT ONBATT * START-TIMER onbatt 30
-# if power returns, cancel the timer
+# If power returns, cancel that timer
 AT ONLINE * CANCEL-TIMER onbatt
-# if timer expires or low battery, execute immediate action
-AT LOWBATT * EXECUTE emergency-shutdown
+
+# Start a 5-minute timer for early shutdown
 AT ONBATT * START-TIMER earlyshutdown 300
 AT ONLINE * CANCEL-TIMER earlyshutdown
+
+# --- Critical cases ---
+# If battery gets low, run the shutdown routine immediately
+AT LOWBATT * EXECUTE emergency-shutdown
+# If upsmon itself enters shutdown, run the shutdown routine
 AT SHUTDOWN * EXECUTE emergency-shutdown
+```
+
+- Restart nut monitor
+
+```bash
+sudo systemctl restart nut-monitor
+```
+
+### Setup Users
+
+- Edit /etc/nut/upsd.users to add a user with appropriate permissions. For example:
+
+```ini
+[root]
+    password = YOUR_PASSWORD
+    actions = SET
+    instcmds = ALL
+    upsmon master
 ```
 
 ### Command dispatcher script
 
 write the command dispatcher script (CMDSCRIPT) that upssched will call
 Create /etc/nut/upssched-cmd (make executable chmod 755 /etc/nut/upssched-cmd). Minimal example:
+
+```bash
+sudo nvim /etc/nut/upssched-cmd
+```
+
+- Put in the contents:
 
 ```bash
 #!/bin/sh
@@ -110,10 +148,17 @@ case "$CMD" in
   onbatt)
     logger -t upssched "ONBATT timer expired"
     ;;
+  went-on-battery)
+    logger -t upssched "Power lost (ONBATT)"
+    /usr/bin/python3 /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py "$CMD"
+    ;;
+  power-restored)
+    logger -t upssched "Power restored (ONLINE)"
+    /usr/bin/python3 /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py "$CMD"
+    ;;
   emergency-shutdown)
     logger -t upssched "Triggering cluster shutdown"
-    # call your python controller here (replace with full path)
-    /usr/local/bin/cluster_shutdown.py --reason nut_lowbat
+    /usr/bin/python3 /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py "$CMD"
     ;;
   *)
     logger -t upssched "Unknown upssched-cmd: $CMD"
@@ -121,31 +166,43 @@ case "$CMD" in
 esac
 ```
 
-permissions & ownership
-upssched runs as the user defined by RUN_AS_USER in upsmon.conf (default root or nut). Ensure that user can execute /etc/nut/upssched-cmd and your Python script and can create/write the pipe/lock paths (or put them somewhere writable by that user).
+- Set the permissions, upssched runs as the user defined by RUN_AS_USER in upsmon.conf (default root or nut). Ensure that user can execute /etc/nut/upssched-cmd and your Python script and can create/write the pipe/lock paths (or put them somewhere writable by that user).
 
-reload/restart and test flow
+```bash
+sudo chmod 755 /etc/nut/upssched-cmd
+```
 
-sudo systemctl restart nut-server nut-monitor
+### Create the python script
 
-# trigger test by simulating an event
+```bash
+sudo nvim /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py
+```
 
-sudo -u <run_as_user> /sbin/upssched test ONBATT cyberpower
+- Put in the contents (example):
 
-# or use upsschedctl to force timers
+```python
+#!/usr/bin/env python3
+import datetime
+import sys
 
-sudo upsschedctl start onbatt 5
+# NUT calls your script with the command name as the first argument
+event = sys.argv[1] if len(sys.argv) > 1 else "UNKNOWN"
 
-Check /var/log/syslog or journalctl -t upssched for messages from upssched and upssched-cmd.
+with open("/etc/nut/power_shutdown_stage_1.log", "a") as f:
+    f.write(f"[{datetime.datetime.now()}] Event: {event}\n")
+    f.flush()
+```
 
-notes / tips (brief)
+### Create the log file and make it writable
 
-Use START-TIMER name seconds to delay action so you can cancel if power returns.
+```bash
+sudo touch /etc/nut/power_shutdown_stage_1.log
+sudo chown root:root /etc/nut/power_shutdown_stage_1.log
+sudo chmod 666 /etc/nut/power_shutdown_stage_1.log
+```
 
-Use EXECUTE name to call your CMDSCRIPT immediately.
+### Testing
 
-Keep the CMDSCRIPT tiny and let your robust Python program handle SSH + shutdown logic.
-
-Test with upssched test and upsschedctl before relying on real battery events.
-
-That’s it — wire upsmon → upssched → /etc/nut/upssched-cmd → your Python script. Tell me the exact path of your Python caller and the RUN_AS_USER if you want the single-line test command to exercise it.
+```bash
+sudo /etc/nut/upssched-cmd emergency-shutdown
+```
