@@ -298,5 +298,10 @@
     "<C-s>": false, // keep ctrl-s for save
     "<C-p>": false, // keep ctrl-p for open file
     "<C-/>": false // keep ctrl-/ for comment
+  },
+  // Fix git terminal authentication issue
+  "git.terminalAuthentication": false,
+  "terminal.integrated.env.windows": {
+    "GIT_SSH": ""
   }
 }
