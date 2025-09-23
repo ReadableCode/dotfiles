@@ -67,15 +67,14 @@ upsc cyberpower@localhost
 Add / edit in /etc/nut/upsmon.conf (ensure lines exist and are not duplicated):
 
 ```bash
-RUN_AS_USER root
+RUN_AS_USER nut
 NOTIFYCMD /sbin/upssched
 NOTIFYFLAG ONBATT EXEC
 NOTIFYFLAG ONLINE EXEC
 NOTIFYFLAG LOWBATT EXEC
 NOTIFYFLAG SHUTDOWN EXEC
 
-MONITOR cyberpower@localhost 1 root YOUR_PASSWORD master
-
+MONITOR cyberpower@localhost 1 monuser YOUR_PASSWORD master
 ```
 
 ### Map events to actions
@@ -117,12 +116,18 @@ AT SHUTDOWN * EXECUTE emergency-shutdown
 sudo systemctl restart nut-monitor
 ```
 
+- To check the logs of the service
+
+```bash
+sudo journalctl -u nut-monitor
+```
+
 ### Setup Users
 
 - Edit /etc/nut/upsd.users to add a user with appropriate permissions. For example:
 
 ```ini
-[root]
+[monuser]
     password = YOUR_PASSWORD
     actions = SET
     instcmds = ALL
@@ -143,6 +148,8 @@ sudo nvim /etc/nut/upssched-cmd
 ```bash
 #!/bin/sh
 # upssched-cmd: called by upssched with one argument = command name (e.g. emergency-shutdown)
+echo "[$(date)] $0 $1" >> /tmp/upssched-test.log
+echo "[$(date)] CMD=$1 USER=$(whoami)" >> /tmp/upssched-debug.log
 CMD="$1"
 case "$CMD" in
   onbatt)
@@ -150,15 +157,16 @@ case "$CMD" in
     ;;
   went-on-battery)
     logger -t upssched "Power lost (ONBATT)"
-    /usr/bin/python3 /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py "$CMD"
+    /usr/bin/python3 /etc/nut/power_shutdown_stage_1.py "$CMD" 2>&1 | logger -t upssched-python
     ;;
   power-restored)
     logger -t upssched "Power restored (ONLINE)"
-    /usr/bin/python3 /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py "$CMD"
+    /usr/bin/python3 /etc/nut/power_shutdown_stage_1.py "$CMD" 2>&1 | logger -t upssched-python
+
     ;;
   emergency-shutdown)
     logger -t upssched "Triggering cluster shutdown"
-    /usr/bin/python3 /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py "$CMD"
+    /usr/bin/python3 /etc/nut/power_shutdown_stage_1.py "$CMD" 2>&1 | logger -t upssched-python
     ;;
   *)
     logger -t upssched "Unknown upssched-cmd: $CMD"
@@ -191,6 +199,18 @@ event = sys.argv[1] if len(sys.argv) > 1 else "UNKNOWN"
 with open("/etc/nut/power_shutdown_stage_1.log", "a") as f:
     f.write(f"[{datetime.datetime.now()}] Event: {event}\n")
     f.flush()
+```
+
+- Make it executable
+
+```bash
+sudo chmod +x /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py
+```
+
+- Hard link it into place
+
+```bash
+sudo ln /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py /etc/nut/power_shutdown_stage_1.py
 ```
 
 ### Create the log file and make it writable
