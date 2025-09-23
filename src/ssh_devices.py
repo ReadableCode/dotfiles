@@ -2,19 +2,20 @@
 # Imports #
 
 import json
+import logging
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import paramiko
-from config import grandparent_dir, parent_dir
+from config import parent_dir
 from dotenv import load_dotenv
-from utils.display_tools import pprint_df, pprint_dict, print_logger
+from utils.display_tools import pprint_df, pprint_dict, print_logger  # noqa F401
 
 # %%
 # Variables #
 
-dotenv_path = os.path.join(grandparent_dir, ".env")
+dotenv_path = os.path.join(parent_dir, ".env")
 if os.path.exists(dotenv_path):
     load_dotenv(dotenv_path)
 
@@ -64,14 +65,67 @@ def run_command_on_host(host, username, port, password, command):
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(host, username=username, password=password, port=port, timeout=10)
+
+        # Try SSH key first if it exists
+        ssh_key_paths = [
+            os.path.expanduser("~/.ssh/id_ed25519"),
+            os.path.expanduser("~/.ssh/id_ecdsa"),
+            os.path.expanduser("~/.ssh/id_rsa"),
+        ]
+        auth_method = None
+        key_connected = False
+
+        for ssh_key_path in ssh_key_paths:
+            if os.path.exists(ssh_key_path) and not key_connected:
+                try:
+                    # Suppress paramiko logging during key attempts
+                    paramiko_logger = logging.getLogger("paramiko")
+                    original_level = paramiko_logger.level
+                    paramiko_logger.setLevel(logging.CRITICAL)
+
+                    ssh.connect(
+                        host,
+                        username=username,
+                        key_filename=ssh_key_path,
+                        port=port,
+                        timeout=10,
+                    )
+                    auth_method = f"ssh_key({os.path.basename(ssh_key_path)})"
+                    key_connected = True
+
+                    # Restore logging level
+                    paramiko_logger.setLevel(original_level)
+                    break
+                except Exception:
+                    # Restore logging level on error too (if variables exist)
+                    try:
+                        paramiko_logger.setLevel(original_level)
+                    except NameError:
+                        pass
+                    continue
+
+        if not key_connected:
+            # Fall back to password if key fails
+            if password:
+                ssh.connect(
+                    host,
+                    username=username,
+                    password=password,
+                    port=port,
+                    timeout=10,
+                    look_for_keys=False,
+                    allow_agent=False,
+                )
+                auth_method = "password"
+            else:
+                raise Exception("SSH key failed and no password provided")
 
         stdin, stdout, stderr = ssh.exec_command(command)
-        cpu_usage = stdout.read().decode().strip()
+        result = stdout.read().decode().strip()
         ssh.close()
-        return cpu_usage
+        return result, auth_method
     except Exception as e:
-        return str(e)
+        return str(e), "failed"
 
 
 def run_commands_on_hosts(dict_systems, dict_commands, password):
@@ -105,7 +159,8 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
 
         for fut in as_completed(future_to_meta):
             meta = future_to_meta[fut]
-            output = fut.result()
+            result = fut.result()
+            output, auth_method = result
 
             # Format disk space if it's numeric (Windows returns bytes)
             if meta["command_name"] == "free_disk_space" and output.isdigit():
@@ -119,6 +174,7 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
                     "port": meta["port"],
                     "username": meta["username"],
                     "result": output,
+                    "auth_method": auth_method,
                 }
             )
 
@@ -130,16 +186,25 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
 
 if __name__ == "__main__":
     # override host for testing
-    # keep_host = "192.168.86.31"
+    # keep_host = "raspberrypi3"
     # dict_systems = {k: v for k, v in dict_systems.items() if v["hostname"] == keep_host}
 
-    pprint_dict(dict_systems)
-    pprint_dict(dict_commands)
+    # pprint_dict(dict_systems)
+    # pprint_dict(dict_commands)
 
     rows = run_commands_on_hosts(dict_systems, dict_commands, ssh_password)
 
     df = pd.DataFrame(
-        rows, columns=["hostname", "command", "system", "port", "username", "result"]
+        rows,
+        columns=[
+            "hostname",
+            "command",
+            "system",
+            "port",
+            "username",
+            "result",
+            "auth_method",
+        ],
     )
 
     df = df.sort_values(by=["hostname", "command"])
