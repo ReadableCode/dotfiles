@@ -24,8 +24,14 @@ with open(os.path.join(parent_dir, "hosts.json"), "r") as f:
     dict_systems = json.load(f)
 
 dict_commands = {
-    "cpu_usage": "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\\1/' | awk '{print 100 - $1}'",  # noqa E501
-    "free_disk_space": "df -h | grep '/dev/sda1' | awk '{print $4}'",
+    "linux": {
+        "cpu_usage": r"top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1}'",  # noqa E501
+        "free_disk_space": "df -h | grep '/dev/sda1' | awk '{print $4}'",
+    },
+    "windows": {
+        "cpu_usage": 'wmic cpu get loadpercentage | findstr /R /V "LoadPercentage"',
+        "free_disk_space": 'wmic logicaldisk where "DeviceID=\'C:\'" get FreeSpace | findstr /R /V "FreeSpace"',  # noqa E501
+    },
 }
 
 # if log level is defined in environment
@@ -39,6 +45,21 @@ else:
 # Functions #
 
 
+def format_bytes(bytes_str):
+    """Convert bytes to human readable format"""
+    try:
+        bytes_val = int(bytes_str.strip())
+        # Convert bytes to GB
+        gb = bytes_val / (1024**3)
+        if gb >= 1:
+            return f"{gb:.1f}G"
+        else:
+            mb = bytes_val / (1024**2)
+            return f"{mb:.1f}M"
+    except (ValueError, AttributeError):
+        return bytes_str
+
+
 def run_command_on_host(host, username, port, password, command):
     try:
         ssh = paramiko.SSHClient()
@@ -48,9 +69,9 @@ def run_command_on_host(host, username, port, password, command):
         stdin, stdout, stderr = ssh.exec_command(command)
         cpu_usage = stdout.read().decode().strip()
         ssh.close()
-        return host, cpu_usage
+        return cpu_usage
     except Exception as e:
-        return host, str(e)
+        return str(e)
 
 
 def run_commands_on_hosts(dict_systems, dict_commands, password):
@@ -62,8 +83,11 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
     future_to_meta = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for command_name, command_text in dict_commands.items():
-            for system_name, system_config in dict_systems.items():
+        for system_name, system_config in dict_systems.items():
+            os = system_config.get("os", "linux")
+            if os not in dict_commands:
+                continue
+            for command_name, command_text in dict_commands[os].items():
                 host = system_config["hostname"]
                 user = system_config["username"]
                 port = system_config.get("ssh_port", 22)
@@ -82,6 +106,11 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
         for fut in as_completed(future_to_meta):
             meta = future_to_meta[fut]
             output = fut.result()
+
+            # Format disk space if it's numeric (Windows returns bytes)
+            if meta["command_name"] == "free_disk_space" and output.isdigit():
+                output = format_bytes(output)
+
             rows.append(
                 {
                     "hostname": meta["hostname"],
@@ -112,6 +141,8 @@ if __name__ == "__main__":
     df = pd.DataFrame(
         rows, columns=["hostname", "command", "system", "port", "username", "result"]
     )
+
+    df = df.sort_values(by=["hostname", "command"])
 
     pprint_df(df)
 
