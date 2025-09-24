@@ -51,7 +51,6 @@ sudo systemctl enable nut-monitor
 
 sudo systemctl start nut-server
 sudo systemctl start nut-monitor
-
 ```
 
 ### Check the current status
@@ -67,7 +66,7 @@ upsc cyberpower@localhost
 Add / edit in /etc/nut/upsmon.conf (ensure lines exist and are not duplicated):
 
 ```bash
-RUN_AS_USER nut
+RUN_AS_USER pi
 NOTIFYCMD /sbin/upssched
 NOTIFYFLAG ONBATT EXEC
 NOTIFYFLAG ONLINE EXEC
@@ -116,6 +115,12 @@ AT SHUTDOWN * EXECUTE emergency-shutdown
 sudo systemctl restart nut-monitor
 ```
 
+- Status of the service
+
+```bash
+sudo systemctl status nut-monitor
+```
+
 - To check the logs of the service
 
 ```bash
@@ -151,27 +156,30 @@ sudo nvim /etc/nut/upssched-cmd
 echo "[$(date)] $0 $1" >> /tmp/upssched-test.log
 echo "[$(date)] CMD=$1 USER=$(whoami)" >> /tmp/upssched-debug.log
 CMD="$1"
+
 case "$CMD" in
   onbatt)
     logger -t upssched "ONBATT timer expired"
     ;;
   went-on-battery)
     logger -t upssched "Power lost (ONBATT)"
-    /usr/bin/python3 /etc/nut/power_shutdown_stage_1.py "$CMD" 2>&1 | logger -t upssched-python
     ;;
   power-restored)
     logger -t upssched "Power restored (ONLINE)"
-    /usr/bin/python3 /etc/nut/power_shutdown_stage_1.py "$CMD" 2>&1 | logger -t upssched-python
-
     ;;
   emergency-shutdown)
     logger -t upssched "Triggering cluster shutdown"
-    /usr/bin/python3 /etc/nut/power_shutdown_stage_1.py "$CMD" 2>&1 | logger -t upssched-python
     ;;
   *)
     logger -t upssched "Unknown upssched-cmd: $CMD"
     ;;
 esac
+
+(
+  cd /home/pi/GitHub/Assistant &&
+  HOME=/home/pi XDG_CACHE_HOME=/home/pi/.cache \
+  /home/pi/GitHub/Assistant/.venv/bin/python src/power_shutdown_stage_1.py "$CMD"
+) 2>&1 | logger -t upssched-python
 ```
 
 - Set the permissions, upssched runs as the user defined by RUN_AS_USER in upsmon.conf (default root or nut). Ensure that user can execute /etc/nut/upssched-cmd and your Python script and can create/write the pipe/lock paths (or put them somewhere writable by that user).
@@ -183,46 +191,75 @@ sudo chmod 755 /etc/nut/upssched-cmd
 ### Create the python script
 
 ```bash
-sudo nvim /home/pi/GitHub/Assistant/scripts/power_shutdown_stage_1.py
+sudo nvim /home/pi/GitHub/Assistant/src/power_shutdown_stage_1.py
 ```
 
 - Put in the contents (example):
 
 ```python
-#!/usr/bin/env python3
+# %%
+# Imports #
+
 import datetime
+import os
 import sys
+
+from utils.config_utils import parent_dir
+from utils.ntfy_tools import send_notification
+
+# %%
+# Imports #
 
 # NUT calls your script with the command name as the first argument
 event = sys.argv[1] if len(sys.argv) > 1 else "UNKNOWN"
 
-with open("/etc/nut/power_shutdown_stage_1.log", "a") as f:
+# create log dir if doesnt exist
+log_dir = os.path.join(parent_dir, "logs")
+print(log_dir)
+os.makedirs(log_dir, exist_ok=True)
+
+
+with open(os.path.join(log_dir, "power_shutdown_stage_1.log"), "a") as f:
     f.write(f"[{datetime.datetime.now()}] Event: {event}\n")
     f.flush()
+
+send_notification(
+    topic="house_power",
+    message=f"Power event detected: {event}. Initiating shutdown sequence stage 1.",
+)
+
+with open(os.path.join(log_dir, "power_shutdown_stage_1.log"), "a") as f:
+    f.write(f"[{datetime.datetime.now()}] Event: {event} handled\n")
+    f.flush()
+
+
+# %%
 ```
 
 - Make it executable
 
 ```bash
-sudo chmod +x /home/pi/GitHub/Assistant/scripts/power_shutdown_stage_1.py
+sudo chmod +x /home/pi/GitHub/Assistant/src/power_shutdown_stage_1.py
 ```
 
-- Hard link it into place
+- Make sure the logs are correctly owned by the user running the script (RUN_AS_USER in upsmon.conf)
 
 ```bash
-sudo ln /home/pi/GitHub/Assistant/scripts/power_shutdown_stage_1.py /etc/nut/power_shutdown_stage_1.py
-```
-
-### Create the log file and make it writable
-
-```bash
-sudo touch /etc/nut/power_shutdown_stage_1.log
-sudo chown root:root /etc/nut/power_shutdown_stage_1.log
-sudo chmod 666 /etc/nut/power_shutdown_stage_1.log
+sudo rm -f /tmp/upssched-*.log
+sudo touch /tmp/upssched-test.log /tmp/upssched-debug.log
+sudo chmod 666 /tmp/upssched-*.log
+sudo mkdir -p /home/pi/GitHub/Assistant/logs
+sudo chmod -R 777 /home/pi/GitHub/Assistant/logs
 ```
 
 ### Testing
 
 ```bash
 sudo /etc/nut/upssched-cmd emergency-shutdown
+```
+
+### Checking logs
+
+```bash
+sudo tail -f /tmp/upssched-*.log
 ```
