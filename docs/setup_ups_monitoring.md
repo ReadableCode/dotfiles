@@ -183,7 +183,7 @@ sudo chmod 755 /etc/nut/upssched-cmd
 ### Create the python script
 
 ```bash
-sudo nvim /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py
+sudo nvim /home/pi/GitHub/Assistant/scripts/power_shutdown_stage_1.py
 ```
 
 - Put in the contents (example):
@@ -204,13 +204,13 @@ with open("/etc/nut/power_shutdown_stage_1.log", "a") as f:
 - Make it executable
 
 ```bash
-sudo chmod +x /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py
+sudo chmod +x /home/pi/GitHub/Assistant/scripts/power_shutdown_stage_1.py
 ```
 
 - Hard link it into place
 
 ```bash
-sudo ln /home/pi/GitHub/dotfiles/scripts/power_shutdown_stage_1.py /etc/nut/power_shutdown_stage_1.py
+sudo ln /home/pi/GitHub/Assistant/scripts/power_shutdown_stage_1.py /etc/nut/power_shutdown_stage_1.py
 ```
 
 ### Create the log file and make it writable
