@@ -171,11 +171,6 @@
   "go.toolsManagement.autoUpdate": true,
   "python.analysis.indexing": false,
   "python.analysis.useLibraryCodeForTypes": false,
-  "python.analysis.include": [
-    "**/dotfiles/**",
-    "**/Data_Tool_Pack_Py/**",
-    "**/Terminal_To_Do/**"
-  ],
   "python.analysis.exclude": [
     "**/__pycache__/**",
     "**/.cargo/**",
