@@ -13,6 +13,9 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
             $env:Path = "$p;$env:Path"
         }
     }
+    Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
+    # print that we ran custom config for 14
+    Write-Host "14 Foods custom config loaded" -ForegroundColor Green
 }
 
 
