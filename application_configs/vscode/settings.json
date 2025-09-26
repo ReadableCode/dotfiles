@@ -293,5 +293,6 @@
     "<C-s>": false, // keep ctrl-s for save
     "<C-p>": false, // keep ctrl-p for open file
     "<C-/>": false // keep ctrl-/ for comment
-  }
+  },
+  "explorer.confirmDragAndDrop": false
 }
