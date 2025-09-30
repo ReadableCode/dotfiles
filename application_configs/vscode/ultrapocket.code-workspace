@@ -61,22 +61,6 @@
       "path": "fourteen_foods"
     },
     {
-      "name": "na-finops",
-      "path": "na-finops"
-    },
-    {
-      "name": "na-fin-data-streamlit",
-      "path": "na-fin-data-streamlit"
-    },
-    {
-      "name": "na-fin-data-svcs",
-      "path": "na-fin-data-svcs"
-    },
-    {
-      "name": "na-faba",
-      "path": "na-faba"
-    },
-    {
       "name": "advent_of_code",
       "path": "advent_of_code"
     },
@@ -93,9 +77,6 @@
     },
     {
       "path": "go-data-inspector"
-    },
-    {
-      "path": "hellofresh_credentials"
     },
     {
       "path": "website"
