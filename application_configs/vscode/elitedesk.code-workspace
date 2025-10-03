@@ -74,7 +74,7 @@
     }
   ],
   "settings": {
-    "workbench.colorTheme": "Solarized Dark",
+    "workbench.colorTheme": "Visual Studio Dark",
     "todo-tree.filtering.includeGlobs": [
       "**/Data_Tool_Pack_Py/src/**",
       "**/dotfiles/src/**",
