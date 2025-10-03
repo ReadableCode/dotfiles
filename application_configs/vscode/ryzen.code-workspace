@@ -155,6 +155,10 @@
     },
     {
       "path": "website"
+    },
+    {
+      "name": "charlie-personal-website",
+      "path": "charlie-personal-website"
     }
   ],
   "settings": {
