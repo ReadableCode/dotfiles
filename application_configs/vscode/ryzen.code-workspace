@@ -214,7 +214,8 @@
       "golang.go",
       "ms-python.mypy-type-checker",
       "foxundermoon.shell-format",
-      "mtsmfm.vscode-stl-viewer"
+      "mtsmfm.vscode-stl-viewer",
+      "openai.chatgpt"
     ]
   }
 }
