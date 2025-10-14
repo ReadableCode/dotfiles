@@ -28,3 +28,4 @@ gsudo
 ffmpeg
 hoppscotch
 obs-studio
+unison
