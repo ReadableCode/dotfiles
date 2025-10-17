@@ -281,7 +281,6 @@
   "editor.cursorBlinking": "expand",
   "editor.cursorSmoothCaretAnimation": "on",
   "docker.extension.enableComposeLanguageServer": true,
-  "github.copilot.nextEditSuggestions.enabled": true,
   // Vim Settings
   "vim.useSystemClipboard": true,
   "vim.hlsearch": true,
