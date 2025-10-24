@@ -1,7 +1,6 @@
 [windows_workstations]
 RyzenWhite
 Yoga7i
-JasonZephyrus
 Spectre
 
 [windows_workstations:vars]
@@ -12,8 +11,8 @@ ansible_shell_type=powershell
 [linux_workstations]
 EliteDesk
 nukbuntu
-Optiplex9020
 Pavilioni5
+JasonZephyrus
 
 [linux_workstations:vars]
 ansible_user=jason
@@ -86,7 +85,6 @@ iPadMini6
 
 [networking]
 asusrouter ansible_host=192.168.86.1
-nokiarouter ansible_host=192.168.1.1
 Living_Room_Switch
 Laundry_Room_Switch
 Den_Switch
@@ -97,6 +95,8 @@ Office_Switch
 [game_consoles]
 Switch
 RebecaSwitch
+Switch2
+RebecaSwitch2
 
 [game_consoles:vars]
 

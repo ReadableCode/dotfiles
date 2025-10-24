@@ -41,13 +41,6 @@
     "category": "Upstairs Rack",
     "os": "linux"
   },
-  "opti": {
-    "username": "jason",
-    "hostname": "Optiplex9020",
-    "ips": ["Optiplex9020"],
-    "category": "Upstairs Rack",
-    "os": "linux"
-  },
   "pav5": {
     "username": "jason",
     "hostname": "Pavilioni5",
