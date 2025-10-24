@@ -1,116 +1,112 @@
 {
-  "ryzenwhite": {
+  "RyzenWhite": {
     "username": "jason",
-    "hostname": "192.168.86.94",
     "ips": ["192.168.86.94"],
     "category": "Workstations",
     "os": "windows"
   },
-  "spectre": {
+  "Spectre": {
     "username": "jason",
-    "hostname": "Spectre",
     "ips": ["Spectre"],
     "category": "Workstations",
     "os": "windows"
   },
-  "zephyrus": {
+  "Yoga7i": {
     "username": "jason",
-    "hostname": "JasonZephyrus",
+    "ips": ["Yoga7i"],
+    "category": "Workstations",
+    "os": "windows"
+  },
+  "JasonZephyrus": {
+    "username": "jason",
     "ips": ["JasonZephyrus"],
     "category": "Workstations",
     "os": "linux"
   },
-  "mac": {
+  "MacbookPro12": {
     "username": "jason",
-    "hostname": "MacbookPro12",
     "ips": ["MacbookPro12"],
     "category": "Workstations",
-    "os": "linux"
+    "os": "macos"
   },
-  "elite": {
+  "MacBookProM5": {
     "username": "jason",
-    "hostname": "192.168.86.179",
+    "ips": ["MacBookProM5"],
+    "category": "Workstations",
+    "os": "macos"
+  },
+  "EliteDesk": {
+    "username": "jason",
     "ips": ["192.168.86.179"],
     "category": "Upstairs Rack",
     "os": "linux"
   },
-  "nuk": {
+  "nukbuntu": {
     "username": "jason",
-    "hostname": "nukbuntu",
     "ips": ["nukbuntu"],
     "category": "Upstairs Rack",
     "os": "linux"
   },
-  "pav5": {
+  "Pavilioni5": {
     "username": "jason",
-    "hostname": "Pavilioni5",
     "ips": ["Pavilioni5"],
     "category": "Upstairs Rack",
     "os": "linux"
   },
-  "behemoth": {
+  "Behemoth": {
     "username": "root",
-    "hostname": "192.168.86.31",
     "ips": ["192.168.86.31"],
     "category": "Servers",
     "os": "linux"
   },
-  "pi4": {
+  "raspberrypi4": {
     "username": "pi",
-    "hostname": "raspberrypi4",
     "ips": ["raspberrypi4"],
     "category": "Appliances",
     "os": "linux"
   },
-  "pi4a": {
+  "raspberrypi4a": {
     "username": "pi",
-    "hostname": "raspberrypi4a",
     "ips": ["raspberrypi4a"],
     "category": "Appliances",
     "os": "linux"
   },
-  "pi3": {
+  "raspberrypi3": {
     "username": "pi",
-    "hostname": "raspberrypi3",
     "ips": ["raspberrypi3"],
     "category": "Appliances",
     "os": "linux"
   },
-  "pi3a": {
+  "raspberrypi3a": {
     "username": "pi",
-    "hostname": "raspberrypi3a",
     "ips": ["raspberrypi3a"],
     "category": "Appliances",
     "os": "linux"
   },
-  "pi0": {
+  "raspberrypi0": {
     "username": "pi",
-    "hostname": "raspberrypi0",
     "ips": ["raspberrypi0"],
     "category": "Appliances",
     "os": "linux"
   },
-  "shelly": {
+  "Shelly": {
     "username": "rebeca",
-    "hostname": "Shelly",
     "ips": ["Shelly"],
     "os": "windows"
   },
-  "hello": {
+  "HelloFreshJason": {
     "username": "jason",
-    "hostname": "192.168.86.4",
     "ips": ["192.168.86.4"],
     "category": "HelloFresh",
     "os": "linux"
   },
-  "hellowin": {
+  "HelloFreshWindows": {
     "username": "HELLOFRESH\\16937827583938060798",
-    "hostname": "HelloFreshWindows",
     "ips": ["HelloFreshWindows"],
     "category": "HelloFresh",
     "os": "windows"
   },
-  "ff14": {
+  "FFLAP-2229": {
     "username": "jason.christiansen",
     "hostname": "192.168.86.126",
     "ips": ["192.168.86.126"],
@@ -118,11 +114,10 @@
     "category": "Fourteen Foods",
     "os": "windows"
   },
-  "tabs7p": {
+  "GalaxyTabS7P": {
     "username": "u0_a1053",
-    "hostname": "GalaxyTabS7P",
     "ips": ["GalaxyTabS7P"],
     "category": "Android",
-    "os": "linux"
+    "os": "android"
   }
 }
