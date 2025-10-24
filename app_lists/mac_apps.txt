@@ -13,3 +13,5 @@ fzf
 htop
 btop
 iperf3
+go
+pandoc

@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# chmod +x install_apps_mac_python_environments.sh
-# ./install_apps_mac_python_environments.sh
+# chmod +x install_mac_apps.sh
+# ./install_mac_apps.sh
 
 # Install Homebrew if it isn't already installed
 if ! command -v brew &>/dev/null; then

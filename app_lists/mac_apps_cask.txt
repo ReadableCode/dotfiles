@@ -7,14 +7,12 @@ vlc
 docker
 steam
 epic-games
-vnc-server
-vnc-viewer
 syncthing
 openvpn-connect
 tailscale
-barrier
-rectangle
 bitwarden
 plex
 messenger
 slack
+microsoft-teams
+parsec
