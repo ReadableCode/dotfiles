@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import paramiko
-from config import parent_dir
+from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from utils.display_tools import pprint_df, pprint_dict, print_logger  # noqa F401
 
@@ -21,7 +21,7 @@ if os.path.exists(dotenv_path):
 
 ssh_password = os.getenv("SSH_PASSWORD")
 
-with open(os.path.join(parent_dir, "hosts.json"), "r") as f:
+with open(os.path.join(grandparent_dir, "Assistant", "hosts_repaired.json"), "r") as f:
     dict_systems = json.load(f)
 
 dict_commands = {
@@ -138,11 +138,11 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         for system_name, system_config in dict_systems.items():
-            os = system_config.get("os", "linux")
+            os = system_config.get("os")
             if os not in dict_commands:
                 continue
             for command_name, command_text in dict_commands[os].items():
-                host = system_config["hostname"]
+                host = system_name
                 user = system_config["username"]
                 port = system_config.get("ssh_port", 22)
                 meta = {
