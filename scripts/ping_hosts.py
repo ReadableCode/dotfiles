@@ -9,7 +9,7 @@ import platform
 import time
 
 import pandas as pd
-from config_scripts import parent_dir  # noqa: F401
+from config_scripts import grandparent_dir  # noqa: F401
 from src.utils.display_tools import pprint_df
 
 # %%
@@ -41,9 +41,9 @@ async def _ping_one(name: str, meta: dict, target: str, timeout_s: float):
     dt = time.time() - t0
     return {
         "alias": name,
-        "category": meta["category"],
+        "category": meta.get("category", "unknown"),
         "username": meta["username"],
-        "hostname": meta["hostname"],
+        "hostname": name,
         "target": target,
         "reachable": ok,
         "elapsed_s": round(dt, 3),
@@ -92,7 +92,9 @@ def ping_all_now(hosts, timeout_s: float = 1.0):
 
 
 if __name__ == "__main__":
-    with open(os.path.join(parent_dir, "hosts.json"), "r") as f:
+    with open(
+        os.path.join(grandparent_dir, "Assistant", "hosts_repaired.json"), "r"
+    ) as f:
         HOSTS = json.load(f)
 
     final_df = ping_all_now(hosts=HOSTS, timeout_s=1.0)
