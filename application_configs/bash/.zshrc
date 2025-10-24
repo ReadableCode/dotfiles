@@ -32,3 +32,28 @@ fi
 if [ -x "$HOME/.pyenv/shims" ]; then
     export PATH="$HOME/.pyenv/shims:$PATH"
 fi
+
+function gitpullall() {
+	arch=$(uname -m)
+	os=$(uname -s | tr '[:upper:]' '[:lower:]')
+	bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
+
+	if [[ "$os" == "darwin" ]]; then
+		# macOS
+		if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+			bin="${bin}_mac_arm"
+		else
+			bin="${bin}_mac_x86"
+		fi
+	elif [[ "$os" == "linux" ]]; then
+		# Linux
+		if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+			bin="${bin}_arm"
+		else
+			bin="$bin"
+		fi
+	fi
+
+	chmod +x "$bin"
+	"$bin" -path "$gitDir" -r
+}

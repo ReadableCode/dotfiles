@@ -122,12 +122,27 @@ alias ll='ls -AlhF'
 
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
 
-function gitpullall {
+function gitpullall() {
 	arch=$(uname -m)
+	os=$(uname -s | tr '[:upper:]' '[:lower:]')
 	bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
-	if [[ "$arch" == arm* || "$arch" == aarch64 ]]; then
-		bin="${bin}_arm"
+
+	if [[ "$os" == "darwin" ]]; then
+		# macOS
+		if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+			bin="${bin}_mac_arm"
+		else
+			bin="${bin}_mac_x86"
+		fi
+	elif [[ "$os" == "linux" ]]; then
+		# Linux
+		if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+			bin="${bin}_arm"
+		else
+			bin="$bin"
+		fi
 	fi
+
 	chmod +x "$bin"
 	"$bin" -path "$gitDir" -r
 }
