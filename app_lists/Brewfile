@@ -15,6 +15,7 @@ brew "iperf3"
 brew "go"
 brew "pandoc"
 brew "uv"
+brew "wget"
 
 cask "google-chrome"
 cask "firefox"
