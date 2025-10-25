@@ -27,7 +27,10 @@ with open(os.path.join(grandparent_dir, "Assistant", "hosts_repaired.json"), "r"
 dict_commands = {
     "linux": {
         "cpu_usage": r"top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\([0-9.]*\)%* id.*/\1/' | awk '{print 100 - $1}'",  # noqa E501
-        "free_disk_space": "df -h | grep '/dev/sda1' | awk '{print $4}'",
+        "free_disk_space": (
+            "df -B1 --output=source,avail | awk '/^\\/dev\\// {sum+=$2} "
+            'END {gb=sum/1024/1024/1024; printf "%.1fG", gb}\''
+        ),
     },
     "windows": {
         "cpu_usage": 'wmic cpu get loadpercentage | findstr /R /V "LoadPercentage"',
@@ -62,6 +65,9 @@ def format_bytes(bytes_str):
 
 
 def run_command_on_host(host, username, port, password, command):
+    print_logger(
+        f"Running command on {host}:{port} as {username} - Command: {command}",
+    )
     try:
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -185,12 +191,12 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
 # Main #
 
 if __name__ == "__main__":
-    # override host for testing
+    # override host for testing only one
     # keep_host = "raspberrypi3"
-    # dict_systems = {k: v for k, v in dict_systems.items() if v["hostname"] == keep_host}
+    # dict_systems = {k: v for k, v in dict_systems.items() if k == keep_host}
 
-    # pprint_dict(dict_systems)
-    # pprint_dict(dict_commands)
+    pprint_dict(dict_systems)
+    pprint_dict(dict_commands)
 
     rows = run_commands_on_hosts(dict_systems, dict_commands, ssh_password)
 
