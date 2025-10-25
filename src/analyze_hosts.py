@@ -107,7 +107,7 @@ print("dict_combined_hosts")
 pprint_dict(dict_combined_hosts)
 print("-" * 1000)
 
-output_path = os.path.join(grandparent_dir, "Assistant", "hosts_repaired.json")
+output_path = os.path.join(grandparent_dir, "Assistant", "hosts.json")
 with open(output_path, "w") as f:
     json.dump(dict_combined_hosts, f, indent=4)
 print(f"Wrote combined hosts to {output_path}")

@@ -21,7 +21,7 @@ if os.path.exists(dotenv_path):
 
 ssh_password = os.getenv("SSH_PASSWORD")
 
-with open(os.path.join(grandparent_dir, "Assistant", "hosts_repaired.json"), "r") as f:
+with open(os.path.join(grandparent_dir, "Assistant", "hosts.json"), "r") as f:
     dict_systems = json.load(f)
 
 dict_commands = {

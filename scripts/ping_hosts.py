@@ -92,9 +92,7 @@ def ping_all_now(hosts, timeout_s: float = 1.0):
 
 
 if __name__ == "__main__":
-    with open(
-        os.path.join(grandparent_dir, "Assistant", "hosts_repaired.json"), "r"
-    ) as f:
+    with open(os.path.join(grandparent_dir, "Assistant", "hosts.json"), "r") as f:
         HOSTS = json.load(f)
 
     final_df = ping_all_now(hosts=HOSTS, timeout_s=1.0)
