@@ -227,7 +227,7 @@ alias sshopti='ssh jason@Optiplex9020'
 alias sshpav5='ssh jason@Pavilioni5'
 
 # Servers #
-alias sshbehemoth='ssh root@behemoth'
+alias sshbehemoth='ssh root@92.168.86.31'
 
 # Appliancs #
 alias sshpi4='ssh pi@raspberrypi4'
