@@ -18,6 +18,20 @@
 curl https://ollama.ai/install.sh | sh
 ```
 
+#### Installation on Mac
+
+- Install Ollama with Homebrew
+
+```bash
+brew install ollama
+# make sure its working
+ollama --version
+# serve in one terminal
+ollama serve
+# run in another terminal
+ollama run llama2-uncensored
+```
+
 ### Pull at least one model
 
 ```bash
@@ -35,6 +49,10 @@ ollama run llama2-uncensored
 ```bash
 /bye
 ```
+
+- To stop serving the model, go to the terminal running `ollama serve` and press `Ctrl + C`
+
+  - if you ran it in the bg with %, you can do `fg` to bring it back to the foreground and then `Ctrl + C`
 
 ### Running the Back End
 
