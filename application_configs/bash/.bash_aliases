@@ -243,6 +243,9 @@ alias sshshelly='ssh rebeca@Shelly'
 alias sshhello='ssh jason@192.168.86.4'
 alias sshhellowin='ssh HELLOFRESH\\16937827583938060798@HelloFreshWindows'
 
+# Fourteen Foods #
+alias ssh14='ssh jason.christiansen@192.168.86.126 -p 2222'
+
 # GinaMary #
 alias sshginamary='ssh gaddy_five@ginagaddysimac'
 
