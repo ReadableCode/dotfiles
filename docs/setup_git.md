@@ -102,6 +102,14 @@
 
 ### Set Up Git on macOS
 
+* open terminal and run:
+
+```bash
+git --version
+```
+
+- You will be prompted to install developer tools, install them
+
 * open terminal and run commands:
 
   ```bash
@@ -143,7 +151,8 @@
 * if .pub key doesn't exist:
 
     ```bash
-    ssh-keygen -t rsa -b 4096 # press enter to accept defaults
+    ssh-keygen -t rsa -b 4096
+    # press enter to accept defaults
     ```
 
 * Run the following command and copy just the key to GitHub:
@@ -176,7 +185,8 @@
 * if .pub key doesn't exist:
 
   ```bash
-  ssh-keygen # press enter to accept defaults
+  ssh-keygen -t rsa -b 4096
+  # press enter to accept defaults
   ```
   
 * Run the following command and copy just the key to GitHub:
