@@ -8,6 +8,15 @@ System Settings → General → About
 
 System Settings → Displays → More Space
 
+## Enable apps collapsing into dock icons
+
+1. Open System Settings → Desktop & Dock.
+2. Scroll to Windows & Apps.
+3. Enable “Prefer tabs when opening documents” → Always (optional).
+4. Then turn ON:
+  ✅ “Minimize windows into application’s icon”.
+5. Close Settings.
+
 ## HID Configuration
 
 1. **System Settings → Trackpad → Point & Click**  
