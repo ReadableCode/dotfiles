@@ -295,5 +295,6 @@
   },
   "explorer.confirmDragAndDrop": false,
   "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
-  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3"
+  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
+  "explorer.confirmDelete": false
 }
