@@ -15,6 +15,7 @@ brew "btop"
 brew "iperf3"
 brew "go"
 brew "pandoc"
+brew "uv"
 
 cask "google-chrome"
 cask "firefox"

@@ -20,6 +20,12 @@ choco install uv
 
 ### Install uv on macOS or Linux
 
+- Install with Brew:
+
+```bash
+brew install uv
+```
+
 - Install with script:
 
 ```bash

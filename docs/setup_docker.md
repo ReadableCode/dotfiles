@@ -105,3 +105,11 @@
     ```bash
     su - ${USER}
     ```
+
+## Installing Docker on macOS
+
+- Install with Brew:
+
+```bash
+brew install --cask docker
+```
