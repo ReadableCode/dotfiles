@@ -57,6 +57,13 @@
         ln -s /path/to/settings/in/your/repository.json ~/.config/Code/User/settings.json
         ```
 
+    - macOS: Open a terminal and run the following commands:
+
+        ```bash
+        mv ~/Library/Application\ Support/Code/User/settings.json /Users/jason/GitHub/dotfiles/application_configs/vscode/settings.json
+        ln -s /Users/jason/GitHub/dotfiles/application_configs/vscode/settings.json ~/Library/Application\ Support/Code/User/settings.json
+        ```
+
 ## Installing Extensions
 
 ### Python
