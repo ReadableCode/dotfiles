@@ -17,6 +17,8 @@ brew "pandoc"
 brew "uv"
 brew "wget"
 brew "speedtest-cli"
+brew "jq"
+brew "tmux"
 
 cask "google-chrome"
 cask "firefox"
