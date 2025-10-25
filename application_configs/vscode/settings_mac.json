@@ -295,5 +295,5 @@
   },
   "explorer.confirmDragAndDrop": false,
   "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
-  "snowflake.connectionsConfigFile": "/Users/jason/.snowflake/connections.toml"
+  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3"
 }
