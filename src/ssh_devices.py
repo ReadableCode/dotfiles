@@ -81,12 +81,14 @@ def run_command_on_host(host, username, port, password, command):
         auth_method = None
         key_connected = False
 
+        # Ensure paramiko logger is defined before try/except blocks
+        paramiko_logger = logging.getLogger("paramiko")
+        original_level = paramiko_logger.level
+
         for ssh_key_path in ssh_key_paths:
             if os.path.exists(ssh_key_path) and not key_connected:
                 try:
                     # Suppress paramiko logging during key attempts
-                    paramiko_logger = logging.getLogger("paramiko")
-                    original_level = paramiko_logger.level
                     paramiko_logger.setLevel(logging.CRITICAL)
 
                     ssh.connect(
