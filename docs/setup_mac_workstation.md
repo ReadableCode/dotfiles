@@ -80,6 +80,10 @@ cd ../app_lists
 brew bundle
 ```
 
+## Install Wireguard
+
+* install from the App Store
+
 ## Python Setup
 
 * Follow instructions in [setup_python.md](./setup_python.md)
