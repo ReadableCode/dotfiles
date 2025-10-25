@@ -160,3 +160,45 @@ function gitpullall() {
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
+
+### Program Shortcuts ###
+
+alias speed='speedtest-cli'
+
+
+### SSH Shortcuts ###
+
+# Workstations #
+alias sshryzenwhite='ssh jason@RyzenWhite'
+alias sshspectre='ssh jason@Spectre'
+alias sshzephyrus='ssh jason@JasonZephyrus'
+alias sshmac='ssh jason@MacbookPro12'
+
+# Upstairs Rack #
+alias sshelite='ssh jason@EliteDesk'
+alias sshnuk='ssh jason@nukbuntu'
+alias sshopti='ssh jason@Optiplex9020'
+alias sshpav5='ssh jason@Pavilioni5'
+
+# Servers #
+alias sshbehemoth='ssh root@behemoth'
+
+# Appliancs #
+alias sshpi4='ssh pi@raspberrypi4'
+alias sshpi4a='ssh pi@raspberrypi4a'
+alias sshpi3='ssh pi@raspberrypi3'
+alias sshpi3a='ssh pi@raspberrypi3a'
+alias sshpi0='ssh pi@raspberrypi0'
+
+# Rebeca #
+alias sshshelly='ssh rebeca@Shelly'
+
+# HelloFresh #
+alias sshhello='ssh jason@192.168.86.4'
+alias sshhellowin='ssh HELLOFRESH\\16937827583938060798@HelloFreshWindows'
+
+# GinaMary #
+alias sshginamary='ssh gaddy_five@ginagaddysimac'
+
+# Android #
+alias sshtabs7p='ssh u0_a1053@GalaxyTabS7P -p 8022'

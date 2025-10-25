@@ -16,6 +16,7 @@ brew "go"
 brew "pandoc"
 brew "uv"
 brew "wget"
+brew "speedtest-cli"
 
 cask "google-chrome"
 cask "firefox"
