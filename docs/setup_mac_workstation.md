@@ -1,28 +1,42 @@
 # Setup macOS Workstation
 
-## Set settings
+## Set hostname
+
+System Settings → General → About
+
+## HID Configuration
+
+1. **System Settings → Trackpad → Point & Click**  
+2. Turn on tap to click
 
 ## Finder Configuration
 
 Finder → Settings → Advanced → “Show all filename extensions”
 
+Finder → Settings → Advanced → “When performing a search" → Change to search the current folder
+
+Finder → Settings → Sidebar > Configure sidebar including change to new windows opening in user folder
+
 Finder → Settings → Tags → Uncheck all tags
-
-## HID Configuration
-
-1. **System Settings → Trackpad → Point & Click**  
-2. Toggle on **“Secondary click”**  
-3. Choose **“Click or tap with two fingers.”**
 
 ## Git Setup
 
 * Follow instructions in [setup_git.md](./setup_git.md)
 
+## Clone dotfiles
+
+```bash
+cd ~
+mkdir GitHub
+cd GitHub
+git clone git@github.com:ReadableCode/dotfiles.git
+```
+
 ## Symlink zsh config
 
 ```bash
 mv ~/.zshrc ~/.zshrc.bak
-ln -s /home/jason/GitHub/dotfiles/application_configs/bash/.zshrc ~/.zshrc
+ln -s ~/GitHub/dotfiles/application_configs/bash/.zshrc ~/.zshrc
 ```
 
 ## Brew Setup
