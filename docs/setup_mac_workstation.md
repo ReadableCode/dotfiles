@@ -4,6 +4,10 @@
 
 System Settings → General → About
 
+## Change scaling
+
+System Settings → Displays → More Space
+
 ## HID Configuration
 
 1. **System Settings → Trackpad → Point & Click**  
