@@ -45,7 +45,7 @@ ln -s ~/GitHub/dotfiles/application_configs/bash/.zshrc ~/.zshrc
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-export PATH="/opt/homebrew/bin:$PATH"
+# follow prompts to add pathing to shell profile
 brew update
 brew upgrade
 brew upgrade --cask
