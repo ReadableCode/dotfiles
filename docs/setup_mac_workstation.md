@@ -13,6 +13,14 @@ System Settings → Displays → More Space
 1. **System Settings → Trackpad → Point & Click**  
 2. Turn on tap to click
 
+### Enable tap dragging
+
+Open System Settings → Accessibility → Pointer Control.  ￼
+ 2. Click on Trackpad Options…
+ 3. Check “Use trackpad for dragging”. Then choose your preferred dragging style:
+ • “without Drag Lock” — you double-tap and hold the second tap, and then drag, releasing ends drag.  ￼
+ • “with Drag Lock” — you double-tap and drag, and you can lift your finger and continue dragging; end by tapping again
+
 ## Finder Configuration
 
 Finder → Settings → Advanced → “Show all filename extensions”
