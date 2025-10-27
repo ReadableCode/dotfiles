@@ -84,6 +84,10 @@ brew bundle
 
 * install from the App Store
 
+## Install GLKVM app
+
+* install from the App Store
+
 ## Python Setup
 
 * Follow instructions in [setup_python.md](./setup_python.md)
