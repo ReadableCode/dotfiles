@@ -19,6 +19,12 @@ System Settings → Displays → More Space
   Enable Group applications by application
 5. Close Settings.
 
+## Disable clicking desktop moves windows
+
+1. Open System Settings → Desktop & Dock.
+2. Scroll to Desktop and Stage Manager.
+3. Change the "Show Desktop" setting to Only in Stage Manager
+
 ## Trim control center and menu bar
 
 System Settings → Menu Bar
@@ -59,6 +65,10 @@ Finder → Settings → Advanced → “When performing a search" → Change to 
 Finder → Settings → Sidebar > Configure sidebar including change to new windows opening in user folder
 
 Finder → Settings → Tags → Uncheck all tags
+
+Finder → View → Show Path Bar
+
+Finder → View → Show Status Bar
 
 ## Git Setup
 
