@@ -15,7 +15,27 @@ System Settings → Displays → More Space
 3. Enable “Prefer tabs when opening documents” → Always (optional).
 4. Then turn ON:
   ✅ “Minimize windows into application’s icon”.
+4a. Mission control:
+  Enable Group applications by application
 5. Close Settings.
+
+## Trim control center and menu bar
+
+System Settings → Menu Bar
+
+1. Disable items in Menu Bar that you do not need.
+
+## Show battery percentage and weather
+
+System Settings → Menu Bar → Battery
+
+1. Turn ON “Show Percentage”.
+
+System Settings → Menu Bar → Weather
+
+1. Turn ON “Weather”.
+2. Click on the Weather item in Menu Bar
+3. Click open weather to select your preferred city and settings
 
 ## HID Configuration
 
