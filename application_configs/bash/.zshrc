@@ -78,6 +78,7 @@ function run_python_script() {
 
 	# Extract the directory from the provided file path
 	script_path="$1"
+	shift  # remove the python path from the commmand leaving only the arguments to the python script
 	script_dir=$(dirname "$script_path")
 
 	# Move up one directory level to check for the .venv folder
@@ -95,7 +96,7 @@ function run_python_script() {
 		source "$venv_dir/bin/activate"
 
 		# Run the script using the .venv environment
-		python3 "$script_path"
+		python3 "$script_path" "$@"
 
 		# Deactivate the environment afterward
 		deactivate
@@ -105,7 +106,7 @@ function run_python_script() {
 	fi
 
 	# Run the script using the system Python as a fallback
-	python3 "$script_path"
+	python3 "$script_path" "$@"
 }
 
 function deploytools() {
@@ -123,6 +124,16 @@ function todo() {
 	fi
 	run_python_script "$gitDir/Terminal_To_Do/src/main.py"
 }
+
+function syncplex() {
+	if [ -z "$gitDir" ]; then
+		echo "gitDir is not set"
+		return 1
+	fi
+	run_python_script "$gitDir/Sync_plex/src/plex_scraper.py" /Users/jason/Media
+}
+
+
 
 ### Command Shortcuts ###
 
