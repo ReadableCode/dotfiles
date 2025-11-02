@@ -122,6 +122,15 @@ def print_logger(message, level="info", as_break=False):
             print("#" * 100)
 
 
+def print_progress_bar(current, total, bar_length=40):
+    fraction = current / total
+    arrow_length = int(fraction * bar_length) - 1
+    arrow = "=" * arrow_length + ">" if arrow_length >= 0 else ""
+    padding = " " * (bar_length - len(arrow))
+    percent = fraction * 100
+    print(f"\rProgress: [{arrow}{padding}] {percent:.2f}%", end=" ")
+
+
 def pprint_ls(ls, ls_title="List"):
     """
     Pretty prints a list with a title.
@@ -223,6 +232,33 @@ def print_nested_dict(data, indent=0):
                 print("  " * indent + str(item))
     else:
         print("  " * indent + str(data))
+
+
+def print_google_doc_string_for_df(df):
+    """
+    Print a DataFrame's schema in Google-style docstring format.
+    """
+
+    dtype_map = {
+        "int64": "int",
+        "float64": "float",
+        "object": "str",
+        "bool": "bool",
+        "datetime64[ns]": "datetime",
+    }
+
+    sample = df.iloc[0] if not df.empty else None
+
+    print('"""')
+    print("Returns:")
+    print("    pd.DataFrame: DataFrame with the following columns:")
+    for c, t in zip(df.columns, df.dtypes):
+        t_str = dtype_map.get(str(t), str(t))
+        val = "" if sample is None else str(sample[c])
+        if len(val) > 40:
+            val = val[:37] + "..."
+        print(f"        - {c} ({t_str}): e.g. {val}")
+    print('"""')
 
 
 def check_name_against_ignore_patterns(name, ls_ignore_patterns):
