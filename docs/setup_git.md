@@ -108,7 +108,7 @@
 git --version
 ```
 
-- You will be prompted to install developer tools, install them
+* You will be prompted to install developer tools, install them
 
 * open terminal and run commands:
 
@@ -188,6 +188,12 @@ git --version
   ssh-keygen -t rsa -b 4096
   # press enter to accept defaults
   ```
+
+* To create an additional key or with a different name:
+
+  ```bash
+  ssh-keygen -t rsa -b 4096 -f ~/.ssh/key_name
+  ```
   
 * Run the following command and copy just the key to GitHub:
 
@@ -203,6 +209,12 @@ git --version
   * paste key into "Key" field
   * click "Add SSH Key"
   * Enable SSO if needed
+
+## Cloning with a specific ssh key
+
+```bash
+git clone -c "core.sshCommand=ssh -i ~/.ssh/key_name" git@github.com:repo/name.git
+```
 
 ## Clone into an existing folder
 
