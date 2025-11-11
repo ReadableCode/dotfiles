@@ -210,7 +210,7 @@ git --version
   * click "Add SSH Key"
   * Enable SSO if needed
 
-## Cloning with a specific ssh key
+## Cloning with a specific SSH key
 
 ```bash
 git clone -c "core.sshCommand=ssh -i ~/.ssh/key_name" git@github.com:repo/name.git
