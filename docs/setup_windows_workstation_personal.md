@@ -49,7 +49,7 @@ New-Item -ItemType Directory -Path (Split-Path -Parent $PROFILE) -Force
 Add-Content -Path $PROFILE -Value 'path you found earlier'
 ```
 
-* Add the following line to the end of the file:
+* Add the following line to the end of the file or change the existing line to this:
 
 ```bash
 . <resolved-path>
