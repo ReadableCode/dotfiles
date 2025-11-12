@@ -125,6 +125,10 @@ icacls "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable
 
 * Create config file in same folder (portable_sshd): (will have to use direct paths, no ~ or $env)
 
+* file name will be:
+
+`sshd_config`
+
 ```bash
 Port 2222
 HostKey C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key
