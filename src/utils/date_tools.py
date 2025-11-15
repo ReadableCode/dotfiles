@@ -706,6 +706,40 @@ def get_num_weeks_in_reporting_month(year_month):
     return len(ls_thurs_2_in_year_month)
 
 
+def get_full_months_in_week_range(start_week: str, end_week: str) -> list[str]:
+    """
+    Returns a list of months (YYYY-MM) where all weeks in that month are fully
+    contained between start_week and end_week.
+
+    Args:
+        start_week (str): Starting week in format 'YYYY-WWW'
+        end_week (str): Ending week in format 'YYYY-WWW'
+
+    Returns:
+        list[str]: Months (YYYY-MM) where all weeks are fully included
+    """
+    # all weeks in the range
+    weeks_in_range = week_range_to_week_list(start_week, end_week)
+
+    # build dict of month -> its weeks
+    month_to_weeks = {}
+    for week in all_weeks_list:
+        year_of_week = int(week[:4])
+        if year_of_week < 2022 or year_of_week > 2027:
+            continue
+        month = get_reporting_month_num_from_week(week)
+        ym = f"{year_of_week}-{month}"
+        month_to_weeks.setdefault(ym, []).append(week)
+
+    full_months = []
+    for ym, month_weeks in month_to_weeks.items():
+        # only include months where all its weeks are within range
+        if all(w in weeks_in_range for w in month_weeks):
+            full_months.append(ym)
+
+    return full_months
+
+
 def get_ls_weeks_in_reporting_month(year_month):
     """
     Returns a list of week strings in the provided month that contain "Thursday - 2".

@@ -131,6 +131,15 @@ def print_progress_bar(current, total, bar_length=40):
     print(f"\rProgress: [{arrow}{padding}] {percent:.2f}%", end=" ")
 
 
+def get_progress_bar_string(current, total, bar_length=40):
+    fraction = current / total
+    arrow_length = int(fraction * bar_length) - 1
+    arrow = "=" * arrow_length + ">" if arrow_length >= 0 else ""
+    padding = " " * (bar_length - len(arrow))
+    percent = fraction * 100
+    return f"Progress: [{arrow}{padding}] {percent:.2f}%"
+
+
 def pprint_ls(ls, ls_title="List"):
     """
     Pretty prints a list with a title.
