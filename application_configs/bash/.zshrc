@@ -29,8 +29,48 @@ alias histg='fc -l 1 | grep'      # Search history
 # handle title of ssh window from windows terminal
 echo -ne "\033]0;${USER}@$(hostname | cut -d'.' -f1)\007"
 
-# change prompt to show full path
-export PROMPT='%n@%m:%~$ '
+# Advanced prompt with git branch and UV environment support
+autoload -Uz vcs_info
+setopt prompt_subst
+
+# Configure git info
+zstyle ':vcs_info:*' enable git
+zstyle ':vcs_info:git:*' formats ' %F{red}(%b)%f'
+zstyle ':vcs_info:git:*' actionformats ' %F{red}(%b|%a)%f'
+
+# Function to get UV environment info
+get_uv_env() {
+    if [[ -n "$VIRTUAL_ENV" ]]; then
+        local env_name=$(basename "$VIRTUAL_ENV")
+        if [[ "$env_name" == ".venv" ]]; then
+            # For UV projects, show project name instead of .venv
+            local project_name=$(basename $(dirname "$VIRTUAL_ENV"))
+            echo "%F{green}(uv:$project_name)%f "
+        else
+            echo "%F{green}($env_name)%f "
+        fi
+    elif [[ -f "pyproject.toml" && -d ".venv" ]]; then
+        # UV project detected but not activated
+        local project_name=$(basename "$PWD")
+        echo "%F{yellow}(uv:$project_name-inactive)%f "
+    fi
+}
+
+# Function to check if directory is writable
+get_dir_status() {
+    if [[ ! -w "$PWD" ]]; then
+        echo "%F{red}🔒%f"
+    fi
+}
+
+# Precmd function to update vcs_info
+precmd() {
+    vcs_info
+}
+
+# Set the prompt
+export PROMPT='%F{cyan}%n@%m%f:%F{blue}%~%f$(get_uv_env)$(get_dir_status)${vcs_info_msg_0_}
+%F{white}$%f '
 
 # Enable spelling correction
 setopt CORRECT
