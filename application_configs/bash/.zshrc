@@ -1,11 +1,30 @@
 ### Terminal Config ###
 
-HISTFILE=~/.zsh_history
-HISTSIZE=1000000
-SAVEHIST=1000000
-setopt APPEND_HISTORY
-setopt SHARE_HISTORY
+# History Configuration
+export HISTFILE=~/.zsh_history
+export HISTSIZE=1000000
+export SAVEHIST=1000000
 
+# Set history options
+setopt APPEND_HISTORY         # Append to history file
+setopt SHARE_HISTORY          # Share history across sessions
+setopt HIST_IGNORE_DUPS       # Don't record duplicate entries
+setopt HIST_IGNORE_ALL_DUPS   # Delete old duplicate entries
+setopt HIST_IGNORE_SPACE      # Don't record entries starting with space
+setopt HIST_SAVE_NO_DUPS      # Don't write duplicate entries to history file
+setopt HIST_REDUCE_BLANKS     # Remove superfluous blanks
+setopt HIST_VERIFY            # Show command with history expansion before running
+setopt INC_APPEND_HISTORY     # Write to history file immediately
+setopt EXTENDED_HISTORY       # Save timestamp and duration
+
+# Force load existing history
+if [[ -r "$HISTFILE" ]]; then
+    fc -R "$HISTFILE"
+fi
+
+# Aliases for better history viewing
+alias hist='fc -l 1'              # Show all history
+alias histg='fc -l 1 | grep'      # Search history
 
 # handle title of ssh window from windows terminal
 echo -ne "\033]0;${USER}@$(hostname | cut -d'.' -f1)\007"
@@ -13,6 +32,27 @@ echo -ne "\033]0;${USER}@$(hostname | cut -d'.' -f1)\007"
 # change prompt to show full path
 export PROMPT='%n@%m:%~$ '
 
+# Enable spelling correction
+setopt CORRECT
+setopt CORRECT_ALL
+
+# Enable better tab completion
+autoload -Uz compinit
+compinit
+
+# Case insensitive completion
+zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
+
+# Menu-style completion
+zstyle ':completion:*' menu select
+
+# Completion styling
+zstyle ':completion:*:descriptions' format '%U%B%d%b%u'
+zstyle ':completion:*:warnings' format '%BSorry, no matches for: %d%b'
+
+# Group matches and describe
+zstyle ':completion:*' group-name ''
+zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions commands
 
 # Detect the type of terminal: WSL, Linux, or macOS
 detect_terminal_type() {
@@ -194,7 +234,7 @@ alias sshpav5='ssh jason@Pavilioni5'
 # Servers #
 alias sshbehemoth='ssh root@192.168.86.31'
 
-# Appliancs #
+# Appliances #
 alias sshpi4='ssh pi@raspberrypi4'
 alias sshpi4a='ssh pi@raspberrypi4a'
 alias sshpi3='ssh pi@raspberrypi3'
