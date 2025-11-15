@@ -132,7 +132,8 @@
       "ms-vscode.makefile-tools",
       "ms-vscode-remote.vscode-remote-extensionpack",
       "golang.go",
-      "qwtel.sqlite-viewer"
+      "qwtel.sqlite-viewer",
+      "openai.chatgpt"
     ]
   }
 }
