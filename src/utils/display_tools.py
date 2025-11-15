@@ -6,6 +6,7 @@ import json
 import os
 import sys
 
+import pandas as pd
 import pytz
 from tabulate import tabulate
 
@@ -72,6 +73,35 @@ def pprint_df(dframe, showindex=False, num_cols=None, num_decimals=2):
                 floatfmt=floatfmt_str,
             )
         )
+
+
+def pprint_rows(df, rows=None):
+    """
+    Pretty-print specific rows (or a DataFrame slice) in transposed form.
+
+    rows:
+        - None  → use the df slice passed in (df.head(3))
+        - int   → single row number
+        - list/tuple of ints → multiple rows
+        - DataFrame → use directly
+    """
+
+    # --- Figure out input type ---
+    if isinstance(rows, pd.DataFrame):
+        sub = rows.copy()
+    elif rows is None:
+        sub = df.copy()  # e.g. user passed df.head(n)
+    elif isinstance(rows, int):
+        sub = df.iloc[[rows]]  # make into 1-row df
+    else:
+        sub = df.iloc[rows]  # list/tuple of row numbers
+
+    # --- Transpose into Field / Row_# structure ---
+    out = sub.T
+    out.reset_index(inplace=True)
+    out.columns = ["Field"] + [f"Row_{i}" for i in range(out.shape[1] - 1)]
+
+    pprint_df(out, showindex=False)
 
 
 def df_to_string(df):
