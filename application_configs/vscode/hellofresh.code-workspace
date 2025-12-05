@@ -37,20 +37,8 @@
       "path": "Data_Tool_Pack_Py"
     },
     {
-      "name": "AHK_Sheet_ID_Shortcut",
-      "path": "AHK_Sheet_ID_Shortcut"
-    },
-    {
-      "name": "snowflake-automation",
-      "path": "snowflake-automation"
-    },
-    {
       "name": "us-ops-analytics-schemachange",
       "path": "us-ops-analytics-schemachange"
-    },
-    {
-      "name": "github-automation",
-      "path": "github-automation"
     },
     {
       "name": "limesync-onboarding",
@@ -59,18 +47,6 @@
     {
       "name": "airflow-community",
       "path": "airflow-community"
-    },
-    {
-      "name": "datasets-automation",
-      "path": "datasets-automation"
-    },
-    {
-      "name": "datasets-automation-community",
-      "path": "datasets-automation-community"
-    },
-    {
-      "name": "vault-namespace-automation",
-      "path": "vault-namespace-automation"
     }
   ],
   "settings": {
