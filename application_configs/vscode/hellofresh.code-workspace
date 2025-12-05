@@ -13,14 +13,6 @@
       "path": "na-faba"
     },
     {
-      "name": "snowflake-db-finops-debit",
-      "path": "snowflake-db-finops-debit"
-    },
-    {
-      "name": "snowflake-db-finops-debit-sensitive",
-      "path": "snowflake-db-finops-debit-sensitive"
-    },
-    {
       "name": "na-fin-data-svcs",
       "path": "na-fin-data-svcs"
     },
