@@ -32,6 +32,9 @@
     },
     {
       "path": "advent_of_code"
+    },
+    {
+      "path": "na-finops"
     }
   ],
   "settings": {}
