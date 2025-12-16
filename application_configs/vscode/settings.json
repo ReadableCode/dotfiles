@@ -294,5 +294,7 @@
     "<C-/>": false // keep ctrl-/ for comment
   },
   "explorer.confirmDragAndDrop": false,
-  "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"]
+  "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
+  "github.copilot.nextEditSuggestions.fixes": false,
+  "github.copilot.nextEditSuggestions.enabled": false
 }
