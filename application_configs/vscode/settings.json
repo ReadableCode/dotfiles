@@ -296,5 +296,7 @@
   "explorer.confirmDragAndDrop": false,
   "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
   "github.copilot.nextEditSuggestions.fixes": false,
-  "github.copilot.nextEditSuggestions.enabled": false
+  "github.copilot.nextEditSuggestions.enabled": false,
+  "python.analysis.languageServerMode": "full",
+  "chat.viewSessions.orientation": "stacked"
 }
