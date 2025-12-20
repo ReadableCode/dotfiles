@@ -14,7 +14,8 @@
     "hellofreshjason": "linux",
     "elitedesk": "linux",
     "HelloFreshJasonIP": "linux",
-    "192.168.86.4": "linux"
+    "192.168.86.4": "linux",
+    "192.168.86.126": "windows"
   },
   "remote.SSH.useLocalServer": true,
   // Git
