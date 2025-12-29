@@ -63,6 +63,18 @@ tailscale funnel 18501
 netsh interface portproxy add v4tov4 listenport=18501 listenaddress=127.0.0.1 connectport=8501 connectaddress=192.168.86.126
 ```
 
+To list the current portproxy settings, run:
+
+```bash
+netsh interface portproxy show v4tov4
+```
+
+To disable the portproxy later, run:
+
+```bash
+netsh interface portproxy delete v4tov4 listenport=18501 listenaddress=127.0.0.1
+```
+
 #### To fix warning message
 
 ```bash
