@@ -11,9 +11,9 @@ sudo tailscale up --advertise-exit-node --advertise-routes=192.168.86.0/24
 sudo systemctl enable --now tailscaled
 ```
 
-#### To enable the subnet routing:
+#### To enable the subnet routing
 
-Go to the Tailscale admin panel: https://login.tailscale.com/admin/machines
+Go to the Tailscale admin panel: <https://login.tailscale.com/admin/machines>
 
 Find the new system
 
@@ -21,9 +21,9 @@ Click the 3-dot menu → Enable subnet routes
 
 This allows other Tailscale devices (like your laptop or phone) to reach anything on your local LAN via this system.
 
-#### To enable the exit node:
+#### To enable the exit node
 
-Go to the Tailscale admin panel: https://login.tailscale.com/admin/machines
+Go to the Tailscale admin panel: <https://login.tailscale.com/admin/machines>
 
 Find the new system
 
@@ -31,7 +31,39 @@ Click the 3-dot menu → Enable exit node
 
 This allows other Tailscale devices (like your laptop or phone) to use this system as a VPN exit node.
 
-#### To fix warning message:
+#### Using tailscale funnel
+
+- Tailscale Funnel allows you to expose services running on your Tailscale device or another reacable device to the public internet.
+
+- To expose a service running on port 8501 (Streamlit default port) to the public internet, run the following commands:
+
+```bash
+tailscale funnel 8501
+```
+
+- You can then access the service via the provided public URL.
+
+#### To host streamlit app running on a different device
+
+- on a terminal on the machine with streamlit
+
+```bash
+streamlit run web_app.py --server.address=0.0.0.0
+```
+
+- on a terminal on the machine with tailscale
+
+```bash
+tailscale funnel 18501
+```
+
+- Windows: on a new admin terminal on the machine with tailscale
+
+```bash
+netsh interface portproxy add v4tov4 listenport=18501 listenaddress=127.0.0.1 connectport=8501 connectaddress=192.168.86.126
+```
+
+#### To fix warning message
 
 ```bash
 Unable to relay traffic
