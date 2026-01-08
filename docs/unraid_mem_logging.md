@@ -4,10 +4,19 @@
 
 ```powershell
 while ($true) {
-    $out = @()
-    $out += (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-    $out += ssh root@192.168.86.31 'docker stats --no-stream'
-    $out | Set-Content docker-mem.log
+    try {
+        $stats = ssh root@192.168.86.31 'docker stats --no-stream' 2>$null
+
+        if ($stats) {
+            @(
+                Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+                $stats
+            ) | Set-Content docker-mem.log
+        }
+    } catch {
+        # do nothing; keep last good file
+    }
+
     Start-Sleep -Seconds 5
 }
 ```
