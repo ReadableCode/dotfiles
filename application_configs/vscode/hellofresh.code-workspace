@@ -2,63 +2,67 @@
   "folders": [
     {
       "name": "na-finops",
-      "path": "na-finops"
+      "path": "na-finops",
     },
     {
       "name": "na-fin-data-streamlit",
-      "path": "na-fin-data-streamlit"
+      "path": "na-fin-data-streamlit",
     },
     {
       "name": "na-faba",
-      "path": "na-faba"
+      "path": "na-faba",
     },
     {
       "name": "na-fin-data-svcs",
-      "path": "na-fin-data-svcs"
+      "path": "na-fin-data-svcs",
     },
     {
       "name": "hellofresh_credentials",
-      "path": "hellofresh_credentials"
+      "path": "hellofresh_credentials",
     },
     {
       "name": "dotfiles",
-      "path": "dotfiles"
+      "path": "dotfiles",
     },
     {
       "name": "Data_Tool_Pack_Py",
-      "path": "Data_Tool_Pack_Py"
+      "path": "Data_Tool_Pack_Py",
     },
     {
       "name": "us-ops-analytics-schemachange",
-      "path": "us-ops-analytics-schemachange"
+      "path": "us-ops-analytics-schemachange",
     },
     {
       "name": "limesync-onboarding",
-      "path": "limesync-onboarding"
+      "path": "limesync-onboarding",
     },
     {
       "name": "airflow-community",
-      "path": "airflow-community"
-    }
+      "path": "airflow-community",
+    },
+    {
+      "name": "rte-manufacturing-data",
+      "path": "rte-manufacturing-data",
+    },
   ],
   "settings": {
     "workbench.colorCustomizations": {
       "titleBar.activeBackground": "#6f9d7b",
-      "titleBar.inactiveBackground": "#6f9d7b"
+      "titleBar.inactiveBackground": "#6f9d7b",
     },
     "todo-tree.filtering.includeGlobs": [
       "**/Data_Tool_Pack_Py/src/**",
       "**/na-finops/src/**",
-      "**/na-finops/docs/**"
+      "**/na-finops/docs/**",
     ],
     "scm.showHistoryGraph": false,
     "task.autoDetect": "off",
     "files.watcherExclude": {
-      "**/.venv/**": true
+      "**/.venv/**": true,
     },
     "[sql]": {
       "editor.formatOnSave": false,
-      "editor.defaultFormatter": null
+      "editor.defaultFormatter": null,
     },
     "github.copilot.enable": {
       "*": true,
@@ -68,11 +72,11 @@
       "yaml": true,
       "python": true,
       "rust": false,
-      "golang": false
+      "golang": false,
     },
     "sqlfluff.dialect": "snowflake",
     "makefile.configureOnOpen": false,
-    "todo-tree.tree.scanMode": "workspace only"
+    "todo-tree.tree.scanMode": "workspace only",
   },
   "extensions": {
     "recommendations": [
@@ -101,7 +105,7 @@
       "ms-vscode-remote.vscode-remote-extensionpack",
       "golang.go",
       "qwtel.sqlite-viewer",
-      "openai.chatgpt"
-    ]
-  }
+      "openai.chatgpt",
+    ],
+  },
 }
