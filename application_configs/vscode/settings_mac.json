@@ -299,4 +299,5 @@
   "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
   "explorer.confirmDelete": false,
   "github.copilot.nextEditSuggestions.enabled": true,
+  "chat.viewSessions.orientation": "stacked",
 }
