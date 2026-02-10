@@ -19,6 +19,7 @@ brew "wget"
 brew "speedtest-cli"
 brew "jq"
 brew "tmux"
+brew "exiftool"
 
 cask "google-chrome"
 cask "firefox"
