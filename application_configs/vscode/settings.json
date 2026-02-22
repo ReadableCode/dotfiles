@@ -14,7 +14,8 @@
     "hellofreshjason": "linux",
     "elitedesk": "linux",
     "HelloFreshJasonIP": "linux",
-    "192.168.86.4": "linux"
+    "192.168.86.4": "linux",
+    "192.168.86.126": "windows",
   },
   "remote.SSH.useLocalServer": true,
   // Git
@@ -38,43 +39,43 @@
   "editor.trimAutoWhitespace": false,
   // Auto Formatting - Language Specific
   "[python]": {
-    "editor.defaultFormatter": "ms-python.black-formatter"
+    "editor.defaultFormatter": "ms-python.black-formatter",
   },
   "[go]": {
     "editor.defaultFormatter": "golang.go",
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
   },
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format",
     "editor.detectIndentation": false,
     "editor.insertSpaces": false,
-    "editor.tabSize": 4 // You can change this to your preferred tab size
+    "editor.tabSize": 4, // You can change this to your preferred tab size
   },
   "[markdown]": {
     "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
-    "editor.tabSize": 2
+    "editor.tabSize": 2,
   },
   "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   "[terraform]": {
-    "editor.defaultFormatter": "hashicorp.terraform"
+    "editor.defaultFormatter": "hashicorp.terraform",
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   "[sql]": {
-    "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
+    "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode",
   },
   "[dot]": {
     "editor.defaultFormatter": "tintinweb.graphviz-interactive-preview",
-    "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000
+    "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000,
   },
   "[typescriptreact]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   // Auto Formatting - Black / Flake8
   "black-formatter.importStrategy": "fromEnvironment",
@@ -85,7 +86,7 @@
   // Auto Formatting - isort
   "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
-    "source.organizeImports": "always"
+    "source.organizeImports": "always",
   },
   "python.sortImports.args": ["--profile", "black"],
   "isort.args": ["--profile", "black"],
@@ -102,7 +103,7 @@
   "todo-tree.filtering.excludeGlobs": [
     "**/node_modules/*/**",
     "**/*.egg-info",
-    "**/todo.py"
+    "**/todo.py",
   ],
   // Notebooks
   "jupyter.interactiveWindow.creationMode": "perFile",
@@ -126,7 +127,6 @@
   "editor.wordWrap": "off",
   "editor.accessibilitySupport": "off",
   "editor.renderWhitespace": "all",
-  "window.zoomLevel": 1,
   "diffEditor.useInlineViewWhenSpaceIsLimited": false,
   "diffEditor.ignoreTrimWhitespace": false,
   "scm.showHistoryGraph": false,
@@ -135,12 +135,12 @@
   "workbench.editorAssociations": {
     "*.copilotmd": "vscode.markdown.preview.editor",
     "*.ipynb": "jupyter-notebook",
-    "*.csv": "default"
+    "*.csv": "default",
   },
   "files.associations": {
     "*.md": "markdown",
     "*.yaml": "yaml",
-    "templates/*.yaml": "helm"
+    "templates/*.yaml": "helm",
   },
   "files.maxMemoryForLargeFilesMB": 12000,
   "workbench.editorLargeFileConfirmation": 50,
@@ -150,10 +150,10 @@
     "**/.hg": false,
     "**/.svn": false,
     "**/CVS": false,
-    "**/Thumbs.db": false
+    "**/Thumbs.db": false,
   },
   "markdown.mermaidConfig": {
-    "maxTextSize": 9000000
+    "maxTextSize": 9000000,
   },
   // Terminal
   "python.terminal.executeInFileDir": true,
@@ -192,7 +192,7 @@
     "**/target/**",
     "**/venv/**",
     "**/*.pyc",
-    "**/*.pyo"
+    "**/*.pyo",
     //   // ignore repos I don't work on often
     //   "**/3D_Models/**",
     //   "**/a_girls_guide_to_georgetown/**",
@@ -234,12 +234,10 @@
     "**/.pytest_cache": true,
     "**/target": true,
     "**/Samsung Health": true,
-    "**/.cargo": true
+    "**/.cargo": true,
   },
-  "python.analysis.enableEditableInstalls": false,
   "python.analysis.enableExperimentalServer": false,
   "python.analysis.enablePytestSupport": false,
-  "python.analysis.nodeExecutable": "auto",
   "cSpell.userWords": [
     "hackathons",
     "Alteryx",
@@ -250,10 +248,10 @@
     "Mendix",
     "Onboarded",
     "Qlik",
-    "Streamlit"
+    "Streamlit",
   ],
   "cSpell.enabledFileTypes": {
-    "*": false
+    "*": false,
   },
   "explorer.fileNesting.patterns": {
     "*.ts": "${capture}.js",
@@ -267,13 +265,13 @@
     "*.sqlite3": "${capture}.${extname}-*",
     "*.db3": "${capture}.${extname}-*",
     "*.sdb": "${capture}.${extname}-*",
-    "*.s3db": "${capture}.${extname}-*"
+    "*.s3db": "${capture}.${extname}-*",
   },
   "github.copilot.enable": {
     "*": true,
     "plaintext": true,
     "markdown": true,
-    "scminput": false
+    "scminput": false,
   },
   "diffEditor.codeLens": true,
   "diffEditor.experimental.showMoves": true,
@@ -291,12 +289,20 @@
     "<C-f>": false, // keep ctrl-f for find
     "<C-s>": false, // keep ctrl-s for save
     "<C-p>": false, // keep ctrl-p for open file
-    "<C-/>": false // keep ctrl-/ for comment
+    "<C-/>": false, // keep ctrl-/ for comment
   },
   "explorer.confirmDragAndDrop": false,
-  "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
-  "github.copilot.nextEditSuggestions.fixes": false,
+  "todo-tree.general.tags": [
+    "HACK",
+    "FIXME",
+    "TODO",
+    "XXX",
+    "[ ]",
+    "[x]"
+  ],
+  "explorer.confirmDelete": false,
   "github.copilot.nextEditSuggestions.enabled": false,
-  "python.analysis.languageServerMode": "full",
-  "chat.viewSessions.orientation": "stacked"
+  "chat.viewSessions.orientation": "stacked",
+  "gitlens.ai.model": "vscode",
+  "gitlens.ai.vscode.model": "copilot:gpt-4.1",
 }

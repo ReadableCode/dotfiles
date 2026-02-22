@@ -64,6 +64,14 @@
         ln -s /Users/jason/GitHub/dotfiles/application_configs/vscode/settings.json ~/Library/Application\ Support/Code/User/settings.json
         ```
 
+        - Create a workspace file in the GitHub directory you want to use, then symlink it to the repo to track it in, this direction is important for vscode to follow links to project folders
+
+        ```bash
+        touch ~/GitHub/your-computer-name.code-workspace
+        cd ~/GitHub/dotfiles/application_configs/vscode
+        ln -s ~/GitHub/your-computer-name.code-workspace .
+        ```
+
 ## Installing Extensions
 
 ### Python

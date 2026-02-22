@@ -58,13 +58,15 @@ Open System Settings → Accessibility → Pointer Control.  ￼
 
 ## Finder Configuration
 
-Finder → Settings → Advanced → “Show all filename extensions”
+Finder → Settings → Disable "Open folders in tabs instead of new windows"
 
-Finder → Settings → Advanced → “When performing a search" → Change to search the current folder
-
-Finder → Settings → Sidebar > Configure sidebar including change to new windows opening in user folder
+Finder → Settings → New Finder windows show: → Select home folder
 
 Finder → Settings → Tags → Uncheck all tags
+
+Finder → Settings → Advanced → Enable “Show all filename extensions”
+
+Finder → Settings → Advanced → “When performing a search" → Change to "search the current folder"
 
 Finder → View → Show Path Bar
 
@@ -109,6 +111,20 @@ brew cleanup
 cd ../app_lists
 brew bundle
 ```
+
+## Install Binary Installler Apps
+
+* Install Logi Options
+* Install Logitech G Hub
+
+## Enable SSH Server
+
+* System Settings -> General -> Sharing -> Remote Management
+* System Settings -> General -> Sharing -> Remote Login
+
+## Disable auto punctuation
+
+System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule space to period and other auto punctuation features
 
 ## Install Wireguard
 
