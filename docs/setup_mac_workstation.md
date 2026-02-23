@@ -24,11 +24,13 @@ System Settings → Displays → More Space
 1. Open System Settings → Desktop & Dock.
 2. Enable "Automaticcally Hide and Show the Dock"
 
-## Disable Displays have separate spaces
+## Disable Displays have separate spaces and other desktop settings
 
 1. Open System Settings → Desktop & Dock.
 2. Scroll to Mission Control.
 3. Disable "Displays have separate spaces"
+4. Disable "Show suggested and recent applications in Dock"
+5. Disable "Automatically rearrange Spaces based on most recent use"
 
 ## Set app order on Dock
 
@@ -124,7 +126,7 @@ Finder → View → Show Status Bar
 
 ## Git Setup
 
-* Follow instructions in [setup_git.md](./setup_git.md)
+- Follow instructions in [setup_git.md](./setup_git.md)
 
 ## Clone dotfiles
 
@@ -144,7 +146,7 @@ ln -s ~/GitHub/dotfiles/application_configs/bash/.zshrc ~/.zshrc
 
 ## Brew Setup
 
-* Install brew, run one line at a time in terminal:
+- Install brew, run one line at a time in terminal:
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -155,7 +157,7 @@ brew upgrade --cask
 brew cleanup
 ```
 
-* Use Brewfile in ../app_lists/Brewfile to install apps:
+- Use Brewfile in ../app_lists/Brewfile to install apps:
 
 ```bash
 cd ../app_lists
@@ -164,13 +166,13 @@ brew bundle
 
 ## Install Binary Installler Apps
 
-* Install Logi Options
-* Install Logitech G Hub
+- Install Logi Options
+- Install Logitech G Hub
 
 ## Enable SSH Server
 
-* System Settings -> General -> Sharing -> Remote Management
-* System Settings -> General -> Sharing -> Remote Login
+- System Settings -> General -> Sharing -> Remote Management
+- System Settings -> General -> Sharing -> Remote Login
 
 ## Disable auto punctuation
 
@@ -178,20 +180,20 @@ System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule 
 
 ## Install Wireguard
 
-* install from the App Store
+- install from the App Store
 
 ## Install GLKVM app
 
-* install from the App Store
+- install from the App Store
 
 ## Python Setup
 
-* Follow instructions in [setup_python.md](./setup_python.md)
+- Follow instructions in [setup_python.md](./setup_python.md)
 
 ## VSCode Setup
 
-* Follow instructions in [setup_vscode.md](./setup_vscode.md)
+- Follow instructions in [setup_vscode.md](./setup_vscode.md)
 
 ## Docker Setup
 
-* Follow instructions in [setup_docker.md](./setup_docker.md)
+- Follow instructions in [setup_docker.md](./setup_docker.md)
