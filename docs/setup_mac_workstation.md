@@ -43,7 +43,8 @@ System Settings → Displays → More Space
 - Notes
 - Bitwarden
 - Chrome
-- Edge Atlas
+- Edge
+- Atlas
 - Messages
 - Phone
 - FaceTime
@@ -54,7 +55,7 @@ System Settings → Displays → More Space
 - VSCode
 - Messenger
 - Discord
-- Slack/Teams
+- Slack/Meet/Teams
 - Plex
 - YouTube
 - YTMusic
@@ -69,7 +70,6 @@ System Settings → Displays → More Space
 - Epic Games
 - Activity Monitor
 - Shortcuts
-- Meet
 
 ## Disable clicking desktop moves windows
 
