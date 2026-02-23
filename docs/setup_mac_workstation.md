@@ -24,6 +24,12 @@ System Settings → Displays → More Space
 1. Open System Settings → Desktop & Dock.
 2. Enable "Automaticcally Hide and Show the Dock"
 
+## Disable Displays have separate spaces
+
+1. Open System Settings → Desktop & Dock.
+2. Scroll to Mission Control.
+3. Disable "Displays have separate spaces"
+
 ## Set app order on Dock
 
 - Finder
