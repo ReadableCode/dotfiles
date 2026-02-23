@@ -19,6 +19,50 @@ System Settings → Displays → More Space
   Enable Group applications by application
 5. Close Settings.
 
+## Auto hide the dock
+
+1. Open System Settings → Desktop & Dock.
+2. Enable "Automaticcally Hide and Show the Dock"
+
+## Set app order on Dock
+
+- Finder
+- Apps
+- App Store
+- Settings
+- Terminal
+- Redminders
+- Notes
+- Bitwarden
+- Chrome
+- Edge Atlas
+- Messages
+- Phone
+- FaceTime
+- Contacts
+- Mail
+- Calendar
+- ChatGPT
+- VSCode
+- Messenger
+- Discord
+- Slack/Teams
+- Plex
+- YouTube
+- YTMusic
+- Phone Mirroring
+- Parsec
+- VNCViewer
+- GLINet
+- Tailscale
+- OpenVPN
+- Wireguard
+- Steam
+- Epic Games
+- Activity Monitor
+- Shortcuts
+- Meet
+
 ## Disable clicking desktop moves windows
 
 1. Open System Settings → Desktop & Dock.
