@@ -295,16 +295,8 @@
     "<C-/>": false, // keep ctrl-/ for comment
   },
   "explorer.confirmDragAndDrop": false,
-  "todo-tree.general.tags": [
-    "HACK",
-    "FIXME",
-    "TODO",
-    "XXX",
-    "[ ]",
-    "[x]"
-  ],
-  "python.defaultInterpreterPath": "/opt/homebrew/bin/python3",
+  "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
   "explorer.confirmDelete": false,
-  "github.copilot.nextEditSuggestions.enabled": false,
+  "github.copilot.nextEditSuggestions.enabled": true,
   "chat.viewSessions.orientation": "stacked",
 }
