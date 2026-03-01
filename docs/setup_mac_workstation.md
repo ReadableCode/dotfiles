@@ -51,7 +51,7 @@ System Settings → Displays → More Space
 - Contacts
 - Mail
 - Calendar
-- ChatGPT
+- Claude
 - VSCode
 - Messenger
 - Discord
