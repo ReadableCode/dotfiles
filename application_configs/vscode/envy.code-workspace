@@ -1,1 +1,38 @@
-/Users/jason/GitHub/envy.code-workspace
+{
+  "folders": [
+    {
+      "path": "dotfiles",
+    },
+    {
+      "path": "personal_credentials",
+    },
+    {
+      "path": "hellofresh_credentials",
+    },
+    {
+      "path": "Cash_Flow_Commander",
+    },
+    {
+      "path": "Data_Tool_Pack_Py",
+    },
+    {
+      "path": "fourteen_foods",
+    },
+    {
+      "path": "Sync_Plex",
+    },
+    {
+      "path": "Assistant",
+    },
+    {
+      "path": "na-finops",
+    },
+    {
+      "path": "Book-Bot",
+    },
+    {
+      "path": "Docker",
+    },
+  ],
+  "settings": {},
+}
