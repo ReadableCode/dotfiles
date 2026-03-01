@@ -12,6 +12,7 @@ grandparent_dir = os.path.dirname(parent_dir)
 great_grandparent_dir = os.path.dirname(grandparent_dir)
 
 data_dir = os.path.join(parent_dir, "data")
+data_dir_archive = os.path.join(parent_dir, "data", "archive")
 templates_dir = os.path.join(parent_dir, "templates")
 log_dir = os.path.join(parent_dir, "logs")
 src_dir = os.path.join(parent_dir, "src")
@@ -21,6 +22,7 @@ s3_download_cache = os.path.join(data_dir, "s3_download_cache")
 
 directories = [
     data_dir,
+    data_dir_archive,
     templates_dir,
     log_dir,
     src_dir,

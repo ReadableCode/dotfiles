@@ -275,6 +275,7 @@
     "plaintext": true,
     "markdown": true,
     "scminput": false,
+    "python": true,
   },
   "diffEditor.codeLens": true,
   "diffEditor.experimental.showMoves": true,
@@ -295,14 +296,7 @@
     "<C-/>": false, // keep ctrl-/ for comment
   },
   "explorer.confirmDragAndDrop": false,
-  "todo-tree.general.tags": [
-    "HACK",
-    "FIXME",
-    "TODO",
-    "XXX",
-    "[ ]",
-    "[x]"
-  ],
+  "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
   "explorer.confirmDelete": false,
   "github.copilot.nextEditSuggestions.enabled": true,
   "chat.viewSessions.orientation": "stacked",

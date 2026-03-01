@@ -20,6 +20,7 @@ brew "speedtest-cli"
 brew "jq"
 brew "tmux"
 brew "exiftool"
+brew "bitwarden-cli"
 
 cask "google-chrome"
 cask "firefox"

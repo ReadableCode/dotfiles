@@ -6,7 +6,7 @@ import os
 import shutil
 import subprocess
 
-from config import data_dir, parent_dir
+from config import data_dir, data_dir_archive, grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from utils.date_tools import get_current_datetime, get_datetime_format_string
 from utils.display_tools import print_logger
@@ -31,12 +31,25 @@ BITWARDEN_URL = os.getenv("BITWARDEN_URL")
 # read org configs from env os.getenv("BITWARDEN_ORG_CONFIGS") as json item
 BITWARDEN_ORG_CONFIGS = json.loads(os.getenv("BITWARDEN_ORG_CONFIGS"))
 
+print(f"Bitwarden URL: {BITWARDEN_URL}")
+print(f"Bitwarden ORG_CONFIGS: {BITWARDEN_ORG_CONFIGS}")
 
 # %%
 # Imports #
 
 
+def logout():
+    logout_command = "bw logout"
+    try:
+        subprocess.run(logout_command, shell=True, check=True)
+        print("Logged out of Bitwarden.")
+    except subprocess.CalledProcessError as e:
+        print("Error logging out:", e)
+
+
 def login(bitwarden_username, bitwarden_password):
+    # ensure logged out
+    logout()
     # set server
     bw_config_command = f"bw config server {BITWARDEN_URL}"
     try:
@@ -74,26 +87,41 @@ def login(bitwarden_username, bitwarden_password):
 
 
 def export_file(file_type, username, org=None):
+    org_command = ""
     if org:
         org_id = BITWARDEN_ORG_CONFIGS[org]
         org_command = f"--organizationid {org_id} "
+
     # get filename with hostname from env
     output_file_name = f"bitwarden_backup_{username}_{HOSTNAME_LOWER}{(f'_{org}' if org else '')}.{file_type}"
     output_file_path = os.path.join(data_dir, output_file_name)
-    export_command = f'bw export {(org_command if org else "")}--output "{output_file_path}" --format {file_type}'
+    export_command = (
+        f'bw export {org_command}--output "{output_file_path}" --format {file_type}'
+    )
+
     try:
         subprocess.run(export_command, shell=True, check=True)
         print("Export command executed successfully.")
+        print(f"Wrote file to: {output_file_path}")
     except subprocess.CalledProcessError as e:
         print("Error executing export command:", e)
 
     # copy output file to archive folder with datetime on it
     archive_output_file_name = f"bitwarden_backup_{username}_{HOSTNAME_LOWER}_{CURRENT_DT}{(f'_{org}' if org else '')}.{file_type}"  # noqa E501
-    archive_output_file_path = os.path.join(
-        data_dir, "archive", archive_output_file_name
-    )
+    archive_output_file_path = os.path.join(data_dir_archive, archive_output_file_name)
     shutil.copy2(output_file_path, archive_output_file_path)
     print(f"Exported {file_type} file copied to archive folder.")
+
+    # if file type is json and parent_dir/personal_credentials exists then copy to bitwarden_exportss
+    if file_type == "json":
+        extra_output_folder_path = os.path.join(grandparent_dir, "personal_credentials", "bitwarden_exports")
+        extra_output_file_path = os.path.join(extra_output_folder_path, output_file_name)
+        # mkdirs
+        os.makedirs(extra_output_folder_path, exist_ok=True)
+        shutil.copy2(
+            output_file_path, extra_output_file_path
+        )
+        print(f"Exported {file_type} file copied to extra output path: {extra_output_file_path}")
 
 
 def export_file_types(username, org=None):
@@ -103,36 +131,34 @@ def export_file_types(username, org=None):
         export_file(file_type, username, org=org)
 
 
-def logout():
-    logout_command = "bw logout"
-    try:
-        subprocess.run(logout_command, shell=True, check=True)
-        print("Logged out of Bitwarden.")
-    except subprocess.CalledProcessError as e:
-        print("Error logging out:", e)
-
-
 def backup_bitwarden():
-    # primary user
-    bitwarden_username = os.getenv("BITWARDEN_USERNAME")
-    bitwarden_password = os.getenv("BITWARDEN_PASSWORD")
-    print_logger(f"Primary user {bitwarden_username} running", as_break=True)
-    login(bitwarden_username, bitwarden_password)
-    export_file_types(username=bitwarden_username)
+    def run_user(username_env, password_env, include_orgs=False):
+        username = os.getenv(username_env)
+        password = os.getenv(password_env)
 
-    for org, org_id in BITWARDEN_ORG_CONFIGS.items():
-        print_logger(f"Exporting {org} org", as_break=True)
-        export_file_types(username=bitwarden_username, org=org)
+        print_logger(f"{username} running", as_break=True)
 
-    logout()
+        try:
+            login(username, password)
+            export_file_types(username=username)
 
-    # secondary user
-    bitwarden_username = os.getenv("BITWARDEN_USERNAME_SECONDARY")
-    bitwarden_password = os.getenv("BITWARDEN_PASSWORD_SECONDARY")
-    print_logger(f"Secondary user {bitwarden_username} running", as_break=True)
-    login(bitwarden_username, bitwarden_password)
-    export_file_types(username=bitwarden_username)
-    logout()
+            if include_orgs:
+                for org in BITWARDEN_ORG_CONFIGS:
+                    print_logger(f"Exporting {org} org", as_break=True)
+                    export_file_types(username=username, org=org)
+
+        finally:
+            logout()  # always runs
+
+    # primary
+    run_user("BITWARDEN_USERNAME", "BITWARDEN_PASSWORD", include_orgs=True)
+
+    # secondary
+    run_user(
+        "BITWARDEN_USERNAME_SECONDARY",
+        "BITWARDEN_PASSWORD_SECONDARY",
+        include_orgs=False,
+    )
 
 
 # %%
