@@ -36,6 +36,9 @@
     {
       "path": "RV",
     },
+    {
+      "path": "../SyncthingDB",
+    },
   ],
   "settings": {},
 }
