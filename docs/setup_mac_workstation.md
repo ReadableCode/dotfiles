@@ -118,11 +118,15 @@ Finder → Settings → Tags → Uncheck all tags
 
 Finder → Settings → Advanced → Enable “Show all filename extensions”
 
+Finder → Settings → Advanced → Enable “Keep Folders on Top In Windows when sorting by name”
+
 Finder → Settings → Advanced → “When performing a search" → Change to "search the current folder"
 
 Finder → View → Show Path Bar
 
 Finder → View → Show Status Bar
+
+- To show hidden files and folders, open a finder window and press `Command + Shift + .`
 
 ## Git Setup
 
