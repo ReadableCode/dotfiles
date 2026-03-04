@@ -21,6 +21,7 @@ brew "jq"
 brew "tmux"
 brew "exiftool"
 brew "bitwarden-cli"
+brew "ollama"
 
 cask "google-chrome"
 cask "firefox"
