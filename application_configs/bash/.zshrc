@@ -263,7 +263,9 @@ alias speed='speedtest-cli'
 alias sshryzenwhite='ssh jason@RyzenWhite'
 alias sshspectre='ssh jason@Spectre'
 alias sshzephyrus='ssh jason@JasonZephyrus'
+alias sshenvy='ssh jason@Envy'
 alias sshmac='ssh jason@MacbookPro12'
+alias sshmac14='ssh jason@macmini14'
 
 # Upstairs Rack #
 alias sshelite='ssh jason@EliteDesk'
