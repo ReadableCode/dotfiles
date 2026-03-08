@@ -40,6 +40,9 @@
       "path": "na-finops",
     },
     {
+      "path": "hf_dev",
+    },
+    {
       "path": "Book-Bot",
     },
     {
