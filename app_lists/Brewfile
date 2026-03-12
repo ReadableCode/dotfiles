@@ -22,6 +22,7 @@ brew "tmux"
 brew "exiftool"
 brew "bitwarden-cli"
 brew "ollama"
+brew "ffmpeg"
 
 cask "google-chrome"
 cask "firefox"
