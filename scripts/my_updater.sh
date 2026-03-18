@@ -10,6 +10,9 @@ update_macos() {
     brew update
     echo "Upgrading Brew packages..."
     brew upgrade
+    echo "Upgrading Brew casks..."
+    brew upgrade --cask
+    brew upgrade --cask --greedy
     echo "Cleaning up Brew..."
     brew cleanup
 }
