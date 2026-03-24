@@ -49,10 +49,6 @@
       "path": "Docker",
     },
     {
-      "name": "RV",
-      "path": "RV",
-    },
-    {
       "name": "SyncthingDB",
       "path": "../SyncthingDB",
     },

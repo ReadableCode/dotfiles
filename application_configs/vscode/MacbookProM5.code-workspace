@@ -1,54 +1,55 @@
 {
   "folders": [
     {
+      "name": "dotfiles",
       "path": "dotfiles",
     },
     {
+      "name": "personal_credentials",
       "path": "personal_credentials",
     },
     {
+      "name": "hellofresh_credentials",
       "path": "hellofresh_credentials",
     },
     {
+      "name": "Cash_Flow_Commander",
       "path": "Cash_Flow_Commander",
     },
     {
+      "name": "Data_Tool_Pack_Py",
       "path": "Data_Tool_Pack_Py",
     },
     {
-      "path": "Data_Tool_Pack_GO",
-    },
-    {
+      "name": "fourteen_foods",
       "path": "fourteen_foods",
     },
     {
-      "path": "Terminal_To_Do",
-    },
-    {
+      "name": "Sync_Plex",
       "path": "Sync_Plex",
     },
     {
+      "name": "Assistant",
       "path": "Assistant",
     },
     {
-      "path": "salad_and_go",
-    },
-    {
-      "path": "advent_of_code",
-    },
-    {
+      "name": "na-finops",
       "path": "na-finops",
     },
     {
+      "name": "hf_dev",
       "path": "hf_dev",
     },
     {
+      "name": "Book-Bot",
       "path": "Book-Bot",
     },
     {
-      "path": "RV",
+      "name": "Docker",
+      "path": "Docker",
     },
     {
+      "name": "SyncthingDB",
       "path": "../SyncthingDB",
     },
   ],
