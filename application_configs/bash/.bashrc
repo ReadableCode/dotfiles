@@ -125,3 +125,8 @@ fi
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+# Fix revoked session keyring in SSH/remote sessions (required for kubelogin token caching)
+if command -v keyctl >/dev/null 2>&1; then
+    keyctl show @s >/dev/null 2>&1 || keyctl new_session >/dev/null 2>&1
+fi
