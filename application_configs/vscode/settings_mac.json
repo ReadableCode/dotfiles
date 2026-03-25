@@ -78,11 +78,8 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   // Auto Formatting - Black / Flake8
-  "black-formatter.importStrategy": "fromEnvironment",
+  "black-formatter.importStrategy": "useBundled",
   "flake8.importStrategy": "useBundled",
-  "python.formatting.provider": "black",
-  "python.formatting.blackPath": "black",
-  "python.formatting.blackArgs": ["--fast"],
   // Auto Formatting - isort
   "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
