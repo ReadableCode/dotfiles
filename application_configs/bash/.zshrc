@@ -257,44 +257,15 @@ alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
 alias speed='speedtest-cli'
 
 
-### SSH Shortcuts ###
+### SSH Shortcuts (loaded from ssh_hosts.conf) ###
 
-# Workstations #
-alias sshryzenwhite='ssh jason@RyzenWhite'
-alias sshspectre='ssh jason@Spectre'
-alias sshzephyrus='ssh jason@JasonZephyrus'
-alias sshenvy='ssh jason@Envy'
-alias sshmac='ssh jason@MacbookPro12'
-alias sshmac14='ssh jason@macmini14'
-
-# Upstairs Rack #
-alias sshelite='ssh jason@EliteDesk'
-alias sshnuk='ssh jason@nukbuntu'
-alias sshopti='ssh jason@Optiplex9020'
-alias sshpav5='ssh jason@Pavilioni5'
-
-# Servers #
-alias sshbehemoth='ssh root@192.168.86.31'
-
-# Appliances #
-alias sshpi4='ssh pi@raspberrypi4'
-alias sshpi4a='ssh pi@raspberrypi4a'
-alias sshpi3='ssh pi@raspberrypi3'
-alias sshpi3a='ssh pi@raspberrypi3a'
-alias sshpi0='ssh pi@raspberrypi0'
-
-# Rebeca #
-alias sshshelly='ssh rebeca@Shelly'
-
-# HelloFresh #
-alias sshhello='ssh jason@192.168.86.4'
-alias sshhellowin='ssh HELLOFRESH\\16937827583938060798@HelloFreshWindows'
-
-# Fourteen Foods #
-alias ssh14='ssh jason.christiansen@192.168.86.126 -p 2222'
-
-# GinaMary #
-alias sshginamary='ssh gaddy_five@ginagaddysimac'
-
-# Android #
-alias sshtabs7p='ssh u0_a1053@GalaxyTabS7P -p 8022'
+_ssh_hosts_file="${gitDir}dotfiles/application_configs/ssh/ssh_hosts.conf"
+if [[ -f "$_ssh_hosts_file" ]]; then
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+        [[ -z "$_line" || "$_line" == \#* ]] && continue
+        read -r _name _rest <<< "$_line"
+        [[ -z "$_name" || -z "$_rest" ]] && continue
+        alias "$_name"="ssh $_rest"
+    done < "$_ssh_hosts_file"
+fi
+unset _ssh_hosts_file _line _name _rest

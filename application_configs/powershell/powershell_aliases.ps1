@@ -267,40 +267,20 @@ function showwifi {
 }
 
 
-### SSH Shortcuts ###
+### SSH Shortcuts (loaded from ssh_hosts.conf) ###
 
-# Workstations #
-function sshryzenwhite { ssh jason@192.168.86.94 }
-function sshspectre { ssh jason@Spectre }
-function sshzephyrus { ssh jason@JasonZephyrus }
-function sshmac { ssh jason@MacbookPro12 }
-
-# Upstairs Rack #
-function sshelite { ssh jason@192.168.86.179 }
-function sshnuk { ssh jason@nukbuntu }
-function sshopti { ssh jason@Optiplex9020 }
-function sshpav5 { ssh jason@Pavilioni5 }
-
-# Servers #
-function sshbehemoth { ssh root@192.168.86.31 }
-
-# Appliancs #
-function sshpi4 { ssh pi@raspberrypi4 }
-function sshpi4a { ssh pi@raspberrypi4a }
-function sshpi3 { ssh pi@raspberrypi3 }
-function sshpi3a { ssh pi@raspberrypi3a }
-function sshpi0 { ssh pi@raspberrypi0 }
-
-# Rebeca #
-function sshshelly { ssh rebeca@Shelly }
-
-# HelloFresh #
-function sshhello { ssh jason@192.168.86.4 }
-function sshhellowin { ssh HELLOFRESH\\16937827583938060798@HelloFreshWindows }
-
-# Fourteen Foods #
-function ssh14 { ssh jason.christiansen@192.168.86.126 -p 2222 }
-
-# Android #
-function sshtabs7p { ssh u0_a1053@GalaxyTabS7P -p 8022 }
+$sshHostsFile = Join-Path $gitDir 'dotfiles\application_configs\ssh\ssh_hosts.conf'
+if (Test-Path $sshHostsFile) {
+    Get-Content $sshHostsFile | ForEach-Object {
+        $line = $_.Trim()
+        if ($line -and -not $line.StartsWith('#')) {
+            $parts = $line -split '\s+', 2
+            $name = $parts[0]
+            $sshArgs = $parts[1]
+            if ($name -and $sshArgs) {
+                Set-Item -Path "function:global:$name" -Value ([scriptblock]::Create("ssh $sshArgs")) -Force
+            }
+        }
+    }
+}
 
