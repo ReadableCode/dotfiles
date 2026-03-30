@@ -33,3 +33,4 @@ gmail_token*.json
 *.egg-info/
 .venv
 authorized_keys
+*rsa_key*
