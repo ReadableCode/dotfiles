@@ -25,6 +25,7 @@ brew "ollama"
 brew "ffmpeg"
 brew "docker"
 brew "docker-compose"
+brew "anisble"
 
 cask "google-chrome"
 cask "firefox"
