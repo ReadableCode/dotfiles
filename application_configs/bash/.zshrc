@@ -257,15 +257,42 @@ alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
 alias speed='speedtest-cli'
 
 
-### SSH Shortcuts (loaded from ssh_hosts.conf) ###
+### SSH Shortcuts (loaded from unified Ansible inventory) ###
 
-_ssh_hosts_file="${gitDir}dotfiles/application_configs/ssh/ssh_hosts.conf"
-if [[ -f "$_ssh_hosts_file" ]]; then
+_hosts_file="${gitDir}dotfiles/inventory/hosts"
+if [[ -f "$_hosts_file" ]]; then
     while IFS= read -r _line || [[ -n "$_line" ]]; do
-        [[ -z "$_line" || "$_line" == \#* ]] && continue
-        read -r _name _rest <<< "$_line"
-        [[ -z "$_name" || -z "$_rest" ]] && continue
-        alias "$_name"="ssh $_rest"
-    done < "$_ssh_hosts_file"
+        [[ -z "$_line" || "$_line" == \#* || "$_line" == \[* ]] && continue
+        [[ "$_line" != *ssh_alias=* ]] && continue
+
+        _inv_host="${_line%% *}"
+
+        _alias="${_line#*ssh_alias=}";   _alias="${_alias%% *}"
+
+        if [[ "$_line" == *ssh_user=* ]]; then
+            _user="${_line#*ssh_user=}";  _user="${_user%% *}"
+        elif [[ "$_line" == *ansible_user=* ]]; then
+            _user="${_line#*ansible_user=}"; _user="${_user%% *}"
+        else
+            _user=""
+        fi
+
+        if [[ "$_line" == *ansible_host=* ]]; then
+            _host="${_line#*ansible_host=}"; _host="${_host%% *}"
+        else
+            _host="$_inv_host"
+        fi
+
+        _port=""
+        if [[ "$_line" == *ansible_port=* ]]; then
+            _port="${_line#*ansible_port=}"; _port="${_port%% *}"
+        fi
+
+        _ssh_cmd="ssh"
+        [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
+        _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
+
+        alias "$_alias"="$_ssh_cmd"
+    done < "$_hosts_file"
 fi
-unset _ssh_hosts_file _line _name _rest
+unset _hosts_file _line _inv_host _alias _user _host _port _ssh_cmd

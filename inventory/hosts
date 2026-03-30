@@ -1,73 +1,88 @@
+# Unified Host Inventory
+# Used by: Ansible, .zshrc, .bash_aliases, powershell_aliases.ps1
+#
+# SSH alias fields (parsed by shell/powershell):
+#   ssh_alias    - shell alias name (required for SSH shortcut creation)
+#   ssh_user     - override SSH user (optional, falls back to ansible_user)
+#   ansible_user - Ansible user & SSH fallback (must be inline for alias hosts)
+#   ansible_host - target host/IP (falls back to inventory hostname)
+#   ansible_port - SSH port (optional, defaults to 22)
+#
+# Hosts without ssh_alias are ignored by shell parsers.
+
 [windows_workstations]
-RyzenWhite
-Yoga7i
-Spectre
+RyzenWhite ansible_host=192.168.86.94 ansible_user=jason ssh_alias=sshryzenwhite
+Spectre ansible_user=jason ssh_alias=sshspectre
+Yoga7i ansible_user=jason
+JasonZephyrus ansible_user=jason ssh_alias=sshzephyrus
 
 [windows_workstations:vars]
-ansible_user=jason
 ansible_connection=ssh
 ansible_shell_type=powershell
 
 [linux_workstations]
-EliteDesk
-nukbuntu
-Pavilioni5
-JasonZephyrus
+EliteDesk ansible_host=192.168.86.179 ansible_user=jason ssh_alias=sshelite
+nukbuntu ansible_user=jason ssh_alias=sshnuk
+Optiplex9020 ansible_user=jason ssh_alias=sshopti
+Pavilioni5 ansible_user=jason ssh_alias=sshpav5
 
 [linux_workstations:vars]
 ansible_user=jason
 
-[work_linux]
-HelloFreshJason
-
-[work_linux:vars]
-ansible_user=jason
-
-[hellofresh_windows]
-HelloFreshWindows
-
-[hellofresh_windows:vars]
-ansible_user=jason
-ansible_connection=ssh
-ansible_shell_type=powershell
-
-[raspbian]
-raspberrypi0
-raspberrypi3
-raspberrypi3a
-raspberrypi4
-raspberrypi4a
-
-[raspbian:vars]
-ansible_user=pi
-
 [macs]
-MacBookPro12
+MacBookPro12 ansible_user=jason ssh_alias=sshmac
+macmini14 ansible_user=jason ssh_alias=sshmac14
+Envy ansible_user=jason ssh_alias=sshenvy
 
 [macs:vars]
 ansible_user=jason
 ansible_python_interpreter=/usr/bin/python3
 
+[work_linux]
+HelloFreshJason ansible_host=192.168.86.4 ansible_user=jason ssh_alias=sshhello
+
+[work_linux:vars]
+ansible_user=jason
+
+[hellofresh_windows]
+HelloFreshWindows ansible_user=jason ssh_alias=sshhellowin ssh_user=HELLOFRESH\16937827583938060798
+
+[hellofresh_windows:vars]
+ansible_connection=ssh
+ansible_shell_type=powershell
+
+[fourteen_foods]
+FourteenFoodsLaptop ansible_host=192.168.86.126 ansible_user=jason.christiansen ansible_port=2222 ssh_alias=ssh14
+
+[fourteen_foods:vars]
+ansible_connection=ssh
+
+[unraid]
+behemoth ansible_host=192.168.86.31 ansible_user=root ssh_alias=sshbehemoth
+
+[raspbian]
+raspberrypi4 ansible_user=pi ssh_alias=sshpi4
+raspberrypi4a ansible_user=pi ssh_alias=sshpi4a
+raspberrypi3 ansible_user=pi ssh_alias=sshpi3
+raspberrypi3a ansible_user=pi ssh_alias=sshpi3a
+raspberrypi0 ansible_user=pi ssh_alias=sshpi0
+
+[raspbian:vars]
+ansible_user=pi
+
 [rebeca_windows]
-Shelly
+Shelly ansible_user=rebeca ssh_alias=sshshelly
 
 [rebeca_windows:vars]
-ansible_user=rebeca
 ansible_connection=ssh
 ansible_shell_type=powershell
 
 [android]
-GalaxyZFold4
-GalaxyTabS7P
+GalaxyTabS7P ansible_user=u0_a1053 ansible_port=8022 ssh_alias=sshtabs7p
 OculusQuest2
 
-[android:vars]
-
-[unraid]
-behemoth ansible_host=behemoth
-
-[unraid:vars]
-ansible_user=root
+[ginamary]
+ginagaddysimac ansible_user=gaddy_five ssh_alias=sshginamary
 
 [iOS]
 AppleCrap
@@ -75,13 +90,9 @@ FreshPhone
 AppleTV4k
 AppleTV
 
-[iOS:vars]
-
 [rebeca_iOS]
 iPhone13ProMax
 iPadMini6
-
-[rebeca_iOS:vars]
 
 [networking]
 asusrouter ansible_host=192.168.86.1
@@ -90,15 +101,11 @@ Laundry_Room_Switch
 Den_Switch
 Office_Switch
 
-[networking:vars]
-
 [game_consoles]
 Switch
 RebecaSwitch
 Switch2
 RebecaSwitch2
-
-[game_consoles:vars]
 
 [IOT]
 Amcrest_Cameras
@@ -110,8 +117,6 @@ SolarPanels
 Litter_Robot_4
 iRobot
 Braava
-
-[IOT:vars]
 
 [crown_windows]
 WhiteTower

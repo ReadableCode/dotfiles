@@ -267,18 +267,32 @@ function showwifi {
 }
 
 
-### SSH Shortcuts (loaded from ssh_hosts.conf) ###
+### SSH Shortcuts (loaded from unified Ansible inventory) ###
 
-$sshHostsFile = Join-Path $gitDir 'dotfiles\application_configs\ssh\ssh_hosts.conf'
-if (Test-Path $sshHostsFile) {
-    Get-Content $sshHostsFile | ForEach-Object {
+$hostsFile = Join-Path $gitDir 'dotfiles\inventory\hosts'
+if (Test-Path $hostsFile) {
+    Get-Content $hostsFile | ForEach-Object {
         $line = $_.Trim()
-        if ($line -and -not $line.StartsWith('#')) {
-            $parts = $line -split '\s+', 2
-            $name = $parts[0]
-            $sshArgs = $parts[1]
-            if ($name -and $sshArgs) {
-                Set-Item -Path "function:global:$name" -Value ([scriptblock]::Create("ssh $sshArgs")) -Force
+        if ($line -and -not $line.StartsWith('#') -and -not $line.StartsWith('[') -and $line -match 'ssh_alias=') {
+            $parts = $line -split '\s+'
+            $invHost = $parts[0]
+            $vars = @{}
+            foreach ($part in $parts[1..($parts.Length - 1)]) {
+                if ($part -match '^([\w]+)=(.+)$') {
+                    $vars[$matches[1]] = $matches[2]
+                }
+            }
+
+            $alias = $vars['ssh_alias']
+            $user = if ($vars.ContainsKey('ssh_user')) { $vars['ssh_user'] } elseif ($vars.ContainsKey('ansible_user')) { $vars['ansible_user'] } else { '' }
+            $hostTarget = if ($vars.ContainsKey('ansible_host')) { $vars['ansible_host'] } else { $invHost }
+            $port = if ($vars.ContainsKey('ansible_port')) { $vars['ansible_port'] } else { '' }
+
+            $sshArgs = "$user@$hostTarget"
+            if ($port) { $sshArgs = "-p $port $sshArgs" }
+
+            if ($alias -and $user) {
+                Set-Item -Path "function:global:$alias" -Value ([scriptblock]::Create("ssh $sshArgs")) -Force
             }
         }
     }
