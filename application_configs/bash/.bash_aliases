@@ -120,7 +120,7 @@ function todo() {
 
 alias ll='ls -AlhF'
 
-alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git diff --name-only master...HEAD | xargs -I{} code {}'
+alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git fetch -q && git diff --name-only origin/master...HEAD | xargs -I{} code {}'
 
 function gitpullall() {
 	arch=$(uname -m)
