@@ -125,3 +125,6 @@ WhiteTower
 ansible_user=crown
 ansible_connection=ssh
 ansible_shell_type=powershell
+
+[crown_linux]
+crown_unraid ansible_host=100.123.123.64 ansible_user=root ssh_alias=sshcrownunraid
