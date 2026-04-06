@@ -52,6 +52,12 @@
       "name": "us-prodtech",
       "path": "us-prodtech",
     },
+    {
+      "path": "snowflake-db-finops-debit",
+    },
+    {
+      "path": "snowflake-db-finops-debit-sensitive",
+    },
   ],
   "settings": {
     "workbench.colorCustomizations": {
