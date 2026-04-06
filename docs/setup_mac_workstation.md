@@ -8,6 +8,11 @@ System Settings → General → About
 
 System Settings → Displays → More Space
 
+## Set key repeat delay and rate
+
+System Settings → Keyboard
+Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
+
 ## Enable apps collapsing into dock icons
 
 1. Open System Settings → Desktop & Dock.
