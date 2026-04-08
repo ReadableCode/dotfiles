@@ -58,6 +58,9 @@
     {
       "path": "snowflake-db-finops-debit-sensitive",
     },
+    {
+      "path": "ca-cogs-report",
+    },
   ],
   "settings": {
     "workbench.colorCustomizations": {
