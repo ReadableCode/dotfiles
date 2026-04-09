@@ -53,13 +53,20 @@
       "path": "us-prodtech",
     },
     {
+      "name": "snowflake-db-finops-debit",
       "path": "snowflake-db-finops-debit",
     },
     {
+      "name": "snowflake-db-finops-debit-sensitive",
       "path": "snowflake-db-finops-debit-sensitive",
     },
     {
+      "name": "ca-cogs-report",
       "path": "ca-cogs-report",
+    },
+    {
+      "name": "ca-ops-analytics-snowflake",
+      "path": "ca-ops-analytics-snowflake",
     },
   ],
   "settings": {
