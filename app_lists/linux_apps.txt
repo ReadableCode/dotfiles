@@ -33,3 +33,4 @@ tmux
 tree
 unixodbc
 unzip
+ripgrep
