@@ -23,7 +23,6 @@ ansible_shell_type=powershell
 [linux_workstations]
 EliteDesk ansible_host=192.168.86.179 ansible_user=jason ssh_alias=sshelite
 nukbuntu ansible_user=jason ssh_alias=sshnuk
-Optiplex9020 ansible_user=jason ssh_alias=sshopti
 Pavilioni5 ansible_user=jason ssh_alias=sshpav5
 
 [linux_workstations:vars]
