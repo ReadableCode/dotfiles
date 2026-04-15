@@ -108,8 +108,20 @@
 
 ## Installing Docker on macOS
 
-- Install with Brew:
+Use [Colima](https://github.com/abiosoft/colima) (open-source) instead of Docker Desktop:
 
 ```bash
-brew install --cask docker
+brew install docker docker-compose colima
+```
+
+Start the Docker engine before use:
+
+```bash
+colima start
+```
+
+Stop it when done (so nothing runs in the background):
+
+```bash
+colima stop
 ```
