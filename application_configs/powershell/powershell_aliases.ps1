@@ -7,7 +7,8 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
         'C:\Users\jason.christiansen\userapps\PortableGit\bin',
         'C:\Users\jason.christiansen\userapps\fzf-0.66.1-windows_amd64',
-        'C:\msys64\mingw64\bin'
+        'C:\msys64\mingw64\bin',
+	    'C:\msys64\usr\bin'
     )
     $curr = ($env:Path -split ';') | Where-Object { $_ }
     foreach ($p in $paths) {

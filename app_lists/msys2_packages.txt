@@ -1,0 +1,7 @@
+mingw-w64-x86_64-bat
+mingw-w64-x86_64-fd
+mingw-w64-x86_64-gdk-pixbuf2
+mingw-w64-x86_64-gobject-introspection
+mingw-w64-x86_64-gtk3
+mingw-w64-x86_64-pango
+mingw-w64-x86_64-ripgrep
