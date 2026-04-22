@@ -4,6 +4,12 @@
 
 System Settings → General → About
 
+## Always show all files
+
+```bash
+defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder
+```
+
 ## Change scaling
 
 System Settings → Displays → More Space

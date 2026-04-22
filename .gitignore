@@ -34,3 +34,4 @@ gmail_token*.json
 .venv
 authorized_keys
 *rsa_key*
+.DS_Store
