@@ -1,3 +1,5 @@
+brew "bat"
+brew "mosh"
 brew "git"
 brew "python"
 brew "tree"
