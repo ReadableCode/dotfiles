@@ -28,7 +28,7 @@ brew "ffmpeg"
 brew "docker"
 brew "docker-compose"
 brew "colima"
-brew "anisble"
+brew "ansible"
 
 cask "google-chrome"
 cask "firefox"
