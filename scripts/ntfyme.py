@@ -2,7 +2,12 @@
 """ntfyme: run a command, send a ntfy notification when it exits.
 
 Reads NTFY_URL, NTFY_TOPIC, NTFY_USERNAME, NTFY_PASSWORD from <dotfiles>/.env
-(or the process env). CLI flags override env vars. Stdlib only.
+(or the process env). CLI flags override env vars.
+
+Stdlib only, except for an optional `truststore` import — when installed it
+makes Python use the OS-native trust store (Schannel on Windows, SecureTransport
+on macOS), which is the only reliable way to pick up corporate / self-hosted CAs
+on Windows. Falls back gracefully when not present.
 """
 
 import argparse
@@ -12,13 +17,18 @@ import os
 import shlex
 import signal
 import socket
-import ssl
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
 
 DOTFILES_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = DOTFILES_ROOT / ".env"
@@ -52,25 +62,6 @@ def format_duration(seconds: float) -> str:
     return f"{h}h {m}m {s}s"
 
 
-def _build_ssl_context():
-    """Build a context that trusts the OS store. On Windows, also load the CA (intermediate) store — create_default_context only loads ROOT, which misses corporate TLS-inspection certs and some self-signed CAs."""
-    ctx = ssl.create_default_context()
-    if sys.platform == "win32":
-        for store in ("ROOT", "CA"):
-            try:
-                certs = ssl.enum_certificates(store)
-            except (FileNotFoundError, OSError, AttributeError):
-                continue
-            for cert, encoding, trust in certs:
-                if encoding != "x509_asn" or not trust:
-                    continue
-                try:
-                    ctx.load_verify_locations(cadata=ssl.DER_cert_to_PEM_cert(cert))
-                except ssl.SSLError:
-                    pass
-    return ctx
-
-
 def send_notification(
     server, topic, title, body, priority, tags, username=None, password=None
 ):
@@ -91,7 +82,7 @@ def send_notification(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10, context=_build_ssl_context()) as resp:
+        with urllib.request.urlopen(req, timeout=10) as resp:
             resp.read()
     except (urllib.error.URLError, OSError) as e:
         print(f"[ntfyme] notification failed: {e}", file=sys.stderr)
