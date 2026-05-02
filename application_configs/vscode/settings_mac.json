@@ -323,4 +323,5 @@
       "approveResponse": false,
     },
   },
+  "terminal.integrated.macOptionIsMeta": true,
 }
