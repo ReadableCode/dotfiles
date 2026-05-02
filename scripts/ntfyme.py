@@ -3,15 +3,9 @@
 
 Reads NTFY_URL, NTFY_TOPIC, NTFY_USERNAME, NTFY_PASSWORD from <dotfiles>/.env
 (or the process env). CLI flags override env vars.
-
-Stdlib only, except for an optional `truststore` import — when installed it
-makes Python use the OS-native trust store (Schannel on Windows, SecureTransport
-on macOS), which is the only reliable way to pick up corporate / self-hosted CAs
-on Windows. Falls back gracefully when not present.
 """
 
 import argparse
-import base64
 import collections
 import os
 import shlex
@@ -20,15 +14,9 @@ import socket
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
-try:
-    import truststore
-    truststore.inject_into_ssl()
-except ImportError:
-    pass
+import requests
 
 DOTFILES_ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = DOTFILES_ROOT / ".env"
@@ -72,19 +60,12 @@ def send_notification(
         "Priority": str(priority),
         "Tags": ",".join(tags),
     }
-    if username and password:
-        creds = base64.b64encode(f"{username}:{password}".encode()).decode()
-        headers["Authorization"] = f"Basic {creds}"
-    req = urllib.request.Request(
-        url,
-        data=body.encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
+    auth = (username, password) if username and password else None
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            resp.read()
-    except (urllib.error.URLError, OSError) as e:
+        requests.post(
+            url, data=body.encode("utf-8"), headers=headers, auth=auth, timeout=10
+        )
+    except requests.RequestException as e:
         print(f"[ntfyme] notification failed: {e}", file=sys.stderr)
 
 

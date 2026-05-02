@@ -182,7 +182,7 @@ function gitpullall {
 ### Script Shortcuts ###
 
 function ntfyme {
-    python (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
+    & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
 }
 
 ### Servers ###
