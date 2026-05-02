@@ -12,6 +12,7 @@ import os
 import shlex
 import signal
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -51,6 +52,25 @@ def format_duration(seconds: float) -> str:
     return f"{h}h {m}m {s}s"
 
 
+def _build_ssl_context():
+    """Build a context that trusts the OS store. On Windows, also load the CA (intermediate) store — create_default_context only loads ROOT, which misses corporate TLS-inspection certs and some self-signed CAs."""
+    ctx = ssl.create_default_context()
+    if sys.platform == "win32":
+        for store in ("ROOT", "CA"):
+            try:
+                certs = ssl.enum_certificates(store)
+            except (FileNotFoundError, OSError, AttributeError):
+                continue
+            for cert, encoding, trust in certs:
+                if encoding != "x509_asn" or not trust:
+                    continue
+                try:
+                    ctx.load_verify_locations(cadata=ssl.DER_cert_to_PEM_cert(cert))
+                except ssl.SSLError:
+                    pass
+    return ctx
+
+
 def send_notification(
     server, topic, title, body, priority, tags, username=None, password=None
 ):
@@ -71,7 +91,7 @@ def send_notification(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=10, context=_build_ssl_context()) as resp:
             resp.read()
     except (urllib.error.URLError, OSError) as e:
         print(f"[ntfyme] notification failed: {e}", file=sys.stderr)
