@@ -251,6 +251,7 @@ function gitpullall() {
 alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
+alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
 
 ### Program Shortcuts ###
 

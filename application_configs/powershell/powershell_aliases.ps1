@@ -179,6 +179,12 @@ function gitpullall {
     & $binary -path $gitDir -r
 }
 
+### Script Shortcuts ###
+
+function ntfyme {
+    python (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
+}
+
 ### Servers ###
 
 function startjupyterlab {
