@@ -20,6 +20,8 @@ net-tools
 npm
 openssh-server
 pandoc
+python3-isort
+ripgrep
 speedtest-cli
 ssmtp
 steam
@@ -33,4 +35,3 @@ tmux
 tree
 unixodbc
 unzip
-ripgrep
