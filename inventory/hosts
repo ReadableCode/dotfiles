@@ -12,6 +12,7 @@
 
 [windows_workstations]
 RyzenWhite ansible_host=192.168.86.94 ansible_user=jason ssh_alias=sshryzenwhite
+UltraPocket ansible_user=jason ssh_alias=sshultra
 Spectre ansible_user=jason ssh_alias=sshspectre
 Yoga7i ansible_user=jason
 JasonZephyrus ansible_user=jason ssh_alias=sshzephyrus
