@@ -2,64 +2,69 @@
   "folders": [
     {
       "name": "dotfiles",
-      "path": "dotfiles"
+      "path": "dotfiles",
     },
     {
       "name": "personal_credentials",
-      "path": "personal_credentials"
+      "path": "personal_credentials",
     },
     {
       "name": "hellofresh_credentials",
-      "path": "hellofresh_credentials"
+      "path": "hellofresh_credentials",
     },
     {
       "name": "Cash_Flow_Commander",
-      "path": "Cash_Flow_Commander"
+      "path": "Cash_Flow_Commander",
     },
     {
       "name": "Data_Tool_Pack_Py",
-      "path": "Data_Tool_Pack_Py"
+      "path": "Data_Tool_Pack_Py",
     },
     {
       "name": "fourteen_foods",
-      "path": "fourteen_foods"
+      "path": "fourteen_foods",
     },
     {
       "name": "Sync_Plex",
-      "path": "Sync_Plex"
+      "path": "Sync_Plex",
     },
     {
       "name": "Assistant",
-      "path": "Assistant"
+      "path": "Assistant",
     },
     {
       "name": "na-finops",
-      "path": "na-finops"
+      "path": "na-finops",
     },
     {
       "name": "hf_dev",
-      "path": "hf_dev"
+      "path": "hf_dev",
     },
     {
       "name": "Book-Bot",
-      "path": "Book-Bot"
+      "path": "Book-Bot",
     },
     {
       "name": "Docker",
-      "path": "Docker"
+      "path": "Docker",
     },
     {
-      "name": "SyncthingDB",
-      "path": "../SyncthingDB"
+      "name": "duck_db_api",
+      "path": "duck_db_api",
     },
     {
       "name": "herdstone",
-      "path": "herdstone"
+      "path": "herdstone",
     },
     {
+      "name": "SyncthingDB",
+      "path": "../SyncthingDB",
+    },
+
+    {
       "name": "HelloFresh",
-      "path": "../Library/CloudStorage/OneDrive-Personal/Documents/Work/HelloFresh"
-    }
+      "path": "../Library/CloudStorage/OneDrive-Personal/Documents/Work/HelloFresh",
+    },
   ],
   "settings": {},
 }
