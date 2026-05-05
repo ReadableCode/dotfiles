@@ -303,4 +303,5 @@
   "explorer.confirmDelete": false,
   "github.copilot.nextEditSuggestions.enabled": true,
   "chat.viewSessions.orientation": "stacked",
+  "git.addAICoAuthor": "off",
 }
