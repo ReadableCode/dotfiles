@@ -62,13 +62,13 @@
 - Add Docker GPG Key:
 
   ```bash
-  curl -fsSL <https://download.docker.com/linux/ubuntu/gpg> | sudo apt-key add -
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
   ```
 
 - Add the Docker repository to your system's software sources:
 
   ```bash
-  sudo add-apt-repository "deb [arch=amd64] <https://download.docker.com/linux/ubuntu> $(lsb_release -cs) stable"
+  sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
   ```
 
 - Update Package Index Again:
@@ -104,6 +104,14 @@
 
     ```bash
     su - ${USER}
+    ```
+
+- Install docker-compose
+
+  - Docker Compose is a tool for defining and running multi-container Docker applications. To install it, run the following command:
+
+    ```bash
+    sudo apt install docker-compose
     ```
 
 ## Installing Docker on macOS

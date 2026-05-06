@@ -35,3 +35,4 @@ tmux
 tree
 unixodbc
 unzip
+docker-compose
