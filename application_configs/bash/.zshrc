@@ -6,15 +6,13 @@ export HISTSIZE=1000000
 export SAVEHIST=1000000
 
 # Set history options
-setopt APPEND_HISTORY         # Append to history file
-setopt SHARE_HISTORY          # Share history across sessions
+setopt SHARE_HISTORY          # Share history across all sessions (implies APPEND + INC_APPEND)
 setopt HIST_IGNORE_DUPS       # Don't record duplicate entries
 setopt HIST_IGNORE_ALL_DUPS   # Delete old duplicate entries
 setopt HIST_IGNORE_SPACE      # Don't record entries starting with space
 setopt HIST_SAVE_NO_DUPS      # Don't write duplicate entries to history file
 setopt HIST_REDUCE_BLANKS     # Remove superfluous blanks
 setopt HIST_VERIFY            # Show command with history expansion before running
-setopt INC_APPEND_HISTORY     # Write to history file immediately
 setopt EXTENDED_HISTORY       # Save timestamp and duration
 
 # Force load existing history
