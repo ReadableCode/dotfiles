@@ -80,13 +80,17 @@
   // Auto Formatting - Black / Flake8
   "black-formatter.importStrategy": "fromEnvironment",
   "flake8.importStrategy": "fromEnvironment",
-  "flake8.interpreter": ["${userHome}/GitHub/dotfiles/.venv/bin/python"],
+  "flake8.interpreter": [
+    "${userHome}\\GitHub\\dotfiles\\.venv\\Scripts\\python.exe"
+  ],
   "python.formatting.provider": "black",
   "python.formatting.blackPath": "black",
   "python.formatting.blackArgs": ["--fast"],
   // Auto Formatting - isort
   "isort.importStrategy": "fromEnvironment",
-  "isort.interpreter": ["${userHome}/GitHub/dotfiles/.venv/bin/python"],
+  "isort.interpreter": [
+    "${userHome}\\GitHub\\dotfiles\\.venv\\Scripts\\python.exe"
+  ],
   "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
     "source.organizeImports": "always"
