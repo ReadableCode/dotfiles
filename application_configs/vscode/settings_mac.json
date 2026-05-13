@@ -82,11 +82,9 @@
   "flake8.importStrategy": "useBundled",
   // Auto Formatting - isort
   "isort.importStrategy": "useBundled",
-  "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
     "source.organizeImports": "always"
   },
-  "python.sortImports.args": ["--profile", "black"],
   "isort.args": ["--profile", "black"],
   // Auto Formatting - Prettier-SQL
   "Prettier-SQL.denseOperators": true,
