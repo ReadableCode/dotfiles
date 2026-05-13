@@ -328,5 +328,7 @@
   },
   "terminal.integrated.macOptionIsMeta": true,
   "git.addAICoAuthor": "off",
-  "githubPullRequests.postCreate": "none"
+  "githubPullRequests.postCreate": "none",
+  "githubPullRequests.pullPR": false,
+  "github.pullRequest.showOnStartup": false
 }
