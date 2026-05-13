@@ -79,11 +79,9 @@
   },
   // Auto Formatting - Black / Flake8
   "black-formatter.importStrategy": "useBundled",
-  "flake8.importStrategy": "fromEnvironment",
-  "flake8.interpreter": ["${userHome}/GitHub/dotfiles/.venv/bin/python"],
+  "flake8.importStrategy": "useBundled",
   // Auto Formatting - isort
-  "isort.importStrategy": "fromEnvironment",
-  "isort.interpreter": ["${userHome}/GitHub/dotfiles/.venv/bin/python"],
+  "isort.importStrategy": "useBundled",
   "python.sortImports.path": "isort",
   "editor.codeActionsOnSave": {
     "source.organizeImports": "always"
