@@ -189,6 +189,46 @@ brew bundle
 - System Settings -> General -> Sharing -> Remote Management
 - System Settings -> General -> Sharing -> Remote Login
 
+### Generate ssh keys if needed
+
+- open terminal and run commands:
+
+  ```bash
+  cd ~
+  ls -a
+  ```
+  
+- if .ssh directory doesn't exist:
+
+  ```bash
+  mkdir .ssh
+  ```
+  
+- enter .ssh directory
+
+  ```bash
+  cd .ssh
+  ```
+  
+- if .pub key doesn't exist:
+
+  ```bash
+  ssh-keygen -t rsa -b 4096
+  # press enter to accept defaults
+  ```
+
+- To create an additional key or with a different name:
+
+  ```bash
+  ssh-keygen -t rsa -b 4096 -f ~/.ssh/key_name
+  ```
+  
+- Run the following command and copy just the key to GitHub:
+
+  ```bash
+  cat ~/.ssh/id_rsa.pub
+  ```
+
 ## Disable auto punctuation
 
 System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule space to period and other auto punctuation features
