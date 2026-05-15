@@ -223,7 +223,7 @@ brew bundle
   ssh-keygen -t rsa -b 4096 -f ~/.ssh/key_name
   ```
   
-- Run the following command and copy just the key to GitHub:
+- Run the following command and copy just the key if needed to deploy:
 
   ```bash
   cat ~/.ssh/id_rsa.pub
