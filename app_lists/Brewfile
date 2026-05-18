@@ -30,6 +30,8 @@ brew "docker"
 brew "docker-compose"
 brew "colima"
 brew "ansible"
+brew "ncdu"
+brew "gdu"
 
 cask "google-chrome"
 cask "firefox"
