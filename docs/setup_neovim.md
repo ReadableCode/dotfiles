@@ -149,14 +149,83 @@ pkg install neovim nodejs
 Use this if you can't install software system-wide (locked-down work
 laptop, USB stick, etc.).
 
-1. Download a release archive for your OS from
-   [Neovim Releases](https://github.com/neovim/neovim/releases).
-2. Extract it anywhere you have write access (e.g. `C:\Tools\nvim` or
-   `~/tools/nvim`).
-3. Add the extracted `bin/` directory to your `PATH`.
-4. Verify with `nvim --version`.
-5. Follow the [Deploy the Config](#deploy-the-config-initlua) section below —
-   the same `init.lua` works for portable installs.
+#### 1. Download and extract
+
+Download a release archive for your OS from
+[Neovim Releases](https://github.com/neovim/neovim/releases).
+
+- **Windows**: download `nvim-win64.zip`, extract to a folder you own, e.g.
+  `C:\Users\<you>\userapps\nvim-win64\`
+- **Linux/mac**: download `nvim-linux64.tar.gz` / `nvim-macos.tar.gz`,
+  extract to `~/tools/nvim/`
+
+#### 2. Add the `bin/` folder to your PATH
+
+**Windows (PowerShell, current session only):**
+
+```powershell
+$env:PATH += ";$env:USERPROFILE\userapps\nvim-win64\bin"
+```
+
+To make it permanent, add it via *System Properties → Environment Variables →
+User variables → Path → Edit → New*.
+
+**Linux/mac (add to `~/.zshrc` or `~/.bashrc`):**
+
+```bash
+export PATH="$HOME/tools/nvim/bin:$PATH"
+```
+
+#### 3. Verify
+
+```powershell
+nvim --version
+```
+
+#### 4. Where does portable Neovim look for its config?
+
+Even a portable Neovim binary uses the **same config location** as a regular
+install. It does **not** look next to the `nvim.exe` — it uses environment
+variables. Find the exact path from inside Neovim:
+
+```vim
+:echo stdpath('config')
+```
+
+Typical results:
+
+| OS | Default config path |
+| --- | --- |
+| Windows | `C:\Users\<you>\AppData\Local\nvim\` |
+| macOS | `~/.config/nvim/` |
+| Linux | `~/.config/nvim/` |
+
+> To override (e.g. to keep config on a USB stick alongside the binary), set
+> `XDG_CONFIG_HOME` before launching:
+>
+> **Windows (permanent, no admin):**
+>
+> ```powershell
+> [Environment]::SetEnvironmentVariable(
+>   'XDG_CONFIG_HOME',
+>   "$env:USERPROFILE\userapps\nvim-config",
+>   'User'
+> )
+> ```
+>
+> **Linux/mac:**
+>
+> ```bash
+> XDG_CONFIG_HOME=~/tools/nvim-config nvim
+> ```
+>
+> Neovim will then look for `init.lua` in `$XDG_CONFIG_HOME\nvim\init.lua`.
+
+#### 5. Symlink / link the config
+
+Once you know the config path (step 4), use the same no-admin approach
+described in the [Deploy the Config — Windows](#windows-1) section above
+(Option A is easiest: just set `XDG_CONFIG_HOME`).
 
 ---
 
@@ -209,19 +278,55 @@ Verify the link:
 ls -la ~/.config/nvim/init.lua
 ```
 
-### Windows (PowerShell as Administrator)
+### Windows
+
+Windows requires Administrator rights to create symlinks. Two no-admin
+alternatives are described below.
+
+#### Option A — Set `XDG_CONFIG_HOME` (recommended, no linking needed)
+
+Tell Neovim to look for its config directly inside your dotfiles folder.
+No copying or linking required:
 
 ```powershell
-cd $env:USERPROFILE\AppData\Local
-mkdir nvim -ErrorAction SilentlyContinue
-cd nvim
-cmd /c mklink init.lua C:\Users\jason\GitHub\dotfiles\application_configs\nvim\init.lua
+[Environment]::SetEnvironmentVariable(
+  'XDG_CONFIG_HOME',
+  "$env:USERPROFILE\GitHub\dotfiles\application_configs",
+  'User'
+)
 ```
 
-Adjust the source path if your username or repo location differs, for example:
+This is permanent for your user account (no admin needed). Restart
+PowerShell, then verify Neovim sees it:
 
 ```powershell
-cmd /c mklink init.lua C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\nvim\init.lua
+nvim --headless -c "echo stdpath('config')" -c q
+```
+
+It should print a path ending in `\dotfiles\application_configs\nvim`.
+Neovim will find `init.lua` there already — nothing else to do.
+
+#### Option B — Hard link (no admin required)
+
+Hard links on NTFS don't need admin. Unlike symlinks, both paths point to
+the same file on disk — edits via either path are identical.
+
+```powershell
+New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\nvim"
+New-Item -ItemType HardLink `
+  -Path "$env:LOCALAPPDATA\nvim\init.lua" `
+  -Target "$env:USERPROFILE\GitHub\dotfiles\application_configs\nvim\init.lua"
+```
+
+> **Caveat:** if `git checkout` or `git pull` ever *replaces* the file
+> (rather than editing it in place), the hard link breaks and you need to
+> re-run the `New-Item -ItemType HardLink` command. Option A doesn't have
+> this problem.
+
+Verify:
+
+```powershell
+dir "$env:LOCALAPPDATA\nvim"
 ```
 
 ---
@@ -516,7 +621,7 @@ Inside Neovim:
 | `Error executing Lua...field 'uv' a nil value` | Neovim is too old. Upgrade (see Linux section for the PPA). |
 | `:PlugInstall` says command not found | vim-plug isn't installed. Re-run the vim-plug curl/iwr command for your OS. |
 | Mason shows nothing | Node.js isn't installed or not on `PATH`. Run `node --version` to check. |
-| Symlink "access denied" on Windows | Open PowerShell **as Administrator** before running `mklink`. |
+| Symlink "access denied" on Windows | Creating symlinks needs admin. Use Option A (`XDG_CONFIG_HOME` env var) or Option B (hard link) from the Deploy section — neither needs admin. |
 | Edits to repo `init.lua` don't show up | Symlink wasn't created, or an old `init.vim` is shadowing it. Confirm with `ls -la ~/.config/nvim/` (mac/Linux) or `dir %LOCALAPPDATA%\nvim` (Windows). Remove any stray `init.vim`. |
 | Copilot ghost text doesn't appear | Run `:Copilot status`. If *Not Authorized*, run `:Copilot setup`. If *Node.js too old*, upgrade to Node ≥ 20. |
 | `:CopilotChat` says module not found | Run `:PlugInstall` to fetch `plenary.nvim` and `CopilotChat.nvim`, then restart Neovim. |
