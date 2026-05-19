@@ -66,7 +66,7 @@ Includes a Windows portable (no admin rights) install path.
 Using [Homebrew](https://brew.sh):
 
 ```bash
-brew install neovim node ripgrep fd
+brew install neovim node ripgrep fd tree-sitter
 ```
 
 Upgrade later with:
@@ -179,7 +179,16 @@ Both ship as standalone zip downloads — no installer required.
 2. Download `fd-*-x86_64-pc-windows-msvc.zip`.
 3. Extract to `C:\Users\jason.christiansen\userapps\fd\`
 
-> **PATH is handled automatically.** All four tools above are registered in
+#### 3b. Download the tree-sitter CLI (portable)
+
+nvim-treesitter (main branch) uses the `tree-sitter` CLI to build parsers.
+
+1. Go to [tree-sitter Releases](https://github.com/tree-sitter/tree-sitter/releases).
+2. Download `tree-sitter-windows-x64.gz`.
+3. Decompress it (7-Zip or `Expand-Archive`) and rename the binary to `tree-sitter.exe`.
+4. Place it at `C:\Users\jason.christiansen\userapps\tree-sitter\tree-sitter.exe`
+
+> **PATH is handled automatically.** All tools above are registered in
 > the FFLAP-2229 block in
 > `application_configs/powershell/powershell_aliases.ps1`. They're added to
 > `$env:Path` at profile load — no `[Environment]::SetEnvironmentVariable`
@@ -343,15 +352,16 @@ ensure_installed = { 'pyright', 'lua_ls', 'gopls' },
 
 ### Treesitter parsers
 
-Parsers are installed once via `require('nvim-treesitter').install({...})` in
-`init.lua`, which runs at startup and is idempotent (skips already-installed
-parsers). To add a language, append it to that list and run `:TSUpdate`:
+Parsers are installed via `require('nvim-treesitter').install({...})` in
+`init.lua`, which runs at startup and skips already-built parsers. To add a
+language, append it to the list and run `:TSUpdate`:
 
 ```lua
 require('nvim-treesitter').install({
   'bash', 'go', 'json', 'lua', 'markdown', 'markdown_inline',
   'python', 'sql', 'toml', 'vim', 'vimdoc', 'yaml',
 })
+```
 
 ### Re-sourcing the config without restarting
 

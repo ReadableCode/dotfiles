@@ -6,6 +6,7 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
         'C:\Users\jason.christiansen\userapps\node',
         'C:\Users\jason.christiansen\userapps\ripgrep',
         'C:\Users\jason.christiansen\userapps\fd',
+        'C:\Users\jason.christiansen\userapps\tree-sitter',
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python',
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
         'C:\Users\jason.christiansen\userapps\PortableGit\bin',

@@ -27,8 +27,9 @@ Plug('github/copilot.vim')
 Plug('nvim-lua/plenary.nvim')
 Plug('CopilotC-Nvim/CopilotChat.nvim', { branch = 'main' })
 
--- Treesitter: better syntax highlighting, folds, text objects.
--- Pinned to main (new API — no configs.setup(); see Autocommands section).
+-- Treesitter: better syntax highlighting, indent, folds, text objects.
+-- Must be on 'main' for nvim 0.11+; 'master' uses a removed API (range()).
+-- Requires the tree-sitter CLI binary on PATH to build parsers.
 Plug('nvim-treesitter/nvim-treesitter', { branch = 'main', ['do'] = ':TSUpdate' })
 
 -- Telescope: fuzzy finder for files, grep, buffers, help, LSP symbols, etc.
@@ -97,10 +98,11 @@ if ok_chat then
 end
 
 -- ---------------------------------------------------------------------------
--- Treesitter (main branch — new API)
--- install() is idempotent: safe to call every startup, only fetches missing
--- parsers. Add languages here and run :TSUpdate to fetch them.
--- Highlighting is wired up per-filetype in the Autocommands section below.
+-- Treesitter (main branch -- nvim 0.11+ API)
+-- install() is idempotent; runs at startup and skips already-built parsers.
+-- Add languages here and run :TSUpdate to fetch them.
+-- Highlighting + folds are enabled per-filetype in the Autocommands section.
+-- Requires the tree-sitter CLI on PATH (see docs/setup_neovim.md).
 -- ---------------------------------------------------------------------------
 local ok_ts, nvim_ts = pcall(require, 'nvim-treesitter')
 if ok_ts then
@@ -198,8 +200,6 @@ vim.api.nvim_create_autocmd('FileType', {
 })
 
 -- Treesitter: enable highlighting and expr-folds for supported filetypes.
--- Uses the main-branch API (vim.treesitter.start) instead of the old
--- configs.setup({ highlight = { enable = true } }) approach.
 vim.api.nvim_create_autocmd('FileType', {
   group = aug,
   pattern = {
@@ -209,8 +209,8 @@ vim.api.nvim_create_autocmd('FileType', {
   callback = function(args)
     pcall(vim.treesitter.start, args.buf)
     vim.wo.foldmethod = 'expr'
-    vim.wo.foldexpr  = 'v:lua.vim.treesitter.foldexpr()'
-    vim.wo.foldenable = false   -- open all folds on entry
+    vim.wo.foldexpr   = 'v:lua.vim.treesitter.foldexpr()'
+    vim.wo.foldenable  = false  -- start with all folds open
   end,
 })
 
