@@ -25,11 +25,42 @@ Plug('williamboman/mason-lspconfig.nvim')
 Plug('github/copilot.vim')
 
 -- GitHub Copilot Chat (sidebar / :CopilotChat commands)
--- plenary.nvim is a required dependency.
+-- plenary.nvim is a required dependency (also reused by telescope).
 Plug('nvim-lua/plenary.nvim')
 Plug('CopilotC-Nvim/CopilotChat.nvim', { branch = 'main' })
 
+-- Treesitter: better syntax highlighting, indent, folds, text objects.
+-- Pinned to master; parsers auto-install via the setup() block below.
+Plug('nvim-treesitter/nvim-treesitter', { branch = 'master', ['do'] = ':TSUpdate' })
+
+-- Telescope: fuzzy finder for files, grep, buffers, help, LSP symbols, etc.
+Plug('nvim-telescope/telescope.nvim', { branch = '0.1.x' })
+
 vim.call('plug#end')
+
+-- ---------------------------------------------------------------------------
+-- Auto-install missing plugins on first launch.
+-- If any plugin listed above isn't on disk yet, run :PlugInstall once and
+-- then source this file again so the require() calls below succeed.
+-- ---------------------------------------------------------------------------
+local function any_plug_missing()
+  for _, plug in pairs(vim.g.plugs or {}) do
+    if vim.fn.isdirectory(plug.dir) == 0 then
+      return true
+    end
+  end
+  return false
+end
+
+if any_plug_missing() then
+  vim.api.nvim_create_autocmd('VimEnter', {
+    once = true,
+    callback = function()
+      vim.cmd('PlugInstall --sync')
+      vim.cmd('source ' .. vim.fn.stdpath('config') .. '/init.lua')
+    end,
+  })
+end
 
 -- ---------------------------------------------------------------------------
 -- Mason + LSP setup
@@ -68,6 +99,32 @@ if ok_chat then
 end
 
 -- ---------------------------------------------------------------------------
+-- Treesitter
+-- Parsers listed in ensure_installed are downloaded & compiled on first use.
+-- Add more languages by extending the list, then restart nvim or run :TSUpdate.
+-- ---------------------------------------------------------------------------
+local ok_ts, ts_configs = pcall(require, 'nvim-treesitter.configs')
+if ok_ts then
+  ts_configs.setup({
+    ensure_installed = {
+      'bash', 'json', 'lua', 'markdown', 'markdown_inline',
+      'python', 'toml', 'vim', 'vimdoc', 'yaml',
+    },
+    auto_install = true,
+    highlight = { enable = true },
+    indent = { enable = true },
+  })
+end
+
+-- ---------------------------------------------------------------------------
+-- Telescope (fuzzy finder)
+-- ---------------------------------------------------------------------------
+local ok_tele, telescope = pcall(require, 'telescope')
+if ok_tele then
+  telescope.setup({})
+end
+
+-- ---------------------------------------------------------------------------
 -- GitHub Copilot (inline ghost-text completions)
 -- ---------------------------------------------------------------------------
 -- By default <Tab> accepts the current suggestion. Uncomment the block below
@@ -92,6 +149,15 @@ vim.keymap.set('n', '<Leader>ce', ':CopilotChatExplain<CR>', map_opts)
 vim.keymap.set('n', '<Leader>cf', ':CopilotChatFix<CR>',     map_opts)
 vim.keymap.set('n', '<Leader>ct', ':CopilotChatTests<CR>',   map_opts)
 vim.keymap.set('n', '<Leader>cr', ':CopilotChatReview<CR>',  map_opts)
+
+-- ---------------------------------------------------------------------------
+-- Telescope keymaps  (<Leader>f* = find)
+-- ---------------------------------------------------------------------------
+vim.keymap.set('n', '<Leader>ff', ':Telescope find_files<CR>', map_opts)
+vim.keymap.set('n', '<Leader>fg', ':Telescope live_grep<CR>',  map_opts)
+vim.keymap.set('n', '<Leader>fb', ':Telescope buffers<CR>',    map_opts)
+vim.keymap.set('n', '<Leader>fh', ':Telescope help_tags<CR>',  map_opts)
+vim.keymap.set('n', '<Leader>fr', ':Telescope resume<CR>',     map_opts)
 
 -- ---------------------------------------------------------------------------
 -- General editor options

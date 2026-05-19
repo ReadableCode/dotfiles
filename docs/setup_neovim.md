@@ -24,9 +24,10 @@ portable install.
 4. [Deploy the Config (`init.lua`)](#deploy-the-config-initlua)
 5. [Install Plugins and LSPs](#install-plugins-and-lsps)
 6. [Set Up GitHub Copilot](#set-up-github-copilot)
-7. [Verify Everything Works](#verify-everything-works)
-8. [Troubleshooting](#troubleshooting)
-9. [Reference: Neovim Key Symbols Explained](#reference-neovim-key-symbols-explained)
+7. [Telescope Keymaps](#telescope-keymaps)
+8. [Verify Everything Works](#verify-everything-works)
+9. [Troubleshooting](#troubleshooting)
+10. [Reference: Neovim Key Symbols Explained](#reference-neovim-key-symbols-explained)
 
 ---
 
@@ -35,20 +36,25 @@ portable install.
 - **Neovim** — the editor itself.
 - **vim-plug** — a plugin manager. Reads the `Plug(...)` lines in `init.lua`
   and downloads those plugins.
-- **Node.js** — required by `Mason` so it can install language servers.
+- **Node.js** — required by `Mason` (LSP installs) and GitHub Copilot.
 - **Mason** — installs and manages Language Server Protocol (LSP) servers
   (for example, `pyright` for Python autocomplete and error checking).
+- **Treesitter** — better syntax highlighting, smarter indentation, and
+  richer text objects. Language parsers download themselves automatically.
+- **Telescope** — fuzzy finder for files, live grep, buffers, and more.
+  Requires `ripgrep` for `:Telescope live_grep` (see install step below).
 
 ---
 
 ## Quick Start
 
 1. Install Neovim (see your OS section below).
-2. Install Node.js (needed for Mason / LSPs).
-3. Install vim-plug.
-4. Symlink this repo's `init.lua` to Neovim's config location.
-5. Open `nvim` and run `:PlugInstall`, then `:Mason` (press `i` on `pyright`).
-6. Restart your shell.
+2. Install Node.js (needed for Mason / LSPs and Copilot).
+3. Install `ripgrep` (needed for Telescope live grep).
+4. Install vim-plug.
+5. Symlink this repo's `init.lua` to Neovim's config location.
+6. Open `nvim` — plugins install automatically on first launch.
+7. Run `:Copilot setup` to authenticate GitHub Copilot (one-time).
 
 ---
 
@@ -59,7 +65,7 @@ portable install.
 Using [Homebrew](https://brew.sh):
 
 ```bash
-brew install neovim node
+brew install neovim node ripgrep
 ```
 
 Upgrade later with:
@@ -77,7 +83,7 @@ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs https://raw.g
 ### Linux
 
 ```bash
-sudo apt install neovim nodejs
+sudo apt install neovim nodejs ripgrep
 # Upgrade later with:
 sudo apt upgrade neovim
 ```
@@ -104,8 +110,7 @@ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
 Using [Chocolatey](https://chocolatey.org) (run PowerShell as Administrator):
 
 ```powershell
-choco install neovim
-choco install nodejs
+choco install neovim nodejs ripgrep
 # Upgrade later with:
 choco upgrade neovim
 ```
@@ -115,6 +120,7 @@ Or using winget:
 ```powershell
 winget install Neovim.Neovim
 winget install OpenJS.NodeJS
+winget install BurntSushi.ripgrep.MSVC
 ```
 
 Install vim-plug:
@@ -214,34 +220,52 @@ cmd /c mklink init.lua C:\Users\16937827583938060798\HelloFreshProjects\dotfiles
 
 ## Install Plugins and LSPs
 
-1. Open Neovim (there will be some errors first time, just hit enter)
+> **Plugins install automatically.** When you open `nvim` for the first time
+> after symlinking `init.lua`, the config detects any missing plugins and runs
+> `:PlugInstall` for you. You don't need to do it manually.
 
-   ```bash
-   nvim
-   ```
+If you ever need to force a reinstall or update:
 
-2. Install all plugins listed in `init.lua`:
+```vim
+:PlugInstall     " install any missing plugins
+:PlugUpdate      " update all plugins to their latest version
+:TSUpdate        " update / install Treesitter parsers
+```
 
-   ```vim
-   :PlugInstall
-   ```
+After `:PlugInstall` completes, press `q` to close the dialog, then quit and
+reopen `nvim` so all plugins initialise cleanly.
 
-   - Once it is done hit `q` to close the dialog
+### LSPs (Mason)
 
-3. Close Neovim with `:q`
+`pyright` (Python) auto-installs on startup via `ensure_installed` in the
+config. For other LSPs:
 
-4. Reopen Neovim with `nvim`
+```vim
+:Mason
+```
 
-5. Open Mason to install LSPs that are not in your init.lua defaults (e.g. `pyright` for Python):
+Navigate to the LSP you want and press `i`. Press `q` to close.
 
-   ```vim
-   :Mason
-   ```
+To add a language to the auto-install list, add it to `ensure_installed`
+in [application_configs/nvim/init.lua](../application_configs/nvim/init.lua):
 
-   Move the cursor to `pyright` (or any other LSP you want) and press `i` to
-   install it. Press `q` to close Mason when done.
+```lua
+ensure_installed = { 'pyright', 'lua_ls', 'gopls' },
+```
 
-6. Restart your shell so everything picks up cleanly.
+### Treesitter parsers
+
+Parsers for the languages in `ensure_installed` download on first open.
+`auto_install = true` means opening any file type not yet covered will
+prompt Treesitter to fetch that parser automatically. Add languages to the
+list in `init.lua` to pre-fetch them:
+
+```lua
+ensure_installed = {
+  'bash', 'json', 'lua', 'markdown', 'markdown_inline',
+  'python', 'toml', 'vim', 'vimdoc', 'yaml',
+},
+```
 
 ### Re-sourcing the config without restarting
 
@@ -426,6 +450,40 @@ buffer is captured as `#buffer`, and any other open file is reachable via
 
 ---
 
+## Telescope Keymaps
+
+Telescope is a fuzzy finder. All mappings use `<Leader>f*` (default `\f*`).
+
+| Mapping | What it does |
+| --- | --- |
+| `<Leader>ff` | Find files in the project (respects `.gitignore`) |
+| `<Leader>fg` | Live grep (search text across all files — needs `ripgrep`) |
+| `<Leader>fb` | Browse open buffers |
+| `<Leader>fh` | Search Neovim help tags |
+| `<Leader>fr` | Resume the last Telescope picker |
+
+You can also call any picker directly:
+
+```vim
+:Telescope find_files
+:Telescope live_grep
+:Telescope lsp_references
+:Telescope git_commits
+```
+
+Inside a Telescope window:
+
+| Keys | Action |
+| --- | --- |
+| Type anything | Filter results |
+| `<CR>` | Open selected item |
+| `<C-v>` | Open in vertical split |
+| `<C-x>` | Open in horizontal split |
+| `<C-t>` | Open in new tab |
+| `<Esc>` | Close picker |
+
+---
+
 ## Verify Everything Works
 
 Inside Neovim:
@@ -433,8 +491,10 @@ Inside Neovim:
 - `:checkhealth` — runs Neovim's built-in diagnostics. Look for green ✓s.
 - `:PlugStatus` — shows installed plugins.
 - `:Mason` — shows installed LSPs.
+- `:TSInstallInfo` — shows installed Treesitter parsers.
 - Open a `.py` file; you should see `pyright` start (status line / no errors
-  about missing LSPs).
+  about missing LSPs). Syntax should be richly highlighted by Treesitter.
+- `<Leader>ff` should open a Telescope file picker.
 - Start typing in a code file — gray ghost text should appear from Copilot.
   Press `<Tab>` to accept. Run `:Copilot status` to confirm it's *Online*.
 - Run `:CopilotChat` — a chat window should open.
@@ -453,6 +513,9 @@ Inside Neovim:
 | Copilot ghost text doesn't appear | Run `:Copilot status`. If *Not Authorized*, run `:Copilot setup`. If *Node.js too old*, upgrade to Node ≥ 20. |
 | `:CopilotChat` says module not found | Run `:PlugInstall` to fetch `plenary.nvim` and `CopilotChat.nvim`, then restart Neovim. |
 | `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.lua` to use `<C-J>` instead. |
+| Telescope `live_grep` says no results / binary not found | Install `ripgrep`: `brew install ripgrep` / `sudo apt install ripgrep` / `choco install ripgrep`. |
+| Treesitter highlighting looks wrong or disabled | Run `:checkhealth nvim-treesitter`. Missing C compiler (needed to compile parsers) is the most common cause. Install Xcode CLT on mac: `xcode-select --install`. On Linux: `sudo apt install build-essential`. |
+| Plugins didn't auto-install on first launch | vim-plug itself isn't installed. Run the `curl`/`iwr` command for your OS, then reopen `nvim`. |
 
 ---
 
