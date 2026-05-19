@@ -2,18 +2,17 @@
 
 if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
     $paths = @(
-	    'C:\Windows\System32',
-	    'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
+        'C:\Windows\System32',
+        'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
         'C:\Users\jason.christiansen\userapps\node',
         'C:\Users\jason.christiansen\userapps\ripgrep',
         'C:\Users\jason.christiansen\userapps\fd',
-        'C:\Users\jason.christiansen\userapps\tree-sitter',
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python',
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
         'C:\Users\jason.christiansen\userapps\PortableGit\bin',
         'C:\Users\jason.christiansen\userapps\fzf-0.66.1-windows_amd64',
         'C:\msys64\mingw64\bin',
-	    'C:\msys64\usr\bin'
+        'C:\msys64\usr\bin'
     )
     $curr = ($env:Path -split ';') | Where-Object { $_ }
     foreach ($p in $paths) {
@@ -22,6 +21,9 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
         }
     }
     Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
+    
+    # Set CC to gcc for any builds that might need it
+    $env:CC = "gcc"
 
     # print that we ran custom config for 14
     Write-Host "14 Foods custom config loaded" -ForegroundColor Green
