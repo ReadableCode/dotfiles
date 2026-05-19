@@ -52,11 +52,19 @@ Plug 'williamboman/mason-lspconfig.nvim'
 call plug#end()
 
 " Install for Mason to manage LSPs
+" Uses the new vim.lsp.config API (Neovim 0.11+) instead of the deprecated
+" require('lspconfig').<server>.setup{} framework. See :help lspconfig-nvim-0.11
 lua << EOF
 require("mason").setup()
-require("mason-lspconfig").setup()
-local lspconfig = require("lspconfig")
-lspconfig.pyright.setup {}
+require("mason-lspconfig").setup({
+  ensure_installed = { "pyright" },
+  -- Do not auto-call the deprecated lspconfig setup handlers
+  automatic_enable = false,
+})
+
+-- Configure and enable servers using the new built-in API
+vim.lsp.config("pyright", {})
+vim.lsp.enable("pyright")
 EOF
 
 
