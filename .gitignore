@@ -35,3 +35,7 @@ gmail_token*.json
 authorized_keys
 *rsa_key*
 .DS_Store
+
+# Tools that drop auth/state into XDG_CONFIG_HOME alongside the configs we track
+application_configs/github-copilot/
+
