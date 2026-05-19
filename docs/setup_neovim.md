@@ -1,8 +1,13 @@
 # Neovim Setup Guide
 
 A beginner-friendly guide to installing and configuring Neovim with this
-repository's `init.vim`, on macOS, Linux, Windows, Android (Termux), and as a
+repository's `init.lua`, on macOS, Linux, Windows, Android (Termux), and as a
 portable install.
+
+> The canonical config is
+> [application_configs/nvim/init.lua](../application_configs/nvim/init.lua).
+> The legacy `init.vim` is kept in the repo for reference only — Neovim loads
+> `init.lua` first when both exist.
 
 ---
 
@@ -16,7 +21,7 @@ portable install.
    - [Windows](#windows)
    - [Android (Termux)](#android-termux)
    - [Portable Install (no admin rights)](#portable-install-no-admin-rights)
-4. [Deploy the Config (`init.vim`)](#deploy-the-config-initvim)
+4. [Deploy the Config (`init.lua`)](#deploy-the-config-initlua)
 5. [Install Plugins and LSPs](#install-plugins-and-lsps)
 6. [Set Up GitHub Copilot](#set-up-github-copilot)
 7. [Verify Everything Works](#verify-everything-works)
@@ -28,7 +33,7 @@ portable install.
 ## What You're Installing
 
 - **Neovim** — the editor itself.
-- **vim-plug** — a plugin manager. Reads the `Plug '...'` lines in `init.vim`
+- **vim-plug** — a plugin manager. Reads the `Plug(...)` lines in `init.lua`
   and downloads those plugins.
 - **Node.js** — required by `Mason` so it can install language servers.
 - **Mason** — installs and manages Language Server Protocol (LSP) servers
@@ -41,7 +46,7 @@ portable install.
 1. Install Neovim (see your OS section below).
 2. Install Node.js (needed for Mason / LSPs).
 3. Install vim-plug.
-4. Symlink this repo's `init.vim` to Neovim's config location.
+4. Symlink this repo's `init.lua` to Neovim's config location.
 5. Open `nvim` and run `:PlugInstall`, then `:Mason` (press `i` on `pyright`).
 6. Restart your shell.
 
@@ -136,36 +141,73 @@ laptop, USB stick, etc.).
    `~/tools/nvim`).
 3. Add the extracted `bin/` directory to your `PATH`.
 4. Verify with `nvim --version`.
-5. Follow the [Deploy the Config](#deploy-the-config-initvim) section below —
-   the same `init.vim` works for portable installs.
+5. Follow the [Deploy the Config](#deploy-the-config-initlua) section below —
+   the same `init.lua` works for portable installs.
 
 ---
 
-## Deploy the Config (`init.vim`)
+## Deploy the Config (`init.lua`)
 
-Neovim looks for `init.vim` at an OS-specific path. Symlink this repo's copy
-so edits flow both ways.
+Neovim looks for `init.lua` (preferred) or `init.vim` at an OS-specific path.
+Symlink this repo's `init.lua` so edits flow both ways.
+
+### Which file does Neovim load if both exist?
+
+Neovim only ever loads **one** init file. On startup it searches the config
+dir (`~/.config/nvim/` on mac/Linux, `%LOCALAPPDATA%\nvim\` on Windows) and
+picks the first of these it finds, in this order:
+
+1. `init.lua`
+2. `init.vim`
+3. `init.fnl`
+
+So if `init.lua` exists, `init.vim` is silently ignored — they will **not**
+both run. Since Neovim 0.9, having both files in the same config dir also
+prints a warning (`E5422: Conflicting configs`) on startup, and `init.lua`
+still wins.
+
+A symlinked `init.lua` counts as existing. If you previously symlinked
+`init.vim`, remove that symlink first to clear the warning:
+
+```bash
+rm ~/.config/nvim/init.vim          # mac/Linux
+```
+
+```powershell
+del $env:LOCALAPPDATA\nvim\init.vim   # Windows
+```
+
+> Note: this only applies to the active config dir. `$XDG_CONFIG_HOME` and
+> `NVIM_APPNAME` can point Neovim at a different folder; the same rules
+> apply there. Two init files coexisting **inside this repo** are fine —
+> they're just files in a folder, not in Neovim's config dir.
 
 ### macOS / Linux
 
 ```bash
 mkdir -p ~/.config/nvim
-ln -s ~/GitHub/dotfiles/application_configs/nvim/init.vim ~/.config/nvim/init.vim
+ln -s ~/GitHub/dotfiles/application_configs/nvim/init.lua ~/.config/nvim/init.lua
+```
+
+Verify the link:
+
+```bash
+ls -la ~/.config/nvim/init.lua
 ```
 
 ### Windows (PowerShell as Administrator)
 
 ```powershell
 cd $env:USERPROFILE\AppData\Local
-mkdir nvim
+mkdir nvim -ErrorAction SilentlyContinue
 cd nvim
-cmd /c mklink init.vim C:\Users\jason\GitHub\dotfiles\application_configs\nvim\init.vim
+cmd /c mklink init.lua C:\Users\jason\GitHub\dotfiles\application_configs\nvim\init.lua
 ```
 
 Adjust the source path if your username or repo location differs, for example:
 
 ```powershell
-cmd /c mklink init.vim C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\nvim\init.vim
+cmd /c mklink init.lua C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\nvim\init.lua
 ```
 
 ---
@@ -178,7 +220,7 @@ cmd /c mklink init.vim C:\Users\16937827583938060798\HelloFreshProjects\dotfiles
    nvim
    ```
 
-2. Install all plugins listed in `init.vim`:
+2. Install all plugins listed in `init.lua`:
 
    ```vim
    :PlugInstall
@@ -203,11 +245,14 @@ cmd /c mklink init.vim C:\Users\16937827583938060798\HelloFreshProjects\dotfiles
 
 ### Re-sourcing the config without restarting
 
-If you edit `init.vim`, you can reload it inside Neovim with:
+If you edit `init.lua`, reload it inside Neovim with:
 
 ```vim
-:source ~/.config/nvim/init.vim
+:source ~/.config/nvim/init.lua
 ```
+
+(Some Lua state — like already-registered autocmd groups or `setup()` calls —
+may need a full `nvim` restart to fully re-apply.)
 
 ---
 
@@ -267,12 +312,14 @@ Just start typing. Gray "ghost text" appears as Copilot suggests code.
 > section).
 
 If `<Tab>` conflicts with a snippet plugin, uncomment the remap block in
-[application_configs/nvim/init.vim](application_configs/nvim/init.vim) to use
+[application_configs/nvim/init.lua](../application_configs/nvim/init.lua) to use
 `<C-J>` instead:
 
-```vim
-let g:copilot_no_tab_map = v:true
-imap <silent><script><expr> <C-J> copilot#Accept("\<CR>")
+```lua
+vim.g.copilot_no_tab_map = true
+vim.keymap.set('i', '<C-J>', 'copilot#Accept("\\<CR>")', {
+  silent = true, script = true, expr = true, replace_keycodes = false,
+})
 ```
 
 Toggle Copilot per buffer with `:Copilot disable` / `:Copilot enable`.
@@ -327,10 +374,13 @@ Typical flow:
 > **About the gray ghost text in the chat window:** that's `copilot.vim`'s
 > inline completion suggesting your next line — it has nothing to do with
 > submitting the chat. Ignore it, or disable Copilot completions in the chat
-> buffer by adding this to [application_configs/nvim/init.vim](application_configs/nvim/init.vim):
+> buffer by adding this to [application_configs/nvim/init.lua](../application_configs/nvim/init.lua):
 >
-> ```vim
-> autocmd FileType copilot-chat let b:copilot_enabled = v:false
+> ```lua
+> vim.api.nvim_create_autocmd('FileType', {
+>   pattern = 'copilot-chat',
+>   callback = function() vim.b.copilot_enabled = false end,
+> })
 > ```
 
 If `<CR>` doesn't submit, check `:verbose nmap <CR>` inside the chat buffer
@@ -399,10 +449,10 @@ Inside Neovim:
 | `:PlugInstall` says command not found | vim-plug isn't installed. Re-run the vim-plug curl/iwr command for your OS. |
 | Mason shows nothing | Node.js isn't installed or not on `PATH`. Run `node --version` to check. |
 | Symlink "access denied" on Windows | Open PowerShell **as Administrator** before running `mklink`. |
-| Edits to repo `init.vim` don't show up | Symlink wasn't created. Confirm with `ls -la ~/.config/nvim/` (mac/Linux) or `dir %LOCALAPPDATA%\nvim` (Windows). |
+| Edits to repo `init.lua` don't show up | Symlink wasn't created, or an old `init.vim` is shadowing it. Confirm with `ls -la ~/.config/nvim/` (mac/Linux) or `dir %LOCALAPPDATA%\nvim` (Windows). Remove any stray `init.vim`. |
 | Copilot ghost text doesn't appear | Run `:Copilot status`. If *Not Authorized*, run `:Copilot setup`. If *Node.js too old*, upgrade to Node ≥ 20. |
 | `:CopilotChat` says module not found | Run `:PlugInstall` to fetch `plenary.nvim` and `CopilotChat.nvim`, then restart Neovim. |
-| `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.vim` to use `<C-J>` instead. |
+| `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.lua` to use `<C-J>` instead. |
 
 ---
 
@@ -472,5 +522,5 @@ Means: press `Ctrl+p` to open the file picker.
 ---
 
 That's it. If you ever forget where the config lives, it's
-`~/.config/nvim/init.vim` (mac/Linux) or `%LOCALAPPDATA%\nvim\init.vim`
+`~/.config/nvim/init.lua` (mac/Linux) or `%LOCALAPPDATA%\nvim\init.lua`
 (Windows), symlinked to this repo.

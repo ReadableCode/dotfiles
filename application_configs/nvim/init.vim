@@ -1,4 +1,6 @@
-" Neovim configuration
+" Neovim configuration (LEGACY)
+" The canonical config is now ../nvim/init.lua. This file is kept for
+" reference. Neovim loads init.lua before init.vim when both exist.
 " See docs/setup_neovim.md for installation and setup instructions.
 
 call plug#begin(stdpath('data') . '/plugged')
