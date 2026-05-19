@@ -20,8 +20,14 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
         }
     }
     Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
+
     # print that we ran custom config for 14
     Write-Host "14 Foods custom config loaded" -ForegroundColor Green
+}
+
+# Point Neovim at the repo config dir on any Windows machine (no symlink or hard link needed)
+if ($env:OS -eq 'Windows_NT') {
+    $env:XDG_CONFIG_HOME = "$env:USERPROFILE\GitHub\dotfiles\application_configs"
 }
 
 

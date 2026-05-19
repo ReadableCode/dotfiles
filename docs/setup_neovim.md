@@ -192,33 +192,24 @@ iwr -useb https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim |
   ni -Path "$env:LOCALAPPDATA\nvim-data\site\autoload\plug.vim" -Force
 ```
 
-#### 5. Where does portable Neovim look for its config?
+#### 5. Point Neovim at the config (automatic via profile)
 
-Even a portable binary uses the same config path as a regular install.
-Confirm from inside Neovim:
+`powershell_aliases.ps1` sets `XDG_CONFIG_HOME` to point directly at the
+repo's `application_configs` folder whenever PowerShell starts on Windows.
+Neovim respects this variable and looks for its config at
+`$XDG_CONFIG_HOME\nvim\init.lua` — which is exactly where the file already
+lives in the repo. No symlink, hard link, or `%LOCALAPPDATA%\nvim\` directory
+needed.
+
+To verify once Neovim is open:
 
 ```vim
 :echo stdpath('config')
 ```
 
-On Windows this will be `C:\Users\<you>\AppData\Local\nvim\`.
+The path returned should end in `application_configs\nvim`.
 
-#### 6. Link the config (hard link, no admin)
-
-```powershell
-New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\nvim"
-New-Item -ItemType HardLink `
-  -Path "$env:LOCALAPPDATA\nvim\init.lua" `
-  -Target "$env:USERPROFILE\GitHub\dotfiles\application_configs\nvim\init.lua"
-```
-
-Verify:
-
-```powershell
-dir "$env:LOCALAPPDATA\nvim"
-```
-
-#### 7. Configure the git credential helper
+#### 6. Configure the git credential helper
 
 PortableGit has no credential helper set on first use. Without this,
 `:PlugInstall` will pop up a **`CredentialHelperSelector` dialog on the
@@ -234,7 +225,7 @@ If the dialogs do appear (e.g. you forgot this step), check
 **"Always use this from now on"**, leave `manager` selected, and click
 **Select** on the front dialog — the rest will auto-dismiss.
 
-#### 8. Open Neovim
+#### 7. Open Neovim
 
 ```powershell
 nvim
@@ -248,7 +239,9 @@ to authenticate GitHub Copilot.
 ## Deploy the Config (`init.lua`)
 
 Neovim looks for `init.lua` (preferred) or `init.vim` at an OS-specific path.
-Symlink this repo's `init.lua` so edits flow both ways.
+On macOS/Linux, symlink this repo's `init.lua` so edits flow both ways.
+On Windows, `XDG_CONFIG_HOME` is set by `powershell_aliases.ps1` to point
+directly at the repo — no symlink or hard link needed.
 
 ### Which file does Neovim load if both exist?
 
@@ -276,10 +269,12 @@ rm ~/.config/nvim/init.vim          # mac/Linux
 del $env:LOCALAPPDATA\nvim\init.vim   # Windows
 ```
 
-> Note: this only applies to the active config dir. `$XDG_CONFIG_HOME` and
-> `NVIM_APPNAME` can point Neovim at a different folder; the same rules
-> apply there. Two init files coexisting **inside this repo** are fine —
-> they're just files in a folder, not in Neovim's config dir.
+> Note: this only applies to the active config dir. On Windows, we use
+> `XDG_CONFIG_HOME` (set in `powershell_aliases.ps1`) to point Neovim straight
+> at the repo — no copy or link required. `NVIM_APPNAME` can also redirect the
+> config dir if needed; the same init file priority rules apply. Two init
+> files coexisting **inside this repo** are fine — they're just files in a
+> folder, not in Neovim's config dir.
 
 ### macOS / Linux
 
@@ -296,25 +291,18 @@ ls -la ~/.config/nvim/init.lua
 
 ### Windows
 
-Windows requires Administrator rights to create symlinks. Use a hard link
-instead — no admin required on NTFS:
+`powershell_aliases.ps1` sets `XDG_CONFIG_HOME` to point directly at the
+repo's `application_configs` folder on any Windows machine. Neovim finds the
+config at `application_configs\nvim\init.lua` automatically — no symlink or
+hard link needed, and nothing breaks when `git pull` runs.
 
-```powershell
-New-Item -ItemType Directory -Force "$env:LOCALAPPDATA\nvim"
-New-Item -ItemType HardLink `
-  -Path "$env:LOCALAPPDATA\nvim\init.lua" `
-  -Target "$env:USERPROFILE\GitHub\dotfiles\application_configs\nvim\init.lua"
+Confirm it's working from inside Neovim:
+
+```vim
+:echo stdpath('config')
 ```
 
-Verify:
-
-```powershell
-dir "$env:LOCALAPPDATA\nvim"
-```
-
-> **Caveat:** if `git checkout` or `git pull` ever *replaces* the file
-> (rather than editing it in place), the hard link breaks. Re-run the
-> `New-Item -ItemType HardLink` command to fix it.
+The path should end in `application_configs\nvim`.
 
 ---
 
@@ -608,7 +596,7 @@ Inside Neovim:
 | `Error executing Lua...field 'uv' a nil value` | Neovim is too old. Upgrade (see Linux section for the PPA). |
 | `:PlugInstall` says command not found | vim-plug isn't installed. Re-run the vim-plug curl/iwr command for your OS. |
 | Mason shows nothing | Node.js isn't installed or not on `PATH`. Run `node --version` to check. |
-| Symlink "access denied" on Windows | Creating symlinks needs admin. Use Option A (`XDG_CONFIG_HOME` env var) or Option B (hard link) from the Deploy section — neither needs admin. |
+| Symlink "access denied" on Windows | Not needed — `powershell_aliases.ps1` sets `XDG_CONFIG_HOME` pointing directly at the repo. No symlink or hard link is used on Windows. |
 | Edits to repo `init.lua` don't show up | Symlink wasn't created, or an old `init.vim` is shadowing it. Confirm with `ls -la ~/.config/nvim/` (mac/Linux) or `dir %LOCALAPPDATA%\nvim` (Windows). Remove any stray `init.vim`. |
 | Copilot ghost text doesn't appear | Run `:Copilot status`. If *Not Authorized*, run `:Copilot setup`. If *Node.js too old*, upgrade to Node ≥ 20. |
 | `:CopilotChat` says module not found | Run `:PlugInstall` to fetch `plenary.nvim` and `CopilotChat.nvim`, then restart Neovim. |
