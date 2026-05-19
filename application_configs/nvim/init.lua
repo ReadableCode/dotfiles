@@ -1,7 +1,5 @@
 -- Neovim configuration (Lua)
 -- See docs/setup_neovim.md for installation and setup instructions.
--- This file is the canonical config. The legacy init.vim is kept for reference
--- only; Neovim loads init.lua first when both exist.
 
 -- ---------------------------------------------------------------------------
 -- Plugins (managed by vim-plug)
