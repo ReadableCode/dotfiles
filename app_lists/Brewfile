@@ -32,6 +32,8 @@ brew "colima"
 brew "ansible"
 brew "ncdu"
 brew "gdu"
+brew "ripgrep"
+brew "fd"
 
 cask "google-chrome"
 cask "firefox"

@@ -42,7 +42,8 @@ portable install.
 - **Treesitter** — better syntax highlighting, smarter indentation, and
   richer text objects. Language parsers download themselves automatically.
 - **Telescope** — fuzzy finder for files, live grep, buffers, and more.
-  Requires `ripgrep` for `:Telescope live_grep` (see install step below).
+  Requires `ripgrep` for `:Telescope live_grep` and `fd` for `:Telescope find_files`
+  (see install step below).
 
 ---
 
@@ -50,7 +51,7 @@ portable install.
 
 1. Install Neovim (see your OS section below).
 2. Install Node.js (needed for Mason / LSPs and Copilot).
-3. Install `ripgrep` (needed for Telescope live grep).
+3. Install `ripgrep` and `fd` (needed for Telescope live grep and file finder).
 4. Install vim-plug.
 5. Symlink this repo's `init.lua` to Neovim's config location.
 6. Open `nvim` — plugins install automatically on first launch.
@@ -65,7 +66,7 @@ portable install.
 Using [Homebrew](https://brew.sh):
 
 ```bash
-brew install neovim node ripgrep
+brew install neovim node ripgrep fd
 ```
 
 Upgrade later with:
@@ -83,10 +84,16 @@ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs https://raw.g
 ### Linux
 
 ```bash
-sudo apt install neovim nodejs ripgrep
+sudo apt install neovim nodejs ripgrep fd-find
 # Upgrade later with:
 sudo apt upgrade neovim
 ```
+
+> On Linux, `fd` is installed as `fdfind`. Create a symlink so Telescope finds it:
+>
+> ```bash
+> mkdir -p ~/.local/bin && ln -s $(which fdfind) ~/.local/bin/fd
+> ```
 
 If you get errors like `Error executing Lua...field 'uv' a nil value`, your
 distro's Neovim is too old. Install the unstable PPA:
@@ -110,7 +117,7 @@ curl -fLo ~/.local/share/nvim/site/autoload/plug.vim --create-dirs \
 Using [Chocolatey](https://chocolatey.org) (run PowerShell as Administrator):
 
 ```powershell
-choco install neovim nodejs ripgrep
+choco install neovim nodejs ripgrep fd
 # Upgrade later with:
 choco upgrade neovim
 ```
@@ -121,6 +128,7 @@ Or using winget:
 winget install Neovim.Neovim
 winget install OpenJS.NodeJS
 winget install BurntSushi.ripgrep.MSVC
+winget install sharkdp.fd
 ```
 
 Install vim-plug:
@@ -514,6 +522,7 @@ Inside Neovim:
 | `:CopilotChat` says module not found | Run `:PlugInstall` to fetch `plenary.nvim` and `CopilotChat.nvim`, then restart Neovim. |
 | `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.lua` to use `<C-J>` instead. |
 | Telescope `live_grep` says no results / binary not found | Install `ripgrep`: `brew install ripgrep` / `sudo apt install ripgrep` / `choco install ripgrep`. |
+| Telescope `find_files` shows nothing / `fd not found` | Install `fd`: `brew install fd` / `sudo apt install fd-find` (then symlink: `ln -s $(which fdfind) ~/.local/bin/fd`) / `choco install fd`. |
 | Treesitter highlighting looks wrong or disabled | Run `:checkhealth nvim-treesitter`. Missing C compiler (needed to compile parsers) is the most common cause. Install Xcode CLT on mac: `xcode-select --install`. On Linux: `sudo apt install build-essential`. |
 | Plugins didn't auto-install on first launch | vim-plug itself isn't installed. Run the `curl`/`iwr` command for your OS, then reopen `nvim`. |
 

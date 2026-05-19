@@ -121,7 +121,26 @@ end
 -- ---------------------------------------------------------------------------
 local ok_tele, telescope = pcall(require, 'telescope')
 if ok_tele then
-  telescope.setup({})
+  telescope.setup({
+    defaults = {
+      -- Follow symlinks so Telescope works from ~/.config/nvim (symlinked config).
+      vimgrep_arguments = {
+        'rg',
+        '--color=never',
+        '--no-heading',
+        '--with-filename',
+        '--line-number',
+        '--column',
+        '--smart-case',
+        '--follow',
+      },
+    },
+    pickers = {
+      find_files = {
+        find_command = { 'fd', '--type', 'f', '--follow' },
+      },
+    },
+  })
 end
 
 -- ---------------------------------------------------------------------------
