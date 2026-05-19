@@ -603,8 +603,37 @@ Inside Neovim:
 | `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.lua` to use `<C-J>` instead. |
 | Telescope `live_grep` says no results / binary not found | Install `ripgrep`: `brew install ripgrep` / `sudo apt install ripgrep` / `choco install ripgrep`. |
 | Telescope `find_files` shows nothing / `fd not found` | Install `fd`: `brew install fd` / `sudo apt install fd-find` (then symlink: `ln -s $(which fdfind) ~/.local/bin/fd`) / `choco install fd`. |
-| Treesitter highlighting looks wrong or disabled | Run `:checkhealth nvim-treesitter`. Missing C compiler (needed to compile parsers) is the most common cause. Install Xcode CLT on mac: `xcode-select --install`. On Linux: `sudo apt install build-essential`. On Windows (msys64 is already on PATH via `powershell_aliases.ps1`): open **MSYS2 MinGW 64-bit** and run `pacman -S mingw-w64-x86_64-gcc make`, then restart nvim. |
+| Treesitter highlighting looks wrong or disabled | Run `:checkhealth nvim-treesitter`. Missing C compiler is the most common cause — see [below](#treesitter-no-c-compiler). |
 | Plugins didn't auto-install on first launch | vim-plug itself isn't installed. Run the `curl`/`iwr` command for your OS, then reopen `nvim`. |
+
+### Treesitter: No C compiler
+
+Treesitter downloads parser source code and compiles it locally, so it needs
+a C compiler on `PATH`. Run `:checkhealth nvim-treesitter` to confirm this is
+the cause.
+
+**macOS**
+
+```bash
+xcode-select --install
+```
+
+**Linux**
+
+```bash
+sudo apt install build-essential
+```
+
+**Windows** (`msys64` is already on `PATH` via `powershell_aliases.ps1`)
+
+Run this from any PowerShell terminal — no need to open a separate MSYS2
+window:
+
+```powershell
+& 'C:\msys64\usr\bin\bash.exe' -lc 'pacman -S --noconfirm mingw-w64-x86_64-gcc make'
+```
+
+Then restart nvim. Treesitter will compile parsers on next open.
 
 ---
 
