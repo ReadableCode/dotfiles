@@ -343,17 +343,15 @@ ensure_installed = { 'pyright', 'lua_ls', 'gopls' },
 
 ### Treesitter parsers
 
-Parsers for the languages in `ensure_installed` download on first open.
-`auto_install = true` means opening any file type not yet covered will
-prompt Treesitter to fetch that parser automatically. Add languages to the
-list in `init.lua` to pre-fetch them:
+Parsers are installed once via `require('nvim-treesitter').install({...})` in
+`init.lua`, which runs at startup and is idempotent (skips already-installed
+parsers). To add a language, append it to that list and run `:TSUpdate`:
 
 ```lua
-ensure_installed = {
-  'bash', 'json', 'lua', 'markdown', 'markdown_inline',
-  'python', 'toml', 'vim', 'vimdoc', 'yaml',
-},
-```
+require('nvim-treesitter').install({
+  'bash', 'go', 'json', 'lua', 'markdown', 'markdown_inline',
+  'python', 'sql', 'toml', 'vim', 'vimdoc', 'yaml',
+})
 
 ### Re-sourcing the config without restarting
 

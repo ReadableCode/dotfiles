@@ -27,9 +27,9 @@ Plug('github/copilot.vim')
 Plug('nvim-lua/plenary.nvim')
 Plug('CopilotC-Nvim/CopilotChat.nvim', { branch = 'main' })
 
--- Treesitter: better syntax highlighting, indent, folds, text objects.
--- Pinned to master; parsers auto-install via the setup() block below.
-Plug('nvim-treesitter/nvim-treesitter', { branch = 'master', ['do'] = ':TSUpdate' })
+-- Treesitter: better syntax highlighting, folds, text objects.
+-- Pinned to main (new API — no configs.setup(); see Autocommands section).
+Plug('nvim-treesitter/nvim-treesitter', { branch = 'main', ['do'] = ':TSUpdate' })
 
 -- Telescope: fuzzy finder for files, grep, buffers, help, LSP symbols, etc.
 Plug('nvim-telescope/telescope.nvim', { branch = '0.1.x' })
@@ -97,20 +97,16 @@ if ok_chat then
 end
 
 -- ---------------------------------------------------------------------------
--- Treesitter
--- Parsers listed in ensure_installed are downloaded & compiled on first use.
--- Add more languages by extending the list, then restart nvim or run :TSUpdate.
+-- Treesitter (main branch — new API)
+-- install() is idempotent: safe to call every startup, only fetches missing
+-- parsers. Add languages here and run :TSUpdate to fetch them.
+-- Highlighting is wired up per-filetype in the Autocommands section below.
 -- ---------------------------------------------------------------------------
-local ok_ts, ts_configs = pcall(require, 'nvim-treesitter.configs')
+local ok_ts, nvim_ts = pcall(require, 'nvim-treesitter')
 if ok_ts then
-  ts_configs.setup({
-    ensure_installed = {
-      'bash', 'json', 'lua', 'markdown', 'markdown_inline',
-      'python', 'toml', 'vim', 'vimdoc', 'yaml',
-    },
-    auto_install = true,
-    highlight = { enable = true },
-    indent = { enable = true },
+  nvim_ts.install({
+    'bash', 'go', 'json', 'lua', 'markdown', 'markdown_inline',
+    'python', 'sql', 'toml', 'vim', 'vimdoc', 'yaml',
   })
 end
 
@@ -198,6 +194,23 @@ vim.api.nvim_create_autocmd('FileType', {
   pattern = 'copilot-chat',
   callback = function()
     vim.b.copilot_enabled = false
+  end,
+})
+
+-- Treesitter: enable highlighting and expr-folds for supported filetypes.
+-- Uses the main-branch API (vim.treesitter.start) instead of the old
+-- configs.setup({ highlight = { enable = true } }) approach.
+vim.api.nvim_create_autocmd('FileType', {
+  group = aug,
+  pattern = {
+    'bash', 'sh', 'go', 'json', 'lua', 'markdown',
+    'python', 'sql', 'toml', 'vim', 'yaml',
+  },
+  callback = function(args)
+    pcall(vim.treesitter.start, args.buf)
+    vim.wo.foldmethod = 'expr'
+    vim.wo.foldexpr  = 'v:lua.vim.treesitter.foldexpr()'
+    vim.wo.foldenable = false   -- open all folds on entry
   end,
 })
 
