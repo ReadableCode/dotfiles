@@ -218,7 +218,23 @@ Verify:
 dir "$env:LOCALAPPDATA\nvim"
 ```
 
-#### 7. Open Neovim
+#### 7. Configure the git credential helper
+
+PortableGit has no credential helper set on first use. Without this,
+`:PlugInstall` will pop up a **`CredentialHelperSelector` dialog on the
+host machine's desktop for every plugin being cloned in parallel** — even
+if you're connected over SSH, the dialogs appear on the physical screen of
+the machine, not in your terminal. Run this once to pre-configure it:
+
+```powershell
+git config --global credential.helper manager
+```
+
+If the dialogs do appear (e.g. you forgot this step), check
+**"Always use this from now on"**, leave `manager` selected, and click
+**Select** on the front dialog — the rest will auto-dismiss.
+
+#### 8. Open Neovim
 
 ```powershell
 nvim
