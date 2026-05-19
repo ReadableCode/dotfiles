@@ -232,7 +232,7 @@ cmd /c mklink init.lua C:\Users\16937827583938060798\HelloFreshProjects\dotfiles
 
 4. Reopen Neovim with `nvim`
 
-5. Open Mason to install LSPs:
+5. Open Mason to install LSPs that are not in your init.lua defaults (e.g. `pyright` for Python):
 
    ```vim
    :Mason
