@@ -2,7 +2,8 @@
 
 if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
     $paths = @(
-        'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
+	    'C:\Windows\System32',
+	    'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
         'C:\Users\jason.christiansen\userapps\node',
         'C:\Users\jason.christiansen\userapps\ripgrep',
         'C:\Users\jason.christiansen\userapps\fd',
