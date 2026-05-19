@@ -3,6 +3,9 @@
 if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
     $paths = @(
         'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
+        'C:\Users\jason.christiansen\userapps\node',
+        'C:\Users\jason.christiansen\userapps\ripgrep',
+        'C:\Users\jason.christiansen\userapps\fd',
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python',
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
         'C:\Users\jason.christiansen\userapps\PortableGit\bin',
