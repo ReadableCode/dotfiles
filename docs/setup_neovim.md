@@ -39,8 +39,6 @@ Includes a Windows portable (no admin rights) install path.
 - **Node.js** — required by `Mason` (LSP installs) and GitHub Copilot.
 - **Mason** — installs and manages Language Server Protocol (LSP) servers
   (for example, `pyright` for Python autocomplete and error checking).
-- **Treesitter** — better syntax highlighting, smarter indentation, and
-  richer text objects. Language parsers download themselves automatically.
 - **Telescope** — fuzzy finder for files, live grep, buffers, and more.
   Requires `ripgrep` for `:Telescope live_grep` and `fd` for `:Telescope find_files`
   (see install step below).
@@ -66,7 +64,7 @@ Includes a Windows portable (no admin rights) install path.
 Using [Homebrew](https://brew.sh):
 
 ```bash
-brew install neovim node ripgrep fd tree-sitter
+brew install neovim node ripgrep fd
 ```
 
 Upgrade later with:
@@ -178,21 +176,6 @@ Both ship as standalone zip downloads — no installer required.
 1. Go to [fd Releases](https://github.com/sharkdp/fd/releases).
 2. Download `fd-*-x86_64-pc-windows-msvc.zip`.
 3. Extract to `C:\Users\jason.christiansen\userapps\fd\`
-
-#### 3b. Download the tree-sitter CLI (portable)
-
-nvim-treesitter (main branch) uses the `tree-sitter` CLI to build parsers.
-
-1. Go to [tree-sitter Releases](https://github.com/tree-sitter/tree-sitter/releases).
-2. Download `tree-sitter-windows-x64.gz`.
-3. Decompress it (7-Zip or `Expand-Archive`) and rename the binary to `tree-sitter.exe`.
-4. Place it at `C:\Users\jason.christiansen\userapps\tree-sitter\tree-sitter.exe`
-
-> **PATH is handled automatically.** All tools above are registered in
-> the FFLAP-2229 block in
-> `application_configs/powershell/powershell_aliases.ps1`. They're added to
-> `$env:Path` at profile load — no `[Environment]::SetEnvironmentVariable`
-> calls needed.
 
 #### 4. Install vim-plug
 
@@ -326,7 +309,6 @@ If you ever need to force a reinstall or update:
 ```vim
 :PlugInstall     " install any missing plugins
 :PlugUpdate      " update all plugins to their latest version
-:TSUpdate        " update / install Treesitter parsers
 ```
 
 After `:PlugInstall` completes, press `q` to close the dialog, then quit and
@@ -348,19 +330,6 @@ in [application_configs/nvim/init.lua](../application_configs/nvim/init.lua):
 
 ```lua
 ensure_installed = { 'pyright', 'lua_ls', 'gopls' },
-```
-
-### Treesitter parsers
-
-Parsers are installed via `require('nvim-treesitter').install({...})` in
-`init.lua`, which runs at startup and skips already-built parsers. To add a
-language, append it to the list and run `:TSUpdate`:
-
-```lua
-require('nvim-treesitter').install({
-  'bash', 'go', 'json', 'lua', 'markdown', 'markdown_inline',
-  'python', 'sql', 'toml', 'vim', 'vimdoc', 'yaml',
-})
 ```
 
 ### Re-sourcing the config without restarting
@@ -587,9 +556,8 @@ Inside Neovim:
 - `:checkhealth` — runs Neovim's built-in diagnostics. Look for green ✓s.
 - `:PlugStatus` — shows installed plugins.
 - `:Mason` — shows installed LSPs.
-- `:TSInstallInfo` — shows installed Treesitter parsers.
 - Open a `.py` file; you should see `pyright` start (status line / no errors
-  about missing LSPs). Syntax should be richly highlighted by Treesitter.
+  about missing LSPs).
 - `<Leader>ff` should open a Telescope file picker.
 - Start typing in a code file — gray ghost text should appear from Copilot.
   Press `<Tab>` to accept. Run `:Copilot status` to confirm it's *Online*.
@@ -611,37 +579,7 @@ Inside Neovim:
 | `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.lua` to use `<C-J>` instead. |
 | Telescope `live_grep` says no results / binary not found | Install `ripgrep`: `brew install ripgrep` / `sudo apt install ripgrep` / `choco install ripgrep`. |
 | Telescope `find_files` shows nothing / `fd not found` | Install `fd`: `brew install fd` / `sudo apt install fd-find` (then symlink: `ln -s $(which fdfind) ~/.local/bin/fd`) / `choco install fd`. |
-| Treesitter highlighting looks wrong or disabled | Run `:checkhealth nvim-treesitter`. Missing C compiler is the most common cause — see [below](#treesitter-no-c-compiler). |
 | Plugins didn't auto-install on first launch | vim-plug itself isn't installed. Run the `curl`/`iwr` command for your OS, then reopen `nvim`. |
-
-### Treesitter: No C compiler
-
-Treesitter downloads parser source code and compiles it locally, so it needs
-a C compiler on `PATH`. Run `:checkhealth nvim-treesitter` to confirm this is
-the cause.
-
-**macOS**
-
-```bash
-xcode-select --install
-```
-
-**Linux**
-
-```bash
-sudo apt install build-essential
-```
-
-**Windows** (`msys64` is already on `PATH` via `powershell_aliases.ps1`)
-
-Run this from any PowerShell terminal — no need to open a separate MSYS2
-window:
-
-```powershell
-& 'C:\msys64\usr\bin\bash.exe' -lc 'pacman -S --noconfirm mingw-w64-x86_64-gcc make'
-```
-
-Then restart nvim. Treesitter will compile parsers on next open.
 
 ---
 
