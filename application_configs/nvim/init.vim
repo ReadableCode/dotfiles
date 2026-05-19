@@ -48,6 +48,16 @@ Plug 'neovim/nvim-lspconfig'
 Plug 'williamboman/mason.nvim'
 Plug 'williamboman/mason-lspconfig.nvim'
 
+" GitHub Copilot inline completions (ghost text, <Tab> to accept)
+" Run :Copilot setup once after :PlugInstall to authenticate.
+" Requires Node.js >= 20 on PATH.
+Plug 'github/copilot.vim'
+
+" GitHub Copilot Chat (sidebar / :CopilotChat commands)
+" plenary.nvim is a required dependency.
+Plug 'nvim-lua/plenary.nvim'
+Plug 'CopilotC-Nvim/CopilotChat.nvim', { 'branch': 'main' }
+
 " End of the plugin section
 call plug#end()
 
@@ -65,8 +75,37 @@ require("mason-lspconfig").setup({
 -- Configure and enable servers using the new built-in API
 vim.lsp.config("pyright", {})
 vim.lsp.enable("pyright")
+
+-- Copilot Chat setup. See :help CopilotChat or run `:CopilotChat` to open.
+require("CopilotChat").setup({
+  -- model = "gpt-5",            -- optional; omit to use default
+  -- window = { layout = "vertical" },
+})
 EOF
 
+
+" -- GitHub Copilot (inline ghost-text completions) ----------------------------
+" By default <Tab> accepts the current suggestion. Uncomment the block below
+" to remap acceptance to Ctrl-J instead (e.g. if <Tab> conflicts with snippets).
+" let g:copilot_no_tab_map = v:true
+" imap <silent><script><expr> <C-J> copilot#Accept("\<CR>")
+"
+" Other built-in insert-mode mappings provided by copilot.vim:
+"   <M-]> / <M-[>   next / previous suggestion
+"   <C-]>           dismiss suggestion
+"   <M-\>           request a suggestion manually
+
+" -- Copilot Chat keymaps ------------------------------------------------------
+nnoremap <silent> <Leader>cc :CopilotChat<CR>
+xnoremap <silent> <Leader>cc :CopilotChat<CR>
+nnoremap <silent> <Leader>ce :CopilotChatExplain<CR>
+nnoremap <silent> <Leader>cf :CopilotChatFix<CR>
+nnoremap <silent> <Leader>ct :CopilotChatTests<CR>
+nnoremap <silent> <Leader>cr :CopilotChatReview<CR>
+
+" Disable copilot.vim's inline ghost text inside the Copilot Chat buffer so it
+" doesn't suggest fake "next lines" while you're typing a chat prompt.
+autocmd FileType copilot-chat let b:copilot_enabled = v:false
 
 set relativenumber
 let NERDTreeShowHidden=1

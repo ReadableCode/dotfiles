@@ -18,9 +18,10 @@ portable install.
    - [Portable Install (no admin rights)](#portable-install-no-admin-rights)
 4. [Deploy the Config (`init.vim`)](#deploy-the-config-initvim)
 5. [Install Plugins and LSPs](#install-plugins-and-lsps)
-6. [Verify Everything Works](#verify-everything-works)
-7. [Troubleshooting](#troubleshooting)
-8. [Reference: Neovim Key Symbols Explained](#reference-neovim-key-symbols-explained)
+6. [Set Up GitHub Copilot](#set-up-github-copilot)
+7. [Verify Everything Works](#verify-everything-works)
+8. [Troubleshooting](#troubleshooting)
+9. [Reference: Neovim Key Symbols Explained](#reference-neovim-key-symbols-explained)
 
 ---
 
@@ -210,6 +211,171 @@ If you edit `init.vim`, you can reload it inside Neovim with:
 
 ---
 
+## Set Up GitHub Copilot
+
+The config ships with two Copilot plugins:
+
+- **`github/copilot.vim`** — inline ghost-text suggestions while you type.
+- **`CopilotC-Nvim/CopilotChat.nvim`** — chat window (`:CopilotChat`) plus
+  helpers like `:CopilotChatExplain`, `:CopilotChatFix`, `:CopilotChatTests`,
+  `:CopilotChatReview`. Requires `nvim-lua/plenary.nvim` (also bundled).
+
+### Prerequisites
+
+- An active GitHub Copilot subscription on your GitHub account.
+- **Node.js ≥ 20** on `PATH` (`node --version`). You already installed Node
+  for Mason — just confirm the version is current. Upgrade via Homebrew
+  (`brew upgrade node`), apt, choco, or winget if needed.
+
+### 1. Install the plugins
+
+Inside Neovim:
+
+```vim
+:PlugInstall
+```
+
+### 2. Authenticate
+
+```vim
+:Copilot setup
+```
+
+Neovim prints a device code and a URL. Open the URL in a browser, paste the
+code, approve the device. One-time per machine. Verify:
+
+```vim
+:Copilot status
+```
+
+Should report *Online* and *Enabled*.
+
+### 3. Use inline completions (Tab completion)
+
+Just start typing. Gray "ghost text" appears as Copilot suggests code.
+
+| Keys (insert mode) | Action |
+| --- | --- |
+| `<Tab>` | Accept the full suggestion |
+| `<M-]>` | Next suggestion |
+| `<M-[>` | Previous suggestion |
+| `<C-]>` | Dismiss suggestion |
+| `<M-\>` | Request a suggestion manually |
+
+> On macOS terminals, `<M-…>` = `Option`. Enable "Use Option as Meta key"
+> in iTerm2 / Terminal preferences (see the [Reference](#reference-neovim-key-symbols-explained)
+> section).
+
+If `<Tab>` conflicts with a snippet plugin, uncomment the remap block in
+[application_configs/nvim/init.vim](application_configs/nvim/init.vim) to use
+`<C-J>` instead:
+
+```vim
+let g:copilot_no_tab_map = v:true
+imap <silent><script><expr> <C-J> copilot#Accept("\<CR>")
+```
+
+Toggle Copilot per buffer with `:Copilot disable` / `:Copilot enable`.
+
+### 4. Use Copilot Chat
+
+The config defines these leader mappings (default `<Leader>` is `\`):
+
+| Mapping | Command | What it does |
+| --- | --- | --- |
+| `<Leader>cc` | `:CopilotChat` | Open chat window (works in normal & visual mode) |
+| `<Leader>ce` | `:CopilotChatExplain` | Explain the selected code |
+| `<Leader>cf` | `:CopilotChatFix` | Suggest a fix for the selected code |
+| `<Leader>ct` | `:CopilotChatTests` | Generate tests for the selection |
+| `<Leader>cr` | `:CopilotChatReview` | Review the selection |
+
+Free-form prompt:
+
+```vim
+:CopilotChat how do I read a JSON file in Python?
+```
+
+Other useful commands: `:CopilotChatModels` (switch model),
+`:CopilotChatPrompts` (browse built-in prompts), `:CopilotChatReset`.
+
+### 5. Using the chat window
+
+When `:CopilotChat` (or `<Leader>cc`) opens the side panel, it behaves like
+any Neovim buffer — typing your question is **not** the same as sending it.
+You have to submit explicitly.
+
+Default keymaps inside the chat buffer:
+
+| Mode | Keys | Action |
+| --- | --- | --- |
+| Normal | `<CR>` (Enter) | **Submit** the prompt you typed |
+| Insert | `<C-s>` | Submit the prompt without leaving insert mode |
+| Normal | `q` | Close the chat window |
+| Normal | `<C-l>` | Reset / clear the conversation |
+| Normal | `gy` | Yank the last code block from the response |
+| Normal | `gd` | Show diff of the suggested change |
+| Normal | `ga` | Accept the diff into your source buffer |
+
+Typical flow:
+
+1. `<Leader>cc` to open the chat panel.
+2. Press `i` (or `o`) to enter insert mode at the prompt line at the bottom.
+3. Type your question.
+4. Press `<Esc>` then `<CR>` — **or** stay in insert mode and press `<C-s>`.
+5. The answer streams in above your prompt.
+
+> **About the gray ghost text in the chat window:** that's `copilot.vim`'s
+> inline completion suggesting your next line — it has nothing to do with
+> submitting the chat. Ignore it, or disable Copilot completions in the chat
+> buffer by adding this to [application_configs/nvim/init.vim](application_configs/nvim/init.vim):
+>
+> ```vim
+> autocmd FileType copilot-chat let b:copilot_enabled = v:false
+> ```
+
+If `<CR>` doesn't submit, check `:verbose nmap <CR>` inside the chat buffer
+to see what plugin grabbed it, or call `:CopilotChatSubmitPrompt` directly.
+
+### 6. Referencing files and buffers in your prompt
+
+CopilotChat.nvim uses `#`-prefixed **context references** to pull extra files
+or buffers into the conversation. Type them inline anywhere in your prompt.
+
+| Reference | What it sends to Copilot |
+| --- | --- |
+| `#buffer` | The buffer that was active **when you opened the chat** |
+| `#buffers` | **All** currently loaded buffers (every file open in any split/tab) |
+| `#file:path/to/file.py` | A specific file by path (relative to cwd or absolute) |
+| `#selection` | The visual selection you made before opening chat |
+| `#git:staged` / `#git:unstaged` | Current git diff |
+| `#system:'cmd'` | Output of a shell command |
+| `#url:https://…` | Contents of a URL |
+
+**Referencing a file open in another split:**
+
+The easiest way is `#buffers`, which includes every open file:
+
+```plaintext
+#buffers how does the LSP config interact with mason?
+```
+
+Or target one file explicitly with `#file:`:
+
+```plaintext
+#file:application_configs/nvim/init.vim explain the autocmd on the last line
+```
+
+Tab-completion works on these references inside the chat prompt — start
+typing `#` then `<Tab>` to cycle through available context providers and
+file paths.
+
+Workflow tip: open the file you want to discuss in a vertical split
+(`:vsplit path/to/file`), then `<Leader>cc` to open chat. The originating
+buffer is captured as `#buffer`, and any other open file is reachable via
+`#buffers` or `#file:…`.
+
+---
+
 ## Verify Everything Works
 
 Inside Neovim:
@@ -219,6 +385,9 @@ Inside Neovim:
 - `:Mason` — shows installed LSPs.
 - Open a `.py` file; you should see `pyright` start (status line / no errors
   about missing LSPs).
+- Start typing in a code file — gray ghost text should appear from Copilot.
+  Press `<Tab>` to accept. Run `:Copilot status` to confirm it's *Online*.
+- Run `:CopilotChat` — a chat window should open.
 
 ---
 
@@ -231,6 +400,9 @@ Inside Neovim:
 | Mason shows nothing | Node.js isn't installed or not on `PATH`. Run `node --version` to check. |
 | Symlink "access denied" on Windows | Open PowerShell **as Administrator** before running `mklink`. |
 | Edits to repo `init.vim` don't show up | Symlink wasn't created. Confirm with `ls -la ~/.config/nvim/` (mac/Linux) or `dir %LOCALAPPDATA%\nvim` (Windows). |
+| Copilot ghost text doesn't appear | Run `:Copilot status`. If *Not Authorized*, run `:Copilot setup`. If *Node.js too old*, upgrade to Node ≥ 20. |
+| `:CopilotChat` says module not found | Run `:PlugInstall` to fetch `plenary.nvim` and `CopilotChat.nvim`, then restart Neovim. |
+| `<Tab>` doesn't accept Copilot suggestion | Another plugin claimed `<Tab>`. Uncomment the `g:copilot_no_tab_map` block in `init.vim` to use `<C-J>` instead. |
 
 ---
 
