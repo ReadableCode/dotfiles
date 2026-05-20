@@ -81,7 +81,7 @@
   "black-formatter.importStrategy": "useBundled",
   "flake8.importStrategy": "useBundled",
   // Auto Formatting - isort
-  "isort.importStrategy": "useBundled",
+  "isort.importStrategy": "fromEnvironment",
   "editor.codeActionsOnSave": {
     "source.organizeImports": "always"
   },
