@@ -7,6 +7,9 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "edit_predictions": {
+    "provider": "copilot",
+  },
   "ssh_connections": [
     {
       "host": "192.168.86.126",
@@ -20,6 +23,9 @@
   ],
   "terminal": {
     "option_as_meta": true,
+  },
+  "git_panel": {
+    "dock": "left",
   },
   "project_panel": {
     "dock": "left",
