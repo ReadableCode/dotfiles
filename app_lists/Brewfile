@@ -34,6 +34,7 @@ brew "ncdu"
 brew "gdu"
 brew "ripgrep"
 brew "fd"
+brew "unixodbc"
 
 cask "google-chrome"
 cask "firefox"
