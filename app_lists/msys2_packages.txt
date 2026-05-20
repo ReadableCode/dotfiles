@@ -5,3 +5,4 @@ mingw-w64-x86_64-gobject-introspection
 mingw-w64-x86_64-gtk3
 mingw-w64-x86_64-pango
 mingw-w64-x86_64-ripgrep
+ncdu
