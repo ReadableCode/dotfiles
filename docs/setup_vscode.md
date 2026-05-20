@@ -137,3 +137,43 @@ Edit the file at `C:\Users\jason.christiansen\.vscode-server\data\Machine\settin
   }
 }
 ```
+
+## Handling Remote SSH Connection Issues
+
+### VS Code Remote SSH hangs on a Windows host
+
+**Why this happens:** Every time VS Code updates on your Mac it pushes a new
+`code-*.exe` server binary to the Windows host but never kills the old ones.
+Multiple server versions end up running simultaneously, each spawning ~10 Node
+processes at ~100% CPU each — enough to completely peg a 6-core machine and
+cause code actions, formatting, and saves to hang indefinitely. A hard kill of
+these processes can also cause VS Code to defensively disable extensions (e.g.
+Jupyter) on reconnect as a crash-loop protection measure.
+
+**Fix: kill all server and node processes on the Windows host**
+
+Run in a terminal on the **Windows host** (PowerShell):
+
+```powershell
+# Kill all running vscode-server and node processes
+Get-Process | Where-Object { $_.Name -like "code-*" } | Stop-Process -Force
+Get-Process | Where-Object { $_.Name -eq "node" }     | Stop-Process -Force
+
+# Remove ALL old server binaries for a clean reinstall on next connect
+Get-ChildItem $env:USERPROFILE\\.vscode-server\\code-*.exe | Remove-Item -Force
+```
+
+Then reconnect from VS Code on your Mac — it will push a fresh server binary.
+
+**After reconnecting:** Check the Extensions panel for any extensions showing
+"Enable (Workspace)" — the hard kill may have disabled them as a crash
+protection measure. Re-enable and reload when prompted.
+
+**Prevent it recurring:** Pin the server install path in VS Code `settings.json`
+so it always uses the same directory across reconnects:
+
+```json
+"remote.SSH.serverInstallPath": {
+  "192.168.86.126": "%USERPROFILE%\\\\.vscode-server"
+}
+```
