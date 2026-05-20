@@ -83,58 +83,6 @@ After symlinking, test that Zed still works:
    git diff application_configs/zed/settings.json
    ```
 
-## Committing to Git
-
-```bash
-cd ~/GitHub/dotfiles
-git add application_configs/zed/
-git commit -m "Add Zed editor configuration"
-git push
-```
-
-## Setting Up on a New Machine
-
-On a new Mac:
-
-1. **Clone your dotfiles repo:**
-
-   ```bash
-   git clone https://github.com/ReadableCode/dotfiles.git ~/GitHub/dotfiles
-   ```
-
-2. **Install Zed:**
-
-   ```bash
-   brew install --cask zed
-   ```
-
-3. **Remove default configs (if they exist):**
-
-   ```bash
-   rm -f ~/.config/zed/settings.json
-   rm -f ~/.config/zed/keymap.json
-   rm -f ~/.config/zed/tasks.json
-   ```
-
-4. **Create symlinks:**
-
-   ```bash
-   ln -s ~/GitHub/dotfiles/application_configs/zed/settings.json ~/.config/zed/settings.json
-   ln -s ~/GitHub/dotfiles/application_configs/zed/keymap.json ~/.config/zed/keymap.json
-   ln -s ~/GitHub/dotfiles/application_configs/zed/tasks.json ~/.config/zed/tasks.json
-   ```
-
-## Tips
-
 ### Accessing Settings in Zed
 
 - **Open Settings:** `Cmd + ,` or `Zed > Settings`
-- **Open Keymap:** `Zed > Settings > Open Keymap` or via command palette (`Cmd + Shift + P`)
-
-### Common Settings Location Quick Reference
-
-```plaintext
-~/.config/zed/settings.json    # Your personal settings
-~/.config/zed/keymap.json      # Keyboard shortcuts
-~/.config/zed/tasks.json       # Task runner configs
-```
