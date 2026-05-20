@@ -7,17 +7,28 @@
 // custom settings, run `zed: open default settings` from the
 // command palette (cmd-shift-p / ctrl-shift-p)
 {
+  "ssh_connections": [
+    {
+      "host": "192.168.86.126",
+      "args": [],
+      "projects": [
+        {
+          "paths": ["~/dotfiles", "~/fourteen_foods"],
+        },
+      ],
+    },
+  ],
   "project_panel": {
-    "dock": "left"
+    "dock": "left",
   },
   "telemetry": {
     "diagnostics": false,
-    "metrics": false
+    "metrics": false,
   },
   "agent_servers": {
     "github-copilot-cli": {
-      "type": "registry"
-    }
+      "type": "registry",
+    },
   },
   "ui_font_size": 16,
   "buffer_font_size": 15,

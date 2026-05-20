@@ -23,7 +23,7 @@ Key files:
 
 ## Symlinking Zed Config to Git Repo
 
-### Method 1: Move and Symlink (Recommended)
+### Move and Symlink
 
 1. **Create a directory in your dotfiles repo for Zed configs:**
    ```bash
@@ -62,33 +62,6 @@ Key files:
    settings.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/settings.json
    keymap.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/keymap.json
    ```
-
-### Method 2: Symlink Entire Directory
-
-Alternatively, symlink the entire Zed config directory:
-
-```bash
-# Move the entire directory
-mv ~/.config/zed ~/GitHub/dotfiles/application_configs/zed
-
-# Create symlink
-ln -s ~/GitHub/dotfiles/application_configs/zed ~/.config/zed
-```
-
-**Note:** This method will also track other files Zed creates (like database files, state files, etc.), which may not be desirable. Method 1 is more selective.
-
-### Method 3: Using Stow (If Available)
-
-If you use GNU Stow for dotfile management:
-
-```bash
-cd ~/GitHub/dotfiles
-mkdir -p stow/zed/.config/zed
-mv ~/.config/zed/settings.json stow/zed/.config/zed/
-mv ~/.config/zed/keymap.json stow/zed/.config/zed/
-
-stow -d stow -t ~ zed
-```
 
 ## Verification
 
@@ -153,84 +126,4 @@ On a new Mac:
 ~/.config/zed/settings.json    # Your personal settings
 ~/.config/zed/keymap.json      # Keyboard shortcuts
 ~/.config/zed/tasks.json       # Task runner configs
-```
-
-### .gitignore Recommendations
-
-If using Method 2 (symlinking entire directory), add this to your `.gitignore`:
-
-```gitignore
-# Ignore Zed state/cache files
-application_configs/zed/conversations/
-application_configs/zed/copilot/
-application_configs/zed/embeddings/
-application_configs/zed/languages/
-application_configs/zed/node/
-application_configs/zed/db/
-application_configs/zed/*.log
-```
-
-### Automation Script
-
-Create a script to set up symlinks automatically:
-
-```bash
-#!/bin/bash
-# ~/GitHub/dotfiles/scripts/setup_zed_symlinks.sh
-
-DOTFILES_DIR="$HOME/GitHub/dotfiles"
-ZED_CONFIG_DIR="$HOME/.config/zed"
-ZED_DOTFILES_DIR="$DOTFILES_DIR/application_configs/zed"
-
-echo "Setting up Zed configuration symlinks..."
-
-# Ensure Zed config directory exists
-mkdir -p "$ZED_CONFIG_DIR"
-
-# Symlink each config file
-for file in settings.json keymap.json tasks.json; do
-    if [ -f "$ZED_DOTFILES_DIR/$file" ]; then
-        if [ -L "$ZED_CONFIG_DIR/$file" ]; then
-            echo "✓ $file already symlinked"
-        elif [ -f "$ZED_CONFIG_DIR/$file" ]; then
-            echo "⚠ $file exists, backing up..."
-            mv "$ZED_CONFIG_DIR/$file" "$ZED_CONFIG_DIR/$file.backup"
-            ln -s "$ZED_DOTFILES_DIR/$file" "$ZED_CONFIG_DIR/$file"
-            echo "✓ $file symlinked"
-        else
-            ln -s "$ZED_DOTFILES_DIR/$file" "$ZED_CONFIG_DIR/$file"
-            echo "✓ $file symlinked"
-        fi
-    fi
-done
-
-echo "Done!"
-```
-
-Make it executable:
-```bash
-chmod +x ~/GitHub/dotfiles/scripts/setup_zed_symlinks.sh
-```
-
-## Troubleshooting
-
-### Symlink not working
-```bash
-# Check if symlink is correct
-ls -la ~/.config/zed/settings.json
-
-# Remove broken symlink
-rm ~/.config/zed/settings.json
-
-# Recreate
-ln -s ~/GitHub/dotfiles/application_configs/zed/settings.json ~/.config/zed/settings.json
-```
-
-### Zed not picking up changes
-Restart Zed after making configuration changes outside the app.
-
-### Permissions issues
-Ensure the files have correct permissions:
-```bash
-chmod 644 ~/GitHub/dotfiles/application_configs/zed/*.json
 ```
