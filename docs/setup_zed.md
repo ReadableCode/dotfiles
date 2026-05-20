@@ -12,11 +12,12 @@ Or download from [zed.dev](https://zed.dev)
 
 Zed stores its configuration files in:
 
-```
+```bash
 ~/.config/zed/
 ```
 
 Key files:
+
 - `~/.config/zed/settings.json` - User settings
 - `~/.config/zed/keymap.json` - Custom keybindings
 - `~/.config/zed/tasks.json` - Task configurations (if used)
@@ -26,11 +27,13 @@ Key files:
 ### Move and Symlink
 
 1. **Create a directory in your dotfiles repo for Zed configs:**
+
    ```bash
    mkdir -p ~/GitHub/dotfiles/application_configs/zed
    ```
 
 2. **Move existing Zed configs to your repo:**
+
    ```bash
    # Backup first if you want
    cp -r ~/.config/zed/* ~/GitHub/dotfiles/application_configs/zed/
@@ -44,6 +47,7 @@ Key files:
    ```
 
 3. **Create symlinks back to Zed's config location:**
+
    ```bash
    ln -s ~/GitHub/dotfiles/application_configs/zed/settings.json ~/.config/zed/settings.json
    ln -s ~/GitHub/dotfiles/application_configs/zed/keymap.json ~/.config/zed/keymap.json
@@ -53,12 +57,14 @@ Key files:
    ```
 
 4. **Verify the symlinks:**
+
    ```bash
    ls -la ~/.config/zed/
    ```
-   
+
    You should see something like:
-   ```
+
+   ```plaintext
    settings.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/settings.json
    keymap.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/keymap.json
    ```
@@ -70,6 +76,7 @@ After symlinking, test that Zed still works:
 1. Open Zed
 2. Make a change to settings (e.g., change theme)
 3. Verify the change appears in your git repo:
+
    ```bash
    cd ~/GitHub/dotfiles
    git status
@@ -90,16 +97,19 @@ git push
 On a new Mac:
 
 1. **Clone your dotfiles repo:**
+
    ```bash
    git clone https://github.com/ReadableCode/dotfiles.git ~/GitHub/dotfiles
    ```
 
 2. **Install Zed:**
+
    ```bash
    brew install --cask zed
    ```
 
 3. **Remove default configs (if they exist):**
+
    ```bash
    rm -f ~/.config/zed/settings.json
    rm -f ~/.config/zed/keymap.json
@@ -107,6 +117,7 @@ On a new Mac:
    ```
 
 4. **Create symlinks:**
+
    ```bash
    ln -s ~/GitHub/dotfiles/application_configs/zed/settings.json ~/.config/zed/settings.json
    ln -s ~/GitHub/dotfiles/application_configs/zed/keymap.json ~/.config/zed/keymap.json
@@ -122,7 +133,7 @@ On a new Mac:
 
 ### Common Settings Location Quick Reference
 
-```
+```plaintext
 ~/.config/zed/settings.json    # Your personal settings
 ~/.config/zed/keymap.json      # Keyboard shortcuts
 ~/.config/zed/tasks.json       # Task runner configs

@@ -13,14 +13,39 @@
       "args": [],
       "projects": [
         {
-          "paths": ["~/dotfiles", "~/fourteen_foods"],
+          "paths": ["~/GitHub/dotfiles/", "~/GitHub/fourteen_foods/"],
         },
       ],
     },
   ],
+  "terminal": {
+    "option_as_meta": true,
+  },
   "project_panel": {
     "dock": "left",
   },
+  "base_keymap": "VSCode",
+  "sticky_scroll": {
+    "enabled": true,
+  },
+  "minimap": {
+    "thumb": "always",
+  },
+  "cursor_blink": true,
+  "autosave": "on_focus_change",
+  "file_types": {
+    "markdown": ["*.md"],
+    "yaml": ["*.yaml"],
+    "helm": ["templates/*.yaml"],
+  },
+  "colorize_brackets": true,
+  "auto_indent_on_paste": true,
+  "show_whitespaces": "all",
+  "show_edit_predictions": true,
+  "semantic_tokens": "full",
+  "line_ending": "prefer_lf",
+  "remove_trailing_whitespace_on_save": false,
+  "soft_wrap": "none",
   "telemetry": {
     "diagnostics": false,
     "metrics": false,
