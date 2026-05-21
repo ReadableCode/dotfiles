@@ -7,3 +7,4 @@ mingw-w64-x86_64-pango
 mingw-w64-x86_64-ripgrep
 ncdu
 mingw-w64-x86_64-bottom
+rsync

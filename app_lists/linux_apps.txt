@@ -36,3 +36,4 @@ tree
 unixodbc
 unzip
 docker-compose
+rsync
