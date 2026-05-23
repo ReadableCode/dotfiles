@@ -11,6 +11,7 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
         'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
         'C:\Users\jason.christiansen\userapps\PortableGit\bin',
         'C:\Users\jason.christiansen\userapps\fzf-0.66.1-windows_amd64',
+        'C:\Users\jason.christiansen\userapps\rust\cargo\bin',
         'C:\msys64\mingw64\bin',
         'C:\msys64\usr\bin'
     )
@@ -24,6 +25,10 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
     
     # Set CC to gcc for any builds that might need it
     $env:CC = "gcc"
+
+    # Tell rustup/cargo to keep their state under userapps instead of the home dir
+    $env:RUSTUP_HOME = "$env:USERPROFILE\userapps\rust\rustup"
+    $env:CARGO_HOME  = "$env:USERPROFILE\userapps\rust\cargo"
 
     # print that we ran custom config for 14
     Write-Host "14 Foods custom config loaded" -ForegroundColor Green
