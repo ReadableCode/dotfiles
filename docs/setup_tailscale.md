@@ -77,7 +77,7 @@ netsh interface portproxy delete v4tov4 listenport=18501 listenaddress=127.0.0.1
 
 #### To fix warning message
 
-```bash
+```plaintext
 Unable to relay traffic
 This machine has IP forwarding disabled and cannot relay traffic. Please enable IP forwarding on this machine to use relay features like subnets or exit nodes.
 ```

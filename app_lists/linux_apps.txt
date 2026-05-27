@@ -1,7 +1,9 @@
 barrier
+btop
 cargo
 cifs-utils
 curl
+docker-compose
 evolution
 fastfetch
 fzf
@@ -22,6 +24,7 @@ openssh-server
 pandoc
 python3-isort
 ripgrep
+rsync
 speedtest-cli
 ssmtp
 steam
@@ -35,5 +38,3 @@ tmux
 tree
 unixodbc
 unzip
-docker-compose
-rsync
