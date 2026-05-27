@@ -405,6 +405,43 @@ sudo nano /etc/ssmtp/ssmtp.conf
   sudo dphys-swapfile swapon
   ```
 
+### Samba host setup
+
+* Install Samba:
+
+  ```bash
+  sudo apt install samba
+  ```
+
+* Add user to Samba:
+
+  ```bash
+  sudo smbpasswd -a pi  # replace 'pi' with your username
+  ```
+
+* Configure Samba shares:
+
+  ```bash
+  sudo nvim /etc/samba/smb.conf
+  ```
+
+* Add share definition at bottom of file:
+
+```plaintext
+[Media]
+  path = /home/pi/Media
+  browseable = yes
+  read only = yes
+  guest ok = no
+  valid users = pi
+```
+
+* Restart Samba to apply changes:
+
+  ```bash
+  sudo systemctl restart smbd
+  ```
+
 ## Raspberry Pi Specific Setup
 
 ### raspi-config

@@ -25,6 +25,7 @@ pandoc
 python3-isort
 ripgrep
 rsync
+samba
 speedtest-cli
 ssmtp
 steam
