@@ -184,6 +184,43 @@ brew bundle
 - Install Logi Options
 - Install Logitech G Hub
 
+## Clipboard History (Maccy)
+
+macOS has no built-in clipboard history. Install Maccy for a free, minimal visual clipboard manager:
+
+```bash
+brew install --cask maccy
+```
+
+- Open Maccy → Preferences → set hotkey (default: `Cmd+Shift+C`)
+- Shows a searchable visual list of recent clipboard items
+
+## Hammerspoon (AutoHotkey equivalent)
+
+Hammerspoon is a free Mac automation tool scriptable in Lua — use it for hotkeys, window management, and macros.
+
+```bash
+brew install --cask hammerspoon
+```
+
+Symlink the dotfiles config:
+
+```bash
+mkdir -p ~/.hammerspoon
+ln -sf ~/GitHub/dotfiles/application_configs/hammerspoon/init.lua ~/.hammerspoon/init.lua
+```
+
+- Launch Hammerspoon from `/Applications` — it lives in the menu bar
+- Click the menu bar icon → **Reload Config**
+- Grant Accessibility permissions when prompted: System Settings → Privacy & Security → Accessibility
+
+Current hotkeys defined in `application_configs/hammerspoon/init.lua`:
+
+| Hotkey | Action |
+|--------|--------|
+| `Ctrl+Shift+C` | Copy selection, open as Google Sheets URL |
+| `Ctrl+Shift+F` | Copy selection, open as Google Drive folder URL |
+
 ## Enable SSH Server
 
 - System Settings -> General -> Sharing -> Remote Management
