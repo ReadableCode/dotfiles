@@ -295,3 +295,6 @@ if [[ -f "$_hosts_file" ]]; then
     done < "$_hosts_file"
 fi
 unset _hosts_file _line _inv_host _alias _user _host _port _ssh_cmd
+
+# Machine-local overrides (not synced)
+[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local

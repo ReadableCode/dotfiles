@@ -179,6 +179,35 @@ cd ../app_lists
 brew bundle
 ```
 
+### Cleaning up brew to get disk space back
+
+```bash
+brew cleanup --prune=all
+rm -rf ~/Library/Caches/Homebrew
+```
+
+### Moving Homebrew Cache
+
+```bash
+# create new cache directory
+mkdir -p /Volumes/EnvyExtSSD/HomebrewCache
+# set permissions for current user
+sudo chown -R $(whoami) /Volumes/EnvyExtSSD/HomebrewCache
+# persist in machine-local zsh config (not synced to other machines)
+echo 'export HOMEBREW_CACHE=/Volumes/EnvyExtSSD/HomebrewCache' >> ~/.zshrc.local
+```
+
+## Claude Setup
+
+### Moving Claude data directory to external drive
+
+quit Claude fully first, then:
+
+```bash
+mv ~/Library/Application\ Support/Claude /Volumes/EnvyExtSSD/Claude
+ln -s /Volumes/EnvyExtSSD/Claude ~/Library/Application\ Support/Claude
+```
+
 ## Install Binary Installler Apps
 
 - Install Logi Options
