@@ -114,6 +114,44 @@
     sudo apt install docker-compose
     ```
 
+## Installing Docker on Raspberry Pi
+
+The best method is Docker's **official convenience script**. Avoid `sudo apt install docker.io` — it pulls an outdated version from the Debian/Raspberry Pi OS repos, not Docker's official packages. The convenience script automatically detects the ARM architecture and installs the latest Docker CE with the Compose plugin included.
+
+- Run the convenience script:
+
+    ```bash
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+    ```
+
+- Manage Docker as a non-root user:
+
+    ```bash
+    sudo usermod -aG docker ${USER}
+    newgrp docker
+    ```
+
+- Enable Docker to start on boot:
+
+    ```bash
+    sudo systemctl enable docker
+    ```
+
+- Verify Docker is working:
+
+    ```bash
+    docker run hello-world
+    ```
+
+- Docker Compose is included as a plugin (v2). Use it as:
+
+    ```bash
+    docker compose up -d
+    ```
+
+> **Note:** If you prefer the manual GPG key method (e.g., for scripted provisioning), use `debian` as the distro instead of `ubuntu` since Raspberry Pi OS is Debian-based. The convenience script handles this automatically.
+
 ## Installing Docker on macOS
 
 Use [Colima](https://github.com/abiosoft/colima) (open-source) instead of Docker Desktop:
