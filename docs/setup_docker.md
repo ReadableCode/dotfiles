@@ -114,6 +114,8 @@
     sudo apt install docker-compose
     ```
 
+> **Note:** The above installs the legacy Docker Compose v1 (`docker-compose`). For a fresh Ubuntu install, prefer the convenience script method (see Raspberry Pi section below) which includes the v2 Compose plugin (`docker compose`).
+
 ## Installing Docker on Raspberry Pi
 
 The best method is Docker's **official convenience script**. Avoid `sudo apt install docker.io` — it pulls an outdated version from the Debian/Raspberry Pi OS repos, not Docker's official packages. The convenience script automatically detects the ARM architecture and installs the latest Docker CE with the Compose plugin included.
@@ -121,8 +123,7 @@ The best method is Docker's **official convenience script**. Avoid `sudo apt ins
 - Run the convenience script:
 
     ```bash
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sudo sh get-docker.sh
+    curl -fsSL https://get.docker.com | sudo sh
     ```
 
 - Manage Docker as a non-root user:
