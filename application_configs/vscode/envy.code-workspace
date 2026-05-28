@@ -68,6 +68,10 @@
       "name": "HelloFresh",
       "path": "../Library/CloudStorage/OneDrive-Personal/Documents/Work/HelloFresh",
     },
+    {
+      "name": "Documents",
+      "path": "Documents",
+    },
   ],
   "settings": {},
 }

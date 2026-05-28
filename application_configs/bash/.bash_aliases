@@ -167,6 +167,7 @@ alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
 alias speed='speedtest-cli'
 alias windirstat='ncdu'
 alias mountcheck='mount | grep "sd"'
+alias neofetch='fastfetch'
 
 ### Servers ###
 
