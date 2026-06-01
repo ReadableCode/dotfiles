@@ -1,10 +1,6 @@
 {
   "folders": [
     {
-      "name": "hf_dev",
-      "path": "hf_dev",
-    },
-    {
       "name": "na-finops",
       "path": "na-finops",
     },
