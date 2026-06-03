@@ -3,5 +3,8 @@
     "commit": "",
     "pr": ""
   },
-  "theme": "auto"
+  "theme": "auto",
+  "enabledPlugins": {
+    "github@claude-plugins-official": true
+  }
 }
