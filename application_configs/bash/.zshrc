@@ -70,10 +70,6 @@ precmd() {
 export PROMPT='%F{cyan}%n@%m%f:%F{blue}%~%f$(get_uv_env)$(get_dir_status)${vcs_info_msg_0_}
 %F{white}$%f '
 
-# Enable spelling correction
-setopt CORRECT
-setopt CORRECT_ALL
-
 # Enable better tab completion
 autoload -Uz compinit
 compinit
