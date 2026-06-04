@@ -93,7 +93,7 @@ Add-Content -Path $PROFILE -Value 'path you found earlier'
 
 * Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
 
-##### Or Use Bootstrap Script to Automatically Install Chocolatey and Install Apps From: [windows_apps.txt](../app_lists/windows_apps.txt)
+##### Or Use Bootstrap Script to Automatically Install Chocolatey and Install Apps From: [windows_apps_personal_choco.txt](../app_lists/windows_apps_personal_choco.txt)
 
 * Open powershell as admin in the directory where you have the script saved and run command to use bootstrap script to install apps:
 

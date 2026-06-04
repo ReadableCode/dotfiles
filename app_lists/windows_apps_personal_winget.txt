@@ -1,0 +1,2 @@
+winget install Anthropic.ClaudeCode
+winget install Anthropic.Claude
