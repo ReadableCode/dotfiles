@@ -12,7 +12,7 @@ pkg update -y && pkg upgrade -y
 
 # Read the list of applications from the android_termux_apps.txt file
 # Adjust the path to the file as needed
-mapfile -t apps < <(cat ../app_lists/android_termux_apps.txt | tr -d '\r')
+mapfile -t apps < <(tr -d '\r' < ../app_lists/android_termux_apps.txt)
 
 # Print the list of applications being installed (for debugging)
 echo "Installing the following applications: ${apps[@]}"

@@ -31,18 +31,18 @@ update_apt() {
     sudo apt -y full-upgrade
 }
 
-# Install neofetch if it's not already installed
-install_neofetch() {
-    echo "Installing neofetch..."
+# Install fastfetch (preferred) or neofetch as fallback
+install_sysinfo() {
+    echo "Installing fastfetch..."
     case "$OS" in
       "Linux")
-        sudo apt install -y neofetch
+        sudo apt install -y fastfetch || sudo apt install -y neofetch
         ;;
       "Darwin")
-        brew install neofetch
+        brew install fastfetch || brew install neofetch
         ;;
       *)
-        echo "Unsupported OS for neofetch installation."
+        echo "Unsupported OS for fastfetch installation."
         ;;
     esac
 }
@@ -70,19 +70,22 @@ case "$OS" in
     ;;
 esac
 
-echo "############ Checking neofetch ############"
+echo "############ System Info ############"
 
-# Check if neofetch is installed and install it if not
-if command -v neofetch &> /dev/null; then
+# Prefer fastfetch, fall back to neofetch
+if command -v fastfetch &> /dev/null; then
+    fastfetch
+elif command -v neofetch &> /dev/null; then
     neofetch
 else
-    echo "neofetch not found. Attempting to install..."
-    install_neofetch
-    # Run neofetch after installation
-    if command -v neofetch &> /dev/null; then
+    echo "fastfetch not found. Attempting to install..."
+    install_sysinfo
+    if command -v fastfetch &> /dev/null; then
+        fastfetch
+    elif command -v neofetch &> /dev/null; then
         neofetch
     else
-        echo "Failed to install neofetch."
+        echo "Failed to install fastfetch."
     fi
 fi
 
