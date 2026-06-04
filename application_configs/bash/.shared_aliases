@@ -1,0 +1,170 @@
+# Shared aliases and functions for bash and zsh.
+# Deploy to ~/.shared_aliases — sourced by ~/.bash_aliases and ~/.zshrc.
+# Both files will auto-symlink this from the dotfiles repo if not found in ~.
+
+### Terminal Config ###
+
+# Detect the type of terminal: WSL, Linux, or macOS — sets $TERMINAL_TYPE
+detect_terminal_type() {
+    if grep -qEi "(Microsoft|WSL)" /proc/version 2>/dev/null; then
+        TERMINAL_TYPE="WSL"
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        TERMINAL_TYPE="Linux"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        TERMINAL_TYPE="macOS"
+    else
+        TERMINAL_TYPE="Unknown"
+    fi
+}
+
+detect_terminal_type
+
+### Paths ###
+
+# Find the git projects directory across different machine setups
+set_git_dir() {
+    if [ -d "$HOME/GitHub/" ]; then
+        gitDir="$HOME/GitHub/"
+    elif [ -d "$HOME/GitHubWSL/" ]; then
+        gitDir="$HOME/GitHubWSL/"
+    elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
+        gitDir="$HOME/HelloFresh/GDrive/Projects/"
+    else
+        gitDir=""
+    fi
+}
+
+set_git_dir
+
+alias githubdir='cd $gitDir'
+
+### Python ###
+
+alias venvactivate='source ./.venv/bin/activate'
+
+alias venvdeactivate='deactivate'
+
+function run_python_script() {
+    # Check if a file path argument is provided
+    if [ -z "$1" ]; then
+        echo "Usage: run_python_script <python_script_path> [args...]" >&2
+        return 1
+    fi
+
+    local script_path="$1"
+    shift  # remove script path, leaving any extra args to pass through
+
+    local script_dir
+    script_dir=$(dirname "$script_path")
+
+    # Look for a .venv one level up from the script (standard project layout)
+    local venv_dir
+    venv_dir="$(dirname "$script_dir")/.venv"
+
+    echo "Running Python script: $script_path"
+    echo "Changing to script directory: $script_dir"
+    cd "$script_dir" || return 1
+
+    # Use the project venv if it exists, otherwise fall back to system Python
+    if [ -d "$venv_dir" ]; then
+        echo "Project .venv detected at: $venv_dir"
+        source "$venv_dir/bin/activate"
+        python3 "$script_path" "$@"
+        deactivate
+    else
+        echo "No project .venv found in parent directory. Running the script with system Python."
+        python3 "$script_path" "$@"
+    fi
+}
+
+function deploytools() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    run_python_script "$gitDir/Data_Tool_Pack_Py/src/deploy_tools.py"
+}
+
+function todo() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    run_python_script "$gitDir/Terminal_To_Do/src/main.py"
+}
+
+### Command Shortcuts ###
+
+alias ll='ls -AlhF'
+
+# Open all files changed between origin/master and HEAD in VSCode
+alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git fetch -q && git diff --name-only origin/master...HEAD | xargs -I{} code {}'
+
+function gitpullall() {
+    local arch os bin
+    arch=$(uname -m)
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
+
+    if [[ "$os" == "darwin" ]]; then
+        # macOS: pick arm or x86 binary
+        if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+            bin="${bin}_mac_arm"
+        else
+            bin="${bin}_mac_x86"
+        fi
+    elif [[ "$os" == "linux" ]]; then
+        # Linux: arm gets a suffix; x86 uses the default binary name
+        if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+            bin="${bin}_arm"
+        fi
+    fi
+
+    chmod +x "$bin"
+    "$bin" -path "$gitDir" -r
+}
+
+### Script Shortcuts ###
+
+alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
+alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
+alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
+alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
+
+### Program Shortcuts ###
+
+alias speed='speedtest-cli'
+
+### SSH Shortcuts (loaded from unified Ansible inventory) ###
+
+_hosts_file="${gitDir}dotfiles/inventory/hosts"
+if [[ -f "$_hosts_file" ]]; then
+    while IFS= read -r _line || [[ -n "$_line" ]]; do
+        [[ -z "$_line" || "$_line" == \#* || "$_line" == \[* ]] && continue
+        [[ "$_line" != *ssh_alias=* ]] && continue
+
+        _inv_host="${_line%% *}"
+
+        _alias="${_line#*ssh_alias=}";   _alias="${_alias%% *}"
+
+        if [[ "$_line" == *ssh_user=* ]]; then
+            _user="${_line#*ssh_user=}";  _user="${_user%% *}"
+        elif [[ "$_line" == *ansible_user=* ]]; then
+            _user="${_line#*ansible_user=}"; _user="${_user%% *}"
+        else
+            _user=""
+        fi
+
+        if [[ "$_line" == *ansible_host=* ]]; then
+            _host="${_line#*ansible_host=}"; _host="${_host%% *}"
+        else
+            _host="$_inv_host"
+        fi
+
+        _port=""
+        if [[ "$_line" == *ansible_port=* ]]; then
+            _port="${_line#*ansible_port=}"; _port="${_port%% *}"
+        fi
+
+        _ssh_cmd="ssh"
+        [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
+        _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
+
+        alias "$_alias"="$_ssh_cmd"
+    done < "$_hosts_file"
+fi
+unset _hosts_file _line _inv_host _alias _user _host _port _ssh_cmd

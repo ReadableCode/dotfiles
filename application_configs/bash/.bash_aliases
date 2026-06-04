@@ -1,23 +1,17 @@
 ### Terminal Config ###
 
-# Detect the type of terminal: WSL, Linux, or macOS
-detect_terminal_type() {
-	if grep -qEi "(Microsoft|WSL)" /proc/version &>/dev/null; then
-		echo "Running in WSL"
-		TERMINAL_TYPE="WSL"
-	elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-		echo "Running on Linux"
-		TERMINAL_TYPE="Linux"
-	elif [[ "$OSTYPE" == "darwin"* ]]; then
-		echo "Running on macOS"
-		TERMINAL_TYPE="macOS"
-	else
-		echo "Unknown system, skipping pyenv setup"
-		TERMINAL_TYPE="Unknown"
-	fi
-}
-
-detect_terminal_type
+# Auto-symlink ~/.shared_aliases from the dotfiles repo if not already present,
+# then source it for all shared aliases and functions.
+if [[ ! -f "$HOME/.shared_aliases" ]]; then
+    for _d in "$HOME/GitHub" "$HOME/GitHubWSL" "$HOME/HelloFresh/GDrive/Projects"; do
+        if [[ -f "$_d/dotfiles/application_configs/bash/.shared_aliases" ]]; then
+            ln -s "$_d/dotfiles/application_configs/bash/.shared_aliases" "$HOME/.shared_aliases"
+            break
+        fi
+    done
+    unset _d
+fi
+[[ -f "$HOME/.shared_aliases" ]] && source "$HOME/.shared_aliases"
 
 alias editaliases='nvim ~/.bash_aliases'
 
@@ -27,24 +21,8 @@ alias srcaliases='source ~/.bashrc'
 
 ### Paths ###
 
-set_git_dir() {
-	if [ -d "$HOME/GitHub/" ]; then
-		gitDir="$HOME/GitHub/"
-	elif [ -d "$HOME/GitHubWSL/" ]; then
-		gitDir="$HOME/GitHubWSL/"
-	elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
-		gitDir="$HOME/HelloFresh/GDrive/Projects/"
-	else
-		echo "No suitable git directory found"
-		gitDir=""
-	fi
-}
-
-set_git_dir
-
 alias myscripts='cd $gitDir/dotfiles/scripts/'
 alias linux='cd ~/Documents/Technology/Linux/'
-alias githubdir='cd $gitDir'
 alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
 
 # HelloFresh #
@@ -53,118 +31,8 @@ alias kubelogs='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_fo
 alias kubebash='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_bash.sh'
 alias kubedelete='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_delete.sh'
 
-### Python ###
-
-alias venvactivate='source ./.venv/bin/activate'
-
-alias venvdeactivate='deactivate'
-
-function run_python_script() {
-	# Check if a file path argument is provided
-	if [ -z "$1" ]; then
-		echo "Usage: run_python_script <python_script_path>"
-		return 1
-	fi
-
-	echo "Running Python script: $1"
-
-	# Extract the directory from the provided file path
-	script_path="$1"
-	script_dir=$(dirname "$script_path")
-
-	# Move up one directory level to check for the .venv folder
-	venv_dir="$(dirname "$script_dir")/.venv"
-
-	# Change to the script directory
-	echo "Changing to script directory: $script_dir"
-	cd "$script_dir" || return
-
-	# Check if the .venv folder exists in the parent directory
-	if [ -d "$venv_dir" ]; then
-		echo "Project .venv detected at: $venv_dir"
-
-		# Activate the .venv environment
-		source "$venv_dir/bin/activate"
-
-		# Run the script using the .venv environment
-		python3 "$script_path"
-
-		# Deactivate the environment afterward
-		deactivate
-		return 0
-	else
-		echo "No project .venv found in parent directory. Running the script with system Python."
-	fi
-
-	# Run the script using the system Python as a fallback
-	python3 "$script_path"
-}
-
-function deploytools() {
-	if [ -z "$gitDir" ]; then
-		echo "gitDir is not set"
-		return 1
-	fi
-	run_python_script "$gitDir/Data_Tool_Pack_Py/src/deploy_tools.py"
-}
-
-function todo() {
-	if [ -z "$gitDir" ]; then
-		echo "gitDir is not set"
-		return 1
-	fi
-	run_python_script "$gitDir/Terminal_To_Do/src/main.py"
-}
-
-### Command Shortcuts ###
-
-alias ll='ls -AlhF'
-
-alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git fetch -q && git diff --name-only origin/master...HEAD | xargs -I{} code {}'
-
-function gitpullall() {
-	arch=$(uname -m)
-	os=$(uname -s | tr '[:upper:]' '[:lower:]')
-	bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
-
-	if [[ "$os" == "darwin" ]]; then
-		# macOS
-		if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
-			bin="${bin}_mac_arm"
-		else
-			bin="${bin}_mac_x86"
-		fi
-	elif [[ "$os" == "linux" ]]; then
-		# Linux
-		if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
-			bin="${bin}_arm"
-		else
-			bin="$bin"
-		fi
-	fi
-
-	chmod +x "$bin"
-	"$bin" -path "$gitDir" -r
-}
-
-alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
-
-### Kubectl ###
-
-alias k="kubectl"
-alias kgp="kubectl get pods -o wide"
-alias kgn="kubectl get nodes -o wide"
-
-### Script Shortcuts ###
-
-alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
-alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
-alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
-alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
-
 ### Program Shortcuts ###
 
-alias speed='speedtest-cli'
 alias windirstat='ncdu'
 alias mountcheck='mount | grep "sd"'
 alias neofetch='fastfetch'
@@ -214,42 +82,10 @@ alias killvpn='sudo kill $(pgrep openvpn)'
 alias unmountgoogle='umount ~/GoogleDrive'
 alias mountgoogle='google-drive-ocamlfuse ~/GoogleDrive'
 
-### SSH Shortcuts (loaded from unified Ansible inventory) ###
+### Kubectl ###
 
-_hosts_file="${gitDir}dotfiles/inventory/hosts"
-if [[ -f "$_hosts_file" ]]; then
-    while IFS= read -r _line || [[ -n "$_line" ]]; do
-        [[ -z "$_line" || "$_line" == \#* || "$_line" == \[* ]] && continue
-        [[ "$_line" != *ssh_alias=* ]] && continue
+alias k="kubectl"
+alias kgp="kubectl get pods -o wide"
+alias kgn="kubectl get nodes -o wide"
 
-        _inv_host="${_line%% *}"
-
-        _alias="${_line#*ssh_alias=}";   _alias="${_alias%% *}"
-
-        if [[ "$_line" == *ssh_user=* ]]; then
-            _user="${_line#*ssh_user=}";  _user="${_user%% *}"
-        elif [[ "$_line" == *ansible_user=* ]]; then
-            _user="${_line#*ansible_user=}"; _user="${_user%% *}"
-        else
-            _user=""
-        fi
-
-        if [[ "$_line" == *ansible_host=* ]]; then
-            _host="${_line#*ansible_host=}"; _host="${_host%% *}"
-        else
-            _host="$_inv_host"
-        fi
-
-        _port=""
-        if [[ "$_line" == *ansible_port=* ]]; then
-            _port="${_line#*ansible_port=}"; _port="${_port%% *}"
-        fi
-
-        _ssh_cmd="ssh"
-        [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
-        _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
-
-        alias "$_alias"="$_ssh_cmd"
-    done < "$_hosts_file"
-fi
-unset _hosts_file _line _inv_host _alias _user _host _port _ssh_cmd
+alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
