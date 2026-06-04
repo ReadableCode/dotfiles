@@ -22,7 +22,7 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
         }
     }
     Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
-    
+
     # Set CC to gcc for any builds that might need it
     $env:CC = "gcc"
 
@@ -50,6 +50,11 @@ function editaliases {
     nvim $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
+function srcaliases {
+    # Reload the PowerShell profile
+    . $PROFILE
+}
+
 if (Test-Path "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe") {
     if (Get-Alias diff -ErrorAction SilentlyContinue) {
         Remove-Item alias:diff -Force
@@ -66,14 +71,23 @@ function treed {
 Remove-Item alias:tree -ErrorAction SilentlyContinue
 Set-Alias tree treed
 
+# Prefer fastfetch over neofetch if available (matches bash config)
+if (Get-Command fastfetch -ErrorAction SilentlyContinue) {
+    Set-Alias neofetch fastfetch
+}
+
 ### Paths ###
 
 # $myDocumentsPath = [Environment]::GetFolderPath('MyDocuments')
 # Write-Host "myDocumentsPath is: $myDocumentsPath"
 
+# Find the git projects directory across different machine setups
 $basePath = $HOME
 if (Test-Path "$basePath\GitHub\") {
     $gitDir = "$basePath\GitHub\"
+}
+elseif (Test-Path "$basePath\GitHubWSL\") {
+    $gitDir = "$basePath\GitHubWSL\"
 }
 elseif (Test-Path "$basePath\HelloFreshProjects\") {
     $gitDir = "$basePath\HelloFreshProjects\"
@@ -83,6 +97,8 @@ elseif (Test-Path "$basePath\HelloFreshProjects\") {
 
 function githubdir { Set-Location $gitDir }
 function fourdir { Set-Location 'C:\Users\jason\OneDrive - Fourteen Foods\code' }
+function myscripts { Set-Location (Join-Path $gitDir 'dotfiles\scripts') }
+function datatoolpack { Set-Location (Join-Path $gitDir 'Data_Tool_Pack_Py') }
 
 # alias finance='cd ~/HelloFresh/GDrive/Projects/na-finops/'
 function finance { Set-Location (Join-Path $gitDir 'na-finops') }
@@ -109,11 +125,14 @@ function venvdeactivate { deactivate }
 
 function run-python-script {
     param (
-        [string]$scriptPath
+        [string]$scriptPath,
+        # Capture any extra arguments to pass through to the Python script
+        [Parameter(ValueFromRemainingArguments)]
+        [string[]]$scriptArgs
     )
 
     if (-not $scriptPath) {
-        Write-Host "Usage: run-python-script <python_script_path>"
+        Write-Host "Usage: run-python-script <python_script_path> [args...]"
         return 1
     }
 
@@ -126,26 +145,26 @@ function run-python-script {
     Write-Host "Changing to script directory: $scriptDir"
     Set-Location -Path $scriptDir
 
-    # Check if the venv folder exists in the project directory
+    # Look for a .venv one level up from the script (standard project layout)
     if (Test-Path "..\.venv") {
-        Write-Host "Project venv detected at: ./venv"
+        Write-Host "Project .venv detected at: ..\.venv"
 
         # Activate the venv environment
         ..\.venv\Scripts\Activate.ps1
 
-        # Run the script using the venv environment
-        python $scriptPath
+        # Run the script using the venv environment, passing through any extra args
+        python $scriptPath @scriptArgs
 
         # Deactivate the environment afterward
         deactivate
         return 0
     }
     else {
-        Write-Host "No project venv found. Running the script with system Python."
+        Write-Host "No project .venv found in parent directory. Running the script with system Python."
     }
 
     # Run the script using the system Python as a fallback
-    python $scriptPath
+    python $scriptPath @scriptArgs
 }
 
 function deploytools {
@@ -180,11 +199,14 @@ function openbranchdiffs {
     }
     Set-Location -Path $repoRoot
 
-    # Get the list of files changed between master and the current branch
-    $changedFiles = git diff --name-only master...HEAD
+    # Fetch to ensure origin/master is up to date before diffing
+    git fetch -q
+
+    # Get the list of files changed between origin/master and the current branch
+    $changedFiles = git diff --name-only origin/master...HEAD
 
     if (-not $changedFiles) {
-        Write-Host "No differences between master and HEAD." -ForegroundColor Yellow
+        Write-Host "No differences between origin/master and HEAD." -ForegroundColor Yellow
         return
     }
 
@@ -203,6 +225,29 @@ function ntfyme {
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
 }
 
+function myupdater {
+    Write-Host "#################   Running System Update   #####################" -ForegroundColor Cyan
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "Updating via winget..." -ForegroundColor Green
+        winget upgrade --all
+    }
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "Updating via Chocolatey..." -ForegroundColor Green
+        choco upgrade all -y
+    }
+    Write-Host "############ Done ############" -ForegroundColor Cyan
+}
+
+function weather {
+    Invoke-RestMethod "https://wttr.in"
+}
+
+function getpubip {
+    (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing).Content.Trim()
+}
+
+function speed { speedtest-cli }
+
 ### Servers ###
 
 function startjupyterlab {
@@ -214,6 +259,18 @@ function startjupyterlab {
 }
 
 ### AI Shortcuts ###
+
+function startollama {
+    if (Get-Command ollama -ErrorAction SilentlyContinue) {
+        ollama serve
+    } else {
+        Write-Host "ollama is not installed. Download from https://ollama.ai" -ForegroundColor Yellow
+    }
+}
+
+function pullollamamodels { ollama pull llama2-uncensored }
+function runollama { ollama run llama2-uncensored }
+function stopollama { Stop-Process -Name "ollama" -ErrorAction SilentlyContinue }
 
 function startstablediffusion {
     $scriptPath = "~\GitHub\stable-diffusion-webui\webui.bat"
@@ -248,6 +305,23 @@ function startstablediffusionamd {
 
     & $scriptPath --listen --gradio-auth jason:$password --skip-torch-cuda-test --no-half --use-directml --lowvram
 }
+
+### GPU Shortcuts ###
+
+function gpustatus {
+    # Windows equivalent of 'watch -n 0.5 nvidia-smi'
+    while ($true) {
+        Clear-Host
+        nvidia-smi
+        Start-Sleep -Milliseconds 500
+    }
+}
+
+### Kubectl ###
+
+function k { kubectl @args }
+function kgp { kubectl get pods -o wide @args }
+function kgn { kubectl get nodes -o wide @args }
 
 ### WSL ###
 
@@ -322,4 +396,3 @@ if (Test-Path $hostsFile) {
         }
     }
 }
-
