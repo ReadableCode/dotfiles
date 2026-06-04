@@ -1,16 +1,23 @@
 #!/bin/bash
+# Install Linux apps from an app list.
+# Usage: install_linux_apps.sh [app_list_file]
+# Defaults to app_lists/linux_apps.txt relative to the repo root.
 
-apt -y update
-apt -y upgrade
-apt -y dist-upgrade
-apt -y autoremove
-apt -y full-upgrade
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+APP_LIST="${1:-$SCRIPT_DIR/../app_lists/linux_apps.txt}"
 
-# Read the list of applications from the linux_apps.txt file in the parent directory
-mapfile -t apps < <(cat ../app_lists/linux_apps.txt | tr -d '\r')
+sudo apt -y update
+sudo apt -y upgrade
+sudo apt -y dist-upgrade
+sudo apt -y autoremove
+sudo apt -y full-upgrade
 
-# Print the list of applications being installed (for debugging)
-echo "Installing the following applications: ${apps[@]}"
+if [ ! -f "$APP_LIST" ]; then
+    echo "App list not found: $APP_LIST — skipping app installation." >&2
+    exit 0
+fi
 
-# Install the applications
-apt install -fy "${apps[@]}"
+mapfile -t apps < <(tr -d '\r' < "$APP_LIST")
+
+echo "Installing ${#apps[@]} apps from $APP_LIST: ${apps[*]}"
+sudo apt install -fy "${apps[@]}"

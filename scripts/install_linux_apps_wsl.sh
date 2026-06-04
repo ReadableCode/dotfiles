@@ -1,19 +1,4 @@
 #!/bin/bash
-
-apt -y update
-apt -y upgrade
-apt -y dist-upgrade
-apt -y autoremove
-apt -y full-upgrade
-
-# Read the list of applications from the linux_apps_wsl.txt file in the parent directory
-mapfile -t apps < <(cat ../app_lists/linux_apps_wsl.txt | tr -d '\r')
-
-# Print the list of applications being installed (for debugging)
-echo "Installing the following applications: ${apps[@]}"
-
-# Install the applications
-for app in "${apps[@]}"; do
-  echo "Installing $app"
-  sudo apt install -y "$app"
-done
+# Install WSL-specific Linux apps. Wrapper around install_linux_apps.sh.
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+bash "$SCRIPT_DIR/install_linux_apps.sh" "$SCRIPT_DIR/../app_lists/linux_apps_wsl.txt"
