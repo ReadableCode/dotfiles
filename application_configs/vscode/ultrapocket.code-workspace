@@ -80,6 +80,9 @@
     },
     {
       "path": "website"
+    },
+    {
+      "path": "na-finops"
     }
   ],
   "settings": {
