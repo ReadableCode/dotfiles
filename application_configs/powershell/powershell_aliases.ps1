@@ -246,7 +246,7 @@ function getpubip {
     (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing).Content.Trim()
 }
 
-function speed { speedtest-cli }
+function speed { speedtest }
 
 ### Servers ###
 
