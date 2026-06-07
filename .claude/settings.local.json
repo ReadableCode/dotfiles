@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:GH_CONFIG_DIR)"
+    ]
+  }
+}
