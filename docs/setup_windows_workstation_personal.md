@@ -83,6 +83,10 @@ Add-Content -Path $PROFILE -Value 'path you found earlier'
 
 * Follow instructions in [setup_git.md](./setup_git.md)
 
+## GitHub CLI Setup
+
+* Follow instructions in [github-cli.md](./github-cli.md)
+
 ## Install Apps
 
 ### Install Package Managers

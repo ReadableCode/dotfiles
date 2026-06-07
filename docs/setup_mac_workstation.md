@@ -143,6 +143,10 @@ Finder → View → Show Status Bar
 
 - Follow instructions in [setup_git.md](./setup_git.md)
 
+## GitHub CLI Setup
+
+- Follow instructions in [github-cli.md](./github-cli.md)
+
 ## Clone dotfiles
 
 ```bash
