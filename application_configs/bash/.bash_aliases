@@ -1,3 +1,5 @@
+echo "Sourced: ~/.bash_aliases"
+
 ### Terminal Config ###
 
 # Auto-symlink ~/.shared_aliases from the dotfiles repo if not already present,

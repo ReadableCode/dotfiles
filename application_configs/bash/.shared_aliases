@@ -1,3 +1,5 @@
+echo "Sourced: ~/.shared_aliases"
+
 # Shared aliases and functions for bash and zsh.
 # Deploy to ~/.shared_aliases — sourced by ~/.bash_aliases and ~/.zshrc.
 # Both files will auto-symlink this from the dotfiles repo if not found in ~.

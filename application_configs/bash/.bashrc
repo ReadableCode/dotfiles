@@ -8,6 +8,8 @@ case $- in
       *) return;;
 esac
 
+echo "Sourced: ~/.bashrc"
+
 
 ############################################################
 ## History

@@ -1,3 +1,5 @@
+echo "Sourced: ~/.zshrc"
+
 ### Terminal Config ###
 
 # History Configuration

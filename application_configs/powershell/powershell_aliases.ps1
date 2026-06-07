@@ -1,3 +1,5 @@
+Write-Host "Sourced: $PSCommandPath" -ForegroundColor Cyan
+
 ## Path Mods ###
 
 if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
@@ -28,7 +30,7 @@ if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
 
     # Tell rustup/cargo to keep their state under userapps instead of the home dir
     $env:RUSTUP_HOME = "$env:USERPROFILE\userapps\rust\rustup"
-    $env:CARGO_HOME  = "$env:USERPROFILE\userapps\rust\cargo"
+    $env:CARGO_HOME = "$env:USERPROFILE\userapps\rust\cargo"
 
     # print that we ran custom config for 14
     Write-Host "14 Foods custom config loaded" -ForegroundColor Green
@@ -263,7 +265,8 @@ function startjupyterlab {
 function startollama {
     if (Get-Command ollama -ErrorAction SilentlyContinue) {
         ollama serve
-    } else {
+    }
+    else {
         Write-Host "ollama is not installed. Download from https://ollama.ai" -ForegroundColor Yellow
     }
 }
