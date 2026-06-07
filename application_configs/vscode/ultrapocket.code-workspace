@@ -2,93 +2,96 @@
   "folders": [
     {
       "name": "dotfiles",
-      "path": "dotfiles"
+      "path": "dotfiles",
     },
     {
       "name": "server_configs",
-      "path": "server_configs"
+      "path": "server_configs",
     },
     {
       "name": "Data_Tool_Pack_Py",
-      "path": "Data_Tool_Pack_Py"
+      "path": "Data_Tool_Pack_Py",
     },
     {
       "name": "Data_Tool_Pack_GO",
-      "path": "Data_Tool_Pack_GO"
+      "path": "Data_Tool_Pack_GO",
     },
     {
       "name": "Data_Tool_Pack_RS",
-      "path": "Data_Tool_Pack_RS"
+      "path": "Data_Tool_Pack_RS",
     },
     {
       "name": "Terminal_To_Do",
-      "path": "Terminal_To_Do"
+      "path": "Terminal_To_Do",
     },
     {
       "name": "AHK_Sheet_ID_Shortcut",
-      "path": "AHK_Sheet_ID_Shortcut"
+      "path": "AHK_Sheet_ID_Shortcut",
     },
     {
       "name": "Assistant",
-      "path": "Assistant"
+      "path": "Assistant",
     },
     {
       "name": "Sync_Plex",
-      "path": "Sync_Plex"
+      "path": "Sync_Plex",
     },
     {
       "name": "Docker",
-      "path": "Docker"
+      "path": "Docker",
     },
     {
       "name": "Cash_Flow_Commander",
-      "path": "Cash_Flow_Commander"
+      "path": "Cash_Flow_Commander",
     },
     {
       "name": "personal_credentials",
-      "path": "personal_credentials"
+      "path": "personal_credentials",
     },
     {
       "name": "readablecode",
-      "path": "readablecode"
+      "path": "readablecode",
     },
     {
       "name": "readablecode.github.io",
-      "path": "readablecode.github.io"
+      "path": "readablecode.github.io",
     },
     {
       "name": "fourteen_foods",
-      "path": "fourteen_foods"
+      "path": "fourteen_foods",
     },
     {
       "name": "advent_of_code",
-      "path": "advent_of_code"
+      "path": "advent_of_code",
     },
     {
       "name": "duck_db_api",
-      "path": "duck_db_api"
+      "path": "duck_db_api",
     },
     {
       "name": "Book-Bot",
-      "path": "Book-Bot"
+      "path": "Book-Bot",
     },
     {
-      "path": "a_girls_guide_to_georgetown"
+      "path": "a_girls_guide_to_georgetown",
     },
     {
-      "path": "go-data-inspector"
+      "path": "go-data-inspector",
     },
     {
-      "path": "website"
+      "path": "website",
     },
     {
-      "path": "na-finops"
-    }
+      "path": "na-finops",
+    },
+    {
+      "path": "herdstone",
+    },
   ],
   "settings": {
     "workbench.colorCustomizations": {
       "titleBar.activeBackground": "#442757",
-      "titleBar.inactiveBackground": "#442757"
+      "titleBar.inactiveBackground": "#442757",
     },
     "todo-tree.filtering.includeGlobs": [
       "**/Data_Tool_Pack_Py/src/**",
@@ -99,7 +102,7 @@
       "**/Sync_Plex/src/**",
       "**/Docker/src/**",
       "**/Scan_Sorter/src/**",
-      "**/AHK_Sheet_ID_Shortcut/src/**"
+      "**/AHK_Sheet_ID_Shortcut/src/**",
     ],
     "cSpell.words": [
       "Alteryx",
@@ -110,8 +113,8 @@
       "Mendix",
       "Onboarded",
       "Qlik",
-      "Streamlit"
-    ]
+      "Streamlit",
+    ],
   },
   "extensions": {
     "recommendations": [
@@ -138,7 +141,7 @@
       "golang.go",
       "ms-python.mypy-type-checker",
       "foxundermoon.shell-format",
-      "mtsmfm.vscode-stl-viewer"
-    ]
-  }
+      "mtsmfm.vscode-stl-viewer",
+    ],
+  },
 }
