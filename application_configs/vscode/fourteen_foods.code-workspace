@@ -19,11 +19,7 @@
     "workbench.colorCustomizations": {
       "titleBar.activeBackground": "#6f709d",
       "titleBar.inactiveBackground": "#746f9d"
-    },
-    "todo-tree.filtering.includeGlobs": [
-      "**/Data_Tool_Pack/src/**",
-      "**/fourteen_foods/src/**"
-    ]
+    }
   },
   "extensions": {
     "recommendations": [
@@ -32,7 +28,6 @@
       "eamodio.gitlens",
       "esbenp.prettier-vscode",
       "github.copilot",
-      "gruntfuggly.todo-tree",
       "mechatroner.rainbow-csv",
       "mhutchie.git-graph",
       "ms-python.black-formatter",

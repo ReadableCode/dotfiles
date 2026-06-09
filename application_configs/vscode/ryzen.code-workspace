@@ -169,17 +169,6 @@
       "titleBar.activeBackground": "#442757",
       "titleBar.inactiveBackground": "#442757"
     },
-    "todo-tree.filtering.includeGlobs": [
-      "**/Data_Tool_Pack_Py/src/**",
-      "**/dotfiles/src/**",
-      "**/Our_Cash/src/**",
-      "**/readablecode/**",
-      "**/Assistant/src/**",
-      "**/Sync_Plex/src/**",
-      "**/Docker/src/**",
-      "**/Scan_Sorter/src/**",
-      "**/AHK_Sheet_ID_Shortcut/src/**"
-    ],
     "cSpell.words": [
       "Alteryx",
       "Christiansen",
@@ -200,7 +189,6 @@
       "esbenp.prettier-vscode",
       "github.copilot",
       "grapecity.gc-excelviewer",
-      "gruntfuggly.todo-tree",
       "inferrinizzard.prettier-sql-vscode",
       "mechatroner.rainbow-csv",
       "mhutchie.git-graph",

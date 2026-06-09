@@ -90,17 +90,6 @@
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
   "Prettier-SQL.SQLFlavourOverride": "snowflake",
-  // TODO Tree
-  "todo-tree.general.rootFolder": "${workspaceFolder}",
-  "todo-tree.tree.showCountsInTree": true,
-  "todo-tree.regex.regexCaseSensitive": false,
-  "todo-tree.general.showActivityBarBadge": true,
-  "todo-tree.general.statusBar": "top three",
-  "todo-tree.filtering.excludeGlobs": [
-    "**/node_modules/*/**",
-    "**/*.egg-info",
-    "**/todo.py"
-  ],
   // Notebooks
   "jupyter.interactiveWindow.creationMode": "perFile",
   "jupyter.askForKernelRestart": false,
@@ -295,7 +284,6 @@
     "<C-/>": false // keep ctrl-/ for comment
   },
   "explorer.confirmDragAndDrop": false,
-  "todo-tree.general.tags": ["HACK", "FIXME", "TODO", "XXX", "[ ]", "[x]"],
   "explorer.confirmDelete": false,
   "github.copilot.nextEditSuggestions.enabled": false,
   "chat.viewSessions.orientation": "stacked",

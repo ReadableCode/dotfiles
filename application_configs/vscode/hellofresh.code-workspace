@@ -70,11 +70,6 @@
       "titleBar.activeBackground": "#6f9d7b",
       "titleBar.inactiveBackground": "#6f9d7b",
     },
-    "todo-tree.filtering.includeGlobs": [
-      "**/Data_Tool_Pack_Py/src/**",
-      "**/na-finops/src/**",
-      "**/na-finops/docs/**",
-    ],
     "scm.showHistoryGraph": false,
     "task.autoDetect": "off",
     "files.watcherExclude": {
@@ -96,7 +91,6 @@
     },
     "sqlfluff.dialect": "snowflake",
     "makefile.configureOnOpen": false,
-    "todo-tree.tree.scanMode": "workspace only",
   },
   "extensions": {
     "recommendations": [
@@ -106,7 +100,6 @@
       "esbenp.prettier-vscode",
       "github.copilot",
       "grapecity.gc-excelviewer",
-      "gruntfuggly.todo-tree",
       "inferrinizzard.prettier-sql-vscode",
       "mechatroner.rainbow-csv",
       "mhutchie.git-graph",
