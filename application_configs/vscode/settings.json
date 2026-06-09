@@ -99,6 +99,7 @@
   "todo-tree.regex.regexCaseSensitive": false,
   "todo-tree.general.showActivityBarBadge": true,
   "todo-tree.general.statusBar": "top three",
+  "todo-tree.ripgrep": "",
   "todo-tree.filtering.excludeGlobs": [
     "**/node_modules/*/**",
     "**/*.egg-info",

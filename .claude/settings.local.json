@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell($env:GH_CONFIG_DIR)"
+      "PowerShell($env:GH_CONFIG_DIR)",
+      "Bash(code --list-extensions)",
+      "Bash(code --list-extensions --show-versions)",
+      "Bash(grep -E \"\\\\.\\(md|txt|rst\\)$\")"
     ]
   }
 }
