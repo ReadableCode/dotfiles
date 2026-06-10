@@ -64,6 +64,9 @@
       "name": "ca-ops-analytics-snowflake",
       "path": "ca-ops-analytics-snowflake",
     },
+    {
+      "path": "databricks-automation",
+    },
   ],
   "settings": {
     "workbench.colorCustomizations": {
