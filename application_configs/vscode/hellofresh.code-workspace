@@ -94,6 +94,8 @@
     },
     "sqlfluff.dialect": "snowflake",
     "makefile.configureOnOpen": false,
+    "python.analysis.useLibraryCodeForTypes": true,
+    "python.analysis.indexing": true,
   },
   "extensions": {
     "recommendations": [
