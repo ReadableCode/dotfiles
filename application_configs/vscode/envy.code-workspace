@@ -76,6 +76,10 @@
       "name": "load-log",
       "path": "load-log",
     },
+    {
+      "name": "Packing-List",
+      "path": "Packing-List",
+    },
   ],
   "settings": {},
 }
