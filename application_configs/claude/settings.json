@@ -3,8 +3,9 @@
     "commit": "",
     "pr": ""
   },
-  "theme": "auto",
   "enabledPlugins": {
     "github@claude-plugins-official": true
-  }
+  },
+  "theme": "auto",
+  "model": "opus"
 }

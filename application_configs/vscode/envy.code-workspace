@@ -72,6 +72,10 @@
       "name": "Documents",
       "path": "Documents",
     },
+    {
+      "name": "load-log",
+      "path": "load-log",
+    },
   ],
   "settings": {},
 }
