@@ -14,7 +14,6 @@ if __name__ == "__main__":
     sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from utils.config_utils import file_dir
-from utils.google_tools import get_book_sheet_df
 
 # %%
 # Functions #
@@ -139,6 +138,12 @@ df_scm_weeks = pd.read_csv(
 
 
 def build_date_csvs_from_sheets():
+    # Imported lazily: this is the only function that talks to Google Sheets,
+    # and google_tools authorizes credentials at import time. Keeping the import
+    # here lets the rest of date_tools (which only reads the committed CSVs) be
+    # imported and tested without Google credentials.
+    from utils.google_tools import get_book_sheet_df
+
     df_days = get_book_sheet_df(
         "Weeks",
         "Days",

@@ -13,7 +13,6 @@ from src.utils.s3_tools import (
     list_bucket_contents,
     upload_file_to_s3,
 )
-from test_tools import get_results_of_tests
 
 # %%
 # Tests #
@@ -82,11 +81,9 @@ def test_write_to_bucket():
 # Main #
 
 if __name__ == "__main__":
-    get_results_of_tests(
-        [
-            test_write_to_bucket,
-        ]
-    )
+    test_write_to_bucket()
+
+    print_logger("All tests passed!")
 
 
 # %%
