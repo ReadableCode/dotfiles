@@ -48,15 +48,25 @@ uv run mypy .                # ignore_missing_imports = true
 
 ## Tests
 
+Two suites, split by whether they need live credentials:
+
+- **`tests/`** — fast unit tests, no external deps. `pytest` is configured
+  (`testpaths` in `pyproject.toml`) to collect **only** this directory by
+  default, so a plain run is always safe.
+- **`integration_tests/`** — setup/integration checks for Gmail, Google Sheets,
+  and S3. They hit live services and need credentials (`.env`, Google OAuth, AWS
+  creds), so they are **not** collected by default and are run manually. See
+  `integration_tests/README.md`.
+
 ```bash
-uv run pytest                # from repo root
-uv run pytest tests/test_utils/test_date_tools.py   # single file
+uv run pytest                  # unit suite only (default)
+uv run pytest integration_tests/   # manual setup checks (need credentials)
 ```
 
-Some tests touch external services (Gmail, Google Sheets, S3). In a sandboxed
-cloud/web session without credentials those will be skipped or fail on auth —
-that is expected, not a regression you introduced. Prefer running the specific
-test relevant to your change.
+In a sandboxed cloud/web session without credentials the integration checks will
+fail on auth — that is the check doing its job (the integration isn't set up
+here), not a regression. Path setup for both suites lives in the repo-root
+`conftest.py`; don't re-add per-file `sys.path` hacks.
 
 ## Conventions
 

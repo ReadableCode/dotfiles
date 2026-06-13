@@ -94,12 +94,25 @@ docker build -t dotfiles-bitwarden_backup `
 
 ## Running Tests
 
-To run tests:
+There are two suites:
 
-```bash
-uv run pytest                # run the full suite from the repo root
-uv run pytest tests/test_utils/test_date_tools.py   # run a specific file
-```
+* **`tests/`** — fast unit tests with no external dependencies. A default
+  `pytest` run collects only these (configured via `testpaths` in
+  `pyproject.toml`), so they're safe to run anywhere, including CI.
+
+  ```bash
+  uv run pytest                                       # full unit suite
+  uv run pytest tests/test_utils/test_date_tools.py   # a specific file
+  ```
+
+* **`integration_tests/`** — setup/integration checks for Gmail, Google Sheets,
+  and S3. These hit live services and need credentials, so they are **not** run
+  by default; a developer runs them by hand to confirm an integration is wired
+  up on a given machine. See `integration_tests/README.md`.
+
+  ```bash
+  uv run pytest integration_tests/
+  ```
 
 ## Bitwarden Manual Backup - CLI
 
