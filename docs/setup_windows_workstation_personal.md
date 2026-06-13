@@ -67,6 +67,8 @@ Add-Content -Path $PROFILE -Value 'path you found earlier'
 
 * Uninstall unneeded apps
 * Make sure windows defender is on
+* Enable Developer Mode (required for creating symlinks without admin)
+  * Settings → System → For developers → Developer Mode ON
 * Set up clipboard history by pressing win+v
   * Turn on clipboard history by searching for clipboard in the windows button and turning it on
   * Turn on sync across devices if desired
