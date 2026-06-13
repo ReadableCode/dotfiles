@@ -30,8 +30,7 @@ scripts under `src/` and `scripts/`.
 
 ## Python environment & tooling
 
-This project uses **uv** (Python 3.10, pinned in `.python-version`). The
-`README.md` still references `pipenv` — that is **stale**; prefer uv.
+This project uses **uv** (Python 3.10, pinned in `.python-version`).
 
 ```bash
 uv sync                      # install deps from pyproject.toml / uv.lock
