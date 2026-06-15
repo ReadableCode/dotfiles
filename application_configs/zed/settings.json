@@ -13,6 +13,8 @@
   "ssh_connections": [
     {
       "host": "192.168.86.126",
+      "port": 2222,
+      "username": "jason.christiansen",
       "args": [],
       "projects": [
         {

@@ -165,36 +165,47 @@ function run-python-script {
 
     Write-Host "Running Python script: $scriptPath"
 
-    # Extract the directory from the provided file path
+    # Resolve to an absolute path so it still points at the right file after we
+    # change directories below.
+    $resolvedScript = Resolve-Path -Path $scriptPath -ErrorAction SilentlyContinue
+    if (-not $resolvedScript) {
+        Write-Host "Script not found: $scriptPath"
+        return 1
+    }
+    $scriptPath = $resolvedScript.Path
+
+    # Extract the directory from the resolved file path
     $scriptDir = Split-Path -Parent $scriptPath
 
-    # Change to the script directory
-    # CONFIG-AUDIT: if a relative script path is passed, it stops resolving after this
-    # Set-Location (python $scriptPath then points at the wrong place) — resolve with
-    # Resolve-Path first; the location change also leaks into the caller's session.
+    # Change to the script directory with Push-Location so the change is undone
+    # in the finally block and does not leak into the caller's session.
     Write-Host "Changing to script directory: $scriptDir"
-    Set-Location -Path $scriptDir
+    Push-Location -Path $scriptDir
+    try {
+        # Look for a .venv one level up from the script (standard project layout)
+        if (Test-Path "..\.venv") {
+            Write-Host "Project .venv detected at: ..\.venv"
 
-    # Look for a .venv one level up from the script (standard project layout)
-    if (Test-Path "..\.venv") {
-        Write-Host "Project .venv detected at: ..\.venv"
+            # Activate the venv environment
+            ..\.venv\Scripts\Activate.ps1
 
-        # Activate the venv environment
-        ..\.venv\Scripts\Activate.ps1
+            # Run the script using the venv environment, passing through any extra args
+            python $scriptPath @scriptArgs
 
-        # Run the script using the venv environment, passing through any extra args
+            # Deactivate the environment afterward
+            deactivate
+            return 0
+        }
+        else {
+            Write-Host "No project .venv found in parent directory. Running the script with system Python."
+        }
+
+        # Run the script using the system Python as a fallback
         python $scriptPath @scriptArgs
-
-        # Deactivate the environment afterward
-        deactivate
-        return 0
     }
-    else {
-        Write-Host "No project .venv found in parent directory. Running the script with system Python."
+    finally {
+        Pop-Location
     }
-
-    # Run the script using the system Python as a fallback
-    python $scriptPath @scriptArgs
 }
 
 function deploytools {
