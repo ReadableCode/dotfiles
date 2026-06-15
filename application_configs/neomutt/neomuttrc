@@ -1,7 +1,7 @@
 # Source .env file for credentials
 
-source /home/jason/.imap_auth
-source /home/jason/.config/neomutt/color.neomuttrc
+source ~/.imap_auth
+source ~/.config/neomutt/color.neomuttrc
 
 # Incoming mail (IMAP) settings
 

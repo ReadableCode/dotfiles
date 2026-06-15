@@ -45,10 +45,12 @@ if ($env:OS -eq 'Windows_NT') {
 ### Terminal Config ###
 
 function cataliases {
+    if (-not (Test-GitDir)) { return }
     Get-Content $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
 function editaliases {
+    if (-not (Test-GitDir)) { return }
     nvim $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
@@ -94,16 +96,39 @@ elseif (Test-Path "$basePath\GitHubWSL\") {
 elseif (Test-Path "$basePath\HelloFreshProjects\") {
     $gitDir = "$basePath\HelloFreshProjects\"
 }
+else {
+    $gitDir = ''
+}
 
 # Write-Host "gitDir is: $gitDir"
 
-function githubdir { Set-Location $gitDir }
+function Test-GitDir {
+    if ([string]::IsNullOrEmpty($gitDir)) {
+        Write-Host "gitDir is not set" -ForegroundColor Red
+        return $false
+    }
+    return $true
+}
+
+function githubdir {
+    if (-not (Test-GitDir)) { return }
+    Set-Location $gitDir
+}
 function fourdir { Set-Location 'C:\Users\jason\OneDrive - Fourteen Foods\code' }
-function myscripts { Set-Location (Join-Path $gitDir 'dotfiles\scripts') }
-function datatoolpack { Set-Location (Join-Path $gitDir 'Data_Tool_Pack_Py') }
+function myscripts {
+    if (-not (Test-GitDir)) { return }
+    Set-Location (Join-Path $gitDir 'dotfiles\scripts')
+}
+function datatoolpack {
+    if (-not (Test-GitDir)) { return }
+    Set-Location (Join-Path $gitDir 'Data_Tool_Pack_Py')
+}
 
 # alias finance='cd ~/HelloFresh/GDrive/Projects/na-finops/'
-function finance { Set-Location (Join-Path $gitDir 'na-finops') }
+function finance {
+    if (-not (Test-GitDir)) { return }
+    Set-Location (Join-Path $gitDir 'na-finops')
+}
 
 
 ### Python ###
@@ -144,6 +169,9 @@ function run-python-script {
     $scriptDir = Split-Path -Parent $scriptPath
 
     # Change to the script directory
+    # CONFIG-AUDIT: if a relative script path is passed, it stops resolving after this
+    # Set-Location (python $scriptPath then points at the wrong place) — resolve with
+    # Resolve-Path first; the location change also leaks into the caller's session.
     Write-Host "Changing to script directory: $scriptDir"
     Set-Location -Path $scriptDir
 
@@ -170,12 +198,14 @@ function run-python-script {
 }
 
 function deploytools {
+    if (-not (Test-GitDir)) { return }
     # Run the deploy_tools.py script using run-python-script
     $scriptPath = (Join-Path $gitDir 'Data_Tool_Pack_Py\src\deploy_tools.py')
     run-python-script $scriptPath
 }
 
 function todo {
+    if (-not (Test-GitDir)) { return }
     # Run the main.py script using run-python-script
     $scriptPath = (Join-Path $gitDir 'Terminal_To_Do\src\main.py')
     run-python-script $scriptPath
@@ -217,6 +247,7 @@ function openbranchdiffs {
 }
 
 function gitpullall {
+    if (-not (Test-GitDir)) { return }
     $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
     & $binary -path $gitDir -r
 }
@@ -224,6 +255,7 @@ function gitpullall {
 ### Script Shortcuts ###
 
 function ntfyme {
+    if (-not (Test-GitDir)) { return }
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
 }
 
@@ -253,6 +285,7 @@ function speed { speedtest }
 ### Servers ###
 
 function startjupyterlab {
+    if (-not (Test-GitDir)) { return }
     # Change to the directory defined by $gitDir
     Set-Location $gitDir
 
@@ -276,6 +309,7 @@ function runollama { ollama run llama2-uncensored }
 function stopollama { Stop-Process -Name "ollama" -ErrorAction SilentlyContinue }
 
 function startstablediffusion {
+    if (-not (Test-GitDir)) { return }
     $scriptPath = "~\GitHub\stable-diffusion-webui\webui.bat"
     $scriptDir = Split-Path $scriptPath
 
@@ -293,6 +327,7 @@ function startstablediffusion {
 }
 
 function startstablediffusionamd {
+    if (-not (Test-GitDir)) { return }
     $scriptPath = "~\GitHub\stable-diffusion-webui-amdgpu\webui.bat"
     $scriptDir = Split-Path $scriptPath
 
@@ -371,8 +406,8 @@ function showwifi {
 
 ### SSH Shortcuts (loaded from unified Ansible inventory) ###
 
-$hostsFile = Join-Path $gitDir 'dotfiles\inventory\hosts'
-if (Test-Path $hostsFile) {
+$hostsFile = if ($gitDir) { Join-Path $gitDir 'dotfiles\inventory\hosts' } else { $null }
+if ($hostsFile -and (Test-Path $hostsFile)) {
     Get-Content $hostsFile | ForEach-Object {
         $line = $_.Trim()
         if ($line -and -not $line.StartsWith('#') -and -not $line.StartsWith('[') -and $line -match 'ssh_alias=') {
