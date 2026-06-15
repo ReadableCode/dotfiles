@@ -69,8 +69,17 @@ precmd() {
 }
 
 # Set the prompt
-export PROMPT='%F{cyan}%n@%m%f:%F{blue}%~%f$(get_uv_env)$(get_dir_status)${vcs_info_msg_0_}
+PROMPT='%F{cyan}%n@%m%f:%F{blue}%~%f$(get_uv_env)$(get_dir_status)${vcs_info_msg_0_}
 %F{white}$%f '
+
+### Paths ###
+
+# Enable better tab completion
+# Homebrew must come first so its completions are in fpath before compinit
+if [ -x "/opt/homebrew/bin/brew" ]; then
+    export PATH="/opt/homebrew/bin:$PATH"
+    fpath=(/opt/homebrew/share/zsh/site-functions $fpath)
+fi
 
 # Enable better tab completion
 autoload -Uz compinit
@@ -90,12 +99,6 @@ zstyle ':completion:*:warnings' format '%BSorry, no matches for: %d%b'
 zstyle ':completion:*' group-name ''
 zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions commands
 
-### Paths ###
-
-# Set PATH for Homebrew (Apple Silicon Macs)
-if [ -x "/opt/homebrew/bin/brew" ]; then
-    export PATH="/opt/homebrew/bin:$PATH"
-fi
 
 ### Shared Aliases ###
 
