@@ -47,36 +47,38 @@ alias venvactivate='source ./.venv/bin/activate'
 alias venvdeactivate='deactivate'
 
 function run_python_script() {
-    # Check if a file path argument is provided
     if [ -z "$1" ]; then
         echo "Usage: run_python_script <python_script_path> [args...]" >&2
         return 1
     fi
+    (
+        script_path=$(realpath "$1")
+        shift
+        script_dir=$(dirname "$script_path")
 
-    local script_path="$1"
-    shift  # remove script path, leaving any extra args to pass through
+        find_venv() {
+            local dir="$1"
+            while [ "$dir" != "/" ]; do
+                [ -d "$dir/.venv" ] && echo "$dir/.venv" && return
+                dir=$(dirname "$dir")
+            done
+        }
 
-    local script_dir
-    script_dir=$(dirname "$script_path")
+        echo "Running Python script: $script_path"
+        echo "Changing to script directory: $script_dir"
+        cd "$script_dir" || exit 1
 
-    # Look for a .venv one level up from the script (standard project layout)
-    local venv_dir
-    venv_dir="$(dirname "$script_dir")/.venv"
+        venv_dir=$(find_venv "$script_dir")
 
-    echo "Running Python script: $script_path"
-    echo "Changing to script directory: $script_dir"
-    cd "$script_dir" || return 1
+        if [ -n "$venv_dir" ]; then
+            echo "Project .venv detected at: $venv_dir"
+            source "$venv_dir/bin/activate"
+        else
+            echo "No project .venv found. Running with system Python."
+        fi
 
-    # Use the project venv if it exists, otherwise fall back to system Python
-    if [ -d "$venv_dir" ]; then
-        echo "Project .venv detected at: $venv_dir"
-        source "$venv_dir/bin/activate"
         python3 "$script_path" "$@"
-        deactivate
-    else
-        echo "No project .venv found in parent directory. Running the script with system Python."
-        python3 "$script_path" "$@"
-    fi
+    )
 }
 
 function deploytools() {
@@ -122,9 +124,9 @@ function gitpullall() {
 
 ### Script Shortcuts ###
 
-alias myupdater='sh $gitDir/dotfiles/scripts/my_updater.sh'
-alias weather='sh $gitDir/dotfiles/scripts/weather.sh'
-alias getpubip='sh $gitDir/dotfiles/scripts/get_my_public_ip.sh'
+alias myupdater='bash $gitDir/dotfiles/scripts/my_updater.sh'
+alias weather='bash $gitDir/dotfiles/scripts/weather.sh'
+alias getpubip='bash $gitDir/dotfiles/scripts/get_my_public_ip.sh'
 alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
 
 ### Program Shortcuts ###
