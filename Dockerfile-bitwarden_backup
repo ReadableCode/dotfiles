@@ -1,20 +1,23 @@
-FROM node:latest
+FROM node:26-slim
 
-# Install Python and pip
-RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
+# Install Python (uv brings its own, but keep python3 available for tooling)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv (copy the prebuilt binary from the official image)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 # Set the working directory
 WORKDIR /dotfiles
 
-# Create a Python virtual environment and activate it
-RUN python3 -m venv /opt/venv
+# uv-managed virtual environment on PATH
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy your Python requirements file
-COPY requirements.txt .
-
-# Install Python dependencies in the virtual environment
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies from the lockfile (no project source yet, for layer caching)
+COPY pyproject.toml uv.lock .python-version ./
+RUN uv sync --frozen --no-install-project --no-dev
 
 # Install Bitwarden CLI
 RUN npm install -g @bitwarden/cli
@@ -32,12 +35,19 @@ ENV BW_IDENTITY_URL=$BITWARDEN_URL
 ARG HOSTNAME
 ENV HOSTNAME=$HOSTNAME
 
+# Stable target for the extra copy of the json exports (mount the host's
+# personal_credentials repo here at run time). Decouples the path from the
+# repo's location in the image filesystem.
+ENV PERSONAL_CREDENTIALS_DIR=/personal_credentials
+
 # Declare a volume for data
 VOLUME ["/dotfiles/data"]
 
 # Copy your application files
 COPY . .
 
-# Run your Python script when the container starts
-CMD ["python3", "src/bitwarden.py"]
+# Sync again now that the project source is present
+RUN uv sync --frozen --no-dev
 
+# Run your Python script when the container starts
+CMD ["uv", "run", "--no-sync", "python", "src/bitwarden.py"]

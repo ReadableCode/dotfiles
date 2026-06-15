@@ -64,33 +64,68 @@ environment management. Python version is pinned in `.python-version`.
 
 ### Docker - Bitwarden Backup Container
 
-* Building Container:
+This is a two-step process: **build the image first, then run it.** Run both
+commands from the repo root (where `.env` and `Dockerfile-bitwarden_backup`
+live).
 
-Linux: (untested new version to match working windows versions below)
+At run time the container loads config (`BITWARDEN_URL`,
+`BITWARDEN_ORG_CONFIGS`, credentials, etc.) from your `.env`. The `.env` is
+**mounted** into the container rather than baked into the image or passed with
+`--env-file` — the script's `.env` loader strips the surrounding quotes that
+most of these values use, whereas `docker --env-file` would pass them through
+literally (e.g. `LOG_LEVEL="info"` → `"info"`) and break.
+
+#### Linux / macOS
+
+1. Build the image:
 
 ```bash
-docker build -t dotfiles-bitwarden_backup --build-arg HOSTNAME=$(hostname) --build-arg BW_API_URL=$(grep BITWARDEN_URL .env | cut -d '=' -f2) --build-arg BW_IDENTITY_URL=$(grep BITWARDEN_URL .env | cut -d '=' -f2) -f Dockerfile-bitwarden_backup .
-```
-
-Windows:
-
-```powershell
-$envFile = ".env"
-$bwApiUrl = (Get-Content $envFile | Where-Object { $_ -match "^BW_API_URL=" }) -replace "BW_API_URL=", ""
-$bwIdentityUrl = (Get-Content $envFile | Where-Object { $_ -match "^BW_IDENTITY_URL=" }) -replace "BW_IDENTITY_URL=", ""
-
-docker build -t dotfiles-bitwarden_backup `
-  --build-arg HOSTNAME=$(hostname) `
-  --build-arg BW_API_URL=$bwApiUrl `
-  --build-arg BW_IDENTITY_URL=$bwIdentityUrl `
+docker build -t dotfiles-bitwarden_backup \
+  --build-arg HOSTNAME=$(hostname) \
+  --build-arg BITWARDEN_URL=$(grep '^BITWARDEN_URL=' .env | cut -d '=' -f2- | tr -d '"') \
   -f Dockerfile-bitwarden_backup .
 ```
 
-* Running without interactive mode:
+1. Run it (mount `.env` read-only, the data volume, and the
+   `personal_credentials` folder):
 
-  ```bash
-  docker run -v "$(pwd)/data:/dotfiles/data" dotfiles-bitwarden_backup
-  ```
+```bash
+docker run \
+  -v "$(pwd)/.env:/dotfiles/.env:ro" \
+  -v "$(pwd)/data:/dotfiles/data" \
+  -v "$(pwd)/../personal_credentials:/personal_credentials" \
+  dotfiles-bitwarden_backup
+```
+
+The JSON exports are also copied to `personal_credentials/bitwarden_exports`.
+The image sets `PERSONAL_CREDENTIALS_DIR=/personal_credentials`, so the third
+mount maps that back to `../personal_credentials` on the host — matching where
+a non-Docker run would put it (`~/GitHub/personal_credentials`). To use a
+different location, override the env var (`-e PERSONAL_CREDENTIALS_DIR=...`) and
+mount accordingly.
+
+#### Windows (PowerShell)
+
+1. Build the image:
+
+   ```powershell
+   $bitwardenUrl = (Get-Content .env | Where-Object { $_ -match "^BITWARDEN_URL=" }) -replace 'BITWARDEN_URL=', '' -replace '"', ''
+
+   docker build -t dotfiles-bitwarden_backup `
+     --build-arg HOSTNAME=$(hostname) `
+     --build-arg BITWARDEN_URL=$bitwardenUrl `
+     -f Dockerfile-bitwarden_backup .
+   ```
+
+2. Run it (mount `.env` read-only and the data volume):
+
+   ```powershell
+   docker run `
+     -v "${PWD}/.env:/dotfiles/.env:ro" `
+     -v "${PWD}/data:/dotfiles/data" `
+     -v "${PWD}/../personal_credentials:/personal_credentials" `
+     dotfiles-bitwarden_backup
+   ```
 
 ## Running Tests
 

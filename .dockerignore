@@ -5,3 +5,6 @@ __pycache__/
 .git/
 node_modules/
 data/
+# Keep secrets out of image layers; pass them at runtime with `--env-file .env`
+.env
+*.env

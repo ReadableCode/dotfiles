@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from utils.date_tools import get_current_datetime, get_datetime_format_string
 from utils.display_tools import print_logger
 from utils.host_tools import get_uppercase_hostname
+from utils.json_tools import normalize_json_file
 
 # %%
 # Imports #
@@ -29,7 +30,23 @@ CURRENT_DT = get_current_datetime(get_datetime_format_string("%Y%m%d%H%M%S"))
 # read bitwarden url from env os.getenv("BITWARDEN_URL")
 BITWARDEN_URL = os.getenv("BITWARDEN_URL")
 # read org configs from env os.getenv("BITWARDEN_ORG_CONFIGS") as json item
-BITWARDEN_ORG_CONFIGS = json.loads(os.getenv("BITWARDEN_ORG_CONFIGS"))
+_bitwarden_org_configs_raw = os.getenv("BITWARDEN_ORG_CONFIGS")
+if not _bitwarden_org_configs_raw:
+    raise SystemExit(
+        "BITWARDEN_ORG_CONFIGS is not set. Set it in your .env file (mounted into "
+        "the container at /dotfiles/.env, e.g. "
+        "`docker run -v \"$(pwd)/.env:/dotfiles/.env:ro\" ...`)."
+    )
+BITWARDEN_ORG_CONFIGS = json.loads(_bitwarden_org_configs_raw)
+
+# Folder the json exports are additionally copied into (a separate credentials
+# repo). Defaults to <repo parent>/personal_credentials so a non-Docker run
+# lands in ~/GitHub/personal_credentials; override with PERSONAL_CREDENTIALS_DIR
+# (the Docker image sets it to a stable mount point instead of relying on the
+# repo's position in the filesystem).
+PERSONAL_CREDENTIALS_DIR = os.getenv("PERSONAL_CREDENTIALS_DIR") or os.path.join(
+    grandparent_dir, "personal_credentials"
+)
 
 print(f"Bitwarden URL: {BITWARDEN_URL}")
 print(f"Bitwarden ORG_CONFIGS: {BITWARDEN_ORG_CONFIGS}")
@@ -106,15 +123,21 @@ def export_file(file_type, username, org=None):
     except subprocess.CalledProcessError as e:
         print("Error executing export command:", e)
 
+    # bw export does not emit a stable key/item order; normalize the json so the
+    # credentials repo only shows real changes (see utils/json_tools.py). All
+    # copies below are made from this normalized file.
+    if file_type == "json":
+        normalize_json_file(output_file_path)
+
     # copy output file to archive folder with datetime on it
     archive_output_file_name = f"bitwarden_backup_{username}_{HOSTNAME_LOWER}_{CURRENT_DT}{(f'_{org}' if org else '')}.{file_type}"  # noqa E501
     archive_output_file_path = os.path.join(data_dir_archive, archive_output_file_name)
     shutil.copy2(output_file_path, archive_output_file_path)
     print(f"Exported {file_type} file copied to archive folder.")
 
-    # if file type is json and parent_dir/personal_credentials exists then copy to bitwarden_exportss
+    # if file type is json copy the normalized export into the credentials repo
     if file_type == "json":
-        extra_output_folder_path = os.path.join(grandparent_dir, "personal_credentials", "bitwarden_exports")
+        extra_output_folder_path = os.path.join(PERSONAL_CREDENTIALS_DIR, "bitwarden_exports")
         extra_output_file_path = os.path.join(extra_output_folder_path, output_file_name)
         # mkdirs
         os.makedirs(extra_output_folder_path, exist_ok=True)
