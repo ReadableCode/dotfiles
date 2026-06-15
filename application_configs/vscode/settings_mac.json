@@ -39,6 +39,9 @@
   // Auto Formatting - Language Specific
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "always",
+    },
   },
   "[go]": {
     "editor.defaultFormatter": "golang.go",
@@ -81,9 +84,6 @@
   "flake8.importStrategy": "useBundled",
   // Auto Formatting - isort
   "isort.importStrategy": "fromEnvironment",
-  "editor.codeActionsOnSave": {
-    "source.organizeImports": "always",
-  },
   "isort.args": ["--profile", "black"],
   // Auto Formatting - Prettier-SQL
   "Prettier-SQL.denseOperators": true,
@@ -154,7 +154,7 @@
   // Terminal
   "python.terminal.executeInFileDir": true,
   "terminal.integrated.enableMultiLinePasteWarning": "never",
-  "powershell.cwd": "c:\\Users\\jason\\GitHub",
+  "powershell.cwd": "/Users/jason/GitHub",
   // Security
   "security.workspace.trust.enabled": false,
   "interactiveWindow.executeWithShiftEnter": true,
