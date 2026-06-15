@@ -128,7 +128,8 @@
   "files.associations": {
     "*.md": "markdown",
     "*.yaml": "yaml",
-    "templates/*.yaml": "helm"
+    "templates/*.yaml": "helm",
+    "Dockerfile-*": "dockerfile"
   },
   "files.maxMemoryForLargeFilesMB": 12000,
   "workbench.editorLargeFileConfirmation": 50,
