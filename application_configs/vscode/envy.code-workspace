@@ -80,6 +80,10 @@
       "name": "Packing-List",
       "path": "Packing-List",
     },
+    {
+      "name": "Trojan-Force",
+      "path": "Trojan-Force",
+    },
   ],
   "settings": {},
 }
