@@ -11,6 +11,6 @@
     "commit": "",
     "pr": ""
   },
-  "model": "eu.anthropic.claude-opus-4-7[1m]",
+  "model": "eu.anthropic.claude-opus-4-8[1m]",
   "theme": "auto"
 }
