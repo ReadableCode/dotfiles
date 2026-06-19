@@ -3,7 +3,6 @@
 ## Update and Rename System
 
 * Update Windows (don't restart)
-* Open Windows App Store and update "app installer"
 * Change name of system to something useful and update and restart
 
 ## Enable Powershell Scripts
@@ -22,10 +21,9 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ## Source Powershell Profile
 
-* Find the location of your powershell profile by running:
+* Find the location of your powershell profile by running (do not run in vscode terminal, run in powershell directly):
 
 ```bash
-# do not run in vscode terminal, run in powershell directly
 $PROFILE
 ```
 

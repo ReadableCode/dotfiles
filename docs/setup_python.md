@@ -18,6 +18,12 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 choco install uv
 ```
 
+- Add to path if any issues with bare `python` command going to windows store:
+
+```bash
+[System.Environment]::SetEnvironmentVariable("Path", (uv python find | Split-Path) + ";" + [System.Environment]::GetEnvironmentVariable("Path", "Machine"), "Machine")
+```
+
 ### Install uv on macOS or Linux
 
 - Install with Brew:
