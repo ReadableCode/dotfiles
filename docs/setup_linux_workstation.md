@@ -171,6 +171,20 @@ sudo dnf autoremove
 
 ## Install Apps from Dotfiles Repo
 
+### Interactive picker (Debian/Arch/macOS)
+
+To pick apps with checkboxes instead of installing the whole list, run the
+interactive installer. It auto-detects the package manager (apt, pacman, or
+Homebrew), reads the matching app list, lets you toggle apps on/off, then
+installs the selected ones:
+
+```bash
+~/GitHub/dotfiles/scripts/install_apps_interactive.sh
+```
+
+It uses `whiptail`/`dialog` checkboxes when available and falls back to a
+pure-bash toggle menu otherwise.
+
 ### Ubuntu/Debian
 
 Install all apps listed in `app_lists/linux_apps.txt`:

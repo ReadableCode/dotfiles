@@ -183,6 +183,13 @@ cd ../app_lists
 brew bundle
 ```
 
+- Or pick apps with checkboxes using the interactive installer (auto-detects
+  Homebrew and reads the Brewfile, splitting formulae and casks):
+
+```bash
+~/GitHub/dotfiles/scripts/install_apps_interactive.sh
+```
+
 ### Cleaning up brew to get disk space back
 
 ```bash
