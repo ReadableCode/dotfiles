@@ -5,7 +5,10 @@
       "Bash(code --list-extensions)",
       "Bash(code --list-extensions --show-versions)",
       "Bash(grep -E \"\\\\.\\(md|txt|rst\\)$\")",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(luac -p application_configs/hammerspoon/init.lua)",
+      "Bash(command -v hs)",
+      "Bash(hs -c \"hs.reload\\(\\)\")"
     ]
   }
 }
