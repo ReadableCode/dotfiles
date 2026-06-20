@@ -102,6 +102,35 @@
   net start sshd
   ```
 
+## Troubleshooting: key auth keeps falling back to a password
+
+* **For Administrator accounts, sshd IGNORES `~/.ssh/authorized_keys`.** The
+  default `sshd_config` has a `Match Group administrators` block pointing
+  `AuthorizedKeysFile` at `C:\ProgramData\ssh\administrators_authorized_keys`.
+  So if your user is an admin (typical on a personal PC), the key MUST be in
+  that file — the per-user file does nothing.
+* **`ssh-copy-id` puts the key in the wrong place.** It appends to
+  `~/.ssh/authorized_keys` (the ignored file), so auth still fails and falls
+  back to password. Fix: copy the key into the admin file and lock its perms,
+  then restart sshd.
+
+  ```bash
+  Copy-Item C:\Users\<you>\.ssh\authorized_keys C:\ProgramData\ssh\administrators_authorized_keys -Force
+  icacls C:\ProgramData\ssh\administrators_authorized_keys /inheritance:r
+  icacls C:\ProgramData\ssh\administrators_authorized_keys /grant "SYSTEM:F" "BUILTIN\Administrators:F"
+  Restart-Service sshd
+  ```
+
+* **`StrictModes` / permissions.** If the home dir, `.ssh`, or the keys file is
+  group-writable or has loose ACLs, sshd silently refuses the key. Either set
+  `StrictModes no` in `sshd_config` (done above) or fix the ACLs.
+* **Old RSA (SHA-1) keys.** A legacy `ssh-rsa AAAAB3…` key may be rejected by
+  newer SSH servers. Test from the client with
+  `ssh -o PubkeyAcceptedAlgorithms=+ssh-rsa <host> hostname`; if that works,
+  either add `PubkeyAcceptedAlgorithms +ssh-rsa` server-side or switch to an
+  `ed25519` key.
+* Diagnose offered/accepted keys from the client with `ssh -v <host> hostname`.
+
 ## Setting up portable SSH server on Windows (no admin)
 
 * Download portable openssh from:
