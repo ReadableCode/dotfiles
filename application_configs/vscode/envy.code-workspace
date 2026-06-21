@@ -84,6 +84,10 @@
       "name": "Trojan-Force",
       "path": "Trojan-Force",
     },
+    {
+      "name": "CrownCentral",
+      "path": "CrownCentral",
+    },
   ],
   "settings": {},
 }
