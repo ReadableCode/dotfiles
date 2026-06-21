@@ -88,6 +88,10 @@
       "name": "CrownCentral",
       "path": "CrownCentral",
     },
+    {
+      "name": "postgrest-auth",
+      "path": "postgrest-auth",
+    },
   ],
   "settings": {},
 }
