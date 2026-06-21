@@ -8,8 +8,8 @@ local hotkeyRef = {
     {"Ctrl+Shift+F",  "Open selected ID as Google Drive folder"},
     {"Cmd+Shift+V",   "Paste as plain text (strips formatting)"},
     {"Ctrl+Shift+T",  "Open front Finder window in Terminal"},
-    {"Ctrl+Shift+L",  "Apply saved window layout (KVM fix)"},
-    {"Ctrl+Shift+S",  "Snapshot windows -> layout code in console"},
+    {"Ctrl+Shift+L",  "Load a saved window layout (asks for space #)"},
+    {"Ctrl+Shift+S",  "Save current space's windows (asks for space #)"},
     {"Ctrl+Shift+H",  "Show this hotkey cheatsheet"},
 }
 
@@ -78,20 +78,69 @@ hs.hotkey.bind({"ctrl", "shift"}, "t", function()
     end)
 end)
 
-----------Window Layouts (KVM monitor-shuffle fix)----------
+----------Window Layouts (per-space, KVM monitor-shuffle fix)----------
 -- Problem: switching the KVM re-enumerates displays, so macOS dumps every
 -- window onto one screen. Display IDs/UUIDs are NOT stable across the switch,
 -- so we anchor layouts on screen ORIENTATION (portrait vs landscape) instead.
 -- One monitor is vertical, so "the portrait screen" is unambiguous and survives
 -- the KVM flip.
 --
+-- Spaces: Mission Control space IDs aren't stable and can't be reliably
+-- detected, so layouts are stored PER SPACE under a number you type. You run
+-- the hotkey once on each space and tell it which space you're on.
+--
+-- Layouts live in `window_layouts.json` (NOT in this file). Because init.lua is
+-- symlinked into ~/.hammerspoon from the dotfiles repo, we follow that symlink
+-- and write the JSON next to the real init.lua, so it can be committed.
+--
 -- Usage:
---   1. Arrange your windows the way you want them.
---   2. Press Ctrl+Shift+S -> a layout block is printed to the Hammerspoon
---      console (it auto-opens). Copy it.
---   3. Paste it into `wl.layouts.default` below, then commit init.lua.
---   4. After any KVM switch, press Ctrl+Shift+L to snap everything back.
+--   Save: go to a space, arrange its windows, press Ctrl+Shift+S, type the
+--         space number. Repeat on each space. Commit window_layouts.json.
+--   Load: go to a space, press Ctrl+Shift+L, type the same number. Repeat on
+--         each space (e.g. after a KVM switch) to snap everything back.
 local wl = {}
+
+-- Where to read/write the saved layouts. Follows the init.lua symlink so the
+-- file lands in the dotfiles repo (committable), not in ~/.hammerspoon.
+function wl.file()
+    if wl._file then return wl._file end
+    local dir = hs.configdir .. "/"
+    local target = hs.execute("readlink '" .. hs.configdir .. "/init.lua' 2>/dev/null")
+    target = (target or ""):gsub("%s+$", "")
+    if target ~= "" then
+        dir = target:match("^(.*/)") or dir
+    end
+    wl._file = dir .. "window_layouts.json"
+    return wl._file
+end
+
+function wl.loadAll()
+    if hs.fs.attributes(wl.file()) then
+        local data = hs.json.read(wl.file())
+        if type(data) == "table" then return data end
+    end
+    return {}
+end
+
+function wl.saveAll(all)
+    return hs.json.write(all, wl.file(), true, true)
+end
+
+-- Ask which space this is. Returns a string key (digits) or nil if cancelled.
+function wl.askSpace(action)
+    local btn, txt = hs.dialog.textPrompt(
+        "Window layout — " .. action,
+        "Which space number is this? (run once per space)",
+        tostring(wl.lastSpace or "1"), "OK", "Cancel")
+    if btn ~= "OK" then return nil end
+    local key = tostring(txt):match("%d+")
+    if not key then
+        hs.alert.show("Enter a number")
+        return nil
+    end
+    wl.lastSpace = key
+    return key
+end
 
 -- Pick a screen by orientation. Falls back to primary if none matches.
 function wl.screenFor(orientation)
@@ -107,18 +156,10 @@ end
 
 -- Move + resize one window using a fractional rect of its target screen.
 -- unit = {x, y, w, h} as fractions (0..1) of the screen's usable frame.
-local function placeWindow(win, orientation, unit, spaceIndex)
+local function placeWindow(win, orientation, unit)
     local screen = wl.screenFor(orientation)
     if not (win and screen) then return end
     local f = screen:frame()
-    -- Optional, best-effort: move to a Mission Control desktop by index first.
-    -- Space IDs aren't stable, so we address by position (1 = leftmost).
-    if spaceIndex and hs.spaces then
-        local ok, spaces = pcall(hs.spaces.spacesForScreen, screen:getUUID())
-        if ok and spaces and spaces[spaceIndex] then
-            pcall(hs.spaces.moveWindowToSpace, win:id(), spaces[spaceIndex])
-        end
-    end
     win:setFrame({
         x = f.x + unit.x * f.w,
         y = f.y + unit.y * f.h,
@@ -127,71 +168,60 @@ local function placeWindow(win, orientation, unit, spaceIndex)
     })
 end
 
--- Saved layouts. Each entry targets one app's main window.
--- screen = "landscape" | "portrait"; space is optional (1-based desktop index).
--- Replace the example with the output of Ctrl+Shift+S.
-wl.layouts = {
-    default = {
-    {app = "Code", screen = "landscape", unit = {x=0.000, y=0.000, w=1.000, h=1.000}, space = 1},
-    {app = "Google Chrome", screen = "landscape", unit = {x=0.163, y=0.121, w=0.603, h=0.700}, space = 1},
-    {app = "YouTube", screen = "portrait", unit = {x=0.001, y=0.000, w=1.000, h=0.367}, space = 2},
-    {app = "Claude", screen = "portrait", unit = {x=0.440, y=0.355, w=0.559, h=0.369}, space = 1},
-    {app = "Messages", screen = "portrait", unit = {x=0.000, y=0.355, w=0.474, h=0.369}, space = 1},
-    {app = "Messenger", screen = "portrait", unit = {x=0.000, y=0.724, w=0.430, h=0.276}, space = 1},
-    {app = "eufyMake Studio 3D", screen = "landscape", unit = {x=0.000, y=0.000, w=1.000, h=1.000}, space = 1},
-    {app = "Finder", screen = "landscape", unit = {x=0.062, y=0.235, w=0.412, h=0.527}, space = 1},
-    {app = "Tailscale", screen = "landscape", unit = {x=0.034, y=0.350, w=0.333, h=0.481}, space = 1},
-    {app = "Bitwarden", screen = "landscape", unit = {x=0.280, y=0.433, w=0.584, h=0.469}, space = 2},
-    {app = "Weather", screen = "landscape", unit = {x=0.142, y=0.177, w=0.562, h=0.661}, space = 1},
-    {app = "Personal Calendar", screen = "landscape", unit = {x=0.889, y=0.302, w=0.419, h=0.474}, space = 1},
-    {app = "Mail", screen = "landscape", unit = {x=0.152, y=0.254, w=0.713, h=0.662}, space = 2},
-    {app = "Terminal", screen = "landscape", unit = {x=0.192, y=0.275, w=0.469, h=0.467}, space = 2},
-    {app = "Reminders", screen = "landscape", unit = {x=0.285, y=0.145, w=0.501, h=0.708}, space = 1},
-    {app = "Calendar", screen = "landscape", unit = {x=0.125, y=0.416, w=0.562, h=0.491}, space = 1},
-},
-}
+local function round(n) return math.floor(n * 1000 + 0.5) / 1000 end
 
-function wl.apply(layout)
-    for _, item in ipairs(layout) do
-        local app = hs.application.get(item.app)
-        local win = app and app:mainWindow()
-        if win then
-            placeWindow(win, item.screen, item.unit, item.space)
-        end
-    end
-    hs.alert.show("Applied window layout")
-end
-
--- Print the current window arrangement as a paste-ready layout block.
+-- Save the windows on the CURRENT space under the given number, then write the
+-- whole file back (preserving the other spaces' saved layouts).
 function wl.snapshot()
-    local out = {"wl.layouts.default = {"}
+    local key = wl.askSpace("save")
+    if not key then return end
+    local layout = {}
     for _, win in ipairs(hs.window.orderedWindows()) do
         if win:isStandard() then
             local s = win:screen()
             local f, wf = s:frame(), win:frame()
-            local orientation = (f.h > f.w) and "portrait" or "landscape"
-            local spacePart = ""
-            if hs.spaces then
-                local wins = hs.spaces.windowSpaces and hs.spaces.windowSpaces(win:id())
-                local screenSpaces = select(2, pcall(hs.spaces.spacesForScreen, s:getUUID()))
-                if wins and wins[1] and type(screenSpaces) == "table" then
-                    for idx, sid in ipairs(screenSpaces) do
-                        if sid == wins[1] then spacePart = string.format(", space = %d", idx) end
-                    end
-                end
-            end
-            table.insert(out, string.format(
-                '    {app = %q, screen = %q, unit = {x=%.3f, y=%.3f, w=%.3f, h=%.3f}%s},',
-                win:application():name(), orientation,
-                (wf.x - f.x) / f.w, (wf.y - f.y) / f.h, wf.w / f.w, wf.h / f.h,
-                spacePart))
+            table.insert(layout, {
+                app = win:application():name(),
+                screen = (f.h > f.w) and "portrait" or "landscape",
+                unit = {
+                    x = round((wf.x - f.x) / f.w),
+                    y = round((wf.y - f.y) / f.h),
+                    w = round(wf.w / f.w),
+                    h = round(wf.h / f.h),
+                },
+            })
         end
     end
-    table.insert(out, "}")
-    print(table.concat(out, "\n"))
-    hs.openConsole()
-    hs.alert.show("Window layout printed to console — copy it into init.lua")
+    local all = wl.loadAll()
+    all[key] = layout
+    if wl.saveAll(all) then
+        hs.alert.show(string.format("Saved %d windows for space %s", #layout, key))
+    else
+        hs.alert.show("Failed to write " .. wl.file())
+    end
 end
 
-hs.hotkey.bind({"ctrl", "shift"}, "l", function() wl.apply(wl.layouts.default) end)
+-- Apply a saved space's layout to whatever of its apps are running now.
+function wl.apply(key)
+    local layout = wl.loadAll()[key]
+    if type(layout) ~= "table" then
+        hs.alert.show("No saved layout for space " .. tostring(key))
+        return
+    end
+    local placed = 0
+    for _, item in ipairs(layout) do
+        local app = hs.application.get(item.app)
+        local win = app and app:mainWindow()
+        if win then
+            placeWindow(win, item.screen, item.unit)
+            placed = placed + 1
+        end
+    end
+    hs.alert.show(string.format("Applied space %s (%d windows)", key, placed))
+end
+
+hs.hotkey.bind({"ctrl", "shift"}, "l", function()
+    local key = wl.askSpace("load")
+    if key then wl.apply(key) end
+end)
 hs.hotkey.bind({"ctrl", "shift"}, "s", wl.snapshot)

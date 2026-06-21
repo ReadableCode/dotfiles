@@ -253,6 +253,27 @@ Current hotkeys defined in `application_configs/hammerspoon/init.lua`:
 |--------|--------|
 | `Ctrl+Shift+C` | Copy selection, open as Google Sheets URL |
 | `Ctrl+Shift+F` | Copy selection, open as Google Drive folder URL |
+| `Cmd+Shift+V` | Paste as plain text (strips formatting) |
+| `Ctrl+Shift+T` | Open front Finder window in Terminal |
+| `Ctrl+Shift+S` | Save current space's window layout (asks for a space number) |
+| `Ctrl+Shift+L` | Load a saved window layout (asks for a space number) |
+| `Ctrl+Shift+H` | Show the hotkey cheatsheet |
+
+### Window layouts (per space)
+
+Saved layouts live in `application_configs/hammerspoon/window_layouts.json`,
+keyed by a space number you type. Because `init.lua` is symlinked from the repo,
+Hammerspoon follows the link and writes that JSON back into the repo, so it can
+be committed.
+
+- **Save:** switch to a space, arrange its windows, press `Ctrl+Shift+S`, and
+  type that space's number. Repeat on each space, then commit
+  `window_layouts.json`.
+- **Load:** switch to a space, press `Ctrl+Shift+L`, type the same number.
+  Repeat per space (e.g. after a KVM switch) to snap windows back into place.
+
+Layouts anchor on screen *orientation* (portrait vs landscape) rather than
+display IDs, so they survive the KVM re-enumerating the monitors.
 
 ## Enable SSH Server
 
