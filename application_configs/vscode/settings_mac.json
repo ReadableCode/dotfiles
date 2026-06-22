@@ -327,4 +327,6 @@
   "github.pullRequest.showOnStartup": false,
   "gitlens.ai.model": "vscode",
   "gitlens.ai.vscode.model": "copilotcli:claude-sonnet-4.6",
+  "workbench.browser.enableRemoteProxy": true,
+  "workbench.browser.searchEngine": "google",
 }
