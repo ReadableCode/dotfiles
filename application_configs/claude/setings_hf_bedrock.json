@@ -4,7 +4,8 @@
   "env": {
     "AWS_PROFILE": "sso-bedrock",
     "AWS_REGION": "eu-west-1",
-    "CLAUDE_CODE_USE_BEDROCK": "0"
+    "CLAUDE_CODE_USE_BEDROCK": "1",
+    "ANTHROPIC_MODEL": "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
   },
   "attribution": {
     "commit": "",
