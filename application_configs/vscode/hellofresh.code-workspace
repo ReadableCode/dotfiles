@@ -65,7 +65,12 @@
       "path": "ca-ops-analytics-snowflake",
     },
     {
+      "name": "databricks-automation",
       "path": "databricks-automation",
+    },
+    {
+      "name": "hf_dev",
+      "path": "hf_dev",
     },
   ],
   "settings": {
