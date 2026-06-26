@@ -11,5 +11,6 @@
     "pr": ""
   },
   "model": "opus[1m]",
-  "theme": "auto"
+  "theme": "auto",
+  "effortLevel": "xhigh"
 }
