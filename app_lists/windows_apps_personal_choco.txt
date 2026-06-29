@@ -32,3 +32,4 @@ vnc-viewer
 vortex
 wireguard
 wiztree
+sunshine
