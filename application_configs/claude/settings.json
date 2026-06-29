@@ -1,11 +1,16 @@
 {
+  "env": {
+    "CLAUDE_CODE_NO_FLICKER": "1"
+  },
   "attribution": {
     "commit": "",
     "pr": ""
   },
-  "model": "opus",
   "enabledPlugins": {
     "github@claude-plugins-official": true
   },
-  "theme": "auto"
+  "tui": "fullscreen",
+  "theme": "auto",
+  "model": "opus",
+  "enableWorkflows": true
 }
