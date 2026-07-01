@@ -6,11 +6,14 @@
     "commit": "",
     "pr": ""
   },
+  "model": "opus",
+  "enableWorkflows": true,
   "enabledPlugins": {
     "github@claude-plugins-official": true
   },
+  "effortLevel": "xhigh",
   "tui": "fullscreen",
   "theme": "auto",
-  "model": "opus",
-  "enableWorkflows": true
+  "agentPushNotifEnabled": true,
+  "inputNeededNotifEnabled": true
 }
