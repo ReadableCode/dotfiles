@@ -10,7 +10,7 @@
     "commit": "",
     "pr": ""
   },
-  "model": "opus[1m]",
-  "theme": "auto",
-  "effortLevel": "xhigh"
+  "model": "claude-fable-5[1m]",
+  "effortLevel": "xhigh",
+  "theme": "auto"
 }
