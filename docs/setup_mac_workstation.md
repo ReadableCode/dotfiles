@@ -73,7 +73,8 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - Phone Mirroring
 - Parsec
 - VNCViewer
-- GLINet
+- GLKVM
+- Moonlight
 - Tailscale
 - OpenVPN
 - Wireguard
