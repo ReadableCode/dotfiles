@@ -84,6 +84,10 @@
       "name": "postgrest-auth",
       "path": "postgrest-auth",
     },
+    {
+      "name": "website",
+      "path": "website",
+    },
   ],
   "settings": {},
 }
