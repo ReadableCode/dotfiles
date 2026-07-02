@@ -81,14 +81,6 @@
       "path": "Packing-List",
     },
     {
-      "name": "Trojan-Force",
-      "path": "Trojan-Force",
-    },
-    {
-      "name": "CrownCentral",
-      "path": "CrownCentral",
-    },
-    {
       "name": "postgrest-auth",
       "path": "postgrest-auth",
     },
