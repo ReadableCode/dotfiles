@@ -1,0 +1,54 @@
+<!-- @dsCard group="Colors" -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>terminal navy — colors</title>
+<style>
+  :root {
+    --bg:#0d1420; --surface:#121b2a; --surface-2:#182333;
+    --border:rgba(148,163,184,.16); --ink:#dbe4f0; --ink-2:#9fb0c3;
+    --muted:#7d8b9e; --green:#2ea043; --green-bright:#56d364;
+    --amber:#b8860b; --amber-bright:#e3b341;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+  }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font-mono);
+         margin:0; padding:24px; }
+  h2 { font-size:1.05rem; margin:0 0 14px; font-weight:700; }
+  h2 .sl { color:var(--green-bright); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr));
+          gap:10px; }
+  .sw { border:1px solid var(--border); border-radius:8px; overflow:hidden;
+        background:var(--surface); }
+  .sw .chip { height:44px; }
+  .sw .meta { padding:7px 9px; font-size:.68rem; line-height:1.5; }
+  .sw .meta b { color:var(--ink); display:block; font-weight:600; }
+  .sw .meta span { color:var(--muted); }
+  .ramp { display:flex; margin-top:16px; border:1px solid var(--border);
+          border-radius:8px; overflow:hidden; }
+  .ramp div { flex:1; height:34px; }
+  .cap { color:var(--muted); font-size:.68rem; margin-top:6px; }
+</style>
+</head>
+<body>
+  <h2><span class="sl">//</span> colors</h2>
+  <div class="grid">
+    <div class="sw"><div class="chip" style="background:#0d1420"></div><div class="meta"><b>--bg</b><span>#0d1420 · page</span></div></div>
+    <div class="sw"><div class="chip" style="background:#121b2a"></div><div class="meta"><b>--surface</b><span>#121b2a · cards</span></div></div>
+    <div class="sw"><div class="chip" style="background:#182333"></div><div class="meta"><b>--surface-2</b><span>#182333 · title bars</span></div></div>
+    <div class="sw"><div class="chip" style="background:#dbe4f0"></div><div class="meta"><b>--ink</b><span>#dbe4f0 · text</span></div></div>
+    <div class="sw"><div class="chip" style="background:#9fb0c3"></div><div class="meta"><b>--ink-2</b><span>#9fb0c3 · secondary</span></div></div>
+    <div class="sw"><div class="chip" style="background:#7d8b9e"></div><div class="meta"><b>--muted</b><span>#7d8b9e · labels</span></div></div>
+    <div class="sw"><div class="chip" style="background:#2ea043"></div><div class="meta"><b>--green</b><span>#2ea043 · accent</span></div></div>
+    <div class="sw"><div class="chip" style="background:#56d364"></div><div class="meta"><b>--green-bright</b><span>#56d364 · ❯ // links</span></div></div>
+    <div class="sw"><div class="chip" style="background:#b8860b"></div><div class="meta"><b>--amber</b><span>#b8860b · series 2</span></div></div>
+    <div class="sw"><div class="chip" style="background:#e3b341"></div><div class="meta"><b>--amber-bright</b><span>#e3b341 · highlights</span></div></div>
+  </div>
+  <div class="ramp">
+    <div style="background:#161b22"></div><div style="background:#0e4429"></div>
+    <div style="background:#006d32"></div><div style="background:#26a641"></div>
+    <div style="background:#39d353"></div>
+  </div>
+  <div class="cap">activity heatmap ramp — empty #161b22 → #0e4429 → #006d32 → #26a641 → #39d353 (GitHub dark)</div>
+</body>
+</html>

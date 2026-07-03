@@ -1,0 +1,84 @@
+<!-- @dsCard group="Components" -->
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>terminal navy — components</title>
+<style>
+  :root {
+    --bg:#0d1420; --surface:#121b2a; --surface-2:#182333;
+    --border:rgba(148,163,184,.16); --ink:#dbe4f0; --ink-2:#9fb0c3;
+    --muted:#7d8b9e; --green:#2ea043; --green-bright:#56d364;
+    --amber-bright:#e3b341;
+    --font-mono:ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+  }
+  body { background:var(--bg); color:var(--ink); font-family:var(--font-mono);
+         margin:0; padding:24px; }
+  h3 { font-size:.95rem; margin:1.4rem 0 .6rem; font-weight:700; }
+  h3 .sl { color:var(--green-bright); }
+
+  .term { border:1px solid var(--border); border-radius:10px; overflow:hidden;
+          max-width:560px; }
+  .term-bar { background:var(--surface-2); padding:.55rem .9rem; display:flex;
+              align-items:center; gap:.45rem; }
+  .term-bar .d { width:11px; height:11px; border-radius:50%; }
+  .d.r { background:#f87171; } .d.y { background:#fbbf24; } .d.g { background:#34d399; }
+  .term-title { color:var(--muted); font-size:.8rem; margin-left:.4rem; }
+  .term-body { background:var(--surface); padding:1rem 1.1rem;
+               font-size:.9rem; color:var(--ink-2); line-height:1.8; }
+  .term-body .prompt { color:var(--green-bright); }
+  .term-body .hl { color:var(--amber-bright); }
+
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(165px,1fr));
+           gap:.7rem; max-width:560px; }
+  .tile { background:var(--surface); border:1px solid var(--border);
+          border-radius:8px; padding:.7rem .9rem .6rem; }
+  .tile .label { font-size:.74rem; color:var(--muted); margin-bottom:.25rem;
+                 display:flex; align-items:center; gap:.45rem; }
+  .tile .label::before { content:""; width:7px; height:7px; border-radius:50%;
+                         background:var(--green-bright);
+                         box-shadow:0 0 6px rgba(86,211,100,.65); flex:none; }
+  .tile.err .label::before { background:#f87171;
+                             box-shadow:0 0 6px rgba(248,113,113,.6); }
+  .tile .value { font-size:1.35rem; font-weight:700; color:var(--ink);
+                 font-variant-numeric:tabular-nums; line-height:1.2; }
+  .tile .value span { font-size:.78rem; color:var(--muted); font-weight:500; }
+  .tile .sub { font-size:.72rem; color:var(--muted); margin-top:.2rem; }
+
+  .btn { display:inline-block; font-family:var(--font-mono); font-size:.85rem;
+         padding:.5rem 1.1rem; border-radius:8px; border:1px solid transparent;
+         cursor:pointer; }
+  .btn.primary { background:var(--green); color:#08130a; font-weight:600; }
+  .btn.secondary { background:var(--surface); color:var(--ink);
+                   border-color:var(--border); }
+</style>
+</head>
+<body>
+  <h3><span class="sl">//</span> terminal window</h3>
+  <div class="term">
+    <div class="term-bar"><span class="d r"></span><span class="d y"></span>
+      <span class="d g"></span><span class="term-title">user@load-log: ~</span></div>
+    <div class="term-body">
+      load-log <span class="prompt">//</span> personal health terminal<br>
+      <span class="prompt">❯</span> <span class="hl">log in</span> to continue
+    </div>
+  </div>
+
+  <h3><span class="sl">//</span> stat pills</h3>
+  <div class="tiles">
+    <div class="tile"><div class="label">day volume</div>
+      <div class="value">14,120 <span>lbs</span></div>
+      <div class="sub">fri jul 3</div></div>
+    <div class="tile"><div class="label">sessions</div>
+      <div class="value">78</div>
+      <div class="sub">234 sets in the last year</div></div>
+    <div class="tile err"><div class="label">onyx</div>
+      <div class="value">timeout</div>
+      <div class="sub">red dot for error states</div></div>
+  </div>
+
+  <h3><span class="sl">//</span> buttons</h3>
+  <button class="btn primary">primary action</button>
+  <button class="btn secondary">secondary</button>
+</body>
+</html>
