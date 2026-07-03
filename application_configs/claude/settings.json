@@ -15,5 +15,6 @@
   "tui": "fullscreen",
   "theme": "auto",
   "agentPushNotifEnabled": true,
-  "inputNeededNotifEnabled": true
+  "inputNeededNotifEnabled": true,
+  "switchModelsOnFlag": false
 }
