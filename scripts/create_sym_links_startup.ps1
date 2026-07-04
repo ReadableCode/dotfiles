@@ -10,7 +10,7 @@ if (Test-Path 'C:\Users\jason\GitHub\') {
 
 # Define the list of file paths relative to the $gitDir directory
 $relativePaths = @(
-    "dotfiles\scripts\key_remaps.ahk",
+    "dotfiles\scripts\app_jumping.ahk",
     "dotfiles\scripts\sheets.ahk"
 )
 
