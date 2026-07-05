@@ -5,7 +5,7 @@ Guidance for Claude Code (and other AI agents) working in this repository.
 ## What this repo is
 
 Personal **dotfiles + cross-machine configuration management**. It stores app
-configs, OS package lists, setup docs, and a set of Python/Go/shell utilities
+configs, OS package lists, setup docs, and a set of Python/shell utilities
 used to sync configs and pull data from various devices and services. It targets
 many environments: Linux, Windows (PowerShell/choco/winget), macOS (Brewfile),
 WSL, Android (Termux), Raspberry Pi, and iPad/Pythonista.
@@ -22,7 +22,6 @@ scripts under `src/` and `scripts/`.
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
 | `ansible_playbooks/` + `inventory/` | Ansible for provisioning machines. |
-| `go_apps/` | Small Go tools (`git_puller`, client/server, syncthing cleanup). Prebuilt binaries are committed. |
 | `docs/` | Setup/how-to docs (one per topic). Surfaced via mkdocs. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
 | `pythonista/` | iOS Pythonista scripts. |
