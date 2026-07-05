@@ -17,7 +17,7 @@ scripts under `src/` and `scripts/`.
 
 | Path | Purpose |
 |------|---------|
-| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines; `bitwarden.py`, `pull_*.py`, `ssh_devices.py` pull data/configs. Shared helpers in `src/utils/`. |
+| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines; `pull_*.py`, `chrome_bookmarks.py`, `ssh_devices.py` pull data/configs. Shared helpers in `src/utils/`. Homelab-only jobs (Bitwarden backup, Minecraft log tools) live in the local `~/GitHub/personal-automation` repo, not here. |
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |

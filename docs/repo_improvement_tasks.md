@@ -251,59 +251,37 @@ against reachable inventory hosts produces one tracked file per host.
 
 ---
 
-## Task 7 — Split the Python automation stack into its own repo
+## Task 7 — Split homelab-only jobs into their own repo — DONE (narrowed scope, 2026-07)
 
-**Problem.** The heavy Python code in this repo is not machine configuration:
-`src/utils/` (gmail/google/drive/sheets/s3/postgres/display/date/json tools)
-plus the jobs that consume it. It's the reason "dotfiles" needs pandas,
-matplotlib, jupyterlab, streamlit, impyla, psycopg2, boto3, a 600 MB venv, and
-live-credential integration tests.
+**Original idea** was to move the whole Python automation stack (`src/utils/`,
+all jobs, tests, heavy deps) out of dotfiles. **Jason narrowed it:** backups
+like Bitwarden can be a separate repo, but pulling configs and pushing configs
+is very much a dotfiles task — dotfiles goes on every device he touches, and
+every device needs repo pulling and config deploys; only homelab devices ever
+run the Bitwarden backup.
 
-**Scope to move** (verify with a fresh grep before moving):
+**What moved** (to the local, unpublished `~/GitHub/personal-automation` repo):
 
-- `src/utils/` (all of it, including the `df_*.csv` and yaml data files)
-- Jobs: `src/bitwarden.py` + `Dockerfile-bitwarden_backup` + `.dockerignore`,
-  `src/pull_home_assistant_configs.py`, `src/pull_router_configs.py`,
-  `src/chrome_bookmarks.py`, `src/parse_minecraft_logs.py`,
-  `src/ssh_devices.py`
-- `tests/` and `integration_tests/` (they test the above), plus
-  `conftest.py`
-- The matching dependencies out of `pyproject.toml`
+- `src/bitwarden.py` + `Dockerfile-bitwarden_backup` + `.dockerignore`
+- `src/parse_minecraft_logs.py` (homelab-only: SSHes the unRAID Minecraft
+  server)
+- The README Bitwarden Docker + `bw export` sections (a pointer remains here)
+- `matplotlib` out of `pyproject.toml` (only `parse_minecraft_logs.py`
+  imported it)
 
-**Stays here:** `src/deploy_configs.py`, `src/config.py`, everything in
-`scripts/` (verified 2026-07: no `scripts/*.py` imports `src/utils`), with a
-slimmed `pyproject.toml` (roughly: python-dotenv, pyyaml, paramiko if still
-needed, pytest + lint tooling). `deploy_configs.py` imports
-`utils.host_tools.get_uppercase_hostname` — inline that one small function
-rather than keeping a dependency.
+**What stayed:** `src/utils/` entirely (shared by the stayers; the new repo
+vendors copies of the five modules the movers import), `src/config.py`,
+`src/deploy_configs.py`, `src/chrome_bookmarks.py`, `src/pull_*.py`,
+`src/ssh_devices.py`, `scripts/`, `tests/`, `integration_tests/`,
+`conftest.py`, and all other deps (pandas/scp/paramiko/etc. still have
+consumers here).
 
-**Steps.**
-
-1. Create the new repo locally at `~/GitHub/` (suggest name:
-   `personal-automation`). Plain copy is fine — do NOT rewrite dotfiles
-   history. Set up uv (`pyproject.toml`, `.python-version`, lockfile), carry
-   over flake8/isort/mypy configs and the CLAUDE.md sections that describe the
-   two test suites.
-2. Keep the `.env` pattern: symlink to `../personal_credentials/personal.env`,
-   same gitignore rules as here.
-3. In dotfiles: remove the moved files, slim `pyproject.toml`, re-lock
-   (`uv sync`), fix `README.md` (Bitwarden/docker sections move to the new
-   repo), and make sure `uv run pytest` and `uv run python
-   src/deploy_configs.py --dry-run` still pass.
-4. **Cutover plan for scheduled jobs — do not execute, just document in the
-   new repo's README:** elitedesk's cron runs
-   `/home/jason/GitHub/dotfiles/.venv/bin/python3 .../scripts/speedtest_logger.py`
-   and the homelab push-to-master deploy builds from dotfiles (see
-   `triggers/crontab_extraction_elitedesk.txt` and
-   `docs/homelab_deployments.md`). List every cron line and deploy reference
-   that must be repointed, host by host. Jason executes the cutover.
-5. Do not publish the new repo; leave it local until Jason reviews (it
-   orbits credentialed services — default private if ever pushed).
-
-**Acceptance criteria.** Both repos lint, type-check, and pass their unit
-suites independently; dotfiles has no import of `utils.*` left
-(`grep -rn "from utils\|import utils" src/ scripts/`); the cutover checklist
-exists and names every affected cron/deploy line.
+**Cutover:** no crontab on any host referenced either script (verified
+against all `triggers/crontab_extraction_*.txt` 2026-07-05); the only
+consumers were the manual Docker build/run and interactive minecraft runs.
+The host-by-host checklist lives in the new repo's README; Jason executes it.
+The new repo stays local/unpublished until Jason decides (private if ever
+pushed — it orbits credentialed services).
 
 ---
 
