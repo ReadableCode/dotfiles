@@ -28,8 +28,7 @@ layout must exist on the Mac and on the servers.
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
 | `personal_credentials` | `personal.env` (KEY="value" secrets) and `hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is local, so automation must never pull it (listed in `~/GitHub/.skiprepos`). |
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. |
-| `dotfiles` | Ansible INI inventory (`inventory/hosts`), `triggers/` crontab snapshots per host. |
-| `go-tools` | Go utilities, including `git_puller` (bulk repo puller, reads `.skiprepos`). Formerly `dotfiles/go_apps/`; binaries now come from its releases, not git. |
+| `dotfiles` | Ansible INI inventory (`inventory/hosts`), `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`), `triggers/` crontab snapshots per host. |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
 | app repos | `load-log`, `Assistant`, `CrownCentral`, `duck_db_api`, `postgrest-auth`, `website`, `charlie-personal-website` — each built into containers by the Docker repo. |
 
@@ -54,8 +53,8 @@ Key behaviors:
   (sonarr, radarr, plex, swag, ...) are never touched.
 - A change to the `Docker` repo itself runs a plain `up -d` (recreates only
   services whose compose config changed).
-- Ignore list: `~/GitHub/.skiprepos` (one repo name per line; shared with
-  `git_puller` from the `go-tools` repo). Contains `personal_credentials`.
+- Ignore list: `~/GitHub/.skiprepos` (one repo name per line; shared with the
+  go git_puller). Contains `personal_credentials`.
 - Because `personal_credentials` is never pulled, after editing
   `personal.env`/`hosts.json` on elitedesk run:
   `sudo bash ~/GitHub/Docker/scripts/redeploy.sh herdstone-web`

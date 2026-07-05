@@ -85,16 +85,16 @@
       "path": "postgrest-auth",
     },
     {
+      "name": "website",
       "path": "website",
     },
     {
+      "name": "readablecode",
       "path": "readablecode",
     },
     {
+      "name": "readablecode.github.io",
       "path": "readablecode.github.io",
-    },
-    {
-      "path": "go-tools",
     },
   ],
   "settings": {},

@@ -100,15 +100,27 @@ alias ll='ls -AlhF'
 alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git fetch -q && git diff --name-only origin/master...HEAD | xargs -I{} code {}'
 
 function gitpullall() {
-    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    # git_puller lives in the go-tools repo (github.com/ReadableCode/go-tools).
-    # Install it on PATH from a release download or: go install github.com/ReadableCode/go-tools/git_puller@latest
-    if ! command -v git_puller >/dev/null 2>&1; then
-        echo "git_puller not found on PATH. Get it from the go-tools repo releases" >&2
-        echo "or run: go install github.com/ReadableCode/go-tools/git_puller@latest" >&2
-        return 1
+    local arch os bin
+    arch=$(uname -m)
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
+
+    if [[ "$os" == "darwin" ]]; then
+        # macOS: pick arm or x86 binary
+        if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+            bin="${bin}_mac_arm"
+        else
+            bin="${bin}_mac_x86"
+        fi
+    elif [[ "$os" == "linux" ]]; then
+        # Linux: arm gets a suffix; x86 uses the default binary name
+        if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
+            bin="${bin}_arm"
+        fi
     fi
-    git_puller -path "$gitDir" -r
+
+    chmod +x "$bin"
+    "$bin" -path "$gitDir" -r
 }
 
 ### Script Shortcuts ###

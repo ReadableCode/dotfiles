@@ -259,14 +259,8 @@ function openbranchdiffs {
 
 function gitpullall {
     if (-not (Test-GitDir)) { return }
-    # git_puller lives in the go-tools repo (github.com/ReadableCode/go-tools).
-    # Install it on PATH from a release download or: go install github.com/ReadableCode/go-tools/git_puller@latest
-    if (-not (Get-Command git_puller -ErrorAction SilentlyContinue)) {
-        Write-Host "git_puller not found on PATH. Get it from the go-tools repo releases" -ForegroundColor Red
-        Write-Host "or run: go install github.com/ReadableCode/go-tools/git_puller@latest" -ForegroundColor Red
-        return
-    }
-    git_puller -path $gitDir -r
+    $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
+    & $binary -path $gitDir -r
 }
 
 ### Script Shortcuts ###
