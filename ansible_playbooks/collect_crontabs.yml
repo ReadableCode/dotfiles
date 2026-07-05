@@ -1,0 +1,109 @@
+---
+# Collect crontab snapshots from every POSIX host in the inventory and store
+# them locally under triggers/, matching the naming used by
+# scripts/crontab_extractor.sh (crontab_extraction_<hostname>.txt) so the
+# .gitignore allowlist (!triggers/crontab_extraction*) keeps them tracked.
+#
+# Read-only on remote hosts: nothing is installed or written remotely. All
+# remote commands use `raw`, so hosts without python (unraid, bare macs,
+# Termux) work too. Root crontabs are collected with `sudo -n` so hosts
+# without passwordless sudo are skipped gracefully instead of hanging on a
+# password prompt; they land in crontab_extraction_<hostname>_root.txt.
+#
+# Hosts with an empty/missing crontab get a one-line "# no user crontab"
+# header file rather than a failed play. Windows hosts are out of scope
+# (Task Scheduler, not cron).
+#
+# Run: ansible-playbook ansible_playbooks/collect_crontabs.yml -i ./inventory/hosts
+
+- name: Ensure local triggers directory exists
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Create triggers directory
+      ansible.builtin.file:
+        path: "{{ playbook_dir }}/../triggers"
+        state: directory
+        mode: "0755"
+
+- name: Collect crontabs from POSIX hosts
+  hosts:
+    - linux_workstations
+    - raspbian
+    - work_linux
+    - macs
+    - fourteen_foods_linux
+    - ginamary
+    - android
+    - unraid
+    - crown_linux
+  gather_facts: false  # raw commands only, so hosts without python still work
+  vars:
+    snapshot_dir: "{{ playbook_dir }}/../triggers"
+    snapshot_host: >-
+      {{ (remote_hostname.stdout | trim | lower)
+         if (remote_hostname.stdout | default('') | trim)
+         else (inventory_hostname | lower) }}
+  tasks:
+    - name: Read remote hostname
+      ansible.builtin.raw: hostname -s 2>/dev/null || hostname
+      register: remote_hostname
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read remote user name
+      ansible.builtin.raw: id -un
+      register: remote_user_name
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read user crontab
+      ansible.builtin.raw: crontab -l
+      register: user_crontab
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read root crontab via passwordless sudo
+      ansible.builtin.raw: sudo -n crontab -l
+      register: root_crontab
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      when: (remote_user_name.stdout | default('') | trim) != 'root'
+
+    - name: Compose crontab snapshot content
+      ansible.builtin.set_fact:
+        user_crontab_text: >-
+          {{ (user_crontab.stdout | regex_replace('\r\n', '\n') | regex_replace('\n+$', ''))
+             if (user_crontab.rc | default(1)) == 0
+             else '# no user crontab on ' ~ snapshot_host
+                  ~ ' (crontab -l exit code ' ~ (user_crontab.rc | default('unknown')) ~ ')' }}
+        root_crontab_text: >-
+          {{ (root_crontab.stdout | default('') | regex_replace('\r\n', '\n') | regex_replace('\n+$', ''))
+             if (root_crontab.rc | default(-1)) == 0
+             else '# no root crontab on ' ~ snapshot_host }}
+
+    - name: Save user crontab snapshot locally
+      ansible.builtin.copy:
+        content: "{{ user_crontab_text }}\n"
+        dest: "{{ snapshot_dir }}/crontab_extraction_{{ snapshot_host }}.txt"
+        mode: "0644"
+      delegate_to: localhost
+      become: no
+
+    - name: Save root crontab snapshot locally (only where passwordless sudo works)
+      ansible.builtin.copy:
+        content: "{{ root_crontab_text }}\n"
+        dest: "{{ snapshot_dir }}/crontab_extraction_{{ snapshot_host }}_root.txt"
+        mode: "0644"
+      delegate_to: localhost
+      become: no
+      # "no crontab for root" proves passwordless sudo worked; raw merges remote
+      # stderr into stdout (pty), so check both streams.
+      when:
+        - root_crontab is not skipped
+        - (root_crontab.rc | default(-1)) == 0
+          or 'no crontab' in ((root_crontab.stdout | default('')) ~ (root_crontab.stderr | default('')))
