@@ -1,4 +1,5 @@
-echo "Sourced: ~/.shared_aliases"
+# Only echo in interactive shells (output here breaks scp/sftp/rsync)
+[[ $- == *i* ]] && echo "Sourced: ~/.shared_aliases"
 
 # Shared aliases and functions for bash and zsh.
 # Deploy to ~/.shared_aliases — sourced by ~/.bash_aliases and ~/.zshrc.

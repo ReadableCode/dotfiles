@@ -2,6 +2,17 @@
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
+############################################################
+## PATH (before the interactive guard so scripts and
+## `ssh host command` shells get it too)
+############################################################
+
+# User-installed binaries (claude, pipx, uv tools, etc.)
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+
 # If not running interactively, don't do anything
 case $- in
     *i*) ;;

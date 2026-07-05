@@ -1,4 +1,5 @@
-echo "Sourced: ~/.bash_aliases"
+# Only echo in interactive shells (output here breaks scp/sftp/rsync)
+[[ $- == *i* ]] && echo "Sourced: ~/.bash_aliases"
 
 ### Terminal Config ###
 
