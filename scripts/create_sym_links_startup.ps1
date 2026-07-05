@@ -1,3 +1,7 @@
+# NOTE: these startup entries are also tracked in deploy_manifest.yaml
+# (ahk_app_jumping, ahk_sheets) and deployed by src/deploy_configs.py -
+# prefer `uv run python src/deploy_configs.py` (see docs/deploy_configs.md).
+
 # Determine the base directory based on the paths that exist
 if (Test-Path 'C:\Users\jason\GitHub\') {
     $gitDir = 'C:\Users\jason\GitHub\'

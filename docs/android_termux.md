@@ -29,6 +29,11 @@ cd /storage/emulated/0/
 
 ## Deploy Config
 
+The `.bashrc` / `.bash_aliases` mappings live in `deploy_manifest.yaml`
+(entries `bashrc` and `bash_aliases` — Termux reports itself as Linux; see
+[deploy_configs.md](./deploy_configs.md)). Termux usually has no `uv`, so the
+same links from the manifest are created by hand here:
+
 ```bash
 cd ~
 ln -s /storage/emulated/0/Documents/

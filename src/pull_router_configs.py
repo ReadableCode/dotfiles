@@ -1,24 +1,13 @@
 # %%
 # Imports #
 
-import glob
-import gzip
-import hashlib
-import logging
 import os
-import re
-import sys
-import time
-from datetime import datetime, timedelta
 
-import matplotlib.dates as mdates
-import matplotlib.pyplot as plt
-import pandas as pd
 import paramiko
-from config import data_dir, parent_dir
-from dotenv import load_dotenv
+from config import parent_dir
 from scp import SCPClient
-from utils.display_tools import pprint_df, print_logger
+from dotenv import load_dotenv
+from utils.display_tools import print_logger
 
 # %%
 # Variables #

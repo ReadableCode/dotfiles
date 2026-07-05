@@ -34,8 +34,10 @@ def sort_json_for_diff(obj):
 def normalize_json_file(path):
     """Rewrite ``path`` in place in a deterministic, diff-friendly form.
 
-    Both the live Bitwarden export and a one-off normalization of an existing
-    baseline call this, so the output is byte-for-byte comparable across runs.
+    Both the live Bitwarden export (the backup job lives in the local
+    ``personal-automation`` repo, which vendors a copy of this module) and a
+    one-off normalization of an existing baseline call this, so the output is
+    byte-for-byte comparable across runs.
     """
     with open(path, "r", encoding="utf-8") as handle:
         data = json.load(handle)

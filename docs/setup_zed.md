@@ -24,50 +24,34 @@ Key files:
 
 ## Symlinking Zed Config to Git Repo
 
-### Move and Symlink
+Zed's settings link is manifest-driven (entry `zed_settings` in
+`deploy_manifest.yaml` — see [deploy_configs.md](./deploy_configs.md)):
 
-1. **Create a directory in your dotfiles repo for Zed configs:**
+```bash
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py             # deploy
+```
 
-   ```bash
-   mkdir -p ~/GitHub/dotfiles/application_configs/zed
-   ```
+Notes:
 
-2. **Move existing Zed configs to your repo:**
+- An existing live `~/.config/zed/settings.json` is backed up to
+  `data/config_backups/` and its content ingested into the repo automatically.
+- Only `settings.json` is tracked today. If you start using `keymap.json` or
+  `tasks.json`, move the file into `application_configs/zed/` and add a
+  manifest entry for it.
 
-   ```bash
-   # Backup first if you want
-   cp -r ~/.config/zed/* ~/GitHub/dotfiles/application_configs/zed/
-   
-   # Move the actual files
-   mv ~/.config/zed/settings.json ~/GitHub/dotfiles/application_configs/zed/settings.json
-   mv ~/.config/zed/keymap.json ~/GitHub/dotfiles/application_configs/zed/keymap.json
-   
-   # If you have tasks.json
-   mv ~/.config/zed/tasks.json ~/GitHub/dotfiles/application_configs/zed/tasks.json
-   ```
+Verify the link:
 
-3. **Create symlinks back to Zed's config location:**
+```bash
+ls -la ~/.config/zed/
+```
 
-   ```bash
-   ln -s ~/GitHub/dotfiles/application_configs/zed/settings.json ~/.config/zed/settings.json
-   ln -s ~/GitHub/dotfiles/application_configs/zed/keymap.json ~/.config/zed/keymap.json
-   
-   # If you have tasks.json
-   ln -s ~/GitHub/dotfiles/application_configs/zed/tasks.json ~/.config/zed/tasks.json
-   ```
+You should see something like:
 
-4. **Verify the symlinks:**
-
-   ```bash
-   ls -la ~/.config/zed/
-   ```
-
-   You should see something like:
-
-   ```plaintext
-   settings.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/settings.json
-   keymap.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/keymap.json
-   ```
+```plaintext
+settings.json -> /Users/jason/GitHub/dotfiles/application_configs/zed/settings.json
+```
 
 ## Verification
 

@@ -7,9 +7,9 @@ import sys
 
 import pandas as pd
 import psycopg2
-from dotenv import load_dotenv
 from psycopg2 import pool, sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from dotenv import load_dotenv
 
 # append grandparent
 if __name__ == "__main__":

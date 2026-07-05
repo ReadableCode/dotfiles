@@ -89,4 +89,16 @@ else
     fi
 fi
 
+echo "############ Config Drift Check ############"
+
+# Surface dotfiles deployment drift on every manual update run.
+# See docs/deploy_configs.md for the manifest workflow and a cron example.
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if command -v uv &> /dev/null && [ -f "$DOTFILES_DIR/deploy_manifest.yaml" ]; then
+    (cd "$DOTFILES_DIR" && uv run python src/deploy_configs.py --status) \
+        || echo "WARNING: config drift detected - run 'uv run python src/deploy_configs.py --dry-run' in $DOTFILES_DIR"
+else
+    echo "Skipping drift check (uv or deploy_manifest.yaml not found)."
+fi
+
 echo "############ Done ############"

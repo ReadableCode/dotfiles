@@ -39,38 +39,49 @@
 
 ## Linking Settings Files
 
-1. To link your settings file in a repository to Visual Studio Code
+Settings deployment is manifest-driven (entry `vscode_settings` in
+`deploy_manifest.yaml` — see
+[deploy_configs.md](./deploy_configs.md)):
 
-    - Windows: Open powershell as administrator and run the following commands:
+```bash
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py             # deploy
+```
 
-        ```powershell
-        mv "C:\Users\jason\AppData\Roaming\Code\User\settings.json" "C:\Users\jason\AppData\Roaming\Code\User\settings.json.bak"
-        # OR
-        rm "C:\Users\jason\AppData\Roaming\Code\User\settings.json"
-        cmd /c mklink "C:\Users\jason\AppData\Roaming\Code\User\settings.json" "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\settings.json"
-        ```
+Notes:
 
-    - Linux: Open a terminal and run the following commands:
+- macOS uses the `settings.mac.json` platform variant (the deployer resolves
+  it automatically from the `settings.json` entry); Windows and Linux share
+  `settings.json`.
+- An existing live `settings.json` is backed up to `data/config_backups/` and
+  its content ingested into the repo — check `git diff` afterwards.
+- On Windows, enable Developer Mode so the deploy can create real symlinks
+  without admin; otherwise it falls back to a copy that `--status` verifies.
 
-        ```bash
-        mv ~/.config/Code/User/settings.json ~/.config/Code/User/settings.json.bak
-        ln -s /path/to/settings/in/your/repository.json ~/.config/Code/User/settings.json
-        ```
+### Workspace files
 
-    - macOS: Open a terminal and run the following commands:
+Workspace files are manifest-driven too (entry `vscode_workspace`). The repo
+tracks one file per host, named `workspace.<host>.code-workspace` (lowercase
+hostname), and the deploy resolves the right one for the current machine and
+links it **next to the repo checkout**, e.g.:
 
-        ```bash
-        mv ~/Library/Application\ Support/Code/User/settings.json /Users/jason/GitHub/dotfiles/application_configs/vscode/settings_mac.json
-        ln -s /Users/jason/GitHub/dotfiles/application_configs/vscode/settings_mac.json ~/Library/Application\ Support/Code/User/settings.json
-        ```
+```text
+~/GitHub/envy.code-workspace -> ~/GitHub/dotfiles/application_configs/vscode/workspace.envy.code-workspace
+```
 
-        - Create a workspace file in the GitHub directory you want to use, then symlink it to the repo to track it in, this direction is important for vscode to follow links to project folders
+The link must live in the repo's parent directory (`~/GitHub`, or
+`~/HelloFreshProjects` on the HelloFresh laptop) because the workspace's
+project folders are relative siblings of `dotfiles/`.
 
-        ```bash
-        touch ~/GitHub/your-computer-name.code-workspace
-        cd ~/GitHub/dotfiles/application_configs/vscode
-        ln -s ~/GitHub/your-computer-name.code-workspace .
-        ```
+For a new machine, add
+`application_configs/vscode/workspace.<host>.code-workspace` to the repo and
+run the deploy — no manifest change is needed:
+
+```bash
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py
+```
 
 ## Installing Extensions
 

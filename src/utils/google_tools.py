@@ -11,9 +11,9 @@ from typing import Optional
 import pandas as pd
 import pygsheets
 import yaml
-from dotenv import load_dotenv
 from google.auth.exceptions import TransportError
 from googleapiclient.errors import HttpError
+from dotenv import load_dotenv
 
 # append grandparent
 if __name__ == "__main__":
@@ -114,8 +114,6 @@ dict_connected_sheets = {}
 
 
 def get_book_from_id(id, retry=True):
-    global dict_connected_books
-
     if id in dict_connected_books.keys():
         Workbook = dict_connected_books[id]
         print_logger(f"Using cached connection to {id}", level="debug")
@@ -242,8 +240,6 @@ def get_book_from_id(id, retry=True):
 
 
 def get_book(bookName, retry=True):
-    global dict_connected_books
-
     if bookName in dict_hardcoded_book_ids.keys():
         print_logger(
             f"Book {bookName} in hardcoded book ids, using id: "
@@ -336,8 +332,6 @@ def get_book_with_create(bookName, parent_folder_id=None, template_id=None):
     a Workbook object.
 
     """
-    global dict_connected_books
-
     # if already in dict_hardcoded_book_ids[bookName], then just get from there
     if bookName in dict_hardcoded_book_ids.keys():
         print_logger(
@@ -391,8 +385,6 @@ def get_book_sheet(bookName, sheetName, retries=3) -> pygsheets.Worksheet:
     Raises:
         Exception: If the maximum number of retries is exceeded.
     """
-
-    global dict_connected_sheets
 
     while retries > 0:
         # Check if the connection is already cached
@@ -532,8 +524,6 @@ def get_book_sheet_from_id_name(id, sheetName, retries=3):
     Returns:
         Worksheet: A Worksheet object from the specified Google Sheet.
     """
-    global dict_connected_sheets
-
     retries_left = retries
 
     while retries_left > 0:

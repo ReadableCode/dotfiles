@@ -141,12 +141,21 @@ git clone git@github.com:ReadableCode/dotfiles.git
 
 ## Link bash_aliases and bashrc
 
+Optionally link the repo itself into the home directory for convenience:
+
 ```bash
-rm ~/.bash_aliases
-rm ~/.bashrc
 ln -s ~/GitHub/dotfiles/ ~/
-ln -s ~/GitHub/dotfiles/application_configs/bash/.bash_aliases ~/.bash_aliases
-ln -s ~/GitHub/dotfiles/application_configs/bash/.bashrc ~/.bashrc
+```
+
+The `.bashrc` / `.bash_aliases` links are manifest-driven (entries `bashrc`
+and `bash_aliases` in `deploy_manifest.yaml` — see
+[deploy_configs.md](./deploy_configs.md)). Existing files are backed up to
+`data/config_backups/` and their content ingested into the repo:
+
+```bash
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py             # deploy
 source ~/.bashrc
 ```
 

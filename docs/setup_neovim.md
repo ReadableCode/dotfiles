@@ -270,9 +270,13 @@ del $env:LOCALAPPDATA\nvim\init.vim   # Windows
 
 ### macOS / Linux
 
+The `~/.config/nvim/init.lua` link is manifest-driven (entry `nvim_init` in
+`deploy_manifest.yaml` — see [deploy_configs.md](./deploy_configs.md)):
+
 ```bash
-mkdir -p ~/.config/nvim
-ln -s ~/GitHub/dotfiles/application_configs/nvim/init.lua ~/.config/nvim/init.lua
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py             # deploy
 ```
 
 Verify the link:
