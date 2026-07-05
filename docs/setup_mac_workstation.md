@@ -157,12 +157,20 @@ cd GitHub
 git clone git@github.com:ReadableCode/dotfiles.git
 ```
 
-## Symlink zsh config
+## Deploy configs (zshrc and friends)
+
+All config links (zshrc, shared aliases, tmux, nvim, zed, VS Code, Hammerspoon,
+Claude settings, ...) are driven by `deploy_manifest.yaml` — see
+[deploy_configs.md](./deploy_configs.md):
 
 ```bash
-mv ~/.zshrc ~/.zshrc.bak
-ln -s ~/GitHub/dotfiles/application_configs/bash/.zshrc ~/.zshrc
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py             # deploy
 ```
+
+Any pre-existing `~/.zshrc` is backed up to `data/config_backups/` and its
+content ingested into the repo, where `git diff` shows what changed.
 
 ## Brew Setup
 
@@ -237,11 +245,11 @@ Hammerspoon is a free Mac automation tool scriptable in Lua — use it for hotke
 brew install --cask hammerspoon
 ```
 
-Symlink the dotfiles config:
+The dotfiles config is deployed by the manifest (entry `hammerspoon_init` in
+`deploy_manifest.yaml` — see [deploy_configs.md](./deploy_configs.md)):
 
 ```bash
-mkdir -p ~/.hammerspoon
-ln -sf ~/GitHub/dotfiles/application_configs/hammerspoon/init.lua ~/.hammerspoon/init.lua
+cd ~/GitHub/dotfiles && uv run python src/deploy_configs.py
 ```
 
 - Launch Hammerspoon from `/Applications` — it lives in the menu bar

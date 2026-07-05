@@ -8,10 +8,10 @@ import sys
 import time
 
 import pandas as pd
-from dotenv import load_dotenv
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
+from dotenv import load_dotenv
 
 # append grandparent
 if __name__ == "__main__":

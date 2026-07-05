@@ -1,0 +1,149 @@
+# Deploy manifest — single source of truth for which repo configs are deployed
+# where on each machine. Consumed by `src/deploy_configs.py`:
+#
+#   uv run python src/deploy_configs.py --dry-run   # show planned actions
+#   uv run python src/deploy_configs.py             # deploy for this machine
+#   uv run python src/deploy_configs.py --status    # drift report (cron-able)
+#
+# Entry schema:
+#   - name: unique identifier
+#     repo: path relative to the repo root (must exist in the repo)
+#     dest:                       # per-platform destination (omit a platform to skip it)
+#       darwin: ~/path
+#       linux: ~/path
+#       windows: ~/path
+#     hosts: [ENVY, ELITEDESK]    # optional: limit to specific hostnames (uppercase,
+#                                 # matched against the short hostname)
+#     method: symlink | copy | none   # default symlink. "none" = inventory-only entry:
+#                                     # the app is configured without links (see note)
+#     note: free text caveat
+#
+# Entries with `method: none` document apps that intentionally do NOT use links,
+# so this file is a complete inventory of deployed configs, not just a link list.
+
+# --- Shells ---
+
+- name: zshrc
+  repo: application_configs/bash/.zshrc
+  dest:
+    darwin: ~/.zshrc
+
+- name: bashrc
+  repo: application_configs/bash/.bashrc
+  dest:
+    linux: ~/.bashrc
+  note: "Also used on Android/Termux (platform.system() reports Linux there)."
+
+- name: bash_aliases
+  repo: application_configs/bash/.bash_aliases
+  dest:
+    linux: ~/.bash_aliases
+
+- name: shared_aliases
+  repo: application_configs/bash/.shared_aliases
+  dest:
+    darwin: ~/.shared_aliases
+    linux: ~/.shared_aliases
+  note: ".zshrc and .bash_aliases also auto-symlink this on first run if missing."
+
+# --- Terminal / multiplexer ---
+
+- name: tmux_conf
+  repo: application_configs/tmux/.tmux.conf
+  dest:
+    darwin: ~/.tmux.conf
+    linux: ~/.tmux.conf
+
+# --- Editors ---
+
+- name: nvim_init
+  repo: application_configs/nvim/init.lua
+  dest:
+    darwin: ~/.config/nvim/init.lua
+    linux: ~/.config/nvim/init.lua
+  note: "Windows deliberately has no dest here - see nvim_init_windows."
+
+- name: nvim_init_windows
+  repo: application_configs/nvim/init.lua
+  method: none
+  note: >-
+    nvim on Windows uses XDG_CONFIG_HOME (set in
+    application_configs/powershell/powershell_aliases.ps1) to point straight at
+    the repo's application_configs folder - no link or copy needed, and nothing
+    breaks when git pull runs. See docs/setup_neovim.md.
+
+- name: vscode_settings
+  repo: application_configs/vscode/settings.json
+  dest:
+    linux: ~/.config/Code/User/settings.json
+    windows: ~/AppData/Roaming/Code/User/settings.json
+
+- name: vscode_settings_mac
+  repo: application_configs/vscode/settings_mac.json
+  dest:
+    darwin: ~/Library/Application Support/Code/User/settings.json
+
+- name: vscode_workspaces
+  repo: application_configs/vscode
+  method: none
+  note: >-
+    Host-specific *.code-workspace files are created in ~/GitHub/<host>.code-workspace
+    and linked into this folder by hand (direction matters so VS Code resolves
+    project folders correctly). See docs/setup_vscode.md.
+
+- name: zed_settings
+  repo: application_configs/zed/settings.json
+  dest:
+    darwin: ~/.config/zed/settings.json
+
+# --- Git ---
+
+- name: git_ignore
+  repo: application_configs/git/ignore
+  dest:
+    darwin: ~/.config/git/ignore
+    linux: ~/.config/git/ignore
+  note: >-
+    ~/.config/git/ignore is git's default global ignore path (no gitconfig entry
+    needed). Candidate for config-path indirection instead of a link:
+    git config --global core.excludesFile <repo path>.
+
+# --- Claude ---
+
+- name: claude_settings
+  repo: application_configs/claude/settings.json
+  dest:
+    darwin: ~/.claude/settings.json
+    linux: ~/.claude/settings.json
+
+# --- macOS automation ---
+
+- name: hammerspoon_init
+  repo: application_configs/hammerspoon/init.lua
+  dest:
+    darwin: ~/.hammerspoon/init.lua
+  note: "Hammerspoon follows the link and writes window_layouts.json back into the repo."
+
+# --- Windows automation (AutoHotkey startup scripts) ---
+
+- name: ahk_app_jumping
+  repo: scripts/app_jumping.ahk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/app_jumping.ahk
+  note: "Previously created by scripts/create_sym_links_startup.ps1."
+
+- name: ahk_sheets
+  repo: scripts/sheets.ahk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sheets.ahk
+  note: "Previously created by scripts/create_sym_links_startup.ps1."
+
+# --- PowerShell ---
+
+- name: powershell_profile
+  repo: application_configs/powershell/powershell_aliases.ps1
+  method: none
+  note: >-
+    Not linked: $PROFILE dot-sources this file (". <path>"), so the profile is
+    config-path indirection rather than a link. See
+    docs/setup_windows_workstation_personal.md.

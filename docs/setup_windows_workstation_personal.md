@@ -53,6 +53,28 @@ Add-Content -Path $PROFILE -Value 'path you found earlier'
 . <resolved-path>
 ```
 
+## Deploy Configs
+
+Config deployment (VS Code settings, AutoHotkey startup scripts, ...) is
+manifest-driven — see [deploy_configs.md](./deploy_configs.md):
+
+```powershell
+cd ~\GitHub\dotfiles
+uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py             # deploy
+```
+
+Notes:
+
+* Enable Developer Mode first (see "Set some windows settings" below) so real
+  symlinks are created without admin. Without it the deploy falls back to
+  copies, which `--status` hash-verifies for drift.
+* The AutoHotkey startup entries (`app_jumping.ahk`, `sheets.ahk` → the
+  Startup folder) are manifest entries now; `scripts/create_sym_links_startup.ps1`
+  is the legacy way to create them.
+* Neovim and the PowerShell profile intentionally use no links (config-path
+  indirection) — see their `method: none` entries in `deploy_manifest.yaml`.
+
 ## Activate Windows with Script if unliscensed
 
 * Open powershell and run command:

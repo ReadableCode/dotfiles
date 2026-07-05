@@ -1,5 +1,34 @@
 # Sym Linking and Hard Linking
 
+> Dotfiles config deployment is manifest-driven — see
+> [deploy_configs.md](./deploy_configs.md). The commands here are a general
+> reference for one-off links.
+
+## Why not hard links for git-tracked files
+
+A hard link is a second directory entry for the **same inode**. Git does not
+update files in place: on `checkout`/`pull` it writes a **new** file (new
+inode) and swaps it into the working tree. Any hard link you made beforehand
+still points at the *old* inode — the old content — while the repo copy moves
+on. Nothing errors; the deployed file just silently stops updating. Everything
+*looks* deployed, which makes this the worst kind of drift.
+
+Symlinks do not have this problem: they point at the *path*, so they always
+resolve to whatever content git last wrote there.
+
+Rules of thumb:
+
+- **Never hard link a git-tracked file.**
+- Prefer a **symlink** (on Windows: works without admin once Developer Mode
+  is enabled — Settings → System → For developers).
+- If symlinks are unavailable, use a **copy** and verify it with
+  `uv run python src/deploy_configs.py --status`, which hash-compares copies
+  against the repo and reports `DIVERGED` when they drift.
+- Better still, use config-path indirection when the app supports it, so no
+  link is needed at all (nvim via `XDG_CONFIG_HOME` set in
+  `application_configs/powershell/powershell_aliases.ps1`, git via
+  `include.path` / `core.excludesFile`).
+
 ## Linux
 
 ### Sym Linking on Linux
@@ -20,54 +49,61 @@ ln -s /path/to/src/file
 
 ```
 
+For example, linking a VS Code settings file out of the repo:
+
+```bash
+ln -s /home/jason/HelloFresh/GDrive/Projects/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
+```
+
 ### Hard linking on Linux
 
-- To Create at a specific directory
-
-Note: Target is the file that already exists, Path is the new hard link you are creating. The one that comes first is the target, the second is the new link.
-
-```bash
-ln /home/jason/HelloFresh/GDrive/Projects/hellofresh.code-workspace /home/jason/HelloFresh/GDrive/Projects/dotfiles/application_configs/vscode/hellofresh.code-workspace
-```
-
-```bash
-ln /home/jason/HelloFresh/GDrive/Projects/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
-```
+`ln` without `-s` creates a hard link. Do **not** use this for files inside a
+git repo (see above) — the examples that used to live here hard-linked
+`.code-workspace` files into the repo and went stale on the next pull. Use a
+symlink instead.
 
 ## Windows
 
-### Hard linking on Windows
+### Sym Linking on Windows
 
-- To Create at a specific directory
+With Developer Mode enabled (Settings → System → For developers), symlinks
+work from a normal PowerShell — no admin needed. Note: `-Path` is the new
+link you are creating, `-Target` is the file that already exists.
 
-Note: Target is the file that already exists, Path is the new hard link you are creating.
-
-```bash
-New-Item -ItemType HardLink `
-  -Path "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ryzen.code-workspace" `
-  -Target "C:\Users\jason\GitHub\ryzen.code-workspace"
-```
-
-```bash
-New-Item -ItemType HardLink `
+```powershell
+New-Item -ItemType SymbolicLink `
   -Path "C:\Users\jason\GitHub\yoga.code-workspace" `
   -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\yoga.code-workspace"
 ```
 
-```bash
-New-Item -ItemType HardLink `
-  -Path "C:\Users\jason\GitHub\ultrapocket.code-workspace" `
-  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ultrapocket.code-workspace"
-```
-
-```bash
-New-Item -ItemType HardLink `
-  -Path "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\fourteen_foods.code-workspace" `
-  -Target "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
-```
-
-```bash
-New-Item -ItemType HardLink `
+```powershell
+New-Item -ItemType SymbolicLink `
   -Path "C:\Users\16937827583938060798\HelloFreshProjects\hellofresh.code-workspace" `
   -Target "C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\vscode\hellofresh.code-workspace"
 ```
+
+Or with `cmd`'s `mklink` (elevated prompt required without Developer Mode):
+
+```powershell
+cmd /c mklink "C:\Users\jason\GitHub\ultrapocket.code-workspace" "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ultrapocket.code-workspace"
+```
+
+### If symlinks are not available
+
+On locked-down machines without Developer Mode or admin rights, **copy** the
+file instead of hard linking it, and let the drift check catch divergence:
+
+```powershell
+Copy-Item "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\fourteen_foods.code-workspace" `
+  -Destination "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
+```
+
+```bash
+uv run python src/deploy_configs.py --status   # reports DIVERGED when a copy goes stale
+```
+
+### Hard linking on Windows (avoid for repo files)
+
+`New-Item -ItemType HardLink` still exists, but per the section above it must
+not be used for git-tracked files — the link silently detaches from the repo
+copy on the next `git pull`.

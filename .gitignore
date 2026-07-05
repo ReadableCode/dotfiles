@@ -19,6 +19,8 @@ token.json
 *creds*.json
 */token.json
 desktop.ini
+# deploy_configs.py backups live in data/config_backups/; this guards against the old in-tree pattern
+*.backup.*
 sheets.googleapis.com-python.json
 looker.ini
 .imap_auth
