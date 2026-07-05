@@ -78,7 +78,10 @@ def test_real_manifest_is_valid_and_repo_paths_exist():
     assert len(names) == len(set(names)), "manifest entry names must be unique"
     for entry in entries:
         repo_path = os.path.join(deploy_configs.REPO_ROOT, entry["repo"])
-        assert os.path.exists(repo_path), f"manifest entry {entry['name']} points at missing repo path {repo_path}"
+        # a repo path may exist as-is, or only as <base>.<host-or-platform>.<ext> variants
+        assert os.path.exists(repo_path) or deploy_configs._any_variant_exists(repo_path), (
+            f"manifest entry {entry['name']} points at missing repo path {repo_path} (no variants either)"
+        )
         if entry.get("method", "symlink") != "none":
             dests = entry.get("dest") or {}
             assert dests, f"manifest entry {entry['name']} has no dest and is not method: none"
@@ -123,6 +126,102 @@ def test_build_plan_classifies_rows(fake_home):
     assert actions == {"a": "apply", "b": "skip_platform", "c": "none", "d": "skip_host"}
     assert plan[0]["repo"] == os.path.join("/repo", "f1")
     assert plan[0]["dest"] == os.path.join(str(fake_home), ".f1")
+
+
+# %%
+# Variant resolution (exact hostname -> platform -> bare default) #
+
+
+def test_short_host_token_lowercases_and_strips_domain():
+    assert deploy_configs.short_host_token("ENVY.ASUSROUTER") == "envy"
+    assert deploy_configs.short_host_token("MACBOOKPROM5") == "macbookprom5"
+    assert deploy_configs.short_host_token(None) == ""
+
+
+def test_resolve_repo_variant_prefers_host_then_platform_then_bare(tmp_path):
+    bare = write_file(str(tmp_path / "settings.json"), "bare")
+    mac = write_file(str(tmp_path / "settings.mac.json"), "mac")
+    host = write_file(str(tmp_path / "settings.envy.json"), "host")
+    assert deploy_configs.resolve_repo_variant(bare, "ENVY.ASUSROUTER", "darwin") == (host, True)
+    assert deploy_configs.resolve_repo_variant(bare, "YOGA", "darwin") == (mac, True)
+    assert deploy_configs.resolve_repo_variant(bare, "YOGA", "linux") == (bare, True)
+
+
+def test_resolve_repo_variant_host_match_is_case_insensitive(tmp_path):
+    variant = write_file(str(tmp_path / "workspace.macbookprom5.code-workspace"), "ws")
+    bare = str(tmp_path / "workspace.code-workspace")
+    assert deploy_configs.resolve_repo_variant(bare, "MACBOOKPROM5", "darwin") == (variant, True)
+
+
+def test_resolve_repo_variant_skips_host_without_variant(tmp_path):
+    write_file(str(tmp_path / "workspace.envy.code-workspace"), "ws")
+    bare = str(tmp_path / "workspace.code-workspace")
+    assert deploy_configs.resolve_repo_variant(bare, "RASPBERRYPI", "linux") == (bare, False)
+
+
+def test_resolve_repo_variant_missing_everything_stays_bare(tmp_path):
+    bare = str(tmp_path / "nothing.conf")
+    assert deploy_configs.resolve_repo_variant(bare, "ENVY", "darwin") == (bare, True)
+
+
+def test_resolve_dest_expands_host_and_repo_parent_placeholders():
+    entry = {"dest": {"darwin": "{repo_parent}/{host}.code-workspace"}}
+    dest = deploy_configs.resolve_dest(entry, "darwin", "ENVY.ASUSROUTER", repo_root="/parent/dotfiles")
+    assert dest == "/parent/envy.code-workspace"
+
+
+def test_build_plan_resolves_variant_and_placeholders(tmp_path):
+    repo_root = str(tmp_path / "GitHub" / "dotfiles")
+    variant = write_file(
+        os.path.join(repo_root, "application_configs", "vscode", "workspace.envy.code-workspace"), "ws"
+    )
+    entries = [
+        {
+            "name": "vscode_workspace",
+            "repo": "application_configs/vscode/workspace.code-workspace",
+            "dest": {
+                "darwin": "{repo_parent}/{host}.code-workspace",
+                "linux": "{repo_parent}/{host}.code-workspace",
+            },
+        }
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY.ASUSROUTER", repo_root=repo_root)
+    assert plan[0]["action"] == "apply"
+    assert plan[0]["repo"] == variant
+    assert plan[0]["dest"] == os.path.join(str(tmp_path), "GitHub", "envy.code-workspace")
+
+    plan = deploy_configs.build_plan(entries, "linux", "PIHOLE", repo_root=repo_root)
+    assert plan[0]["action"] == "skip_variant"
+    assert plan[0]["dest"] == os.path.join(str(tmp_path), "GitHub", "pihole.code-workspace")
+
+
+def test_deploy_fixes_dangling_old_name_workspace_link(tmp_path, fake_home, monkeypatch, capsys):
+    repo_root = tmp_path / "GitHub" / "dotfiles"
+    monkeypatch.setattr(deploy_configs, "REPO_ROOT", str(repo_root))
+    monkeypatch.setattr(deploy_configs, "BACKUP_ROOT", str(repo_root / "data" / "config_backups"))
+    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "ENVY.ASUSROUTER")
+    variant = write_file(
+        str(repo_root / "application_configs" / "vscode" / "workspace.envy.code-workspace"), "ws"
+    )
+    dest_template = "{repo_parent}/{host}.code-workspace"
+    manifest_path = write_manifest(
+        tmp_path,
+        [
+            {
+                "name": "vscode_workspace",
+                "repo": "application_configs/vscode/workspace.code-workspace",
+                "dest": {"darwin": dest_template, "linux": dest_template, "windows": dest_template},
+            }
+        ],
+    )
+    # dangling link left behind by the Task 5 rename (points at the old filename)
+    link = str(tmp_path / "GitHub" / "envy.code-workspace")
+    os.symlink(str(repo_root / "application_configs" / "vscode" / "envy.code-workspace"), link)
+
+    assert deploy_configs.main(["--manifest", manifest_path]) == 0
+    assert "1 changed" in capsys.readouterr().out
+    assert os.path.islink(link)
+    assert os.path.realpath(link) == os.path.realpath(variant)
 
 
 # %%

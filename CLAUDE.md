@@ -72,6 +72,18 @@ here), not a regression. Path setup for both suites lives in the repo-root
 - Keep platform-specific things in their existing buckets (e.g. a new package
   goes in the right `app_lists/*` file; a new config goes under
   `application_configs/<app>/`).
+- **Config variant naming**: host-, platform-, and context-specific configs use
+  the suffix scheme `<base>.<token>.<ext>` with a single lowercase token —
+  e.g. `workspace.elitedesk.code-workspace` (host),
+  `barrier_config.ryzenwhite.sgc` (host), `settings.mac.json` (platform),
+  `settings.hf.json` (context tag: `hf` = HelloFresh work; compound tags use
+  underscores inside the token, e.g. `settings.hf_bedrock.json`).
+  `src/deploy_configs.py` auto-resolves manifest `repo` paths in the order
+  **exact hostname → platform → bare default** (hostname matching is
+  case-insensitive on the short pre-dot name, so host `ENVY.ASUSROUTER`
+  matches token `envy`; platform tokens are `darwin`/`mac`, `linux`,
+  `windows`). Context tags are never auto-resolved — they are deployed by
+  hand or via a host-filtered manifest entry.
 - New docs: add a `docs/<topic>.md` following the existing one-topic-per-file
   pattern.
 - Match the style of nearby code; respect the flake8 line length (120) and run

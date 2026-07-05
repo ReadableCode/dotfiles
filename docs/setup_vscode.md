@@ -39,8 +39,8 @@
 
 ## Linking Settings Files
 
-Settings deployment is manifest-driven (entries `vscode_settings` and
-`vscode_settings_mac` in `deploy_manifest.yaml` — see
+Settings deployment is manifest-driven (entry `vscode_settings` in
+`deploy_manifest.yaml` — see
 [deploy_configs.md](./deploy_configs.md)):
 
 ```bash
@@ -51,7 +51,9 @@ uv run python src/deploy_configs.py             # deploy
 
 Notes:
 
-- macOS uses `settings_mac.json`; Windows and Linux share `settings.json`.
+- macOS uses the `settings.mac.json` platform variant (the deployer resolves
+  it automatically from the `settings.json` entry); Windows and Linux share
+  `settings.json`.
 - An existing live `settings.json` is backed up to `data/config_backups/` and
   its content ingested into the repo — check `git diff` afterwards.
 - On Windows, enable Developer Mode so the deploy can create real symlinks
@@ -59,15 +61,26 @@ Notes:
 
 ### Workspace files
 
-Workspace files are handled by hand, **not** by the manifest (inventory entry
-`vscode_workspaces`, `method: none`). Create the workspace file in the GitHub
-directory you want to use, then symlink it to the repo to track it — this
-direction is important for vscode to follow links to project folders:
+Workspace files are manifest-driven too (entry `vscode_workspace`). The repo
+tracks one file per host, named `workspace.<host>.code-workspace` (lowercase
+hostname), and the deploy resolves the right one for the current machine and
+links it **next to the repo checkout**, e.g.:
+
+```text
+~/GitHub/envy.code-workspace -> ~/GitHub/dotfiles/application_configs/vscode/workspace.envy.code-workspace
+```
+
+The link must live in the repo's parent directory (`~/GitHub`, or
+`~/HelloFreshProjects` on the HelloFresh laptop) because the workspace's
+project folders are relative siblings of `dotfiles/`.
+
+For a new machine, add
+`application_configs/vscode/workspace.<host>.code-workspace` to the repo and
+run the deploy — no manifest change is needed:
 
 ```bash
-touch ~/GitHub/your-computer-name.code-workspace
-cd ~/GitHub/dotfiles/application_configs/vscode
-ln -s ~/GitHub/your-computer-name.code-workspace .
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py
 ```
 
 ## Installing Extensions

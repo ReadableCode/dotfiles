@@ -2,6 +2,7 @@
 # Imports #
 
 import argparse
+import glob
 import hashlib
 import os
 import platform
@@ -29,10 +30,14 @@ BACKUP_ROOT = os.path.join(REPO_ROOT, "data", "config_backups")
 
 PLATFORM_KEYS = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}
 
+# Filename tokens accepted per platform when resolving <base>.<token>.<ext>
+# variant files ("mac" is an alias kept for settings.mac.json)
+PLATFORM_FILE_TOKENS = {"darwin": ("darwin", "mac"), "linux": ("linux",), "windows": ("windows",)}
+
 # Statuses that mean "this entry needs no attention"
 HEALTHY_STATUSES = {"OK"}
 # Rows that are informational only and never affect the exit code
-INFO_ACTIONS = {"none", "skip_host", "skip_platform"}
+INFO_ACTIONS = {"none", "skip_host", "skip_platform", "skip_variant"}
 
 
 # %%
@@ -206,11 +211,65 @@ def load_manifest(manifest_path=None):
     return entries
 
 
-def resolve_dest(entry, platform_key):
-    """Return the expanded destination path for this platform, or None if not applicable."""
+def short_host_token(hostname):
+    """Lowercase short (pre-dot) hostname - the token used in variant filenames."""
+    return (hostname or "").split(".")[0].lower()
+
+
+def _variant_path(repo_path, token):
+    """<dir>/<base><ext> -> <dir>/<base>.<token><ext> per the variant naming convention."""
+    directory, filename = os.path.split(repo_path)
+    base, ext = os.path.splitext(filename)
+    return os.path.join(directory, f"{base}.{token}{ext}")
+
+
+def _any_variant_exists(repo_path):
+    """True when at least one <base>.<token><ext> sibling of repo_path exists."""
+    directory, filename = os.path.split(repo_path)
+    base, ext = os.path.splitext(filename)
+    pattern = os.path.join(glob.escape(directory), f"{glob.escape(base)}.*{ext}")
+    return bool(glob.glob(pattern))
+
+
+def resolve_repo_variant(repo_path, hostname, platform_key):
+    """
+    Resolve a manifest repo path to its per-host / per-platform variant file,
+    named <base>.<token>.<ext> with a lowercase token (see CLAUDE.md conventions).
+
+    Resolution order: exact hostname (short pre-dot name, case-insensitive) ->
+    platform -> bare default. Returns (path, applies):
+    - (variant_path, True) when a host or platform variant exists;
+    - (repo_path, True) when the bare file exists, or when nothing related
+      exists at all (so a bad manifest path still surfaces as REPO_MISSING);
+    - (repo_path, False) when only variants for *other* hosts exist - the
+      entry simply does not apply to this machine.
+    """
+    host_token = short_host_token(hostname)
+    tokens = ([host_token] if host_token else []) + list(PLATFORM_FILE_TOKENS.get(platform_key, (platform_key,)))
+    for token in tokens:
+        candidate = _variant_path(repo_path, token)
+        if os.path.exists(candidate):
+            return candidate, True
+    if os.path.exists(repo_path) or not _any_variant_exists(repo_path):
+        return repo_path, True
+    return repo_path, False
+
+
+def resolve_dest(entry, platform_key, hostname="", repo_root=None):
+    """
+    Return the expanded destination path for this platform, or None if not applicable.
+
+    dest values support two placeholders: {host} expands to the lowercase short
+    hostname (same token as variant filenames) and {repo_parent} to the directory
+    containing this repo checkout (e.g. ~/GitHub) - where workspace links live.
+    """
     dest = entry.get("dest") or {}
     raw_dest = dest.get(platform_key)
-    return os.path.expanduser(raw_dest) if raw_dest else None
+    if not raw_dest:
+        return None
+    raw_dest = raw_dest.replace("{host}", short_host_token(hostname))
+    raw_dest = raw_dest.replace("{repo_parent}", os.path.dirname(repo_root or REPO_ROOT))
+    return os.path.expanduser(raw_dest)
 
 
 def host_allowed(entry, hostname):
@@ -224,7 +283,7 @@ def host_allowed(entry, hostname):
 
 
 def build_plan(entries, platform_key, hostname, repo_root=None):
-    """Turn manifest entries into plan rows: apply / none / skip_host / skip_platform."""
+    """Turn manifest entries into plan rows: apply / none / skip_host / skip_platform / skip_variant."""
     repo_root = repo_root or REPO_ROOT
     plan = []
     for entry in entries:
@@ -241,9 +300,13 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
         elif not host_allowed(entry, hostname):
             row["action"] = "skip_host"
         else:
-            row["dest"] = resolve_dest(entry, platform_key)
+            row["dest"] = resolve_dest(entry, platform_key, hostname, repo_root)
             if row["dest"] is None:
                 row["action"] = "skip_platform"
+            else:
+                row["repo"], applies = resolve_repo_variant(row["repo"], hostname, platform_key)
+                if not applies:
+                    row["action"] = "skip_variant"
         plan.append(row)
     return plan
 
@@ -294,6 +357,8 @@ def _print_info_row(row, platform_key):
         print(f"NONE          {row['name']:<22} no link by design. {row['note']}")
     elif row["action"] == "skip_host":
         print(f"SKIP_HOST     {row['name']:<22} not for this host")
+    elif row["action"] == "skip_variant":
+        print(f"SKIP_VARIANT  {row['name']:<22} no {os.path.basename(row['repo'])} variant for this host")
     else:
         print(f"SKIP_PLATFORM {row['name']:<22} no dest for {platform_key}")
 

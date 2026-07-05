@@ -73,20 +73,24 @@ link you are creating, `-Target` is the file that already exists.
 ```powershell
 New-Item -ItemType SymbolicLink `
   -Path "C:\Users\jason\GitHub\yoga.code-workspace" `
-  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\yoga.code-workspace"
+  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\workspace.yoga.code-workspace"
 ```
 
 ```powershell
 New-Item -ItemType SymbolicLink `
   -Path "C:\Users\16937827583938060798\HelloFreshProjects\hellofresh.code-workspace" `
-  -Target "C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\vscode\hellofresh.code-workspace"
+  -Target "C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\vscode\workspace.hellofresh.code-workspace"
 ```
 
 Or with `cmd`'s `mklink` (elevated prompt required without Developer Mode):
 
 ```powershell
-cmd /c mklink "C:\Users\jason\GitHub\ultrapocket.code-workspace" "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\ultrapocket.code-workspace"
+cmd /c mklink "C:\Users\jason\GitHub\ultrapocket.code-workspace" "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\workspace.ultrapocket.code-workspace"
 ```
+
+(These workspace links are exactly what
+`uv run python src/deploy_configs.py` now creates via the `vscode_workspace`
+manifest entry — the commands remain here only as one-off reference.)
 
 ### If symlinks are not available
 
@@ -94,7 +98,7 @@ On locked-down machines without Developer Mode or admin rights, **copy** the
 file instead of hard linking it, and let the drift check catch divergence:
 
 ```powershell
-Copy-Item "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\fourteen_foods.code-workspace" `
+Copy-Item "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\workspace.fourteen_foods.code-workspace" `
   -Destination "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
 ```
 

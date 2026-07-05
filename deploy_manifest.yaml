@@ -7,11 +7,16 @@
 #
 # Entry schema:
 #   - name: unique identifier
-#     repo: path relative to the repo root (must exist in the repo)
+#     repo: path relative to the repo root. Resolved against <base>.<token>.<ext>
+#           variant files (lowercase token): exact hostname first, then platform
+#           (darwin/mac, linux, windows), then the bare default. Hosts with no
+#           matching variant and no bare file are skipped, so new host variants
+#           need no manifest change. Context tags (settings.hf.json) are never
+#           auto-resolved.
 #     dest:                       # per-platform destination (omit a platform to skip it)
-#       darwin: ~/path
-#       linux: ~/path
-#       windows: ~/path
+#       darwin: ~/path            # {host} expands to the lowercase short hostname,
+#       linux: ~/path             # {repo_parent} to the directory containing this
+#       windows: ~/path           # repo checkout (e.g. ~/GitHub)
 #     hosts: [ENVY, ELITEDESK]    # optional: limit to specific hostnames (uppercase,
 #                                 # matched against the short hostname)
 #     method: symlink | copy | none   # default symlink. "none" = inventory-only entry:
@@ -75,21 +80,25 @@
 - name: vscode_settings
   repo: application_configs/vscode/settings.json
   dest:
+    darwin: ~/Library/Application Support/Code/User/settings.json
     linux: ~/.config/Code/User/settings.json
     windows: ~/AppData/Roaming/Code/User/settings.json
+  note: "On macOS the deployer resolves the settings.mac.json platform variant."
 
-- name: vscode_settings_mac
-  repo: application_configs/vscode/settings_mac.json
+- name: vscode_workspace
+  repo: application_configs/vscode/workspace.code-workspace
   dest:
-    darwin: ~/Library/Application Support/Code/User/settings.json
-
-- name: vscode_workspaces
-  repo: application_configs/vscode
-  method: none
+    darwin: "{repo_parent}/{host}.code-workspace"
+    linux: "{repo_parent}/{host}.code-workspace"
+    windows: "{repo_parent}/{host}.code-workspace"
   note: >-
-    Host-specific *.code-workspace files are created in ~/GitHub/<host>.code-workspace
-    and linked into this folder by hand (direction matters so VS Code resolves
-    project folders correctly). See docs/setup_vscode.md.
+    Resolves to workspace.<host>.code-workspace (there is no bare default -
+    hosts without a variant are skipped). The link lives next to the repo
+    checkout (~/GitHub, or ~/HelloFreshProjects on the HelloFresh laptop)
+    because the workspace's project folders are relative siblings of dotfiles/.
+    Renamed from <host>.code-workspace - redeploy on each machine to fix the
+    old dangling links. New host: add the variant file, no manifest change
+    needed. See docs/setup_vscode.md.
 
 - name: zed_settings
   repo: application_configs/zed/settings.json
@@ -115,6 +124,26 @@
   dest:
     darwin: ~/.claude/settings.json
     linux: ~/.claude/settings.json
+
+- name: claude_settings_hf
+  repo: application_configs/claude/settings.hf.json
+  method: none
+  note: >-
+    Work-context variants settings.hf.json / settings.hf_bedrock.json (hf =
+    HelloFresh). Context tags are never auto-resolved - on work machines link
+    or copy the wanted variant to ~/.claude/settings.json by hand. Renamed to
+    the dotted variant scheme in Task 5; re-point any pre-rename link.
+
+# --- Barrier (KVM sharing) ---
+
+- name: barrier_configs
+  repo: application_configs/barrier
+  method: none
+  note: >-
+    Per-host barrier_config.<host>.sgc files, loaded by path from the Barrier
+    GUI / autostart arguments - no links. Renamed to the dotted variant scheme
+    in Task 5; re-point Barrier at the new filename on hellofreshwindows,
+    jasonzephyrus, and ryzenwhite.
 
 # --- macOS automation ---
 

@@ -40,6 +40,32 @@ intentionally do **not** use links (e.g. nvim on Windows via
 `XDG_CONFIG_HOME`, the PowerShell profile via dot-sourcing), so the manifest
 is a complete inventory of deployed configs, not just a link list.
 
+### Host / platform variant files
+
+A `repo` path is resolved against variant files named `<base>.<token>.<ext>`
+(single lowercase token — the repo-wide convention, see `CLAUDE.md`), in this
+order:
+
+1. **Exact hostname** — `settings.envy.json`. The short (pre-dot) hostname is
+   matched case-insensitively, so host `ENVY.ASUSROUTER` matches token `envy`
+   and `MacbookProM5` matches `macbookprom5`.
+2. **Platform** — `settings.darwin.json` or `settings.mac.json` on macOS,
+   `settings.linux.json`, `settings.windows.json`.
+3. **Bare default** — `settings.json` itself.
+
+If neither a matching variant nor the bare file exists but variants for
+*other* hosts do (e.g. `workspace.<host>.code-workspace` with no bare
+`workspace.code-workspace`), the entry is skipped as `SKIP_VARIANT` — so
+adding a variant file for a new host needs **no manifest change**. Context
+tags (e.g. `settings.hf.json`) are never auto-resolved.
+
+`dest` values support two placeholders:
+
+- `{host}` — the lowercase short hostname (same token as variant filenames).
+- `{repo_parent}` — the directory containing the repo checkout (e.g.
+  `~/GitHub`), used for the VS Code workspace links that must live next to
+  the sibling project folders they reference.
+
 ## How deployment behaves
 
 - **Destination missing** → a symlink is created pointing at the repo file.
