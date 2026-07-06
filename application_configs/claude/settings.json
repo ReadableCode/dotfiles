@@ -11,10 +11,10 @@
   "enabledPlugins": {
     "github@claude-plugins-official": true
   },
-  "effortLevel": "xhigh",
+  "effortLevel": "medium",
   "tui": "fullscreen",
   "theme": "auto",
-  "agentPushNotifEnabled": true,
+  "switchModelsOnFlag": false,
   "inputNeededNotifEnabled": true,
-  "switchModelsOnFlag": false
+  "agentPushNotifEnabled": true
 }
