@@ -53,7 +53,7 @@ ansible_connection=ssh
 ansible_shell_type=powershell
 
 [fourteen_foods_windows]
-FourteenFoodsLaptop ansible_host=192.168.86.126 ansible_user=jason.christiansen ansible_port=2222 ssh_alias=ssh14
+FFLAP-2229 ansible_host=192.168.86.126 ansible_user=jason.christiansen ansible_port=2222 ssh_alias=ssh14
 
 [fourteen_foods_windows:vars]
 ansible_connection=ssh

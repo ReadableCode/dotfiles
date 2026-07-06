@@ -92,7 +92,7 @@ def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
 
 def test_load_inventory_hostnames_parses_hosts_and_skips_vars():
     hostnames = load_inventory_hostnames(deploy_configs.INVENTORY_PATH)
-    assert {"ENVY", "ELITEDESK", "HELLOFRESHJASON", "FOURTEENFOODSLAPTOP"} <= hostnames
+    assert {"ENVY", "ELITEDESK", "HELLOFRESHJASON", "FFLAP-2229"} <= hostnames
     # values from [group:vars] sections and key=value tokens must not leak in
     assert not any("=" in hostname for hostname in hostnames)
     assert "ANSIBLE_USER" not in hostnames

@@ -130,7 +130,7 @@
   note: >-
     Personal darwin/linux machines only, named exactly as in inventory/hosts
     (validated at load). Work-context hosts (HELLOFRESHJASON,
-    FOURTEENFOODSLAPTOP, HELLOFRESHWINDOWS, FF-TN-ENGINEER-01) are deliberately
+    FFLAP-2229, HELLOFRESHWINDOWS, FF-TN-ENGINEER-01) are deliberately
     excluded so this entry never overwrites a by-hand context-variant link -
     see claude_settings_hf.
 
