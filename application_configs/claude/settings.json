@@ -1,6 +1,7 @@
 {
   "model": "opus",
   "effortLevel": "high",
+  "includeCoAuthoredBy": false,
   "autoUpdatesChannel": "latest",
   "tui": "fullscreen",
   "theme": "auto"
