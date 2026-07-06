@@ -5,11 +5,14 @@ import glob
 import os
 import re
 import warnings
+from datetime import date
 
 from config_scripts import log_dir
-from src.utils.date_tools import WorkingWeek
 
 warnings.filterwarnings("ignore")
+
+iso_year, iso_week, _ = date.today().isocalendar()
+WorkingWeek = f"{iso_year}-W{iso_week:02d}"
 
 # %%
 # Read Logs #
