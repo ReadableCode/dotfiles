@@ -242,19 +242,24 @@ function openbranchdiffs {
     }
     Set-Location -Path $repoRoot
 
-    # Fetch to ensure origin/master is up to date before diffing
+    # Fetch to ensure the remote default branch is up to date before diffing
     git fetch -q
 
-    # Get the list of files changed between origin/master and the current branch
-    $changedFiles = git diff --name-only origin/master...HEAD
+    # Detect the remote default branch instead of assuming origin/master
+    $base = git symbolic-ref --short refs/remotes/origin/HEAD 2>$null
+    if (-not $base) { $base = 'origin/master' }
+
+    # base...HEAD diffs from the merge-base, so only this branch's own commits count;
+    # --diff-filter=d drops files deleted on this branch, Test-Path drops renamed-away paths
+    $changedFiles = git diff --name-only --diff-filter=d "$base...HEAD" | Where-Object { Test-Path $_ }
 
     if (-not $changedFiles) {
-        Write-Host "No differences between origin/master and HEAD." -ForegroundColor Yellow
+        Write-Host "No files changed on this branch relative to $base." -ForegroundColor Yellow
         return
     }
 
-    # Open each changed file in VSCode
-    $changedFiles | ForEach-Object { code $_ }
+    # Open all changed files in one VSCode invocation
+    code @($changedFiles)
 }
 
 function gitpullall {

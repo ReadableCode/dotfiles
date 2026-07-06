@@ -96,8 +96,26 @@ function todo() {
 
 alias ll='ls -AlhF'
 
-# Open all files changed between origin/master and HEAD in VSCode
-alias openbranchdiffs='cd $(git rev-parse --show-toplevel) && git fetch -q && git diff --name-only origin/master...HEAD | xargs -I{} code {}'
+# Open the files this branch changed (vs the merge-base with the default branch) in VSCode.
+# Skips deleted/renamed-away paths and never includes changes that only happened upstream.
+function openbranchdiffs() {
+    local root base f
+    local -a files=()
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Not a git repository." >&2; return 1; }
+    cd "$root" || return 1
+    git fetch -q
+    base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master)
+    # base...HEAD diffs from the merge-base, so only this branch's own commits count;
+    # --diff-filter=d drops files deleted on this branch
+    while IFS= read -r f; do
+        [ -e "$f" ] && files+=("$f")
+    done < <(git diff --name-only --diff-filter=d "$base"...HEAD)
+    if [ ${#files[@]} -eq 0 ]; then
+        echo "No files changed on this branch relative to $base."
+        return 0
+    fi
+    code "${files[@]}"
+}
 
 function gitpullall() {
     local arch os bin
