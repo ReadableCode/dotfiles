@@ -9,8 +9,7 @@
       "Bash(luac -p application_configs/hammerspoon/init.lua)",
       "Bash(command -v hs)",
       "Bash(hs -c \"hs.reload\\(\\)\")",
-      "Bash(python ./src/deploy_configs.py --dry-run)",
-      "Bash(git -C /Users/jason/GitHub/dotfiles ls-files src/utils/)"
+      "Bash(python ./src/deploy_configs.py --dry-run)"
     ]
   }
 }

@@ -150,7 +150,7 @@ ln -s ~/GitHub/dotfiles/ ~/
 The `.bashrc` / `.bash_aliases` links are manifest-driven (entries `bashrc`
 and `bash_aliases` in `deploy_manifest.yaml` — see
 [deploy_configs.md](./deploy_configs.md)). Existing files are backed up to
-`data/config_backups/` and replaced by links to the repo versions:
+`data/config_backups/` and their content ingested into the repo:
 
 ```bash
 cd ~/GitHub/dotfiles

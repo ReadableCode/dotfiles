@@ -80,7 +80,7 @@ There are two suites:
 
   ```bash
   uv run pytest                                       # full unit suite
-  uv run pytest tests/test_deploy_configs.py          # a specific file
+  uv run pytest tests/test_utils/test_date_tools.py   # a specific file
   ```
 
 * **`integration_tests/`** — setup/integration checks for Gmail, Google Sheets,

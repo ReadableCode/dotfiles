@@ -81,17 +81,10 @@ tags (e.g. `settings.hf.json`) are never auto-resolved.
 - **Destination is already the correct link** → no-op.
 - **Destination is a wrong-target or dangling link** → the stale link is
   replaced.
-- **Destination is a regular file and the repo file exists** → the repo is
-  the source of truth: the system file is backed up to
-  `data/config_backups/<repo-relative path>.<timestamp>` (gitignored, mtime
-  preserved), then **replaced** by the link. Local edits survive only in the
-  backup — they are never moved into the repo working tree. Once linked,
-  editing the file at the system location edits the repo file, so changes
-  show up in `git status` immediately.
-- **Destination is a regular file and the repo file does not exist** →
-  first-time capture: the system file is the only copy, so it is moved into
-  the repo and linked (requires `ingest_system_if_exists=True`; the CLI path
-  skips it and reports).
+- **Destination is a regular file** → it is backed up to
+  `data/config_backups/<repo-relative path>.<timestamp>` (gitignored), its
+  content is moved into the repo (so `git diff` shows what changed), and the
+  link is created.
 - **Windows**: `os.symlink` works without admin when Developer Mode is
   enabled (Settings → System → For developers). If symlinks are denied
   (locked-down work machines), deploy falls back to a **hard link** — no
@@ -112,7 +105,7 @@ tags (e.g. `settings.hf.json`) are never auto-resolved.
 | `NOT_DEPLOYED` | Destination missing. |
 | `BROKEN_LINK` | Destination is a dangling symlink. |
 | `WRONG_TARGET` | Destination is a link resolving somewhere else. |
-| `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file or an orphaned hard link (git replaced the inode on pull); the detail says whether its content matches the repo copy or diverges. Deploy backs it up, then replaces it with a link to the repo version. |
+| `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file or an orphaned hard link (git replaced the inode on pull); the detail says whether its content matches the repo copy or diverges. Deploy backs it up, ingests, and re-links. |
 
 Unhealthy rows get a second dimmed line explaining what is wrong and what
 `deploy` would do about it. A one-line summary prints last (e.g.
@@ -141,6 +134,4 @@ how the homelab manages its entries):
 3. `uv run python src/deploy_configs.py status`, then deploy.
 
 If the destination already has a live config file, deploy backs it up and
-replaces it with a link to the repo version (see behavior above) — so make
-sure any local edits worth keeping are in the repo file *before* deploying,
-or fish them out of `data/config_backups/` afterwards.
+ingests it into the repo automatically (see behavior above).

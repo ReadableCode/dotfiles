@@ -349,16 +349,13 @@ def test_case3_backup_goes_to_backup_root_not_repo_tree(tmp_path):
     dest = write_file(str(tmp_path / "sys" / "conf"), "system version")
 
     result = deploy_configs.deploy_config(
-        repo_file, dest, replace_system_if_exists=True, backup_root=backup_root, repo_root=repo_root
+        repo_file, dest, backup_into_repo=True, backup_root=backup_root, repo_root=repo_root
     )
 
-    assert result == "replaced"
+    assert result == "ingested"
     assert os.path.islink(dest)
-    # repo is the source of truth - the system version is NOT ingested into it
     with open(repo_file, encoding="utf-8") as file_handle:
-        assert file_handle.read() == "repo version"
-    with open(dest, encoding="utf-8") as file_handle:
-        assert file_handle.read() == "repo version"
+        assert file_handle.read() == "system version"
     backup_dir = os.path.join(backup_root, "application_configs", "app")
     backups = os.listdir(backup_dir)
     assert len(backups) == 1 and backups[0].startswith("conf.")
@@ -371,7 +368,7 @@ def test_case3_backup_goes_to_backup_root_not_repo_tree(tmp_path):
 def test_case3_without_backup_makes_no_changes(tmp_path):
     repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo version")
     dest = write_file(str(tmp_path / "sys" / "conf"), "system version")
-    result = deploy_configs.deploy_config(repo_file, dest, replace_system_if_exists=False)
+    result = deploy_configs.deploy_config(repo_file, dest, backup_into_repo=False)
     assert result == "skipped"
     assert not os.path.islink(dest)
     with open(repo_file, encoding="utf-8") as file_handle:

@@ -55,8 +55,7 @@ Notes:
   it automatically from the `settings.json` entry); Windows and Linux share
   `settings.json`.
 - An existing live `settings.json` is backed up to `data/config_backups/` and
-  replaced by a link to the repo version — local-only tweaks survive only in
-  the backup.
+  its content ingested into the repo — check `git diff` afterwards.
 - On Windows, enable Developer Mode so the deploy can create real symlinks
   without admin; otherwise the deploy falls back to a hard link (never a
   copy). After `git pull` on such machines, run
