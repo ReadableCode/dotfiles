@@ -184,14 +184,17 @@ def deploy_config(
     repo_path,
     system_path,
     ingest_system_if_exists=False,
-    backup_into_repo=True,
+    replace_system_if_exists=True,
     backup_root=None,
     repo_root=None,
 ):
     """
     Keep the real file in the repo and place a symlink at system_path.
-    Optionally ingest an existing system file into the repo and back up the
-    existing system file before replacing it.
+
+    The repo is the source of truth: when both versions exist, the system file
+    is backed up (timestamped copy, mtime preserved) and replaced by the link -
+    it is never moved into the repo working tree. Ingestion only happens when
+    the repo file does not exist yet (first-time capture of a config).
 
     Idempotent: a destination that is already a correct symlink - or an
     existing hard link sharing the repo file's inode - is a no-op.
@@ -218,7 +221,7 @@ def deploy_config(
     if not repo_exists and system_exists:
         return _ingest_system_file(repo_path, system_path, ingest_system_if_exists)
     if repo_exists and system_exists:
-        return _replace_system_file(repo_path, system_path, backup_into_repo, backup_root, repo_root)
+        return _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root)
     print(f"  nothing to deploy: neither {repo_path} nor {system_path} exists")
     return "missing"
 
@@ -235,17 +238,17 @@ def _ingest_system_file(repo_path, system_path, ingest_system_if_exists):
     return "ingested"
 
 
-def _replace_system_file(repo_path, system_path, backup_into_repo, backup_root, repo_root):
-    if not backup_into_repo:
-        print(f"  both versions exist; skipping backup of {system_path} - no changes made")
+def _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root):
+    if not replace_system_if_exists:
+        print(f"  both versions exist; skipping replacement of {system_path} - no changes made")
         return "skipped"
     backup_path = backup_system_file(system_path, repo_path, backup_root=backup_root, repo_root=repo_root)
     print(f"  backed up {system_path} to {backup_path}")
-    shutil.move(system_path, repo_path)
-    print(f"  moved system version into repo at {repo_path} (git diff shows what changed)")
+    os.remove(system_path)
+    print("  replaced system version with the repo version (local edits live only in the backup)")
     action = create_link(repo_path, system_path)
     print(f"  {action} {system_path} -> {repo_path}")
-    return "ingested"
+    return "replaced"
 
 
 # %%
@@ -416,7 +419,7 @@ def classify_entry(repo_path, system_path):
     if is_hard_link_to(repo_path, system_path):
         return "OK", "hard link shares the repo file's inode"
     if _file_hash(system_path) == _file_hash(repo_path):
-        return "NOT_A_LINK", "regular file; content matches repo (orphaned hard link or ingest candidate)"
+        return "NOT_A_LINK", "regular file; content matches repo (orphaned hard link or not yet linked)"
     return "NOT_A_LINK", "regular file; content diverges from repo (orphaned hard link after git pull?)"
 
 
@@ -427,7 +430,8 @@ def planned_action(status):
         "NOT_DEPLOYED": "deploy would create symlink at destination",
         "BROKEN_LINK": "deploy would remove the stale link and create symlink",
         "WRONG_TARGET": "deploy would remove the stale link and create symlink",
-        "NOT_A_LINK": "deploy would back up the system file to data/config_backups, ingest it into the repo, then link",
+        "NOT_A_LINK": "deploy would back up the system file to data/config_backups, then replace it with a link "
+                      "to the repo version",
         "REPO_MISSING": "nothing to deploy (repo file missing)",
     }
     return descriptions.get(status, "unknown")

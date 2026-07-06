@@ -169,8 +169,8 @@ uv run python src/deploy_configs.py status      # preview / drift report
 uv run python src/deploy_configs.py             # deploy
 ```
 
-Any pre-existing `~/.zshrc` is backed up to `data/config_backups/` and its
-content ingested into the repo, where `git diff` shows what changed.
+Any pre-existing `~/.zshrc` is backed up to `data/config_backups/` and
+replaced by a link to the repo version.
 
 ## Brew Setup
 
