@@ -124,6 +124,11 @@
   dest:
     darwin: ~/.claude/settings.json
     linux: ~/.claude/settings.json
+  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, RYZEN, ULTRAPOCKET, YOGA]
+  note: >-
+    Personal machines only. Work-context hosts (HELLOFRESHJASON,
+    FOURTEENFOODSLAPTOP, ...) are deliberately excluded so this entry never
+    overwrites a by-hand context-variant link - see claude_settings_hf.
 
 - name: claude_settings_hf
   repo: application_configs/claude/settings.hf.json
