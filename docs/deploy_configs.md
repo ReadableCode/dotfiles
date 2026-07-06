@@ -38,11 +38,12 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
   note: free text caveat
 ```
 
-Every name in a `hosts:` filter must exist in the Ansible inventory
-([`inventory/hosts`](../inventory/hosts)) — the single source of truth for
+Every name in a `hosts:` filter must exist in the host inventory
+(`~/GitHub/personal_credentials/hosts.json`) — the single source of truth for
 machine names. `load_manifest` fails loudly on an unknown name, so a typo or
 an invented hostname can't silently deploy to (or skip) the wrong machines.
-The unit tests also check the real manifest against the real inventory.
+Machines without the personal_credentials repo skip the check. The unit tests
+also check the real manifest against the real inventory when it is present.
 
 Entries with `method: none` are inventory-only: they document apps that
 intentionally do **not** use links (e.g. nvim on Windows via

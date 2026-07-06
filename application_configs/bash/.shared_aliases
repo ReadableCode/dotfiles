@@ -152,42 +152,29 @@ alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
 
 alias speed='speedtest-cli'
 
-### SSH Shortcuts (loaded from unified Ansible inventory) ###
+### SSH Shortcuts (loaded from personal_credentials/hosts.json) ###
 
-_hosts_file="${gitDir}dotfiles/inventory/hosts"
-if [[ -f "$_hosts_file" ]]; then
-    while IFS= read -r _line || [[ -n "$_line" ]]; do
-        [[ -z "$_line" || "$_line" == \#* || "$_line" == \[* ]] && continue
-        [[ "$_line" != *ssh_alias=* ]] && continue
-
-        _inv_host="${_line%% *}"
-
-        _alias="${_line#*ssh_alias=}";   _alias="${_alias%% *}"
-
-        if [[ "$_line" == *ssh_user=* ]]; then
-            _user="${_line#*ssh_user=}";  _user="${_user%% *}"
-        elif [[ "$_line" == *ansible_user=* ]]; then
-            _user="${_line#*ansible_user=}"; _user="${_user%% *}"
-        else
-            _user=""
-        fi
-
-        if [[ "$_line" == *ansible_host=* ]]; then
-            _host="${_line#*ansible_host=}"; _host="${_host%% *}"
-        else
-            _host="$_inv_host"
-        fi
-
-        _port=""
-        if [[ "$_line" == *ansible_port=* ]]; then
-            _port="${_line#*ansible_port=}"; _port="${_port%% *}"
-        fi
-
+_hosts_file="${gitDir}personal_credentials/hosts.json"
+if [[ -f "$_hosts_file" ]] && command -v python3 >/dev/null 2>&1; then
+    while IFS=$'\t' read -r _alias _user _host _port; do
+        [[ -z "$_alias" || -z "$_user" ]] && continue
         _ssh_cmd="ssh"
         [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
         _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
-
         alias "$_alias"="$_ssh_cmd"
-    done < "$_hosts_file"
+    done < <(python3 - "$_hosts_file" <<'PYEOF'
+import json
+import sys
+
+with open(sys.argv[1]) as f:
+    inventory = json.load(f)
+for host in inventory.get("hosts", []):
+    user = host.get("ssh_user") or host.get("user") or ""
+    target = host.get("hostname") or host.get("name", "")
+    port = host.get("port") or ""
+    for alias in host.get("aliases") or []:
+        print(f"{alias}\t{user}\t{target}\t{port}")
+PYEOF
+)
 fi
-unset _hosts_file _line _inv_host _alias _user _host _port _ssh_cmd
+unset _hosts_file _alias _user _host _port _ssh_cmd

@@ -28,7 +28,7 @@ layout must exist on the Mac and on the servers.
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
 | `personal_credentials` | `personal.env` (KEY="value" secrets) and `hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is local, so automation must never pull it (listed in `~/GitHub/.skiprepos`). |
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. |
-| `dotfiles` | Ansible INI inventory (`inventory/hosts`), `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`), `triggers/` crontab snapshots per host. |
+| `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`), `triggers/` crontab snapshots per host. |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
 | app repos | `load-log`, `Assistant`, `CrownCentral`, `duck_db_api`, `postgrest-auth`, `website`, `charlie-personal-website` — each built into containers by the Docker repo. |
 

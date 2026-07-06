@@ -425,30 +425,20 @@ function showwifi {
 }
 
 
-### SSH Shortcuts (loaded from unified Ansible inventory) ###
+### SSH Shortcuts (loaded from personal_credentials/hosts.json) ###
 
-$hostsFile = if ($gitDir) { Join-Path $gitDir 'dotfiles\inventory\hosts' } else { $null }
+$hostsFile = if ($gitDir) { Join-Path $gitDir 'personal_credentials\hosts.json' } else { $null }
 if ($hostsFile -and (Test-Path $hostsFile)) {
-    Get-Content $hostsFile | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith('#') -and -not $line.StartsWith('[') -and $line -match 'ssh_alias=') {
-            $parts = $line -split '\s+'
-            $invHost = $parts[0]
-            $vars = @{}
-            foreach ($part in $parts[1..($parts.Length - 1)]) {
-                if ($part -match '^([\w]+)=(.+)$') {
-                    $vars[$matches[1]] = $matches[2]
-                }
-            }
+    $hostInventory = Get-Content $hostsFile -Raw | ConvertFrom-Json
+    foreach ($invHost in $hostInventory.hosts) {
+        $user = if ($invHost.PSObject.Properties['ssh_user']) { $invHost.ssh_user } elseif ($invHost.PSObject.Properties['user']) { $invHost.user } else { '' }
+        $hostTarget = if ($invHost.PSObject.Properties['hostname']) { $invHost.hostname } else { $invHost.name }
+        $port = if ($invHost.PSObject.Properties['port']) { $invHost.port } else { '' }
 
-            $alias = $vars['ssh_alias']
-            $user = if ($vars.ContainsKey('ssh_user')) { $vars['ssh_user'] } elseif ($vars.ContainsKey('ansible_user')) { $vars['ansible_user'] } else { '' }
-            $hostTarget = if ($vars.ContainsKey('ansible_host')) { $vars['ansible_host'] } else { $invHost }
-            $port = if ($vars.ContainsKey('ansible_port')) { $vars['ansible_port'] } else { '' }
+        $sshArgs = "$user@$hostTarget"
+        if ($port) { $sshArgs = "-p $port $sshArgs" }
 
-            $sshArgs = "$user@$hostTarget"
-            if ($port) { $sshArgs = "-p $port $sshArgs" }
-
+        foreach ($alias in @($invHost.aliases)) {
             if ($alias -and $user) {
                 Set-Item -Path "function:global:$alias" -Value ([scriptblock]::Create("ssh $sshArgs")) -Force
             }

@@ -21,7 +21,6 @@ scripts under `src/` and `scripts/`.
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
-| `ansible_playbooks/` + `inventory/` | Ansible for provisioning machines. |
 | `go_apps/` | Small Go tools (`git_puller`, client/server, syncthing cleanup). Prebuilt binaries are committed. |
 | `docs/` | Setup/how-to docs (one per topic). Surfaced via mkdocs. |
 | `tests/` | pytest suite (`tests/test_utils/`). |

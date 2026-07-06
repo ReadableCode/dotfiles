@@ -27,7 +27,7 @@ system = platform.system()
 
 REPO_ROOT = parent_dir
 MANIFEST_PATH = os.path.join(REPO_ROOT, "deploy_manifest.yaml")
-INVENTORY_PATH = os.path.join(REPO_ROOT, "inventory", "hosts")
+INVENTORY_PATH = os.path.join(grandparent_dir, "personal_credentials", "hosts.json")
 BACKUP_ROOT = os.path.join(REPO_ROOT, "data", "config_backups")
 
 PLATFORM_KEYS = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}
@@ -256,10 +256,11 @@ def load_manifest(manifest_path=None, inventory_path=None):
     """
     Load and validate deploy_manifest.yaml, returning a list of entry dicts.
 
-    Every name in an entry's optional hosts filter must exist in the Ansible
-    inventory (inventory/hosts) - the single source of truth for machine
-    names - so a typo or invented hostname fails loudly instead of silently
-    deploying to (or skipping) the wrong machines.
+    Every name in an entry's optional hosts filter must exist in the host
+    inventory (personal_credentials/hosts.json) - the single source of truth
+    for machine names - so a typo or invented hostname fails loudly instead of
+    silently deploying to (or skipping) the wrong machines. Machines without
+    the personal_credentials repo skip the check.
     """
     manifest_path = manifest_path or MANIFEST_PATH
     with open(manifest_path, "r", encoding="utf-8") as file_handle:

@@ -33,7 +33,7 @@
   ```
   
   * (might say already started, thats OK)
-* get rsa.pub from ansible server using this command executed client machine:
+* get rsa.pub from the controlling machine using this command executed on it:
 
   ```bash
   cat ~/.ssh/id_rsa.pub

@@ -19,7 +19,8 @@
 #       windows: ~/path           # repo checkout (e.g. ~/GitHub)
 #     hosts: [ENVY, ELITEDESK]    # optional: limit to specific hostnames (uppercase,
 #                                 # matched against the short hostname). Every name
-#                                 # must exist in inventory/hosts - validated at load.
+#                                 # must exist in personal_credentials/hosts.json -
+#                                 # validated at load (skipped if that repo is absent).
 #     method: symlink | none      # default symlink. "none" = inventory-only entry:
 #                                 # the app is configured without links (see note).
 #                                 # There is no copy method - copies silently drift.
@@ -129,7 +130,7 @@
     windows: ~/.claude/settings.json
   hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
   note: >-
-    Personal machines only, named exactly as in inventory/hosts (validated at
+    Personal machines only, named exactly as in personal_credentials/hosts.json (validated at
     load). ~/.claude/settings.json is the correct location on Windows too
     (%USERPROFILE%\.claude\settings.json). Work-context hosts (HELLOFRESHJASON,
     FFLAP-2229, HELLOFRESHWINDOWS, FF-TN-ENGINEER-01) are deliberately

@@ -81,7 +81,10 @@ def test_load_manifest_rejects_copy_method(tmp_path):
 
 
 def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
-    inventory_path = write_file(str(tmp_path / "hosts"), "[macs]\nEnvy ansible_user=jason\n")
+    inventory_path = write_file(
+        str(tmp_path / "hosts.json"),
+        '{"hosts": [{"name": "Envy", "user": "jason"}]}\n',
+    )
     manifest_path = write_manifest(
         tmp_path,
         [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "NOSUCHBOX"]}],
@@ -90,16 +93,19 @@ def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
         deploy_configs.load_manifest(manifest_path, inventory_path=inventory_path)
 
 
-def test_load_inventory_hostnames_parses_hosts_and_skips_vars():
-    hostnames = load_inventory_hostnames(deploy_configs.INVENTORY_PATH)
-    assert {"ENVY", "ELITEDESK", "HELLOFRESHJASON", "FFLAP-2229"} <= hostnames
-    # values from [group:vars] sections and key=value tokens must not leak in
-    assert not any("=" in hostname for hostname in hostnames)
-    assert "ANSIBLE_USER" not in hostnames
+def test_load_inventory_hostnames_uppercases_short_names(tmp_path):
+    inventory_path = write_file(
+        str(tmp_path / "hosts.json"),
+        '{"hosts": [{"name": "Envy"}, {"name": "envy.asusrouter"}, {"name": "FFLAP-2229"}]}\n',
+    )
+    hostnames = load_inventory_hostnames(inventory_path)
+    assert hostnames == {"ENVY", "FFLAP-2229"}
 
 
 def test_real_manifest_hosts_all_exist_in_inventory():
-    # host targeting must use inventory/hosts names - load_manifest enforces it
+    # host targeting must use hosts.json names - load_manifest enforces it
+    if not os.path.exists(deploy_configs.INVENTORY_PATH):
+        pytest.skip("personal_credentials/hosts.json not present on this machine")
     entries = deploy_configs.load_manifest()
     known_hosts = load_inventory_hostnames(deploy_configs.INVENTORY_PATH)
     for entry in entries:
