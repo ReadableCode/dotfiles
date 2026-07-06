@@ -18,12 +18,15 @@ resolve to whatever content git last wrote there.
 
 Rules of thumb:
 
-- **Never hard link a git-tracked file.**
 - Prefer a **symlink** (on Windows: works without admin once Developer Mode
   is enabled — Settings → System → For developers).
-- If symlinks are unavailable, use a **copy** and verify it with
-  `uv run python src/deploy_configs.py --status`, which hash-compares copies
-  against the repo and reports `DIVERGED` when they drift.
+- If symlinks are denied (locked-down machine), `src/deploy_configs.py` falls
+  back to a **hard link** automatically. Because of the inode problem above,
+  run `uv run python src/deploy_configs.py status` (or a re-deploy) after
+  `git pull` on those machines — an orphaned hard link shows up as
+  `NOT_A_LINK` and deploy re-links it.
+- **Never copy** a config into place — a copy has no tie to the repo at all
+  and silently drifts with nothing to catch it.
 - Better still, use config-path indirection when the app supports it, so no
   link is needed at all (nvim via `XDG_CONFIG_HOME` set in
   `application_configs/powershell/powershell_aliases.ps1`, git via
@@ -72,8 +75,8 @@ link you are creating, `-Target` is the file that already exists.
 
 ```powershell
 New-Item -ItemType SymbolicLink `
-  -Path "C:\Users\jason\GitHub\yoga.code-workspace" `
-  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\workspace.yoga.code-workspace"
+  -Path "C:\Users\jason\GitHub\yoga7i.code-workspace" `
+  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\workspace.yoga7i.code-workspace"
 ```
 
 ```powershell
@@ -92,22 +95,21 @@ cmd /c mklink "C:\Users\jason\GitHub\ultrapocket.code-workspace" "C:\Users\jason
 `uv run python src/deploy_configs.py` now creates via the `vscode_workspace`
 manifest entry — the commands remain here only as one-off reference.)
 
-### If symlinks are not available
+### If symlinks are not available (hard-link fallback)
 
-On locked-down machines without Developer Mode or admin rights, **copy** the
-file instead of hard linking it, and let the drift check catch divergence:
+On locked-down machines without Developer Mode or admin rights,
+`src/deploy_configs.py` falls back to a **hard link** — creating one needs no
+special rights on the same NTFS volume. Never a copy: a copy has no tie to
+the repo at all. The one-off manual equivalent:
 
 ```powershell
-Copy-Item "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\workspace.fourteen_foods.code-workspace" `
-  -Destination "C:\Users\jason.christiansen\GitHub\fourteen_foods.code-workspace"
+New-Item -ItemType HardLink `
+  -Path "C:\Users\jason.christiansen\GitHub\fourteenfoodslaptop.code-workspace" `
+  -Target "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\workspace.fourteenfoodslaptop.code-workspace"
 ```
 
-```bash
-uv run python src/deploy_configs.py --status   # reports DIVERGED when a copy goes stale
-```
-
-### Hard linking on Windows (avoid for repo files)
-
-`New-Item -ItemType HardLink` still exists, but per the section above it must
-not be used for git-tracked files — the link silently detaches from the repo
-copy on the next `git pull`.
+The trade-off (see the inode section above): `git pull` orphans hard links
+when it rewrites a file. That drift is not silent here —
+`uv run python src/deploy_configs.py status` compares inodes and reports an
+orphaned hard link as `NOT_A_LINK`, and a re-deploy re-links it. On these
+machines, run `status` or deploy after pulling.

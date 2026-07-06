@@ -1,9 +1,9 @@
 # Deploy manifest — single source of truth for which repo configs are deployed
 # where on each machine. Consumed by `src/deploy_configs.py`:
 #
-#   uv run python src/deploy_configs.py --dry-run   # show planned actions
 #   uv run python src/deploy_configs.py             # deploy for this machine
-#   uv run python src/deploy_configs.py --status    # drift report (cron-able)
+#   uv run python src/deploy_configs.py status      # read-only drift report +
+#                                                   # planned actions (cron-able)
 #
 # Entry schema:
 #   - name: unique identifier
@@ -18,9 +18,11 @@
 #       linux: ~/path             # {repo_parent} to the directory containing this
 #       windows: ~/path           # repo checkout (e.g. ~/GitHub)
 #     hosts: [ENVY, ELITEDESK]    # optional: limit to specific hostnames (uppercase,
-#                                 # matched against the short hostname)
-#     method: symlink | copy | none   # default symlink. "none" = inventory-only entry:
-#                                     # the app is configured without links (see note)
+#                                 # matched against the short hostname). Every name
+#                                 # must exist in inventory/hosts - validated at load.
+#     method: symlink | none      # default symlink. "none" = inventory-only entry:
+#                                 # the app is configured without links (see note).
+#                                 # There is no copy method - copies silently drift.
 #     note: free text caveat
 #
 # Entries with `method: none` document apps that intentionally do NOT use links,
@@ -124,11 +126,13 @@
   dest:
     darwin: ~/.claude/settings.json
     linux: ~/.claude/settings.json
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, RYZEN, ULTRAPOCKET, YOGA]
+  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5]
   note: >-
-    Personal machines only. Work-context hosts (HELLOFRESHJASON,
-    FOURTEENFOODSLAPTOP, ...) are deliberately excluded so this entry never
-    overwrites a by-hand context-variant link - see claude_settings_hf.
+    Personal darwin/linux machines only, named exactly as in inventory/hosts
+    (validated at load). Work-context hosts (HELLOFRESHJASON,
+    FOURTEENFOODSLAPTOP, HELLOFRESHWINDOWS, FF-TN-ENGINEER-01) are deliberately
+    excluded so this entry never overwrites a by-hand context-variant link -
+    see claude_settings_hf.
 
 - name: claude_settings_hf
   repo: application_configs/claude/settings.hf.json

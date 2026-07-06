@@ -14,6 +14,7 @@ import yaml
 from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from utils.host_tools import get_uppercase_hostname
+from utils.inventory_tools import load_inventory_hostnames
 
 # %%
 # Variables #
@@ -26,6 +27,7 @@ system = platform.system()
 
 REPO_ROOT = parent_dir
 MANIFEST_PATH = os.path.join(REPO_ROOT, "deploy_manifest.yaml")
+INVENTORY_PATH = os.path.join(REPO_ROOT, "inventory", "hosts")
 BACKUP_ROOT = os.path.join(REPO_ROOT, "data", "config_backups")
 
 PLATFORM_KEYS = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}
@@ -36,8 +38,62 @@ PLATFORM_FILE_TOKENS = {"darwin": ("darwin", "mac"), "linux": ("linux",), "windo
 
 # Statuses that mean "this entry needs no attention"
 HEALTHY_STATUSES = {"OK"}
-# Rows that are informational only and never affect the exit code
-INFO_ACTIONS = {"none", "skip_host", "skip_platform", "skip_variant"}
+
+# %%
+# Output formatting #
+
+_COLOR_CODES = {
+    "green": "32",
+    "red": "31",
+    "yellow": "33",
+    "cyan": "36",
+    "bold": "1",
+    "dim": "2",
+}
+
+STATUS_COLORS = {
+    "OK": "green",
+    "NOT_DEPLOYED": "yellow",
+    "BROKEN_LINK": "red",
+    "WRONG_TARGET": "red",
+    "NOT_A_LINK": "red",
+    "REPO_MISSING": "red",
+    "NONE": "dim",
+    "SKIP_HOST": "dim",
+    "SKIP_PLATFORM": "dim",
+    "SKIP_VARIANT": "dim",
+}
+
+
+def use_color():
+    """Color when writing to a real terminal and NO_COLOR is not set."""
+    return sys.stdout.isatty() and "NO_COLOR" not in os.environ
+
+
+def paint(text, color):
+    if not use_color() or color not in _COLOR_CODES:
+        return text
+    return f"\033[{_COLOR_CODES[color]}m{text}\033[0m"
+
+
+def status_line(status, name, text, name_width=22):
+    """One aligned report row: colored STATUS column, entry name, free text."""
+    label = paint(f"{status:<14}", STATUS_COLORS.get(status))
+    return f"{label}{name:<{name_width}}  {text}".rstrip()
+
+
+def _info_detail(row, platform_key):
+    """Explanation text for rows that are skipped by design."""
+    if row["action"] == "none":
+        note = " ".join(row["note"].split())
+        if len(note) > 90:
+            note = note[:90].rstrip() + "... (see manifest note)"
+        return f"no link by design{': ' + note if note else ''}"
+    if row["action"] == "skip_host":
+        return "not for this host"
+    if row["action"] == "skip_variant":
+        return f"no {os.path.basename(row['repo'])} variant for this host"
+    return f"no dest for {platform_key}"
 
 
 # %%
@@ -58,38 +114,47 @@ def _file_hash(path):
     return hasher.hexdigest()
 
 
-def create_link(repo_path, system_path, method="symlink"):
+def create_link(repo_path, system_path):
     """
-    Create a symlink (or copy) at system_path pointing back at repo_path.
+    Create a symlink at system_path pointing back at repo_path.
 
-    On Windows, os.symlink works without admin when Developer Mode is enabled; if it
-    is denied we fall back to a copy - never a hard link, because git replaces files
-    with new inodes on checkout/pull, which silently orphans hard links.
+    On Windows, symlinks need admin rights (or Developer Mode); when denied,
+    fall back to a HARD link - never a copy (copies have no tie to the repo at
+    all and silently drift). The hard-link caveat: git replaces file inodes on
+    checkout/pull, orphaning the link; status catches that (the inode no longer
+    matches -> NOT_A_LINK) and a re-deploy re-links it.
     """
     parent = os.path.dirname(system_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    if method == "copy":
-        shutil.copy2(repo_path, system_path)
-        return "copied"
     try:
         os.symlink(repo_path, system_path)
         return "symlinked"
     except OSError:
         if system == "Windows":
-            print(f"Symlink not permitted for {system_path}, falling back to copy (enable Developer Mode for links)")
-            shutil.copy2(repo_path, system_path)
-            return "copied"
+            os.link(repo_path, system_path)
+            print("  symlink denied - created a hard link instead; after git pull, "
+                  "run status/deploy to catch and fix orphaned hard links")
+            return "hardlinked"
         raise
 
 
-def is_deployed(repo_path, system_path, method="symlink"):
-    """True when system_path is already a correct deployment of repo_path."""
+def is_hard_link_to(repo_path, system_path):
+    """True when system_path is a regular file sharing repo_path's inode (a hard link)."""
+    if os.path.islink(system_path) or not (os.path.isfile(system_path) and os.path.isfile(repo_path)):
+        return False
+    try:
+        return os.path.samefile(system_path, repo_path)
+    except OSError:
+        return False
+
+
+def is_deployed(repo_path, system_path):
+    """True when system_path is already a correct symlink (or existing hard link) to repo_path."""
     if os.path.islink(system_path):
         return os.path.exists(system_path) and os.path.realpath(system_path) == os.path.realpath(repo_path)
-    if method == "copy" and os.path.isfile(system_path) and os.path.isfile(repo_path):
-        return _file_hash(system_path) == _file_hash(repo_path)
-    return False
+    # an existing correct hard link is left alone - do not churn it
+    return is_hard_link_to(repo_path, system_path)
 
 
 def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None):
@@ -120,74 +185,66 @@ def deploy_config(
     system_path,
     ingest_system_if_exists=False,
     backup_into_repo=True,
-    method="symlink",
     backup_root=None,
     repo_root=None,
 ):
     """
-    Keep the real file in the repo and place a symlink (or, as a Windows fallback,
-    a copy) at system_path. Optionally ingest an existing system file into the repo
-    and back up the existing system file before replacing it.
+    Keep the real file in the repo and place a symlink at system_path.
+    Optionally ingest an existing system file into the repo and back up the
+    existing system file before replacing it.
 
-    Idempotent: a destination that is already a correct link (or matching copy)
-    is a no-op.
+    Idempotent: a destination that is already a correct symlink - or an
+    existing hard link sharing the repo file's inode - is a no-op.
     """
     repo_path = os.path.abspath(os.path.expanduser(repo_path))
     system_path = os.path.abspath(os.path.expanduser(system_path))
 
-    if is_deployed(repo_path, system_path, method=method):
-        print(f"Already deployed: {system_path} -> {repo_path} (no action)")
+    if is_deployed(repo_path, system_path):
+        print(f"  already deployed: {system_path}")
         return "noop"
 
     # A wrong-target or dangling link at the destination is just a pointer - drop it
     if os.path.islink(system_path):
         os.remove(system_path)
-        print(f"Removed stale link at {system_path}")
+        print(f"  removed stale link at {system_path}")
 
     repo_exists = os.path.exists(repo_path)
     system_exists = os.path.exists(system_path)
 
     if repo_exists and not system_exists:
-        action = create_link(repo_path, system_path, method=method)
-        print(f"Case 1: {action} {system_path} -> {repo_path}")
+        action = create_link(repo_path, system_path)
+        print(f"  {action} {system_path} -> {repo_path}")
         return action
     if not repo_exists and system_exists:
-        return _ingest_system_file(repo_path, system_path, ingest_system_if_exists, method)
+        return _ingest_system_file(repo_path, system_path, ingest_system_if_exists)
     if repo_exists and system_exists:
-        return _replace_system_file(repo_path, system_path, backup_into_repo, method, backup_root, repo_root)
-    print("Case 4: Neither repo nor system file exists. No action taken.")
+        return _replace_system_file(repo_path, system_path, backup_into_repo, backup_root, repo_root)
+    print(f"  nothing to deploy: neither {repo_path} nor {system_path} exists")
     return "missing"
 
 
-def _ingest_system_file(repo_path, system_path, ingest_system_if_exists, method):
-    print("Case 2: Repo file does not exist, system file exists")
+def _ingest_system_file(repo_path, system_path, ingest_system_if_exists):
     if not ingest_system_if_exists:
-        print(f"Skipping ingestion of existing system file {system_path} into repo")
+        print(f"  repo file missing; skipping ingestion of existing system file {system_path}")
         return "skipped"
     os.makedirs(os.path.dirname(repo_path), exist_ok=True)
     shutil.move(system_path, repo_path)
-    print(f"Moved {system_path} into repo at {repo_path}")
-    action = create_link(repo_path, system_path, method=method)
-    print(f"{action} {system_path} -> {repo_path}")
+    print(f"  moved {system_path} into repo at {repo_path}")
+    action = create_link(repo_path, system_path)
+    print(f"  {action} {system_path} -> {repo_path}")
     return "ingested"
 
 
-def _replace_system_file(repo_path, system_path, backup_into_repo, method, backup_root, repo_root):
-    print("Case 3: Both repo and system file exist")
+def _replace_system_file(repo_path, system_path, backup_into_repo, backup_root, repo_root):
     if not backup_into_repo:
-        print(f"Skipping backup of existing system file {system_path}. No changes made.")
+        print(f"  both versions exist; skipping backup of {system_path} - no changes made")
         return "skipped"
     backup_path = backup_system_file(system_path, repo_path, backup_root=backup_root, repo_root=repo_root)
-    print(f"Backed up {system_path} to {backup_path}")
-    if method == "copy":
-        # With copies the repo is the source of truth - refresh the destination
-        shutil.copy2(repo_path, system_path)
-        print(f"Copied {repo_path} over {system_path}")
-        return "copied"
+    print(f"  backed up {system_path} to {backup_path}")
     shutil.move(system_path, repo_path)
-    print(f"Moved {system_path} into repo at {repo_path} (system version kept; git diff shows what changed)")
-    action = create_link(repo_path, system_path, method=method)
-    print(f"{action} {system_path} -> {repo_path}")
+    print(f"  moved system version into repo at {repo_path} (git diff shows what changed)")
+    action = create_link(repo_path, system_path)
+    print(f"  {action} {system_path} -> {repo_path}")
     return "ingested"
 
 
@@ -195,8 +252,15 @@ def _replace_system_file(repo_path, system_path, backup_into_repo, method, backu
 # Manifest #
 
 
-def load_manifest(manifest_path=None):
-    """Load and validate deploy_manifest.yaml, returning a list of entry dicts."""
+def load_manifest(manifest_path=None, inventory_path=None):
+    """
+    Load and validate deploy_manifest.yaml, returning a list of entry dicts.
+
+    Every name in an entry's optional hosts filter must exist in the Ansible
+    inventory (inventory/hosts) - the single source of truth for machine
+    names - so a typo or invented hostname fails loudly instead of silently
+    deploying to (or skipping) the wrong machines.
+    """
     manifest_path = manifest_path or MANIFEST_PATH
     with open(manifest_path, "r", encoding="utf-8") as file_handle:
         entries = yaml.safe_load(file_handle) or []
@@ -206,9 +270,29 @@ def load_manifest(manifest_path=None):
         if not isinstance(entry, dict) or "name" not in entry or "repo" not in entry:
             raise ValueError(f"Manifest entry must be a mapping with 'name' and 'repo' keys: {entry}")
         method = entry.get("method", "symlink")
-        if method not in ("symlink", "copy", "none"):
+        if method not in ("symlink", "none"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
+    validate_manifest_hosts(entries, inventory_path)
     return entries
+
+
+def validate_manifest_hosts(entries, inventory_path=None):
+    """Raise if any manifest hosts entry names a machine missing from the inventory."""
+    inventory_path = inventory_path or INVENTORY_PATH
+    if not os.path.exists(inventory_path):
+        return
+    known_hosts = load_inventory_hostnames(inventory_path)
+    unknown = [
+        f"{entry['name']}: {host}"
+        for entry in entries
+        for host in entry.get("hosts") or []
+        if str(host).split(".")[0].upper() not in known_hosts
+    ]
+    if unknown:
+        raise ValueError(
+            f"Manifest hosts not found in inventory {inventory_path} "
+            f"(fix the manifest name or add the machine to the inventory): {', '.join(unknown)}"
+        )
 
 
 def short_host_token(hostname):
@@ -315,7 +399,7 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
 # Status #
 
 
-def classify_entry(repo_path, system_path, method="symlink"):
+def classify_entry(repo_path, system_path):
     """Classify the deployment health of one destination. Returns (status, detail)."""
     if not os.path.exists(repo_path):
         return "REPO_MISSING", f"repo file {repo_path} does not exist"
@@ -329,86 +413,79 @@ def classify_entry(repo_path, system_path, method="symlink"):
         return "WRONG_TARGET", f"link resolves to {os.path.realpath(system_path)}"
     if os.path.isdir(system_path):
         return "NOT_A_LINK", "destination is a directory, expected a file link"
-    if method == "copy":
-        if _file_hash(system_path) == _file_hash(repo_path):
-            return "OK", "copy content matches repo file"
-        return "DIVERGED", "copy content differs from repo file"
+    if is_hard_link_to(repo_path, system_path):
+        return "OK", "hard link shares the repo file's inode"
     if _file_hash(system_path) == _file_hash(repo_path):
-        return "NOT_A_LINK", "regular file; content matches repo (candidate for ingest)"
-    return "NOT_A_LINK", "regular file; content diverges from repo"
+        return "NOT_A_LINK", "regular file; content matches repo (orphaned hard link or ingest candidate)"
+    return "NOT_A_LINK", "regular file; content diverges from repo (orphaned hard link after git pull?)"
 
 
-def planned_action(status, method):
+def planned_action(status):
     """Human description of what deploy would do for a given status."""
     descriptions = {
-        "OK": "no action (already deployed)",
-        "NOT_DEPLOYED": f"would create {method} at destination",
-        "BROKEN_LINK": f"would remove stale link and create {method}",
-        "WRONG_TARGET": f"would remove stale link and create {method}",
-        "NOT_A_LINK": "would back up system file to data/config_backups, ingest it into the repo, then link",
-        "DIVERGED": "would back up system file to data/config_backups and re-copy the repo version",
+        "OK": "no action needed",
+        "NOT_DEPLOYED": "deploy would create symlink at destination",
+        "BROKEN_LINK": "deploy would remove the stale link and create symlink",
+        "WRONG_TARGET": "deploy would remove the stale link and create symlink",
+        "NOT_A_LINK": "deploy would back up the system file to data/config_backups, ingest it into the repo, then link",
         "REPO_MISSING": "nothing to deploy (repo file missing)",
     }
     return descriptions.get(status, "unknown")
 
 
-def _print_info_row(row, platform_key):
-    if row["action"] == "none":
-        print(f"NONE          {row['name']:<22} no link by design. {row['note']}")
-    elif row["action"] == "skip_host":
-        print(f"SKIP_HOST     {row['name']:<22} not for this host")
-    elif row["action"] == "skip_variant":
-        print(f"SKIP_VARIANT  {row['name']:<22} no {os.path.basename(row['repo'])} variant for this host")
-    else:
-        print(f"SKIP_PLATFORM {row['name']:<22} no dest for {platform_key}")
-
-
-def run_dry_run(plan, platform_key):
-    """Print the planned action for every manifest entry without touching anything."""
+def run_status(plan, platform_key):
+    """
+    Combined health report + dry run: one row per manifest entry showing its
+    current state and, when unhealthy, what deploy would do about it. Read-only;
+    exits non-zero when anything needs attention (cron-able drift check).
+    """
+    name_width = max([len(row["name"]) for row in plan] + [4])
+    status_counts: dict = {}
     for row in plan:
         if row["action"] != "apply":
-            _print_info_row(row, platform_key)
+            print(status_line(row["action"].upper(), row["name"], _info_detail(row, platform_key), name_width))
             continue
-        status, detail = classify_entry(row["repo"], row["dest"], method=row["method"])
-        print(f"{status:<13} {row['name']:<22} {row['dest']}: {planned_action(status, row['method'])} ({detail})")
-    print("Dry run complete. No changes made.")
-    return 0
+        status, detail = classify_entry(row["repo"], row["dest"])
+        status_counts[status] = status_counts.get(status, 0) + 1
+        print(status_line(status, row["name"], row["dest"], name_width))
+        if status not in HEALTHY_STATUSES:
+            follow_up = f"{'':<14}{'':<{name_width}}  -> {detail}; {planned_action(status)}"
+            print(paint(follow_up, "dim"))
+    unhealthy = sum(count for status, count in status_counts.items() if status not in HEALTHY_STATUSES)
+    summary = ", ".join(f"{count} {status.lower()}" for status, count in sorted(status_counts.items()))
+    print()
+    if not summary:
+        print("no applicable entries")
+    elif unhealthy:
+        print(paint(f"drift detected: {summary} - run deploy to fix", "red"))
+    else:
+        print(paint(f"all healthy: {summary}", "green"))
+    return 1 if unhealthy else 0
 
 
 def run_deploy(plan, platform_key):
     """Deploy every applicable manifest entry; correct deployments are no-ops."""
     counts = {"changed": 0, "noop": 0, "skipped": 0}
+    name_width = max([len(row["name"]) for row in plan] + [4])
     for row in plan:
         if row["action"] != "apply":
-            _print_info_row(row, platform_key)
+            print(status_line(row["action"].upper(), row["name"], _info_detail(row, platform_key), name_width))
             continue
-        print(f"--- {row['name']} ---")
-        result = deploy_config(row["repo"], row["dest"], method=row["method"])
+        print(paint(row["name"], "bold"))
+        result = deploy_config(row["repo"], row["dest"])
         if result == "noop":
             counts["noop"] += 1
         elif result in ("skipped", "missing"):
             counts["skipped"] += 1
         else:
             counts["changed"] += 1
-    print(f"Deploy complete: {counts['changed']} changed, {counts['noop']} already deployed, "
-          f"{counts['skipped']} skipped")
+    print()
+    print(paint(
+        f"Deploy complete: {counts['changed']} changed, {counts['noop']} already deployed, "
+        f"{counts['skipped']} skipped",
+        "green",
+    ))
     return 0
-
-
-def run_status(plan, platform_key):
-    """Print a health report for every applicable entry; non-zero exit on any drift."""
-    status_counts: dict = {}
-    for row in plan:
-        if row["action"] != "apply":
-            _print_info_row(row, platform_key)
-            continue
-        status, detail = classify_entry(row["repo"], row["dest"], method=row["method"])
-        status_counts[status] = status_counts.get(status, 0) + 1
-        print(f"{status:<13} {row['name']:<22} {row['dest']} ({detail})")
-    summary = ", ".join(f"{count} {status.lower()}" for status, count in sorted(status_counts.items()))
-    print(summary if summary else "no applicable entries")
-    unhealthy = sum(count for status, count in status_counts.items() if status not in HEALTHY_STATUSES)
-    return 1 if unhealthy else 0
 
 
 # %%
@@ -424,10 +501,11 @@ def parse_args(argv=None):
         nargs="?",
         choices=["deploy", "status"],
         default="deploy",
-        help="deploy (default) creates the links; status reports drift without changing anything",
+        help="deploy (default) creates the links; status is a read-only combined "
+        "drift report + dry run (non-zero exit on drift)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="print planned actions without touching the filesystem")
-    parser.add_argument("--status", action="store_true", help="same as the status command; non-zero exit on drift")
+    parser.add_argument("--status", action="store_true", help="same as the status command")
+    parser.add_argument("--dry-run", action="store_true", help="deprecated alias for the status command")
     parser.add_argument("--manifest", default=None, help="path to an alternate manifest file (for testing)")
     return parser.parse_args(argv)
 
@@ -438,11 +516,10 @@ def main(argv=None):
     platform_key = get_platform_key()
     hostname = get_uppercase_hostname()
     print(f"platform: {platform_key}, hostname: {hostname}")
+    print()
     plan = build_plan(entries, platform_key, hostname)
-    if args.status or args.command == "status":
+    if args.status or args.dry_run or args.command == "status":
         return run_status(plan, platform_key)
-    if args.dry_run:
-        return run_dry_run(plan, platform_key)
     return run_deploy(plan, platform_key)
 
 

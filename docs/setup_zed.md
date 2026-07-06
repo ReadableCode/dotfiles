@@ -29,7 +29,7 @@ Zed's settings link is manifest-driven (entry `zed_settings` in
 
 ```bash
 cd ~/GitHub/dotfiles
-uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py status      # preview / drift report
 uv run python src/deploy_configs.py             # deploy
 ```
 

@@ -7,6 +7,7 @@ import config_test_utils  # noqa F401
 import pytest
 import yaml
 from src import deploy_configs
+from utils.inventory_tools import load_inventory_hostnames
 
 # %%
 # Helpers #
@@ -70,6 +71,40 @@ def test_load_manifest_rejects_bad_method(tmp_path):
     manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "method": "hardlink"}])
     with pytest.raises(ValueError):
         deploy_configs.load_manifest(manifest_path)
+
+
+def test_load_manifest_rejects_copy_method(tmp_path):
+    # copies silently drift - there is deliberately no copy method
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "method": "copy"}])
+    with pytest.raises(ValueError):
+        deploy_configs.load_manifest(manifest_path)
+
+
+def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
+    inventory_path = write_file(str(tmp_path / "hosts"), "[macs]\nEnvy ansible_user=jason\n")
+    manifest_path = write_manifest(
+        tmp_path,
+        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "NOSUCHBOX"]}],
+    )
+    with pytest.raises(ValueError, match="NOSUCHBOX"):
+        deploy_configs.load_manifest(manifest_path, inventory_path=inventory_path)
+
+
+def test_load_inventory_hostnames_parses_hosts_and_skips_vars():
+    hostnames = load_inventory_hostnames(deploy_configs.INVENTORY_PATH)
+    assert {"ENVY", "ELITEDESK", "HELLOFRESHJASON", "FOURTEENFOODSLAPTOP"} <= hostnames
+    # values from [group:vars] sections and key=value tokens must not leak in
+    assert not any("=" in hostname for hostname in hostnames)
+    assert "ANSIBLE_USER" not in hostnames
+
+
+def test_real_manifest_hosts_all_exist_in_inventory():
+    # host targeting must use inventory/hosts names - load_manifest enforces it
+    entries = deploy_configs.load_manifest()
+    known_hosts = load_inventory_hostnames(deploy_configs.INVENTORY_PATH)
+    for entry in entries:
+        for host in entry.get("hosts") or []:
+            assert str(host).upper() in known_hosts, f"{entry['name']} targets unknown host {host}"
 
 
 def test_real_manifest_is_valid_and_repo_paths_exist():
@@ -245,7 +280,7 @@ def test_deploy_is_idempotent_second_run_is_noop(tmp_path):
     assert os.path.islink(dest)
 
 
-def test_windows_symlink_denied_falls_back_to_copy(tmp_path, monkeypatch):
+def test_windows_symlink_denied_falls_back_to_hard_link_never_copy(tmp_path, monkeypatch, capsys):
     repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
     dest = str(tmp_path / "sys" / "conf")
 
@@ -255,10 +290,42 @@ def test_windows_symlink_denied_falls_back_to_copy(tmp_path, monkeypatch):
     monkeypatch.setattr(deploy_configs, "system", "Windows")
     monkeypatch.setattr(deploy_configs.os, "symlink", deny_symlink)
     result = deploy_configs.deploy_config(repo_file, dest)
-    assert result == "copied"
+    assert result == "hardlinked"
     assert os.path.isfile(dest) and not os.path.islink(dest)
-    with open(dest, encoding="utf-8") as file_handle:
-        assert file_handle.read() == "repo content"
+    assert os.path.samefile(dest, repo_file)
+    assert "copied" not in capsys.readouterr().out.lower()
+
+
+def test_existing_correct_hard_link_is_left_alone(tmp_path):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "sys" / "conf")
+    os.makedirs(os.path.dirname(dest))
+    os.link(repo_file, dest)
+    assert deploy_configs.deploy_config(repo_file, dest) == "noop"
+    assert os.path.samefile(dest, repo_file)
+
+
+def test_classify_hard_link_is_ok_and_orphaned_hard_link_is_drift(tmp_path):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "sys" / "conf")
+    os.makedirs(os.path.dirname(dest))
+    os.link(repo_file, dest)
+    assert deploy_configs.classify_entry(repo_file, dest)[0] == "OK"
+    # simulate git pull replacing the repo file's inode - the hard link is now orphaned
+    os.remove(repo_file)
+    write_file(repo_file, "new repo content")
+    status, detail = deploy_configs.classify_entry(repo_file, dest)
+    assert status == "NOT_A_LINK" and "orphaned hard link" in detail
+
+
+def test_deploy_section_never_copies_a_config_into_place():
+    with open(deploy_configs.__file__.replace(".pyc", ".py"), encoding="utf-8") as file_handle:
+        source = file_handle.read()
+    # copies as a deployment mechanism are banned; shutil.copy2 is allowed only
+    # for backup_system_file (backups are copies by design), which lives outside
+    # the Deploy section
+    deploy_section = source.split("# Deploy #")[1].split("# Manifest #")[0]
+    assert "copy2" not in deploy_section
 
 
 def test_non_windows_symlink_failure_raises(tmp_path, monkeypatch):
@@ -273,12 +340,6 @@ def test_non_windows_symlink_failure_raises(tmp_path, monkeypatch):
     with pytest.raises(OSError):
         deploy_configs.deploy_config(repo_file, dest)
     assert not os.path.lexists(dest)
-
-
-def test_no_hard_links_in_source():
-    source_path = deploy_configs.__file__.replace(".pyc", ".py")
-    with open(source_path, encoding="utf-8") as file_handle:
-        assert "os.link(" not in file_handle.read()
 
 
 def test_case3_backup_goes_to_backup_root_not_repo_tree(tmp_path):
@@ -341,22 +402,6 @@ def test_broken_link_at_destination_is_replaced(tmp_path):
     assert os.path.realpath(dest) == os.path.realpath(repo_file)
 
 
-def test_copy_method_refreshes_diverged_copy(tmp_path):
-    repo_root = str(tmp_path / "repo")
-    backup_root = os.path.join(repo_root, "data", "config_backups")
-    repo_file = write_file(os.path.join(repo_root, "conf"), "repo version")
-    dest = write_file(str(tmp_path / "sys" / "conf"), "stale copy")
-    result = deploy_configs.deploy_config(
-        repo_file, dest, method="copy", backup_root=backup_root, repo_root=repo_root
-    )
-    assert result == "copied"
-    assert not os.path.islink(dest)
-    with open(dest, encoding="utf-8") as file_handle:
-        assert file_handle.read() == "repo version"
-    # matching copy is a no-op on the next run
-    assert deploy_configs.deploy_config(repo_file, dest, method="copy") == "noop"
-
-
 # %%
 # Status classification #
 
@@ -399,14 +444,6 @@ def test_classify_not_a_link_matching_and_diverging(tmp_path):
     assert status == "NOT_A_LINK" and "matches" in detail
     status, detail = deploy_configs.classify_entry(repo_file, dest_diff)
     assert status == "NOT_A_LINK" and "diverges" in detail
-
-
-def test_classify_copy_ok_and_diverged(tmp_path):
-    repo_file = write_file(str(tmp_path / "repo" / "conf"), "content")
-    dest_match = write_file(str(tmp_path / "sys" / "match"), "content")
-    dest_diff = write_file(str(tmp_path / "sys" / "diff"), "stale")
-    assert deploy_configs.classify_entry(repo_file, dest_match, method="copy")[0] == "OK"
-    assert deploy_configs.classify_entry(repo_file, dest_diff, method="copy")[0] == "DIVERGED"
 
 
 def test_classify_repo_missing(tmp_path):
@@ -460,16 +497,18 @@ def test_status_all_ok_exits_zero(tmp_path, fake_home, monkeypatch, capsys):
     assert "1 ok" in output
 
 
-def test_dry_run_plans_without_touching_filesystem(tmp_path, fake_home, monkeypatch, capsys):
+def test_status_shows_planned_action_without_touching_filesystem(tmp_path, fake_home, monkeypatch, capsys):
     manifest_path = _temp_manifest(tmp_path, monkeypatch)
     dest = os.path.join(str(fake_home), "config_dir", "conf")
 
-    exit_code = deploy_configs.main(["--dry-run", "--manifest", manifest_path])
-    output = capsys.readouterr().out
-    assert exit_code == 0
-    assert "NOT_DEPLOYED" in output
-    assert "would create symlink" in output
-    assert not os.path.lexists(dest)
+    # --dry-run is a deprecated alias for the status command; both are read-only
+    for argv in (["status", "--manifest", manifest_path], ["--dry-run", "--manifest", manifest_path]):
+        exit_code = deploy_configs.main(argv)
+        output = capsys.readouterr().out
+        assert exit_code == 1  # not deployed counts as drift
+        assert "NOT_DEPLOYED" in output
+        assert "would create symlink" in output
+        assert not os.path.lexists(dest)
 
 
 def test_deploy_then_second_run_reports_no_changes(tmp_path, fake_home, monkeypatch, capsys):

@@ -30,7 +30,7 @@ environment management. Python version is pinned in `.python-version`.
   needed):
 
   ```bash
-  uv run python src/deploy_configs.py --dry-run
+  uv run python src/deploy_configs.py status
   ```
 
 * To add or remove a dependency (updates `pyproject.toml` and `uv.lock`):

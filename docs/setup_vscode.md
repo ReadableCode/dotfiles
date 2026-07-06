@@ -45,7 +45,7 @@ Settings deployment is manifest-driven (entry `vscode_settings` in
 
 ```bash
 cd ~/GitHub/dotfiles
-uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py status      # preview / drift report
 uv run python src/deploy_configs.py             # deploy
 ```
 
@@ -57,7 +57,10 @@ Notes:
 - An existing live `settings.json` is backed up to `data/config_backups/` and
   its content ingested into the repo — check `git diff` afterwards.
 - On Windows, enable Developer Mode so the deploy can create real symlinks
-  without admin; otherwise it falls back to a copy that `--status` verifies.
+  without admin; otherwise the deploy falls back to a hard link (never a
+  copy). After `git pull` on such machines, run
+  `deploy_configs.py status` / re-deploy — it inode-checks hard links and
+  re-links any that git orphaned.
 
 ### Workspace files
 

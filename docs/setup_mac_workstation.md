@@ -165,7 +165,7 @@ Claude settings, ...) are driven by `deploy_manifest.yaml` — see
 
 ```bash
 cd ~/GitHub/dotfiles
-uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py status      # preview / drift report
 uv run python src/deploy_configs.py             # deploy
 ```
 

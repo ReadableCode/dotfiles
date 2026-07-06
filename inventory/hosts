@@ -31,6 +31,7 @@ ansible_user=jason
 
 [macs]
 MacBookPro12 ansible_user=jason ssh_alias=sshmac
+MacBookProM5 ansible_user=jason
 macmini14 ansible_user=jason ssh_alias=sshmac14
 Envy ansible_user=jason ssh_alias=sshenvy
 

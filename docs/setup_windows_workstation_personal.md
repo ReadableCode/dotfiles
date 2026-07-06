@@ -60,7 +60,7 @@ manifest-driven — see [deploy_configs.md](./deploy_configs.md):
 
 ```powershell
 cd ~\GitHub\dotfiles
-uv run python src/deploy_configs.py --dry-run   # preview
+uv run python src/deploy_configs.py status      # preview / drift report
 uv run python src/deploy_configs.py             # deploy
 ```
 
@@ -68,7 +68,9 @@ Notes:
 
 * Enable Developer Mode first (see "Set some windows settings" below) so real
   symlinks are created without admin. Without it the deploy falls back to
-  copies, which `--status` hash-verifies for drift.
+  **hard links** (never a copy). Hard links get orphaned when `git pull`
+  rewrites a file — run `deploy_configs.py status` (or re-deploy) after
+  pulling; it inode-checks them and re-links anything orphaned.
 * The AutoHotkey startup entries (`app_jumping.ahk`, `sheets.ahk` → the
   Startup folder) are manifest entries now; `scripts/create_sym_links_startup.ps1`
   is the legacy way to create them.

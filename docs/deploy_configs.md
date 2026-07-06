@@ -10,16 +10,19 @@ dry-runs, or health-checks) every config for the current machine — the per-app
 ```bash
 cd ~/GitHub/dotfiles
 
-# Show what would happen, touching nothing
-uv run python src/deploy_configs.py --dry-run
-
 # Deploy every applicable entry for this machine (idempotent - a second
 # run right after a first reports zero changes)
 uv run python src/deploy_configs.py
 
-# Drift report: exits non-zero if anything is wrong, so it can run from cron
-uv run python src/deploy_configs.py --status
+# Read-only report: current health of every entry PLUS what deploy would do
+# about anything unhealthy. Exits non-zero on drift, so it can run from cron.
+uv run python src/deploy_configs.py status
 ```
+
+There used to be separate `--dry-run` and `--status` modes; they showed the
+same classification, so they are collapsed into the single `status` command
+(`--status` and `--dry-run` still work as aliases). Output is an aligned,
+colored table when writing to a terminal (set `NO_COLOR` to disable colors).
 
 ## Manifest entry schema
 
@@ -31,9 +34,15 @@ uv run python src/deploy_configs.py --status
     linux: ~/.zshrc
     windows: ~/AppData/...                # only if the app is deployed on Windows
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
-  method: symlink | copy | none           # default symlink
+  method: symlink | none                  # default symlink
   note: free text caveat
 ```
+
+Every name in a `hosts:` filter must exist in the Ansible inventory
+([`inventory/hosts`](../inventory/hosts)) — the single source of truth for
+machine names. `load_manifest` fails loudly on an unknown name, so a typo or
+an invented hostname can't silently deploy to (or skip) the wrong machines.
+The unit tests also check the real manifest against the real inventory.
 
 Entries with `method: none` are inventory-only: they document apps that
 intentionally do **not** use links (e.g. nvim on Windows via
@@ -76,31 +85,36 @@ tags (e.g. `settings.hf.json`) are never auto-resolved.
   `data/config_backups/<repo-relative path>.<timestamp>` (gitignored), its
   content is moved into the repo (so `git diff` shows what changed), and the
   link is created.
-- **Windows**: `os.symlink` is tried first — it works without admin when
-  Developer Mode is enabled (Settings → System → For developers). If symlinks
-  are denied, the file is **copied** instead. Copies are hash-compared by
-  `--status`, so a stale copy shows up as `DIVERGED`. Hard links are never
-  used — see
-  [sym_linking_and_hard_linking.md](./sym_linking_and_hard_linking.md) for why
-  they silently break with git.
+- **Windows**: `os.symlink` works without admin when Developer Mode is
+  enabled (Settings → System → For developers). If symlinks are denied
+  (locked-down work machines), deploy falls back to a **hard link** — no
+  admin needed on the same NTFS volume. An existing correct hard link (same
+  inode as the repo file) counts as deployed and is left alone. A copy is
+  **never** used — a copy has no tie to the repo at all and silently drifts.
+  The hard-link caveat: `git pull` replaces file inodes, orphaning the link —
+  `status` catches that (inode no longer matches → `NOT_A_LINK`) and a
+  re-deploy re-links it, so run `status`/deploy after pulling on those
+  machines. See
+  [sym_linking_and_hard_linking.md](./sym_linking_and_hard_linking.md).
 
 ## Status classifications
 
 | Status | Meaning |
 |--------|---------|
-| `OK` | Link resolves to the repo file (or a `method: copy` hash matches). |
+| `OK` | Symlink resolves to the repo file, or a hard link shares its inode. |
 | `NOT_DEPLOYED` | Destination missing. |
 | `BROKEN_LINK` | Destination is a dangling symlink. |
 | `WRONG_TARGET` | Destination is a link resolving somewhere else. |
-| `NOT_A_LINK` | Regular file where a link was expected; the detail says whether its content matches the repo copy (ingest candidate) or diverges. |
-| `DIVERGED` | `method: copy` and the hashes differ (the Windows hard-link failure mode, now caught). |
+| `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file or an orphaned hard link (git replaced the inode on pull); the detail says whether its content matches the repo copy or diverges. Deploy backs it up, ingests, and re-links. |
 
-`--status` prints a one-line summary last (e.g. `1 not_a_link, 8 ok`) and
-exits `0` only when everything is `OK`.
+Unhealthy rows get a second dimmed line explaining what is wrong and what
+`deploy` would do about it. A one-line summary prints last (e.g.
+`drift detected: 1 not_a_link, 8 ok`) and the exit code is `0` only when
+everything is `OK`.
 
 ## Running it automatically
 
-`scripts/my_updater.sh` runs `--status` at the end of every manual update run,
+`scripts/my_updater.sh` runs `status` at the end of every manual update run,
 so drift surfaces whenever a machine is updated.
 
 To run it from cron (add via `crontab -e` on the machine — cron jobs are
@@ -109,7 +123,7 @@ how the homelab manages its entries):
 
 ```cron
 # Daily dotfiles drift check at 08:00; only emails/logs on failure output
-0 8 * * * cd ~/GitHub/dotfiles && uv run python src/deploy_configs.py --status >> ~/GitHub/dotfiles/logs/deploy_status.log 2>&1
+0 8 * * * cd ~/GitHub/dotfiles && uv run python src/deploy_configs.py status >> ~/GitHub/dotfiles/logs/deploy_status.log 2>&1
 ```
 
 ## Adding a new config
@@ -117,7 +131,7 @@ how the homelab manages its entries):
 1. Put the file under `application_configs/<app>/`.
 2. Add an entry to `deploy_manifest.yaml` with a `dest` for each platform it
    applies to.
-3. `uv run python src/deploy_configs.py --dry-run`, then deploy.
+3. `uv run python src/deploy_configs.py status`, then deploy.
 
 If the destination already has a live config file, deploy backs it up and
 ingests it into the repo automatically (see behavior above).
