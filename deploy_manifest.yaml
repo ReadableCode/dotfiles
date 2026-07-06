@@ -61,6 +61,10 @@
   dest:
     darwin: ~/.tmux.conf
     linux: ~/.tmux.conf
+    windows: ~/.tmux.conf
+  note: >-
+    On Windows tmux runs under MSYS2, whose HOME resolves to the Windows
+    profile, so ~/.tmux.conf is correct there too.
 
 # --- Editors ---
 

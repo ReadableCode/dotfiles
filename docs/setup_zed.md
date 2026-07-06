@@ -36,7 +36,7 @@ uv run python src/deploy_configs.py             # deploy
 Notes:
 
 - An existing live `~/.config/zed/settings.json` is backed up to
-  `data/config_backups/` and its content ingested into the repo automatically.
+  `data/config_backups/` and replaced by a link to the repo version.
 - Only `settings.json` is tracked today. If you start using `keymap.json` or
   `tasks.json`, move the file into `application_configs/zed/` and add a
   manifest entry for it.
