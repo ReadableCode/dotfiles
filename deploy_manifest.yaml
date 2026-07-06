@@ -136,12 +136,15 @@
 
 - name: claude_settings_hf
   repo: application_configs/claude/settings.hf.json
-  method: none
+  dest:
+    linux: ~/.claude/settings.json
+  hosts: [HELLOFRESHJASON]
   note: >-
-    Work-context variants settings.hf.json / settings.hf_bedrock.json (hf =
-    HelloFresh). Context tags are never auto-resolved - on work machines link
-    or copy the wanted variant to ~/.claude/settings.json by hand. Renamed to
-    the dotted variant scheme in Task 5; re-point any pre-rename link.
+    HelloFresh work context. Context tags are never auto-resolved, so this
+    host-filtered entry deploys the wanted variant explicitly: currently the
+    non-Bedrock settings.hf.json - point repo at settings.hf_bedrock.json
+    here when switching back to Bedrock. No collision with claude_settings:
+    its hosts whitelist excludes the work machines.
 
 # --- Barrier (KVM sharing) ---
 
