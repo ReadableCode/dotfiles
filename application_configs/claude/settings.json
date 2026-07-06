@@ -1,7 +1,7 @@
 {
-  "model": "opus",
-  "effortLevel": "high",
   "includeCoAuthoredBy": false,
+  "model": "claude-fable-5[1m]",
+  "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
   "tui": "fullscreen",
   "theme": "auto"
