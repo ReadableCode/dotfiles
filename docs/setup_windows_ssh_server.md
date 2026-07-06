@@ -165,7 +165,16 @@ PubkeyAuthentication yes
 PasswordAuthentication yes
 AuthorizedKeysFile C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
 Subsystem sftp C:/Users/jason.christiansen/userapps/OpenSSH-Win64/sftp-server.exe
+ForceCommand C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/shell_wrapper.cmd
 ```
+
+* Default shell: without admin the HKLM `DefaultShell` registry value can't
+  be set, so sshd would drop interactive logins into `cmd.exe`. The
+  `ForceCommand` line points at `shell_wrapper.cmd` (kept in the same
+  `portable_sshd` folder), which starts PowerShell for interactive logins and
+  passes exec requests (`ssh host <cmd>`, scp, rsync, sftp, VS Code
+  Remote-SSH) through `cmd /c` unchanged — the same way the default shell ran
+  them. Restart sshd after changing the config or wrapper.
 
 * Generate keys on other machine, deploy to authorized_keys file
 

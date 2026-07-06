@@ -4,3 +4,10 @@ PubkeyAuthentication yes
 PasswordAuthentication yes
 AuthorizedKeysFile C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
 Subsystem sftp C:/Users/jason.christiansen/userapps/OpenSSH-Win64/sftp-server.exe
+# No admin means no HKLM DefaultShell, so sshd would drop interactive logins
+# into cmd.exe. The wrapper starts PowerShell for interactive sessions and
+# passes SSH_ORIGINAL_COMMAND (exec/scp/rsync/sftp requests) through cmd /c
+# unchanged. The command MUST start with cmd.exe: pty sessions CreateProcess
+# the forced command directly (no shell), which cannot execute a bare .cmd
+# file. Restart sshd after changing this.
+ForceCommand cmd.exe /c C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\portable_sshd\shell_wrapper.cmd
