@@ -55,8 +55,13 @@ function editaliases {
 }
 
 function srcaliases {
-    # Reload the PowerShell profile
+    # Reload the PowerShell profile. Dot-sourcing inside a function traps the
+    # re-defined functions in this function's scope, so promote them to the
+    # global scope afterwards or the session keeps the old definitions.
     . $PROFILE
+    foreach ($fn in Get-ChildItem function:) {
+        Set-Item -Path "function:global:$($fn.Name)" -Value $fn.ScriptBlock -Force
+    }
 }
 
 if (Test-Path "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe") {
@@ -251,7 +256,7 @@ function openbranchdiffs {
 
     # base...HEAD diffs from the merge-base, so only this branch's own commits count;
     # --diff-filter=d drops files deleted on this branch, Test-Path drops renamed-away paths
-    $changedFiles = git diff --name-only --diff-filter=d "$base...HEAD" | Where-Object { Test-Path $_ }
+    $changedFiles = git diff --name-only --diff-filter=d "$base...HEAD" | Where-Object { Test-Path -LiteralPath $_ }
 
     if (-not $changedFiles) {
         Write-Host "No files changed on this branch relative to $base." -ForegroundColor Yellow
