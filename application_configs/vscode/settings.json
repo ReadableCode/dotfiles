@@ -15,7 +15,7 @@
     "elitedesk": "linux",
     "HelloFreshJasonIP": "linux",
     "192.168.86.4": "linux",
-    "192.168.86.126": "windows"
+    "192.168.86.126": "windows",
   },
   "remote.SSH.useLocalServer": true,
   // Git
@@ -25,7 +25,6 @@
   "git.alwaysShowStagedChangesResourceGroup": true,
   "git.autoStash": true,
   "git.replaceTagsWhenPull": true,
-  "githubPullRequests.ignoredPullRequestBranches": ["master"],
   //Git Poliot and Suggestions
   "editor.inlineSuggest.enabled": true,
   "editor.suggest.matchOnWordStartOnly": false,
@@ -41,55 +40,66 @@
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter",
     "editor.codeActionsOnSave": {
-      "source.organizeImports": "always"
-    }
+      "source.organizeImports": "always",
+    },
   },
   "[go]": {
     "editor.defaultFormatter": "golang.go",
-    "editor.formatOnSave": true
+    "editor.formatOnSave": true,
   },
   "[shellscript]": {
     "editor.defaultFormatter": "foxundermoon.shell-format",
     "editor.detectIndentation": false,
     "editor.insertSpaces": false,
-    "editor.tabSize": 4 // You can change this to your preferred tab size
+    "editor.tabSize": 4, // You can change this to your preferred tab size
   },
   "[markdown]": {
     "editor.defaultFormatter": "DavidAnson.vscode-markdownlint",
-    "editor.tabSize": 2
+    "editor.tabSize": 2,
   },
   "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   "[terraform]": {
-    "editor.defaultFormatter": "hashicorp.terraform"
+    "editor.defaultFormatter": "hashicorp.terraform",
   },
   "[json]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   "[jsonc]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   "[sql]": {
-    "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode"
+    "editor.defaultFormatter": "inferrinizzard.prettier-sql-vscode",
   },
   "[dot]": {
     "editor.defaultFormatter": "tintinweb.graphviz-interactive-preview",
-    "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000
+    "graphviz-interactive-preview.renderLockAdditionalTimeout": 5000,
   },
   "[typescriptreact]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
   },
   // Auto Formatting - Black / Flake8
   "black-formatter.importStrategy": "useBundled",
   "flake8.importStrategy": "useBundled",
   // Auto Formatting - isort
-  "isort.importStrategy": "useBundled",
+  "isort.importStrategy": "fromEnvironment",
   "isort.args": ["--profile", "black"],
   // Auto Formatting - Prettier-SQL
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
   "Prettier-SQL.SQLFlavourOverride": "snowflake",
+  // TODO Tree
+  "todo-tree.general.rootFolder": "${workspaceFolder}",
+  "todo-tree.tree.showCountsInTree": true,
+  "todo-tree.regex.regexCaseSensitive": false,
+  "todo-tree.general.showActivityBarBadge": true,
+  "todo-tree.general.statusBar": "top three",
+  "todo-tree.filtering.excludeGlobs": [
+    "**/node_modules/*/**",
+    "**/*.egg-info",
+    "**/todo.py",
+  ],
   // Notebooks
   "jupyter.interactiveWindow.creationMode": "perFile",
   "jupyter.askForKernelRestart": false,
@@ -120,13 +130,13 @@
   "workbench.editorAssociations": {
     "*.copilotmd": "vscode.markdown.preview.editor",
     "*.ipynb": "jupyter-notebook",
-    "*.csv": "default"
+    "*.csv": "default",
   },
   "files.associations": {
     "*.md": "markdown",
     "*.yaml": "yaml",
     "templates/*.yaml": "helm",
-    "Dockerfile-*": "dockerfile"
+    "Dockerfile-*": "dockerfile",
   },
   "files.maxMemoryForLargeFilesMB": 12000,
   "workbench.editorLargeFileConfirmation": 50,
@@ -136,21 +146,22 @@
     "**/.hg": false,
     "**/.svn": false,
     "**/CVS": false,
-    "**/Thumbs.db": false
+    "**/Thumbs.db": false,
   },
   "markdown.mermaidConfig": {
-    "maxTextSize": 9000000
+    "maxTextSize": 9000000,
   },
   // Terminal
   "python.terminal.executeInFileDir": true,
   "terminal.integrated.enableMultiLinePasteWarning": "never",
-  "powershell.cwd": "c:\\Users\\jason\\GitHub",
+  "powershell.cwd": "/Users/jason/GitHub",
   // Security
   "security.workspace.trust.enabled": false,
   "interactiveWindow.executeWithShiftEnter": true,
   "notebook.defaultFormatter": "ms-python.black-formatter",
   "python.analysis.inlayHints.functionReturnTypes": true,
   "python.analysis.typeCheckingMode": "standard",
+  "python.analysis.useNearestConfiguration": true,
   "python.analysis.inlayHints.variableTypes": true,
   "scm.repositories.sortOrder": "path",
   "scm.repositories.visible": 100,
@@ -178,7 +189,9 @@
     "**/target/**",
     "**/venv/**",
     "**/*.pyc",
-    "**/*.pyo"
+    "**/*.pyo",
+    "**/Interactive-*",
+    "**/.interactive*",
     //   // ignore repos I don't work on often
     //   "**/3D_Models/**",
     //   "**/a_girls_guide_to_georgetown/**",
@@ -220,7 +233,7 @@
     "**/.pytest_cache": true,
     "**/target": true,
     "**/Samsung Health": true,
-    "**/.cargo": true
+    "**/.cargo": true,
   },
   "python.analysis.enableExperimentalServer": false,
   "python.analysis.enablePytestSupport": false,
@@ -234,10 +247,10 @@
     "Mendix",
     "Onboarded",
     "Qlik",
-    "Streamlit"
+    "Streamlit",
   ],
   "cSpell.enabledFileTypes": {
-    "*": false
+    "*": false,
   },
   "explorer.fileNesting.patterns": {
     "*.ts": "${capture}.js",
@@ -251,13 +264,14 @@
     "*.sqlite3": "${capture}.${extname}-*",
     "*.db3": "${capture}.${extname}-*",
     "*.sdb": "${capture}.${extname}-*",
-    "*.s3db": "${capture}.${extname}-*"
+    "*.s3db": "${capture}.${extname}-*",
   },
   "github.copilot.enable": {
     "*": true,
     "plaintext": true,
     "markdown": true,
-    "scminput": false
+    "scminput": false,
+    "python": true,
   },
   "diffEditor.codeLens": true,
   "diffEditor.experimental.showMoves": true,
@@ -275,13 +289,41 @@
     "<C-f>": false, // keep ctrl-f for find
     "<C-s>": false, // keep ctrl-s for save
     "<C-p>": false, // keep ctrl-p for open file
-    "<C-/>": false // keep ctrl-/ for comment
+    "<C-/>": false, // keep ctrl-/ for comment
   },
   "explorer.confirmDragAndDrop": false,
   "explorer.confirmDelete": false,
-  "github.copilot.nextEditSuggestions.enabled": true,
+  "github.copilot.nextEditSuggestions.enabled": false,
   "chat.viewSessions.orientation": "stacked",
+  "github.copilot.editor.enableCodeActions": false,
+  "github.copilot.nextEditSuggestions.extendedRange": false,
+  "github.copilot.nextEditSuggestions.fixes": false,
+  "github.copilot.renameSuggestions.triggerAutomatically": false,
+  "claudeCode.preferredLocation": "panel",
+  "remote.SSH.connectTimeout": 120,
+  "chat.agent.thinking.collapsedTools": "withThinking",
+  "chat.tools.urls.autoApprove": {
+    "https://code.visualstudio.com": true,
+    "https://github.com/microsoft/vscode/wiki/*": true,
+    "https://formulae.brew.sh": {
+      "approveRequest": true,
+      "approveResponse": false,
+    },
+    "https://store.steampowered.com": {
+      "approveRequest": true,
+      "approveResponse": false,
+    },
+    "https://help.steampowered.com": {
+      "approveRequest": true,
+      "approveResponse": false,
+    },
+  },
+  "terminal.integrated.macOptionIsMeta": true,
   "git.addAICoAuthor": "off",
   "githubPullRequests.pullPR": false,
-  "github.pullRequest.showOnStartup": false
+  "github.pullRequest.showOnStartup": false,
+  "gitlens.ai.model": "vscode",
+  "gitlens.ai.vscode.model": "copilotcli:claude-sonnet-4.6",
+  "workbench.browser.enableRemoteProxy": true,
+  "workbench.browser.searchEngine": "google",
 }

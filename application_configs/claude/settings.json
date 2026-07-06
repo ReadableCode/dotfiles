@@ -1,20 +1,7 @@
 {
-  "env": {
-    "CLAUDE_CODE_NO_FLICKER": "1"
-  },
-  "attribution": {
-    "commit": "",
-    "pr": ""
-  },
-  "model": "claude-fable-5[1m]",
-  "enableWorkflows": true,
-  "enabledPlugins": {
-    "github@claude-plugins-official": true
-  },
-  "effortLevel": "medium",
+  "model": "opus",
+  "effortLevel": "high",
+  "autoUpdatesChannel": "latest",
   "tui": "fullscreen",
-  "theme": "auto",
-  "switchModelsOnFlag": false,
-  "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true
+  "theme": "auto"
 }

@@ -126,10 +126,12 @@
   dest:
     darwin: ~/.claude/settings.json
     linux: ~/.claude/settings.json
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5]
+    windows: ~/.claude/settings.json
+  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
   note: >-
-    Personal darwin/linux machines only, named exactly as in inventory/hosts
-    (validated at load). Work-context hosts (HELLOFRESHJASON,
+    Personal machines only, named exactly as in inventory/hosts (validated at
+    load). ~/.claude/settings.json is the correct location on Windows too
+    (%USERPROFILE%\.claude\settings.json). Work-context hosts (HELLOFRESHJASON,
     FFLAP-2229, HELLOFRESHWINDOWS, FF-TN-ENGINEER-01) are deliberately
     excluded so this entry never overwrites a by-hand context-variant link -
     see claude_settings_hf.
