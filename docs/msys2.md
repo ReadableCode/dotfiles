@@ -27,6 +27,28 @@ pacman -S --needed - < ~/GitHub/dotfiles/app_lists/msys2_packages.txt
 
 Install it normally via pacman, then regenerate the list file using the capture command above. This keeps the list file as the source of truth for what is installed.
 
+## Home directory
+
+`C:\msys64\etc\nsswitch.conf` is set to `db_home: windows` (default was
+`cygwin desc`) so MSYS2's `$HOME` is always the Windows profile
+(`C:\Users\<user>`) no matter how a shell is launched — mintty, over ssh, or
+from PowerShell. Without this, launch contexts that don't pass a `HOME` env
+var get `/home/<user>` (`C:\msys64\home\<user>`) instead, and tools like tmux
+read their dotfiles from the wrong place. This is a local edit on each
+machine, not a deployed config — redo it after a fresh MSYS2 install.
+
+## tmux
+
+tmux (from `app_lists/msys2_packages.txt`) must run inside a POSIX layer, so
+on Windows it lives in MSYS2. The deployed `~/.tmux.conf` detects MSYS2 via
+`uname -o` and sets `default-command` to PowerShell, so every tmux window is
+a PowerShell prompt. Start it from any terminal with:
+
+```powershell
+C:\msys64\usr\bin\bash.exe -lc tmux          # new session
+C:\msys64\usr\bin\bash.exe -lc "tmux attach" # reattach after disconnect
+```
+
 ## Notes
 
 - This is the pacman equivalent of a Brewfile for macOS.
