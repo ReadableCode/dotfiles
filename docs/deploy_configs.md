@@ -122,8 +122,10 @@ everything is `OK`.
 
 ## Running it automatically
 
-`scripts/my_updater.sh` runs `status` at the end of every manual update run,
-so drift surfaces whenever a machine is updated.
+The `myupdater` alias (`scripts/my_updater.sh` on bash machines, the
+`myupdater` function in `powershell_aliases.ps1` on Windows) pulls the
+dotfiles repo first and then runs a full deploy, so every manual update run
+links the latest configs and re-links any hard links the pull orphaned.
 
 To run it from cron (add via `crontab -e` on the machine — cron jobs are
 managed per-host, see [homelab_deployments.md](./homelab_deployments.md) for

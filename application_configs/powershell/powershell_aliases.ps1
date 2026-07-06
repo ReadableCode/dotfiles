@@ -282,6 +282,21 @@ function ntfyme {
 
 function myupdater {
     Write-Host "#################   Running System Update   #####################" -ForegroundColor Cyan
+    if (Test-GitDir) {
+        $dotfiles = Join-Path $gitDir 'dotfiles'
+        Write-Host "Pulling dotfiles..." -ForegroundColor Green
+        git -C $dotfiles pull --ff-only
+        if (Get-Command uv -ErrorAction SilentlyContinue) {
+            # Deploy after the pull: idempotent, and re-links the hard links
+            # the pull just orphaned (no-symlink machines like work laptops).
+            Write-Host "Deploying configs..." -ForegroundColor Green
+            Push-Location $dotfiles
+            uv run python src/deploy_configs.py
+            Pop-Location
+        } else {
+            Write-Host "uv not found, skipping config deploy." -ForegroundColor Yellow
+        }
+    }
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Host "Updating via winget..." -ForegroundColor Green
         winget upgrade --all

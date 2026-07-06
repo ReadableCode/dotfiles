@@ -2,6 +2,19 @@
 
 echo "#################   Running System Update   #####################"
 
+DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+echo "############ Dotfiles Pull ############"
+
+# Pull before anything else so the deploy below links the latest configs
+# (note: an updated my_updater.sh takes effect on the NEXT run).
+if command -v git &> /dev/null; then
+    git -C "$DOTFILES_DIR" pull --ff-only \
+        || echo "WARNING: dotfiles pull failed (offline or diverged) - resolve manually in $DOTFILES_DIR"
+else
+    echo "git not found, skipping dotfiles pull."
+fi
+
 # Function for updating & upgrading macOS with Brew and system updates
 update_macos() {
     echo "Checking for macOS System Updates..."
@@ -89,16 +102,15 @@ else
     fi
 fi
 
-echo "############ Config Drift Check ############"
+echo "############ Config Deploy ############"
 
-# Surface dotfiles deployment drift on every manual update run.
-# See docs/deploy_configs.md for the manifest workflow and a cron example.
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Deploy configs after the pull: idempotent, and re-links anything the pull
+# orphaned (hard-link machines). See docs/deploy_configs.md.
 if command -v uv &> /dev/null && [ -f "$DOTFILES_DIR/deploy_manifest.yaml" ]; then
-    (cd "$DOTFILES_DIR" && uv run python src/deploy_configs.py status) \
-        || echo "WARNING: config drift detected - run 'uv run python src/deploy_configs.py' in $DOTFILES_DIR to fix"
+    (cd "$DOTFILES_DIR" && uv run python src/deploy_configs.py) \
+        || echo "WARNING: config deploy failed - run 'uv run python src/deploy_configs.py' in $DOTFILES_DIR"
 else
-    echo "Skipping drift check (uv or deploy_manifest.yaml not found)."
+    echo "Skipping config deploy (uv or deploy_manifest.yaml not found)."
 fi
 
 echo "############ Done ############"
