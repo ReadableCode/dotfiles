@@ -25,11 +25,14 @@
 #                                 # the app is configured without links (see note).
 #                                 # There is no copy method - copies silently drift.
 #     requires: ~/path            # optional precondition: skip the entry (SKIP_REQUIRES)
-#                                 # unless this path already exists. Placeholders expand
-#                                 # like dest. Set it when dest lives inside a sibling
-#                                 # repo checkout so deploy never creates a repo's folder
-#                                 # on a machine that hasn't cloned it (which would break
-#                                 # a later git clone). Configs that OWN their dest dir
+#                                 # unless this path (or, given a list of paths, ALL of
+#                                 # them) already exists. Placeholders expand like dest.
+#                                 # Set it when dest lives inside a sibling repo checkout
+#                                 # so deploy never creates a repo's folder on a machine
+#                                 # that hasn't cloned it (which would break a later git
+#                                 # clone); list both the dest repo and the credentials
+#                                 # source repo so the entry follows the clones instead
+#                                 # of a hosts whitelist. Configs that OWN their dest dir
 #                                 # (~/.config/nvim, ~/.claude, ...) must NOT set it -
 #                                 # creating those dirs is wanted.
 #     note: free text caveat
@@ -238,14 +241,19 @@
     once personal_credentials exists there.
 
 # --- Claude: fourteen_foods project links (sources in personal_credentials) ---
+# No hosts filter: these follow the clones. Any machine with BOTH
+# fourteen_foods and personal_credentials checked out (see requires) gets the
+# links; everything else skips with SKIP_REQUIRES.
 
 - name: fourteen_foods_mcp
   repo: ../personal_credentials/fourteen_foods_mcp.json
   dest:
+    darwin: "{repo_parent}/fourteen_foods/.mcp.json"
     linux: "{repo_parent}/fourteen_foods/.mcp.json"
     windows: "{repo_parent}/fourteen_foods/.mcp.json"
-  requires: "{repo_parent}/fourteen_foods"
-  hosts: [FFLAP-2229, FF-TN-ENGINEER-01]
+  requires:
+    - "{repo_parent}/fourteen_foods"
+    - "{repo_parent}/personal_credentials"
   note: >-
     MCP server def WITH a live API token - never move into dotfiles.
     Gitignored in the project repo via its /*.json rule.
@@ -253,66 +261,78 @@
 - name: fourteen_foods_claude_settings
   repo: ../personal_credentials/fourteen_foods_claude_settings.json
   dest:
+    darwin: "{repo_parent}/fourteen_foods/.claude/settings.local.json"
     linux: "{repo_parent}/fourteen_foods/.claude/settings.local.json"
     windows: "{repo_parent}/fourteen_foods/.claude/settings.local.json"
-  requires: "{repo_parent}/fourteen_foods"
-  hosts: [FFLAP-2229, FF-TN-ENGINEER-01]
+  requires:
+    - "{repo_parent}/fourteen_foods"
+    - "{repo_parent}/personal_credentials"
   note: "Formalizes the by-hand symlink created 2025-06; no secrets, just permissions."
 
 - name: fourteen_foods_claude_md
   repo: ../personal_credentials/fourteen_foods_CLAUDE.md
   dest:
+    darwin: "{repo_parent}/fourteen_foods/CLAUDE.md"
     linux: "{repo_parent}/fourteen_foods/CLAUDE.md"
     windows: "{repo_parent}/fourteen_foods/CLAUDE.md"
-  requires: "{repo_parent}/fourteen_foods"
-  hosts: [FFLAP-2229, FF-TN-ENGINEER-01]
+  requires:
+    - "{repo_parent}/fourteen_foods"
+    - "{repo_parent}/personal_credentials"
   note: >-
     Repo guidance containing internal client hostnames/IPs, so it is
     deliberately gitignored in the project repo and versioned in
     personal_credentials instead.
 
-# --- Claude: na-finops project links (sources in hellofresh_credentials) ---
-
 - name: fourteen_foods_claude_command_ticket_pr
   repo: ../personal_credentials/fourteen_foods_create_ticket_and_pr.md
   dest:
+    darwin: "{repo_parent}/fourteen_foods/.claude/commands/create_ticket_and_pr.md"
     linux: "{repo_parent}/fourteen_foods/.claude/commands/create_ticket_and_pr.md"
     windows: "{repo_parent}/fourteen_foods/.claude/commands/create_ticket_and_pr.md"
-  requires: "{repo_parent}/fourteen_foods"
-  hosts: [FFLAP-2229, FF-TN-ENGINEER-01]
+  requires:
+    - "{repo_parent}/fourteen_foods"
+    - "{repo_parent}/personal_credentials"
   note: >-
     Personal Claude command (/create_ticket_and_pr in that repo); the project
     repo gitignores .claude/commands/ expecting this symlink-from-credentials
     arrangement, mirroring na_finops_claude_command_ticket_pr.
 
+# --- Claude: na-finops project links (sources in hellofresh_credentials) ---
+
 - name: na_finops_mcp
   repo: ../hellofresh_credentials/na_finops.mcp.json
   dest:
+    darwin: "{repo_parent}/na-finops/.mcp.json"
     linux: "{repo_parent}/na-finops/.mcp.json"
     windows: "{repo_parent}/na-finops/.mcp.json"
-  requires: "{repo_parent}/na-finops"
-  hosts: [HELLOFRESHJASON, HELLOFRESHWINDOWS]
+  requires:
+    - "{repo_parent}/na-finops"
+    - "{repo_parent}/hellofresh_credentials"
   note: >-
     MCP server def WITH a live API token - never move into dotfiles.
-    .mcp.json is gitignored in the project repo. Requires the credentials
-    repo checked out next to dotfiles on each listed host.
+    .mcp.json is gitignored in the project repo. Follows the clones: deploys
+    wherever na-finops and hellofresh_credentials sit next to dotfiles.
 
 - name: na_finops_claude_settings
   repo: ../hellofresh_credentials/na_finops_claude_settings.json
   dest:
+    darwin: "{repo_parent}/na-finops/.claude/settings.local.json"
     linux: "{repo_parent}/na-finops/.claude/settings.local.json"
     windows: "{repo_parent}/na-finops/.claude/settings.local.json"
-  requires: "{repo_parent}/na-finops"
-  hosts: [HELLOFRESHJASON, HELLOFRESHWINDOWS]
+  requires:
+    - "{repo_parent}/na-finops"
+    - "{repo_parent}/hellofresh_credentials"
   note: "No secrets, just permissions."
 
 - name: na_finops_claude_command_ticket_pr
   repo: ../hellofresh_credentials/na_finops_create_ticket_and_pr.md
   dest:
+    darwin: "{repo_parent}/na-finops/.claude/commands/create_ticket_and_pr.md"
     linux: "{repo_parent}/na-finops/.claude/commands/create_ticket_and_pr.md"
     windows: "{repo_parent}/na-finops/.claude/commands/create_ticket_and_pr.md"
-  requires: "{repo_parent}/na-finops"
-  hosts: [HELLOFRESHJASON, HELLOFRESHWINDOWS]
+  requires:
+    - "{repo_parent}/na-finops"
+    - "{repo_parent}/hellofresh_credentials"
   note: >-
     Personal Claude command; na-finops gitignores .claude/commands/ expecting
     exactly this symlink-from-credentials arrangement.

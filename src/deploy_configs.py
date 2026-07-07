@@ -280,10 +280,13 @@ def load_manifest(manifest_path=None, inventory_path=None):
         if method not in ("symlink", "none"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
         requires = entry.get("requires")
-        if requires is not None and (not isinstance(requires, str) or not requires.strip()):
-            raise ValueError(
-                f"Manifest entry {entry['name']} has invalid requires (must be a non-empty path): {requires}"
-            )
+        if requires is not None:
+            paths = requires if isinstance(requires, list) else [requires]
+            if not paths or any(not isinstance(path, str) or not path.strip() for path in paths):
+                raise ValueError(
+                    f"Manifest entry {entry['name']} has invalid requires "
+                    f"(must be a non-empty path or list of paths): {requires}"
+                )
     validate_manifest_hosts(entries, inventory_path)
     return entries
 
@@ -415,20 +418,25 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
 
 def requires_satisfied(entry, row, hostname, repo_root):
     """
-    Apply the optional requires precondition: a path (placeholder-expanded)
-    that must already exist for the entry to deploy on this machine.
+    Apply the optional requires precondition: a path or list of paths
+    (placeholder-expanded) that must ALL already exist for the entry to
+    deploy on this machine.
 
     Use it for dests inside sibling repo checkouts: without it, deploying on a
     machine that never cloned the repo would silently create the repo's folder
-    (and break a later git clone into it). Configs that OWN their destination
-    dir (~/.config/nvim, ~/.claude, ...) should NOT set requires - creating
-    those dirs is wanted.
+    (and break a later git clone into it). List both the dest repo and the
+    source (credentials) repo so the entry follows the clones, not a host
+    whitelist. Configs that OWN their destination dir (~/.config/nvim,
+    ~/.claude, ...) should NOT set requires - creating those dirs is wanted.
     """
     requires = entry.get("requires")
     if not requires:
         return True
-    row["requires"] = expand_path(requires, hostname, repo_root)
-    return os.path.exists(row["requires"])
+    paths = requires if isinstance(requires, list) else [requires]
+    expanded = [expand_path(path, hostname, repo_root) for path in paths]
+    missing = [path for path in expanded if not os.path.exists(path)]
+    row["requires"] = ", ".join(missing or expanded)
+    return not missing
 
 
 # %%

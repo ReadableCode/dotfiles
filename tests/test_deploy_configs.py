@@ -80,13 +80,19 @@ def test_load_manifest_rejects_copy_method(tmp_path):
         deploy_configs.load_manifest(manifest_path)
 
 
-def test_load_manifest_rejects_non_string_requires(tmp_path):
-    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "requires": ["not", "a", "path"]}])
-    with pytest.raises(ValueError, match="requires"):
-        deploy_configs.load_manifest(manifest_path)
-    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "requires": "  "}])
-    with pytest.raises(ValueError, match="requires"):
-        deploy_configs.load_manifest(manifest_path)
+def test_load_manifest_rejects_invalid_requires(tmp_path):
+    for bad in ("  ", [], ["~/ok", "  "], [5], {"path": "~/x"}):
+        manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "requires": bad}])
+        with pytest.raises(ValueError, match="requires"):
+            deploy_configs.load_manifest(manifest_path)
+
+
+def test_load_manifest_accepts_requires_list(tmp_path):
+    manifest_path = write_manifest(
+        tmp_path, [{"name": "x", "repo": "y", "requires": ["{repo_parent}/a", "{repo_parent}/b"]}]
+    )
+    entries = deploy_configs.load_manifest(manifest_path, inventory_path=str(tmp_path / "no_inventory.json"))
+    assert entries[0]["requires"] == ["{repo_parent}/a", "{repo_parent}/b"]
 
 
 def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
@@ -208,6 +214,27 @@ def test_build_plan_applies_entry_when_requires_path_exists(tmp_path, fake_home)
             "requires": "{repo_parent}/some-repo",
         }
     ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root=repo_root)
+    assert plan[0]["action"] == "apply"
+
+
+def test_requires_list_needs_every_path(tmp_path, fake_home):
+    # repo-specific entries list the dest repo AND the credentials source repo:
+    # the entry follows the clones, deploying only where both are checked out
+    repo_root = str(tmp_path / "GitHub" / "dotfiles")
+    entries = [
+        {
+            "name": "into_cloned_repo",
+            "repo": "f1",
+            "dest": {"darwin": "{repo_parent}/some-repo/.mcp.json"},
+            "requires": ["{repo_parent}/some-repo", "{repo_parent}/personal_credentials"],
+        }
+    ]
+    os.makedirs(os.path.join(str(tmp_path), "GitHub", "some-repo"))
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root=repo_root)
+    assert plan[0]["action"] == "skip_requires"
+    assert plan[0]["requires"] == os.path.join(str(tmp_path), "GitHub", "personal_credentials")
+    os.makedirs(os.path.join(str(tmp_path), "GitHub", "personal_credentials"))
     plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root=repo_root)
     assert plan[0]["action"] == "apply"
 
