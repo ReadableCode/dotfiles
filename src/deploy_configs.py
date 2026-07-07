@@ -62,6 +62,7 @@ STATUS_COLORS = {
     "SKIP_HOST": "dim",
     "SKIP_PLATFORM": "dim",
     "SKIP_VARIANT": "dim",
+    "SKIP_REQUIRES": "dim",
 }
 
 
@@ -93,6 +94,8 @@ def _info_detail(row, platform_key):
         return "not for this host"
     if row["action"] == "skip_variant":
         return f"no {os.path.basename(row['repo'])} variant for this host"
+    if row["action"] == "skip_requires":
+        return f"requires {row['requires']} - not present on this machine (repo not cloned here?)"
     return f"no dest for {platform_key}"
 
 
@@ -276,6 +279,11 @@ def load_manifest(manifest_path=None, inventory_path=None):
         method = entry.get("method", "symlink")
         if method not in ("symlink", "none"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
+        requires = entry.get("requires")
+        if requires is not None and (not isinstance(requires, str) or not requires.strip()):
+            raise ValueError(
+                f"Manifest entry {entry['name']} has invalid requires (must be a non-empty path): {requires}"
+            )
     validate_manifest_hosts(entries, inventory_path)
     return entries
 
@@ -343,21 +351,24 @@ def resolve_repo_variant(repo_path, hostname, platform_key):
     return repo_path, False
 
 
-def resolve_dest(entry, platform_key, hostname="", repo_root=None):
+def expand_path(raw_path, hostname="", repo_root=None):
     """
-    Return the expanded destination path for this platform, or None if not applicable.
+    Expand ~ and the two manifest placeholders: {host} becomes the lowercase
+    short hostname (same token as variant filenames) and {repo_parent} the
+    directory containing this repo checkout (e.g. ~/GitHub).
+    """
+    raw_path = raw_path.replace("{host}", short_host_token(hostname))
+    raw_path = raw_path.replace("{repo_parent}", os.path.dirname(repo_root or REPO_ROOT))
+    return os.path.expanduser(raw_path)
 
-    dest values support two placeholders: {host} expands to the lowercase short
-    hostname (same token as variant filenames) and {repo_parent} to the directory
-    containing this repo checkout (e.g. ~/GitHub) - where workspace links live.
-    """
+
+def resolve_dest(entry, platform_key, hostname="", repo_root=None):
+    """Return the expanded destination path for this platform, or None if not applicable."""
     dest = entry.get("dest") or {}
     raw_dest = dest.get(platform_key)
     if not raw_dest:
         return None
-    raw_dest = raw_dest.replace("{host}", short_host_token(hostname))
-    raw_dest = raw_dest.replace("{repo_parent}", os.path.dirname(repo_root or REPO_ROOT))
-    return os.path.expanduser(raw_dest)
+    return expand_path(raw_dest, hostname, repo_root)
 
 
 def host_allowed(entry, hostname):
@@ -371,7 +382,7 @@ def host_allowed(entry, hostname):
 
 
 def build_plan(entries, platform_key, hostname, repo_root=None):
-    """Turn manifest entries into plan rows: apply / none / skip_host / skip_platform / skip_variant."""
+    """Turn manifest entries into plan rows: apply / none / skip_host / skip_platform / skip_requires / skip_variant."""
     repo_root = repo_root or REPO_ROOT
     plan = []
     for entry in entries:
@@ -380,6 +391,7 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
             "repo": os.path.join(repo_root, entry["repo"]),
             "method": entry.get("method", "symlink"),
             "note": entry.get("note", ""),
+            "requires": None,
             "dest": None,
             "action": "apply",
         }
@@ -391,12 +403,32 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
             row["dest"] = resolve_dest(entry, platform_key, hostname, repo_root)
             if row["dest"] is None:
                 row["action"] = "skip_platform"
+            elif not requires_satisfied(entry, row, hostname, repo_root):
+                row["action"] = "skip_requires"
             else:
                 row["repo"], applies = resolve_repo_variant(row["repo"], hostname, platform_key)
                 if not applies:
                     row["action"] = "skip_variant"
         plan.append(row)
     return plan
+
+
+def requires_satisfied(entry, row, hostname, repo_root):
+    """
+    Apply the optional requires precondition: a path (placeholder-expanded)
+    that must already exist for the entry to deploy on this machine.
+
+    Use it for dests inside sibling repo checkouts: without it, deploying on a
+    machine that never cloned the repo would silently create the repo's folder
+    (and break a later git clone into it). Configs that OWN their destination
+    dir (~/.config/nvim, ~/.claude, ...) should NOT set requires - creating
+    those dirs is wanted.
+    """
+    requires = entry.get("requires")
+    if not requires:
+        return True
+    row["requires"] = expand_path(requires, hostname, repo_root)
+    return os.path.exists(row["requires"])
 
 
 # %%

@@ -80,6 +80,15 @@ def test_load_manifest_rejects_copy_method(tmp_path):
         deploy_configs.load_manifest(manifest_path)
 
 
+def test_load_manifest_rejects_non_string_requires(tmp_path):
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "requires": ["not", "a", "path"]}])
+    with pytest.raises(ValueError, match="requires"):
+        deploy_configs.load_manifest(manifest_path)
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "requires": "  "}])
+    with pytest.raises(ValueError, match="requires"):
+        deploy_configs.load_manifest(manifest_path)
+
+
 def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
     inventory_path = write_file(
         str(tmp_path / "hosts.json"),
@@ -167,6 +176,78 @@ def test_build_plan_classifies_rows(fake_home):
     assert actions == {"a": "apply", "b": "skip_platform", "c": "none", "d": "skip_host"}
     assert plan[0]["repo"] == os.path.join("/repo", "f1")
     assert plan[0]["dest"] == os.path.join(str(fake_home), ".f1")
+
+
+# %%
+# requires precondition (skip repo-destined entries when the repo is not cloned) #
+
+
+def test_build_plan_skips_entry_when_requires_path_missing(tmp_path, fake_home):
+    repo_root = str(tmp_path / "GitHub" / "dotfiles")
+    entries = [
+        {
+            "name": "into_uncloned_repo",
+            "repo": "f1",
+            "dest": {"darwin": "{repo_parent}/some-repo/.claude/settings.local.json"},
+            "requires": "{repo_parent}/some-repo",
+        }
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root=repo_root)
+    assert plan[0]["action"] == "skip_requires"
+    assert plan[0]["requires"] == os.path.join(str(tmp_path), "GitHub", "some-repo")
+
+
+def test_build_plan_applies_entry_when_requires_path_exists(tmp_path, fake_home):
+    repo_root = str(tmp_path / "GitHub" / "dotfiles")
+    os.makedirs(os.path.join(str(tmp_path), "GitHub", "some-repo"))
+    entries = [
+        {
+            "name": "into_cloned_repo",
+            "repo": "f1",
+            "dest": {"darwin": "{repo_parent}/some-repo/.claude/settings.local.json"},
+            "requires": "{repo_parent}/some-repo",
+        }
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root=repo_root)
+    assert plan[0]["action"] == "apply"
+
+
+def test_requires_expands_home(tmp_path, fake_home):
+    entries = [{"name": "x", "repo": "f1", "dest": {"darwin": "~/.x"}, "requires": "~/must_exist"}]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root="/repo")
+    assert plan[0]["action"] == "skip_requires"
+    os.makedirs(os.path.join(str(fake_home), "must_exist"))
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root="/repo")
+    assert plan[0]["action"] == "apply"
+
+
+def test_deploy_never_creates_folder_for_uncloned_repo(tmp_path, fake_home, monkeypatch, capsys):
+    repo_root = tmp_path / "GitHub" / "dotfiles"
+    monkeypatch.setattr(deploy_configs, "REPO_ROOT", str(repo_root))
+    monkeypatch.setattr(deploy_configs, "BACKUP_ROOT", str(repo_root / "data" / "config_backups"))
+    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "ENVY")
+    write_file(str(repo_root / "allow.json"), "{}")
+    dest = "{repo_parent}/some-repo/.claude/settings.local.json"
+    manifest_path = write_manifest(
+        tmp_path,
+        [
+            {
+                "name": "guarded",
+                "repo": "allow.json",
+                "dest": {"darwin": dest, "linux": dest, "windows": dest},
+                "requires": "{repo_parent}/some-repo",
+            }
+        ],
+    )
+    assert deploy_configs.main(["--manifest", manifest_path]) == 0
+    output = capsys.readouterr().out
+    assert "SKIP_REQUIRES" in output
+    # the whole point: the uncloned repo's folder must NOT be created
+    assert not os.path.exists(str(tmp_path / "GitHub" / "some-repo"))
+
+    # status treats it as informational, not drift
+    assert deploy_configs.main(["--status", "--manifest", manifest_path]) == 0
+    assert "SKIP_REQUIRES" in capsys.readouterr().out
 
 
 # %%
