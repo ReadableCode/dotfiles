@@ -5,9 +5,12 @@ rem ForceCommand at this wrapper instead: interactive logins get PowerShell,
 rem while exec requests (ssh host <cmd>, scp, rsync, VS Code Remote-SSH, the
 rem sftp subsystem) land in SSH_ORIGINAL_COMMAND and are run through cmd /c
 rem exactly as the default shell would have run them.
-if defined SSH_ORIGINAL_COMMAND (
-  cmd.exe /c %SSH_ORIGINAL_COMMAND%
-) else (
-  C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoLogo
-)
+rem
+rem STYLE: single-line ifs ONLY. Parenthesized blocks and goto labels misparse
+rem if this file is ever rewritten with LF line endings (a git checkout did
+rem exactly that once - .gitattributes pins *.cmd to CRLF, but keep this file
+rem endings-proof anyway).
+if defined SSH_ORIGINAL_COMMAND cmd.exe /c %SSH_ORIGINAL_COMMAND%
+if defined SSH_ORIGINAL_COMMAND exit /b %ERRORLEVEL%
+C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -NoLogo
 exit /b %ERRORLEVEL%
