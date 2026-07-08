@@ -8,7 +8,7 @@ local hotkeyRef = {
     {"Ctrl+Shift+F",  "Open selected ID as Google Drive folder"},
     {"Cmd+Shift+V",   "Paste as plain text (strips formatting)"},
     {"Ctrl+Shift+T",  "Open front Finder window in Terminal"},
-    {"Ctrl+Shift+L",  "Load a saved window layout (asks for space #)"},
+    {"Ctrl+Shift+L",  "Apply saved layouts to every space in sequence"},
     {"Ctrl+Shift+S",  "Save current space's windows (asks for space #)"},
     {"Ctrl+Shift+H",  "Show this hotkey cheatsheet"},
 }
@@ -96,9 +96,12 @@ end)
 -- Usage:
 --   Save: go to a space, arrange its windows, press Ctrl+Shift+S, type the
 --         space number. Repeat on each space. Commit window_layouts.json.
---   Load: go to a space, press Ctrl+Shift+L, type the same number. Repeat on
---         each space (e.g. after a KVM switch) to snap everything back.
+--   Load: press Ctrl+Shift+L once. It walks every space in order (space 1,
+--         2, 3, ...), applies the layout saved under that number on each,
+--         then returns to the space you started on.
 local wl = {}
+
+hs.window.animationDuration = 0
 
 -- Where to read/write the saved layouts. Follows the init.lua symlink so the
 -- file lands in the dotfiles repo (committable), not in ~/.hammerspoon.
@@ -166,6 +169,17 @@ local function placeWindow(win, orientation, unit)
         w = unit.w * f.w,
         h = unit.h * f.h,
     })
+    -- Apps with a minimum size can refuse the requested width/height and end
+    -- up hanging off the screen edge; shift them back fully on-screen. Deferred
+    -- because some apps apply the resize (and their min-size clamp) async.
+    hs.timer.doAfter(0.3, function()
+        local wf = win:frame()
+        local x = math.max(f.x, math.min(wf.x, f.x + f.w - wf.w))
+        local y = math.max(f.y, math.min(wf.y, f.y + f.h - wf.h))
+        if x ~= wf.x or y ~= wf.y then
+            win:setTopLeft({x = x, y = y})
+        end
+    end)
 end
 
 local function round(n) return math.floor(n * 1000 + 0.5) / 1000 end
@@ -220,8 +234,27 @@ function wl.apply(key)
     hs.alert.show(string.format("Applied space %s (%d windows)", key, placed))
 end
 
+-- Walk every user space in Mission Control order, applying the layout saved
+-- under its position number (space 1 -> layout "1", etc.), then come home.
 hs.hotkey.bind({"ctrl", "shift"}, "l", function()
-    local key = wl.askSpace("load")
-    if key then wl.apply(key) end
+    local spaceIDs = {}
+    for _, id in ipairs(hs.spaces.spacesForScreen(hs.screen.mainScreen()) or {}) do
+        if hs.spaces.spaceType(id) == "user" then table.insert(spaceIDs, id) end
+    end
+    local startSpace = hs.spaces.focusedSpace()
+    local i = 0
+    local function step()
+        i = i + 1
+        if not spaceIDs[i] then
+            hs.spaces.gotoSpace(startSpace)
+            return
+        end
+        hs.spaces.gotoSpace(spaceIDs[i])
+        hs.timer.doAfter(0.8, function()
+            wl.apply(tostring(i))
+            step()
+        end)
+    end
+    step()
 end)
 hs.hotkey.bind({"ctrl", "shift"}, "s", wl.snapshot)
