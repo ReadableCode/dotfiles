@@ -1,7 +1,3 @@
-# third-party tap (github.com/XcodesOrg/homebrew-made) providing the xcodes formula
-tap "xcodesorg/made"
-
-brew "aria2" # multi-connection download manager (segmented HTTP/FTP/BitTorrent CLI)
 brew "bat"
 brew "bitwarden-cli"
 brew "black"
@@ -38,7 +34,6 @@ brew "tree"
 brew "unixodbc"
 brew "uv"
 brew "wget"
-brew "xcodesorg/made/xcodes" # install/manage multiple Xcode versions; tap-qualified name = tap user/repo/formula
 
 cask "bitwarden"
 cask "claude"
