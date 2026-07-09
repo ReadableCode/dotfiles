@@ -152,17 +152,21 @@ alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
 
 alias speed='speedtest-cli'
 
-### SSH Shortcuts (loaded from personal_credentials/hosts.json) ###
+### SSH Shortcuts (loaded from <gitDir>/*_credentials host inventories) ###
 
-_hosts_file="${gitDir}personal_credentials/hosts.json"
-if [[ -f "$_hosts_file" ]] && command -v python3 >/dev/null 2>&1; then
+# Loads ssh aliases from a hosts.json-style inventory file.
+_load_ssh_hosts() {
+    local hosts_file="$1"
+    [[ -f "$hosts_file" ]] || return 0
+    command -v python3 >/dev/null 2>&1 || return 0
+    local _alias _user _host _port _ssh_cmd
     while IFS=$'\t' read -r _alias _user _host _port; do
         [[ -z "$_alias" || -z "$_user" ]] && continue
         _ssh_cmd="ssh"
         [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
         _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
         alias "$_alias"="$_ssh_cmd"
-    done < <(python3 - "$_hosts_file" <<'PYEOF'
+    done < <(python3 - "$hosts_file" <<'PYEOF'
 import json
 import sys
 
@@ -176,5 +180,26 @@ for host in inventory.get("hosts", []):
         print(f"{alias}\t{user}\t{target}\t{port}")
 PYEOF
 )
-fi
-unset _hosts_file _alias _user _host _port _ssh_cmd
+}
+
+# Each sibling repo matching <gitDir>/*_credentials may carry a host
+# inventory: <prefix>_hosts.json inside it, falling back to hosts.json.
+_load_all_ssh_hosts() {
+    [[ -n "$gitDir" ]] || return 0
+    # zsh errors out on a non-matching glob; bash leaves it literal and the
+    # [[ -d ]] check below skips it.
+    [[ -n "$ZSH_VERSION" ]] && setopt localoptions nullglob
+    local dir prefix
+    for dir in "${gitDir%/}"/*_credentials; do
+        [[ -d "$dir" ]] || continue
+        prefix="${dir##*/}"
+        prefix="${prefix%_credentials}"
+        if [[ -f "$dir/${prefix}_hosts.json" ]]; then
+            _load_ssh_hosts "$dir/${prefix}_hosts.json"
+        elif [[ -f "$dir/hosts.json" ]]; then
+            _load_ssh_hosts "$dir/hosts.json"
+        fi
+    done
+}
+
+_load_all_ssh_hosts

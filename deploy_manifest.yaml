@@ -1,5 +1,8 @@
-# Deploy manifest — single source of truth for which repo configs are deployed
-# where on each machine. Consumed by `src/deploy_configs.py`:
+# Deploy manifest — which repo configs are deployed where on each machine.
+# Sibling `<context>_credentials/<context>_manifest.yaml` overlay manifests
+# (same entry schema, `repo:` paths relative to their own repo root) are
+# loaded additionally when those repos are cloned next to dotfiles.
+# Consumed by `src/deploy_configs.py`:
 #
 #   uv run python src/deploy_configs.py             # deploy for this machine
 #   uv run python src/deploy_configs.py status      # read-only drift report +
@@ -11,16 +14,17 @@
 #           variant files (lowercase token): exact hostname first, then platform
 #           (darwin/mac, linux, windows), then the bare default. Hosts with no
 #           matching variant and no bare file are skipped, so new host variants
-#           need no manifest change. Context tags (settings.hf.json) are never
-#           auto-resolved.
+#           need no manifest change. Context tags (settings.<context>.json)
+#           are never auto-resolved.
 #     dest:                       # per-platform destination (omit a platform to skip it)
 #       darwin: ~/path            # {host} expands to the lowercase short hostname,
 #       linux: ~/path             # {repo_parent} to the directory containing this
 #       windows: ~/path           # repo checkout (e.g. ~/GitHub)
 #     hosts: [ENVY, ELITEDESK]    # optional: limit to specific hostnames (uppercase,
 #                                 # matched against the short hostname). Every name
-#                                 # must exist in personal_credentials/hosts.json -
-#                                 # validated at load (skipped if that repo is absent).
+#                                 # must exist in the union of all `*_credentials`
+#                                 # host inventories - validated at load (skipped if
+#                                 # no inventory repo is present).
 #     method: symlink | none      # default symlink. "none" = inventory-only entry:
 #                                 # the app is configured without links (see note).
 #                                 # There is no copy method - copies silently drift.
@@ -103,20 +107,10 @@
     windows: ~/AppData/Roaming/Code/User/settings.json
   note: "On macOS the deployer resolves the settings.mac.json platform variant."
 
-- name: vscode_workspace
-  repo: application_configs/vscode/workspace.code-workspace
-  dest:
-    darwin: "{repo_parent}/{host}.code-workspace"
-    linux: "{repo_parent}/{host}.code-workspace"
-    windows: "{repo_parent}/{host}.code-workspace"
-  note: >-
-    Resolves to workspace.<host>.code-workspace (there is no bare default -
-    hosts without a variant are skipped). The link lives next to the repo
-    checkout (~/GitHub, or ~/HelloFreshProjects on the HelloFresh laptop)
-    because the workspace's project folders are relative siblings of dotfiles/.
-    Renamed from <host>.code-workspace - redeploy on each machine to fix the
-    old dangling links. New host: add the variant file, no manifest change
-    needed. See docs/setup_vscode.md.
+# VS Code workspace files live in the credentials overlays (entry
+# vscode_workspace in personal_manifest.yaml, per-host entries in the client
+# manifests): a workspace file lists every sibling repo at once, which is
+# exactly the cross-client inventory the public repo must not carry.
 
 - name: zed_settings
   repo: application_configs/zed/settings.json
@@ -148,194 +142,9 @@
   note: >-
     Personal machines only, named exactly as in personal_credentials/hosts.json (validated at
     load). ~/.claude/settings.json is the correct location on Windows too
-    (%USERPROFILE%\.claude\settings.json). Work-context hosts (HELLOFRESHJASON,
-    FFLAP-2229, HELLOFRESHWINDOWS, FF-TN-ENGINEER-01) are deliberately
-    excluded so this entry never overwrites a by-hand context-variant link -
-    see claude_settings_hf.
-
-- name: claude_settings_hf
-  repo: application_configs/claude/settings.hf.json
-  dest:
-    linux: ~/.claude/settings.json
-    windows: ~/.claude/settings.json
-  hosts: [HELLOFRESHJASON, HELLOFRESHWINDOWS]
-  note: >-
-    HelloFresh work context. Context tags are never auto-resolved, so this
-    host-filtered entry deploys the wanted variant explicitly: currently the
-    non-Bedrock settings.hf.json - point repo at settings.hf_bedrock.json
-    here when switching back to Bedrock. No collision with claude_settings:
-    its hosts whitelist excludes the work machines.
-
-# Claude permission allow lists are personal and must NEVER be committed to a
-# project repo (cloners should not inherit them) or to this public repo. One
-# combined permissive list (personal_credentials/claude/project_settings/
-# personal_repos.settings.local.json) is symlinked into every personal repo as
-# .claude/settings.local.json, which stays gitignored everywhere (global git
-# ignore). Approvals made in a session write through the link, so they sync
-# via the credentials repo. Repo-destined entries set requires so a machine
-# that never cloned that repo skips the link instead of creating the folder.
-# Hosts: personal machines known to have personal_credentials checked out
-# next to dotfiles.
-
-- name: claude_allow_github_folder
-  repo: ../personal_credentials/claude/project_settings/personal_repos.settings.local.json
-  dest:
-    darwin: "{repo_parent}/.claude/settings.local.json"
-    linux: "{repo_parent}/.claude/settings.local.json"
-    windows: "{repo_parent}/.claude/settings.local.json"
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
-  note: >-
-    Folder-scoped permissions for the repos parent dir (~/GitHub or
-    equivalent); covers repos with no entry of their own. No requires:
-    the parent dir always exists (dotfiles lives in it).
-
-- name: claude_allow_dotfiles
-  repo: ../personal_credentials/claude/project_settings/personal_repos.settings.local.json
-  dest:
-    darwin: "{repo_parent}/dotfiles/.claude/settings.local.json"
-    linux: "{repo_parent}/dotfiles/.claude/settings.local.json"
-    windows: "{repo_parent}/dotfiles/.claude/settings.local.json"
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
-  note: >-
-    No requires: deploy runs from this repo, so it is always present. An allow
-    list was mistakenly git-tracked here until 2026-07; never re-add one.
-
-- name: claude_allow_load_log
-  repo: ../personal_credentials/claude/project_settings/personal_repos.settings.local.json
-  dest:
-    darwin: "{repo_parent}/load-log/.claude/settings.local.json"
-    linux: "{repo_parent}/load-log/.claude/settings.local.json"
-    windows: "{repo_parent}/load-log/.claude/settings.local.json"
-  requires: "{repo_parent}/load-log"
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
-
-- name: claude_allow_packing_list
-  repo: ../personal_credentials/claude/project_settings/personal_repos.settings.local.json
-  dest:
-    darwin: "{repo_parent}/Packing-List/.claude/settings.local.json"
-    linux: "{repo_parent}/Packing-List/.claude/settings.local.json"
-    windows: "{repo_parent}/Packing-List/.claude/settings.local.json"
-  requires: "{repo_parent}/Packing-List"
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
-
-- name: claude_allow_herdstone
-  repo: ../personal_credentials/claude/project_settings/personal_repos.settings.local.json
-  dest:
-    darwin: "{repo_parent}/herdstone/.claude/settings.local.json"
-    linux: "{repo_parent}/herdstone/.claude/settings.local.json"
-    windows: "{repo_parent}/herdstone/.claude/settings.local.json"
-  requires: "{repo_parent}/herdstone"
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
-
-- name: claude_skill_pr_review
-  repo: ../personal_credentials/claude/skills/pr-review/SKILL.md
-  dest:
-    darwin: ~/.claude/skills/pr-review/SKILL.md
-    linux: ~/.claude/skills/pr-review/SKILL.md
-    windows: ~/.claude/skills/pr-review/SKILL.md
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5, ULTRAPOCKET]
-  note: >-
-    Personal PR-review skill. Lives in personal_credentials (NOT dotfiles -
-    dotfiles is public and this file encodes private review preferences), so
-    it can only deploy to hosts with that repo checked out. Add a host here
-    once personal_credentials exists there.
-
-# --- Claude: fourteen_foods project links (sources in personal_credentials) ---
-# No hosts filter: these follow the clones. Any machine with BOTH
-# fourteen_foods and personal_credentials checked out (see requires) gets the
-# links; everything else skips with SKIP_REQUIRES.
-
-- name: fourteen_foods_mcp
-  repo: ../personal_credentials/fourteen_foods_mcp.json
-  dest:
-    darwin: "{repo_parent}/fourteen_foods/.mcp.json"
-    linux: "{repo_parent}/fourteen_foods/.mcp.json"
-    windows: "{repo_parent}/fourteen_foods/.mcp.json"
-  requires:
-    - "{repo_parent}/fourteen_foods"
-    - "{repo_parent}/personal_credentials"
-  note: >-
-    MCP server def WITH a live API token - never move into dotfiles.
-    Gitignored in the project repo via its /*.json rule.
-
-- name: fourteen_foods_claude_settings
-  repo: ../personal_credentials/fourteen_foods_claude_settings.json
-  dest:
-    darwin: "{repo_parent}/fourteen_foods/.claude/settings.local.json"
-    linux: "{repo_parent}/fourteen_foods/.claude/settings.local.json"
-    windows: "{repo_parent}/fourteen_foods/.claude/settings.local.json"
-  requires:
-    - "{repo_parent}/fourteen_foods"
-    - "{repo_parent}/personal_credentials"
-  note: "Formalizes the by-hand symlink created 2025-06; no secrets, just permissions."
-
-- name: fourteen_foods_claude_md
-  repo: ../personal_credentials/fourteen_foods_CLAUDE.md
-  dest:
-    darwin: "{repo_parent}/fourteen_foods/CLAUDE.md"
-    linux: "{repo_parent}/fourteen_foods/CLAUDE.md"
-    windows: "{repo_parent}/fourteen_foods/CLAUDE.md"
-  requires:
-    - "{repo_parent}/fourteen_foods"
-    - "{repo_parent}/personal_credentials"
-  note: >-
-    Repo guidance containing internal client hostnames/IPs, so it is
-    deliberately gitignored in the project repo and versioned in
-    personal_credentials instead.
-
-- name: fourteen_foods_claude_command_ticket_pr
-  repo: ../personal_credentials/fourteen_foods_create_ticket_and_pr.md
-  dest:
-    darwin: "{repo_parent}/fourteen_foods/.claude/commands/create_ticket_and_pr.md"
-    linux: "{repo_parent}/fourteen_foods/.claude/commands/create_ticket_and_pr.md"
-    windows: "{repo_parent}/fourteen_foods/.claude/commands/create_ticket_and_pr.md"
-  requires:
-    - "{repo_parent}/fourteen_foods"
-    - "{repo_parent}/personal_credentials"
-  note: >-
-    Personal Claude command (/create_ticket_and_pr in that repo); the project
-    repo gitignores .claude/commands/ expecting this symlink-from-credentials
-    arrangement, mirroring na_finops_claude_command_ticket_pr.
-
-# --- Claude: na-finops project links (sources in hellofresh_credentials) ---
-
-- name: na_finops_mcp
-  repo: ../hellofresh_credentials/na_finops.mcp.json
-  dest:
-    darwin: "{repo_parent}/na-finops/.mcp.json"
-    linux: "{repo_parent}/na-finops/.mcp.json"
-    windows: "{repo_parent}/na-finops/.mcp.json"
-  requires:
-    - "{repo_parent}/na-finops"
-    - "{repo_parent}/hellofresh_credentials"
-  note: >-
-    MCP server def WITH a live API token - never move into dotfiles.
-    .mcp.json is gitignored in the project repo. Follows the clones: deploys
-    wherever na-finops and hellofresh_credentials sit next to dotfiles.
-
-- name: na_finops_claude_settings
-  repo: ../hellofresh_credentials/na_finops_claude_settings.json
-  dest:
-    darwin: "{repo_parent}/na-finops/.claude/settings.local.json"
-    linux: "{repo_parent}/na-finops/.claude/settings.local.json"
-    windows: "{repo_parent}/na-finops/.claude/settings.local.json"
-  requires:
-    - "{repo_parent}/na-finops"
-    - "{repo_parent}/hellofresh_credentials"
-  note: "No secrets, just permissions."
-
-- name: na_finops_claude_command_ticket_pr
-  repo: ../hellofresh_credentials/na_finops_create_ticket_and_pr.md
-  dest:
-    darwin: "{repo_parent}/na-finops/.claude/commands/create_ticket_and_pr.md"
-    linux: "{repo_parent}/na-finops/.claude/commands/create_ticket_and_pr.md"
-    windows: "{repo_parent}/na-finops/.claude/commands/create_ticket_and_pr.md"
-  requires:
-    - "{repo_parent}/na-finops"
-    - "{repo_parent}/hellofresh_credentials"
-  note: >-
-    Personal Claude command; na-finops gitignores .claude/commands/ expecting
-    exactly this symlink-from-credentials arrangement.
+    (%USERPROFILE%\.claude\settings.json). Work-context hosts live in their
+    credentials-repo overlay manifests so this entry never collides with a
+    context variant.
 
 # --- Barrier (KVM sharing) ---
 
@@ -345,8 +154,7 @@
   note: >-
     Per-host barrier_config.<host>.sgc files, loaded by path from the Barrier
     GUI / autostart arguments - no links. Renamed to the dotted variant scheme
-    in Task 5; re-point Barrier at the new filename on hellofreshwindows,
-    jasonzephyrus, and ryzenwhite.
+    in Task 5; re-point Barrier at the new filename on each host that uses one.
 
 # --- macOS automation ---
 

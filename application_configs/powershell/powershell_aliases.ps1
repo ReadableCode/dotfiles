@@ -440,10 +440,11 @@ function showwifi {
 }
 
 
-### SSH Shortcuts (loaded from personal_credentials/hosts.json) ###
+### SSH Shortcuts (loaded from <gitDir>\*_credentials host inventories) ###
 
-$hostsFile = if ($gitDir) { Join-Path $gitDir 'personal_credentials\hosts.json' } else { $null }
-if ($hostsFile -and (Test-Path $hostsFile)) {
+# Loads ssh aliases from a hosts.json-style inventory file.
+function Import-SshHostAliases([string]$hostsFile) {
+    if (-not $hostsFile -or -not (Test-Path $hostsFile)) { return }
     $hostInventory = Get-Content $hostsFile -Raw | ConvertFrom-Json
     foreach ($invHost in $hostInventory.hosts) {
         $user = if ($invHost.PSObject.Properties['ssh_user']) { $invHost.ssh_user } elseif ($invHost.PSObject.Properties['user']) { $invHost.user } else { '' }
@@ -458,5 +459,17 @@ if ($hostsFile -and (Test-Path $hostsFile)) {
                 Set-Item -Path "function:global:$alias" -Value ([scriptblock]::Create("ssh $sshArgs")) -Force
             }
         }
+    }
+}
+
+# Each sibling repo matching <gitDir>\*_credentials may carry a host
+# inventory: <prefix>_hosts.json inside it, falling back to hosts.json.
+if ($gitDir -and (Test-Path $gitDir)) {
+    foreach ($credDir in Get-ChildItem -Path $gitDir -Directory -Filter '*_credentials' -ErrorAction SilentlyContinue) {
+        $prefix = $credDir.Name -replace '_credentials$', ''
+        $prefixedFile = Join-Path $credDir.FullName "${prefix}_hosts.json"
+        $fallbackFile = Join-Path $credDir.FullName 'hosts.json'
+        if (Test-Path $prefixedFile) { Import-SshHostAliases $prefixedFile }
+        elseif (Test-Path $fallbackFile) { Import-SshHostAliases $fallbackFile }
     }
 }

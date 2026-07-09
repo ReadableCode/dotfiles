@@ -7,7 +7,11 @@ import config_test_utils  # noqa F401
 import pytest
 import yaml
 from src import deploy_configs
-from utils.inventory_tools import load_inventory_hostnames
+from utils.inventory_tools import (
+    find_inventory_paths,
+    load_inventory_hostnames,
+    load_union_inventory_hostnames,
+)
 
 # %%
 # Helpers #
@@ -117,23 +121,154 @@ def test_load_inventory_hostnames_uppercases_short_names(tmp_path):
     assert hostnames == {"ENVY", "FFLAP-2229"}
 
 
-def test_real_manifest_hosts_all_exist_in_inventory():
-    # host targeting must use hosts.json names - load_manifest enforces it
-    if not os.path.exists(deploy_configs.INVENTORY_PATH):
-        pytest.skip("personal_credentials/hosts.json not present on this machine")
-    entries = deploy_configs.load_manifest()
-    known_hosts = load_inventory_hostnames(deploy_configs.INVENTORY_PATH)
+# %%
+# Overlay manifests from sibling *_credentials repos #
+
+
+def write_manifest_at(path, entries):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file_handle:
+        yaml.safe_dump(entries, file_handle)
+    return path
+
+
+@pytest.fixture
+def overlay_tree(tmp_path, monkeypatch):
+    """Fake ~/GitHub with a dotfiles checkout and one sibling acme_credentials overlay repo."""
+    github = tmp_path / "GitHub"
+    repo_root = github / "dotfiles"
+    os.makedirs(str(repo_root))
+    monkeypatch.setattr(deploy_configs, "REPO_ROOT", str(repo_root))
+    monkeypatch.setattr(deploy_configs, "grandparent_dir", str(github))
+    write_manifest_at(
+        str(repo_root / "deploy_manifest.yaml"),
+        [{"name": "main_conf", "repo": "application_configs/app/conf", "dest": {"darwin": "~/.conf"}}],
+    )
+    write_manifest_at(
+        str(github / "acme_credentials" / "acme_manifest.yaml"),
+        [
+            {
+                "name": "acme_conf",
+                "repo": "configs/acme.json",
+                "dest": {"darwin": "{repo_parent}/some-repo/acme.json"},
+            }
+        ],
+    )
+    return github
+
+
+def test_load_manifests_discovers_overlays_and_resolves_repo_against_overlay_root(overlay_tree):
+    entries, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
+    assert [entry["name"] for entry in entries] == ["main_conf", "acme_conf"]
+
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY")
+    rows = {row["name"]: row for row in plan}
+    # main entry resolves against the dotfiles root, overlay entry against ITS repo root
+    assert rows["main_conf"]["repo"] == os.path.join(str(overlay_tree), "dotfiles", "application_configs",
+                                                     "app", "conf")
+    assert rows["acme_conf"]["repo"] == os.path.join(str(overlay_tree), "acme_credentials", "configs", "acme.json")
+    # {repo_parent} still expands against the DOTFILES parent, not the overlay repo
+    assert rows["acme_conf"]["dest"] == os.path.join(str(overlay_tree), "some-repo", "acme.json")
+
+
+def test_load_manifests_with_explicit_manifest_skips_overlay_discovery(overlay_tree, tmp_path):
+    manifest_path = write_manifest_at(
+        str(tmp_path / "solo.yaml"), [{"name": "solo", "repo": "f1", "dest": {"darwin": "~/.f1"}}]
+    )
+    entries, manifest_paths = deploy_configs.load_manifests(manifest_path)
+    assert manifest_paths == [manifest_path]
+    assert [entry["name"] for entry in entries] == ["solo"]
+    # repo paths of an explicit manifest resolve against the dotfiles REPO_ROOT
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY")
+    assert plan[0]["repo"] == os.path.join(str(overlay_tree), "dotfiles", "f1")
+
+
+def test_credentials_repo_without_manifest_contributes_nothing(overlay_tree):
+    os.makedirs(str(overlay_tree / "empty_credentials"))
+    _, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
+
+
+def test_duplicate_entry_names_across_manifests_raise(overlay_tree):
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [{"name": "main_conf", "repo": "configs/clash.json", "dest": {"darwin": "~/.clash"}}],
+    )
+    with pytest.raises(ValueError) as excinfo:
+        deploy_configs.load_manifests()
+    message = str(excinfo.value)
+    assert "main_conf" in message
+    assert "deploy_manifest.yaml" in message and "acme_manifest.yaml" in message
+
+
+# %%
+# Host inventory union across *_credentials repos #
+
+
+def test_find_inventory_paths_prefers_prefixed_name_over_legacy_fallback(tmp_path):
+    write_file(str(tmp_path / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
+    write_file(str(tmp_path / "acme_credentials" / "hosts.json"), '{"hosts": [{"name": "DECOY"}]}')
+    write_file(str(tmp_path / "personal_credentials" / "hosts.json"), '{"hosts": [{"name": "Envy"}]}')
+    os.makedirs(str(tmp_path / "no_inventory_credentials"))
+    paths = find_inventory_paths(str(tmp_path))
+    assert paths == [
+        os.path.join(str(tmp_path), "acme_credentials", "acme_hosts.json"),
+        os.path.join(str(tmp_path), "personal_credentials", "hosts.json"),
+    ]
+    hostnames, inventory_paths = load_union_inventory_hostnames(str(tmp_path))
+    assert hostnames == {"ACMEBOX", "ENVY"}
+    assert inventory_paths == paths
+
+
+def test_manifest_hosts_validate_against_union_of_inventories(overlay_tree):
+    write_file(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
+    write_file(str(overlay_tree / "personal_credentials" / "hosts.json"), '{"hosts": [{"name": "Envy"}]}')
+    write_manifest_at(
+        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
+        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "ACMEBOX"]}],
+    )
+    entries, _ = deploy_configs.load_manifests()  # hosts from different inventories both resolve
+    assert entries[0]["hosts"] == ["ENVY", "ACMEBOX"]
+
+    write_manifest_at(
+        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
+        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["NOSUCHBOX"]}],
+    )
+    with pytest.raises(ValueError, match="NOSUCHBOX"):
+        deploy_configs.load_manifests()
+
+
+def test_hosts_validation_skipped_when_no_inventory_exists(overlay_tree):
+    # no *_credentials repo declares an inventory -> machine without credentials repos
+    write_manifest_at(
+        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
+        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["GHOSTBOX"]}],
+    )
+    entries, _ = deploy_configs.load_manifests()
+    assert entries[0]["hosts"] == ["GHOSTBOX"]
+
+
+def test_real_manifest_hosts_all_exist_in_union_inventory():
+    # host targeting must use inventory names - load_manifests enforces it
+    # against the union of every *_credentials repo's inventory
+    known_hosts, inventory_paths = load_union_inventory_hostnames(deploy_configs.grandparent_dir)
+    if not inventory_paths:
+        pytest.skip("no *_credentials host inventory present on this machine")
+    entries, _ = deploy_configs.load_manifests()
     for entry in entries:
         for host in entry.get("hosts") or []:
-            assert str(host).upper() in known_hosts, f"{entry['name']} targets unknown host {host}"
+            assert str(host).split(".")[0].upper() in known_hosts, \
+                f"{entry['name']} targets unknown host {host}"
 
 
-def test_real_manifest_is_valid_and_repo_paths_exist():
-    entries = deploy_configs.load_manifest()
-    names = [entry["name"] for entry in entries]
-    assert len(names) == len(set(names)), "manifest entry names must be unique"
+def test_real_manifests_are_valid_and_repo_paths_exist():
+    # loads the real deploy_manifest.yaml plus any overlay manifests present;
+    # load_manifests itself enforces name uniqueness across all of them
+    entries, manifest_paths = deploy_configs.load_manifests()
+    assert manifest_paths[0] == os.path.join(deploy_configs.REPO_ROOT, "deploy_manifest.yaml")
     for entry in entries:
-        repo_path = os.path.join(deploy_configs.REPO_ROOT, entry["repo"])
+        repo_path = os.path.join(entry["_base_dir"], entry["repo"])
         # a repo path may exist as-is, or only as <base>.<host-or-platform>.<ext> variants
         assert os.path.exists(repo_path) or deploy_configs._any_variant_exists(repo_path), (
             f"manifest entry {entry['name']} points at missing repo path {repo_path} (no variants either)"

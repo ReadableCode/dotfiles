@@ -14,7 +14,12 @@ import yaml
 from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from utils.host_tools import get_uppercase_hostname
-from utils.inventory_tools import load_inventory_hostnames
+from utils.inventory_tools import (
+    credentials_context,
+    find_credentials_dirs,
+    load_inventory_hostnames,
+    load_union_inventory_hostnames,
+)
 
 # %%
 # Variables #
@@ -27,7 +32,6 @@ system = platform.system()
 
 REPO_ROOT = parent_dir
 MANIFEST_PATH = os.path.join(REPO_ROOT, "deploy_manifest.yaml")
-INVENTORY_PATH = os.path.join(grandparent_dir, "personal_credentials", "hosts.json")
 BACKUP_ROOT = os.path.join(REPO_ROOT, "data", "config_backups")
 
 PLATFORM_KEYS = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}
@@ -258,17 +262,61 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
 # Manifest #
 
 
-def load_manifest(manifest_path=None, inventory_path=None):
+def discover_manifests():
     """
-    Load and validate deploy_manifest.yaml, returning a list of entry dicts.
+    Locate every manifest to load: the main deploy_manifest.yaml (repo paths
+    relative to REPO_ROOT) plus, for each sibling ``*_credentials`` repo, an
+    optional overlay manifest named ``<context>_manifest.yaml`` whose repo
+    paths are relative to that credentials repo's root. Returns a list of
+    (manifest_path, base_dir) pairs, overlays sorted for determinism.
+    """
+    manifests = [(os.path.join(REPO_ROOT, "deploy_manifest.yaml"), REPO_ROOT)]
+    for credentials_dir in find_credentials_dirs(grandparent_dir):
+        overlay = os.path.join(credentials_dir, f"{credentials_context(credentials_dir)}_manifest.yaml")
+        if os.path.exists(overlay):
+            manifests.append((overlay, credentials_dir))
+    return manifests
 
-    Every name in an entry's optional hosts filter must exist in the host
-    inventory (personal_credentials/hosts.json) - the single source of truth
-    for machine names - so a typo or invented hostname fails loudly instead of
-    silently deploying to (or skipping) the wrong machines. Machines without
-    the personal_credentials repo skip the check.
+
+def load_manifests(manifest_path=None, inventory_path=None):
     """
-    manifest_path = manifest_path or MANIFEST_PATH
+    Load the main manifest plus every discovered overlay manifest, returning
+    (entries, manifest_paths). Each entry is stamped with the internal keys
+    ``_base_dir`` (its manifest's repo root, which build_plan joins ``repo``
+    against) and ``_manifest`` (for error messages). Entry names must be
+    unique across ALL loaded manifests.
+
+    Passing manifest_path (the --manifest test escape hatch) loads only that
+    single file, repo paths relative to the dotfiles REPO_ROOT, skipping
+    overlay discovery.
+    """
+    located = [(manifest_path, REPO_ROOT)] if manifest_path else discover_manifests()
+    entries = []
+    seen: dict = {}
+    for path, base_dir in located:
+        for entry in _parse_manifest_file(path):
+            if entry["name"] in seen:
+                raise ValueError(
+                    f"Duplicate manifest entry name '{entry['name']}' in {path} "
+                    f"(already defined in {seen[entry['name']]})"
+                )
+            seen[entry["name"]] = path
+            entry["_base_dir"] = base_dir
+            entry["_manifest"] = path
+            entries.append(entry)
+    validate_manifest_hosts(entries, inventory_path)
+    return entries, [path for path, _ in located]
+
+
+def load_manifest(manifest_path=None, inventory_path=None):
+    """Load and validate a single manifest file (no overlay discovery), returning its entry dicts."""
+    entries = _parse_manifest_file(manifest_path or MANIFEST_PATH)
+    validate_manifest_hosts(entries, inventory_path)
+    return entries
+
+
+def _parse_manifest_file(manifest_path):
+    """Parse one manifest file and validate the entry schema, returning a list of entry dicts."""
     with open(manifest_path, "r", encoding="utf-8") as file_handle:
         entries = yaml.safe_load(file_handle) or []
     if not isinstance(entries, list):
@@ -287,16 +335,32 @@ def load_manifest(manifest_path=None, inventory_path=None):
                     f"Manifest entry {entry['name']} has invalid requires "
                     f"(must be a non-empty path or list of paths): {requires}"
                 )
-    validate_manifest_hosts(entries, inventory_path)
     return entries
 
 
 def validate_manifest_hosts(entries, inventory_path=None):
-    """Raise if any manifest hosts entry names a machine missing from the inventory."""
-    inventory_path = inventory_path or INVENTORY_PATH
-    if not os.path.exists(inventory_path):
-        return
-    known_hosts = load_inventory_hostnames(inventory_path)
+    """
+    Raise if any manifest hosts entry names a machine missing from the host
+    inventories - the single source of truth for machine names - so a typo or
+    invented hostname fails loudly instead of silently deploying to (or
+    skipping) the wrong machines.
+
+    By default the check runs against the UNION of every sibling
+    ``*_credentials`` repo's inventory (``<context>_hosts.json``, legacy
+    fallback ``hosts.json``); machines with no inventory at all (no
+    credentials repos cloned) skip it. Passing inventory_path validates
+    against that single file instead (tests).
+    """
+    if inventory_path is not None:
+        if not os.path.exists(inventory_path):
+            return
+        known_hosts = load_inventory_hostnames(inventory_path)
+        source = inventory_path
+    else:
+        known_hosts, inventory_paths = load_union_inventory_hostnames(grandparent_dir)
+        if not inventory_paths:
+            return
+        source = ", ".join(inventory_paths)
     unknown = [
         f"{entry['name']}: {host}"
         for entry in entries
@@ -305,7 +369,7 @@ def validate_manifest_hosts(entries, inventory_path=None):
     ]
     if unknown:
         raise ValueError(
-            f"Manifest hosts not found in inventory {inventory_path} "
+            f"Manifest hosts not found in inventory {source} "
             f"(fix the manifest name or add the machine to the inventory): {', '.join(unknown)}"
         )
 
@@ -358,7 +422,8 @@ def expand_path(raw_path, hostname="", repo_root=None):
     """
     Expand ~ and the two manifest placeholders: {host} becomes the lowercase
     short hostname (same token as variant filenames) and {repo_parent} the
-    directory containing this repo checkout (e.g. ~/GitHub).
+    directory containing the DOTFILES checkout (e.g. ~/GitHub) - always, even
+    for entries loaded from an overlay manifest.
     """
     raw_path = raw_path.replace("{host}", short_host_token(hostname))
     raw_path = raw_path.replace("{repo_parent}", os.path.dirname(repo_root or REPO_ROOT))
@@ -391,7 +456,9 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
     for entry in entries:
         row = {
             "name": entry["name"],
-            "repo": os.path.join(repo_root, entry["repo"]),
+            # each entry's repo path resolves against its own manifest's repo root
+            # (overlay entries live in their *_credentials repo, not in dotfiles)
+            "repo": os.path.join(entry.get("_base_dir") or repo_root, entry["repo"]),
             "method": entry.get("method", "symlink"),
             "note": entry.get("note", ""),
             "requires": None,
@@ -551,16 +618,26 @@ def parse_args(argv=None):
     )
     parser.add_argument("--status", action="store_true", help="same as the status command")
     parser.add_argument("--dry-run", action="store_true", help="deprecated alias for the status command")
-    parser.add_argument("--manifest", default=None, help="path to an alternate manifest file (for testing)")
+    parser.add_argument(
+        "--manifest",
+        default=None,
+        help="load only this manifest file, repo paths relative to the dotfiles repo root; "
+        "skips overlay discovery (for testing)",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     args = parse_args(argv)
-    entries = load_manifest(args.manifest)
+    entries, manifest_paths = load_manifests(args.manifest)
     platform_key = get_platform_key()
     hostname = get_uppercase_hostname()
     print(f"platform: {platform_key}, hostname: {hostname}")
+    manifests_label = os.path.basename(manifest_paths[0])
+    if len(manifest_paths) > 1:
+        overlays = ", ".join(os.path.basename(path) for path in manifest_paths[1:])
+        manifests_label += f" + {len(manifest_paths) - 1} overlays ({overlays})"
+    print(f"manifests: {manifests_label}")
     print()
     plan = build_plan(entries, platform_key, hostname)
     if args.status or args.dry_run or args.command == "status":
