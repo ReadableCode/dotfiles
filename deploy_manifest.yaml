@@ -21,10 +21,13 @@
 #       linux: ~/path             # {repo_parent} to the directory containing this
 #       windows: ~/path           # repo checkout (e.g. ~/GitHub)
 #     hosts: [ENVY, ELITEDESK]    # optional: limit to specific hostnames (uppercase,
-#                                 # matched against the short hostname). Every name
-#                                 # must exist in the union of all `*_credentials`
-#                                 # host inventories - validated at load (skipped if
-#                                 # no inventory repo is present).
+#                                 # matched against the short hostname). OVERLAY
+#                                 # MANIFESTS ONLY - names are validated against the
+#                                 # union of the `*_credentials` host inventories, and
+#                                 # only an overlay travels with the inventory that
+#                                 # knows its names; a filter here would fail to
+#                                 # validate on machines that clone other inventories
+#                                 # (enforced at load).
 #     method: symlink | none      # default symlink. "none" = inventory-only entry:
 #                                 # the app is configured without links (see note).
 #                                 # There is no copy method - copies silently drift.
@@ -131,20 +134,11 @@
 
 # --- Claude ---
 
-- name: claude_settings
-  repo: application_configs/claude/settings.json
-  dest:
-    darwin: ~/.claude/settings.json
-    linux: ~/.claude/settings.json
-    windows: ~/.claude/settings.json
-  hosts: [ENVY, ELITEDESK, MACBOOKPROM5, MACBOOKPRO12, MACMINI14, NUKBUNTU, PAVILIONI5,
-          ULTRAPOCKET, RYZENWHITE, SPECTRE, YOGA7I, JASONZEPHYRUS]
-  note: >-
-    Personal machines only, named exactly as in personal_credentials/hosts.json (validated at
-    load). ~/.claude/settings.json is the correct location on Windows too
-    (%USERPROFILE%\.claude\settings.json). Work-context hosts live in their
-    credentials-repo overlay manifests so this entry never collides with a
-    context variant.
+# claude_settings (application_configs/claude/settings.json -> ~/.claude/
+# settings.json on personal machines) deploys via personal_manifest.yaml: its
+# hosts whitelist names personal machines, so it must travel with the
+# inventory that validates them. Work-context variants are entries in their
+# client overlay manifests, so nothing here can collide with them.
 
 # --- Barrier (KVM sharing) ---
 

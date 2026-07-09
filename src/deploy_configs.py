@@ -289,12 +289,25 @@ def load_manifests(manifest_path=None, inventory_path=None):
     Passing manifest_path (the --manifest test escape hatch) loads only that
     single file, repo paths relative to the dotfiles REPO_ROOT, skipping
     overlay discovery.
+
+    ``hosts`` filters are only allowed in overlay manifests: only an overlay
+    travels with the inventory that knows its names, so a filter in the main
+    manifest would fail host validation on any machine that clones a
+    different subset of credentials repos.
     """
     located = [(manifest_path, REPO_ROOT)] if manifest_path else discover_manifests()
+    main_manifest = None if manifest_path else located[0][0]
     entries = []
     seen: dict = {}
     for path, base_dir in located:
         for entry in _parse_manifest_file(path):
+            if path == main_manifest and entry.get("hosts"):
+                raise ValueError(
+                    f"Manifest entry '{entry['name']}' in {path} uses a hosts filter; hosts "
+                    "filters are only allowed in overlay manifests (move the entry to the "
+                    "relevant <context>_manifest.yaml, whose credentials repo carries the "
+                    "inventory that validates those names)"
+                )
             if entry["name"] in seen:
                 raise ValueError(
                     f"Duplicate manifest entry name '{entry['name']}' in {path} "

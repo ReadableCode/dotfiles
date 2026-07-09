@@ -36,6 +36,7 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
     linux: ~/.zshrc
     windows: ~/AppData/...                # only if the app is deployed on Windows
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
+                                          # (overlay manifests only, see below)
   method: symlink | none                  # default symlink
   note: free text caveat
 ```
@@ -48,6 +49,16 @@ loudly on an unknown name, so a typo or an invented hostname can't silently
 deploy to (or skip) the wrong machines. Machines with no credentials repo (and
 therefore no inventory) skip the check. The unit tests also check the real
 manifests against the real inventories when present.
+
+Because each machine only clones **its own** credentials repos, `hosts:`
+filters are only allowed in **overlay manifests** — an overlay travels with
+the inventory that knows its names, while a filter in the main
+`deploy_manifest.yaml` would fail validation on any machine that clones a
+different subset (e.g. a client laptop with only its own inventory). Loading
+rejects a `hosts:` filter in the main manifest with an error saying which
+overlay to move the entry to; an entry whose *file* lives in dotfiles can
+still deploy host-filtered from an overlay by pointing `repo:` back across,
+e.g. `repo: ../dotfiles/application_configs/claude/settings.json`.
 
 Entries with `method: none` are inventory-only: they document apps that
 intentionally do **not** use links (e.g. nvim on Windows via

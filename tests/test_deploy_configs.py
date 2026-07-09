@@ -1,6 +1,7 @@
 # %%
 # Imports #
 
+import json
 import os
 
 import config_test_utils  # noqa F401
@@ -190,6 +191,47 @@ def test_credentials_repo_without_manifest_contributes_nothing(overlay_tree):
     assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
 
 
+def write_inventory_at(path, names):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file_handle:
+        json.dump({"hosts": [{"name": name} for name in names]}, file_handle)
+    return path
+
+
+def test_hosts_filter_in_main_manifest_is_rejected(overlay_tree):
+    # rejected even when an inventory KNOWS the name - the rule is structural:
+    # other machines clone other inventories, so validation there would fail
+    write_inventory_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), ["ENVY"])
+    write_manifest_at(
+        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
+        [{"name": "main_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY"]}],
+    )
+    with pytest.raises(ValueError, match="only allowed in overlay manifests"):
+        deploy_configs.load_manifests()
+
+
+def test_hosts_filter_in_overlay_validates_against_the_only_inventory_present(overlay_tree):
+    # the work-laptop case: ONE client repo cloned, nothing else - the
+    # overlay's hosts filter validates against its own inventory
+    write_inventory_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), ["ACMEBOX"])
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [{"name": "acme_conf", "repo": "configs/acme.json", "dest": {"darwin": "~/.acme"}, "hosts": ["ACMEBOX"]}],
+    )
+    entries, _ = deploy_configs.load_manifests()
+    assert [entry["name"] for entry in entries] == ["main_conf", "acme_conf"]
+
+
+def test_explicit_manifest_flag_still_allows_hosts_filters(overlay_tree, tmp_path):
+    write_inventory_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), ["ENVY"])
+    manifest_path = write_manifest_at(
+        str(tmp_path / "solo.yaml"),
+        [{"name": "solo", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY"]}],
+    )
+    entries, _ = deploy_configs.load_manifests(manifest_path)
+    assert [entry["name"] for entry in entries] == ["solo"]
+
+
 def test_duplicate_entry_names_across_manifests_raise(overlay_tree):
     write_manifest_at(
         str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
@@ -225,15 +267,15 @@ def test_manifest_hosts_validate_against_union_of_inventories(overlay_tree):
     write_file(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
     write_file(str(overlay_tree / "personal_credentials" / "hosts.json"), '{"hosts": [{"name": "Envy"}]}')
     write_manifest_at(
-        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
-        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "ACMEBOX"]}],
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [{"name": "acme_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "ACMEBOX"]}],
     )
     entries, _ = deploy_configs.load_manifests()  # hosts from different inventories both resolve
-    assert entries[0]["hosts"] == ["ENVY", "ACMEBOX"]
+    assert entries[-1]["hosts"] == ["ENVY", "ACMEBOX"]
 
     write_manifest_at(
-        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
-        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["NOSUCHBOX"]}],
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [{"name": "acme_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["NOSUCHBOX"]}],
     )
     with pytest.raises(ValueError, match="NOSUCHBOX"):
         deploy_configs.load_manifests()
@@ -242,11 +284,11 @@ def test_manifest_hosts_validate_against_union_of_inventories(overlay_tree):
 def test_hosts_validation_skipped_when_no_inventory_exists(overlay_tree):
     # no *_credentials repo declares an inventory -> machine without credentials repos
     write_manifest_at(
-        str(overlay_tree / "dotfiles" / "deploy_manifest.yaml"),
-        [{"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["GHOSTBOX"]}],
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [{"name": "acme_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["GHOSTBOX"]}],
     )
     entries, _ = deploy_configs.load_manifests()
-    assert entries[0]["hosts"] == ["GHOSTBOX"]
+    assert entries[-1]["hosts"] == ["GHOSTBOX"]
 
 
 def test_real_manifest_hosts_all_exist_in_union_inventory():
