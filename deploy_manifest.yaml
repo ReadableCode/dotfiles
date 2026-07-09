@@ -54,6 +54,14 @@
   dest:
     darwin: ~/.zshrc
 
+- name: zshrc_local
+  repo: application_configs/bash/zshrc_local
+  dest:
+    darwin: ~/.zshrc.local
+  note: >-
+    Machine-local exports sourced by .zshrc. Only per-host zshrc_local.<host>
+    variants exist (no bare default), so hosts without one skip this entry.
+
 - name: bashrc
   repo: application_configs/bash/.bashrc
   dest:
