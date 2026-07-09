@@ -17,7 +17,7 @@ scripts under `src/` and `scripts/`.
 
 | Path | Purpose |
 |------|---------|
-| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines; `pull_*.py`, `chrome_bookmarks.py`, `ssh_devices.py` pull data/configs. Shared helpers in `src/utils/`. Homelab-only jobs (Bitwarden backup, Minecraft log tools) live in the local `~/GitHub/personal-automation` repo, not here. |
+| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines from `deploy_manifest.yaml` plus overlay manifests (`<context>_manifest.yaml`) discovered in sibling `*_credentials` repos; manifest `hosts:` names must exist in the union of the `*_credentials` host inventories (`<context>_hosts.json`, legacy fallback `hosts.json`). `pull_*.py`, `chrome_bookmarks.py`, `ssh_devices.py` pull data/configs. Shared helpers in `src/utils/`. Homelab-only jobs (Bitwarden backup, Minecraft log tools) live in the local `~/GitHub/personal-automation` repo, not here. |
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
@@ -65,8 +65,10 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
   the suffix scheme `<base>.<token>.<ext>` with a single lowercase token —
   e.g. `workspace.elitedesk.code-workspace` (host),
   `barrier_config.ryzenwhite.sgc` (host), `settings.mac.json` (platform),
-  `settings.hf.json` (context tag: `hf` = HelloFresh work; compound tags use
-  underscores inside the token, e.g. `settings.hf_bedrock.json`).
+  `settings.acme.json` (context tag for a client/company; compound tags use
+  underscores inside the token, e.g. `settings.acme_cloud.json` — such
+  company-tagged variants live in that client's `*_credentials` repo, not
+  here).
   `src/deploy_configs.py` auto-resolves manifest `repo` paths in the order
   **exact hostname → platform → bare default** (hostname matching is
   case-insensitive on the short pre-dot name, so host `ENVY.ASUSROUTER`

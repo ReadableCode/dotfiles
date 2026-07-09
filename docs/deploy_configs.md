@@ -1,9 +1,11 @@
 # Deploying Configs with the Manifest
 
-All repo-path → system-path config mappings live in one file at the repo root:
-[`deploy_manifest.yaml`](../deploy_manifest.yaml). One command deploys (or
-dry-runs, or health-checks) every config for the current machine — the per-app
-`ln -s` / `mklink` blocks that used to live in the setup docs are gone.
+All repo-path → system-path config mappings for the public dotfiles live in
+one file at the repo root: [`deploy_manifest.yaml`](../deploy_manifest.yaml).
+Sibling `*_credentials` repos can contribute **overlay manifests** with the
+same schema (see below). One command deploys (or dry-runs, or health-checks)
+every config for the current machine — the per-app `ln -s` / `mklink` blocks
+that used to live in the setup docs are gone.
 
 ## Commands
 
@@ -38,17 +40,41 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
   note: free text caveat
 ```
 
-Every name in a `hosts:` filter must exist in the host inventory
-(`~/GitHub/personal_credentials/hosts.json`) — the single source of truth for
-machine names. `load_manifest` fails loudly on an unknown name, so a typo or
-an invented hostname can't silently deploy to (or skip) the wrong machines.
-Machines without the personal_credentials repo skip the check. The unit tests
-also check the real manifest against the real inventory when it is present.
+Every name in a `hosts:` filter must exist in the host inventory — the
+**union** of every sibling `*_credentials` repo's inventory file
+(`<context>_hosts.json`, falling back to legacy `hosts.json` when the prefixed
+file is absent) — the single source of truth for machine names. Loading fails
+loudly on an unknown name, so a typo or an invented hostname can't silently
+deploy to (or skip) the wrong machines. Machines with no credentials repo (and
+therefore no inventory) skip the check. The unit tests also check the real
+manifests against the real inventories when present.
 
 Entries with `method: none` are inventory-only: they document apps that
 intentionally do **not** use links (e.g. nvim on Windows via
 `XDG_CONFIG_HOME`, the PowerShell profile via dot-sourcing), so the manifest
 is a complete inventory of deployed configs, not just a link list.
+
+## Overlay manifests from `*_credentials` repos
+
+Private configs never live in this public repo — they live in sibling
+credentials repos (see
+[client_credentials_repos.md](./client_credentials_repos.md)). On every run,
+`deploy_configs.py` loads `deploy_manifest.yaml` first and then discovers one
+optional overlay per directory matching `../*_credentials` (sorted for
+determinism): `<context>_manifest.yaml`, where `<context>` is the directory
+name minus the `_credentials` suffix — e.g. `acme_credentials` contributes
+`acme_manifest.yaml`. Overlay entries use the exact same schema; the only
+difference is that their `repo:` paths resolve against **that credentials
+repo's root**, not the dotfiles root. The `{repo_parent}` placeholder always
+expands to the dotfiles checkout's parent (e.g. `~/GitHub`) no matter which
+manifest an entry came from.
+
+Entry `name`s must be unique across **all** loaded manifests — a duplicate
+fails loudly naming both manifest files. The loaded set is printed as a
+one-liner at the top of every run (e.g.
+`manifests: deploy_manifest.yaml + 1 overlays (acme_manifest.yaml)`).
+`--manifest <file>` loads only that single file (repo paths relative to the
+dotfiles root) and skips overlay discovery — a test escape hatch.
 
 ### Host / platform variant files
 
@@ -67,7 +93,7 @@ If neither a matching variant nor the bare file exists but variants for
 *other* hosts do (e.g. `workspace.<host>.code-workspace` with no bare
 `workspace.code-workspace`), the entry is skipped as `SKIP_VARIANT` — so
 adding a variant file for a new host needs **no manifest change**. Context
-tags (e.g. `settings.hf.json`) are never auto-resolved.
+tags (e.g. `settings.acme.json`) are never auto-resolved.
 
 `dest` values support two placeholders:
 
