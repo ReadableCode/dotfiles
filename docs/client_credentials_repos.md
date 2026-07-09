@@ -41,25 +41,32 @@ clones: `dotfiles` and that client's `*_credentials` repo. Entries whose
 destinations live inside other repo checkouts should use the manifest
 `requires:` precondition so they follow the clones.
 
-## Hosting: bare repo over ssh
+## Hosting: repo on a Linux host, cloned over ssh
 
-A credentials repo does not need a git forge — a **bare repo on client
-hardware** keeps client data on client infrastructure:
+A credentials repo does not need a git forge. The canonical copy is a
+**normal working clone in a Linux machine's repos dir** — the same pattern as
+`personal_credentials` — and every other machine clones straight from it over
+ssh:
 
 ```bash
-# on the client host (once)
-git init --bare ~/repos/acme_credentials.git
+# the canonical copy lives on a Linux host, e.g.
+#   /home/user/GitHub/acme_credentials   (a plain working repo, not bare)
+
+# make pushes from clones update its working tree (refused if it is dirty)
+git -C /home/user/GitHub/acme_credentials config receive.denyCurrentBranch updateInstead
 
 # on each machine that needs it
-git clone ssh://user@client-host/~/repos/acme_credentials.git ~/GitHub/acme_credentials
+git clone user@linux-host:/home/user/GitHub/acme_credentials ~/GitHub/acme_credentials
 ```
 
-On a **Windows** host, OpenSSH Server (an optional Windows feature) works as
-the transport, with two caveats: the default shell is `cmd.exe`, so `~` in ssh
-URLs may not expand — use an absolute path like
-`ssh://user@client-host/C:/repos/acme_credentials.git` — and `git` must be on
-the PATH that non-interactive ssh sessions see (system PATH, not just the
-user profile).
+Do NOT host the canonical copy on a **Windows** machine. Windows OpenSSH's
+default shell is `cmd.exe`, which breaks git's server-side transport (it does
+not strip the single quotes git wraps around the repo path, and the ssh URL's
+absolute `/C:/...` path form is rejected by Windows git). Fixing that needs
+either admin rights (registry `DefaultShell` change) or wrapper shims —
+neither is acceptable here. A client machine whose repos should live on its
+own hardware but is Windows-only gets its canonical hosted on the homelab
+Linux box instead; Windows machines work fine as clone *clients*.
 
 When the origin is a **laptop** that is often asleep or off-network, that only
 blocks `git pull`/`push` against it — existing clones keep working fully
