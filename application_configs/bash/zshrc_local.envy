@@ -1,3 +1,4 @@
 export HOMEBREW_CACHE=/Volumes/EnvyExtSSD/HomebrewCache
 export OLLAMA_MODELS="/Volumes/EnvyExtSSD/ollama/models"
 export UV_CACHE_DIR=/Volumes/EnvyExtSSD/cache/uv
+export GOCACHE=/Volumes/EnvyExtSSD/cache/go-build
