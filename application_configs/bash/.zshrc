@@ -38,6 +38,14 @@ zstyle ':vcs_info:*' enable git
 zstyle ':vcs_info:git:*' formats ' %F{red}(%b)%f'
 zstyle ':vcs_info:git:*' actionformats ' %F{red}(%b|%a)%f'
 
+# A venv inherited from a parent process (tmux server, VS Code, launcher)
+# sets VIRTUAL_ENV without activate ever running in this shell — detectable
+# because the deactivate function only exists in shells that really activated.
+if [[ -n "$VIRTUAL_ENV" ]] && ! typeset -f deactivate > /dev/null; then
+    path=(${path:#$VIRTUAL_ENV/bin})
+    unset VIRTUAL_ENV VIRTUAL_ENV_PROMPT
+fi
+
 # Function to get UV environment info
 get_uv_env() {
     if [[ -n "$VIRTUAL_ENV" ]]; then
