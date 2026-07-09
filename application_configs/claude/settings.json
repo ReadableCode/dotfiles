@@ -4,5 +4,8 @@
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
   "tui": "fullscreen",
-  "theme": "auto"
+  "theme": "auto",
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true
+  }
 }
