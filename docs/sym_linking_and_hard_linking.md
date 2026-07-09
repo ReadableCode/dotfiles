@@ -76,19 +76,13 @@ link you are creating, `-Target` is the file that already exists.
 ```powershell
 New-Item -ItemType SymbolicLink `
   -Path "C:\Users\jason\GitHub\yoga7i.code-workspace" `
-  -Target "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\workspace.yoga7i.code-workspace"
-```
-
-```powershell
-New-Item -ItemType SymbolicLink `
-  -Path "C:\Users\16937827583938060798\HelloFreshProjects\hellofresh.code-workspace" `
-  -Target "C:\Users\16937827583938060798\HelloFreshProjects\dotfiles\application_configs\vscode\workspace.hellofresh.code-workspace"
+  -Target "C:\Users\jason\GitHub\personal_credentials\vscode\workspace.yoga7i.code-workspace"
 ```
 
 Or with `cmd`'s `mklink` (elevated prompt required without Developer Mode):
 
 ```powershell
-cmd /c mklink "C:\Users\jason\GitHub\ultrapocket.code-workspace" "C:\Users\jason\GitHub\dotfiles\application_configs\vscode\workspace.ultrapocket.code-workspace"
+cmd /c mklink "C:\Users\jason\GitHub\ultrapocket.code-workspace" "C:\Users\jason\GitHub\personal_credentials\vscode\workspace.ultrapocket.code-workspace"
 ```
 
 (These workspace links are exactly what

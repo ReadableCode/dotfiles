@@ -65,22 +65,27 @@ Notes:
 
 ### Workspace files
 
-Workspace files are manifest-driven too (entry `vscode_workspace`). The repo
-tracks one file per host, named `workspace.<host>.code-workspace` (lowercase
-hostname), and the deploy resolves the right one for the current machine and
-links it **next to the repo checkout**, e.g.:
+Workspace files are manifest-driven too, but they do NOT live in this repo: a
+workspace file names every sibling repo at once — including private client
+repos — so they belong in the credentials overlays (see
+`client_credentials_repos.md`). Personal machines get theirs from the
+`vscode_workspace` entry in `personal_credentials/personal_manifest.yaml`
+(one `vscode/workspace.<host>.code-workspace` per host, lowercase hostname);
+client machines get a per-host entry in their own `<context>_manifest.yaml`.
+The deploy resolves the right variant for the current machine and links it
+**next to the repo checkout**, e.g.:
 
 ```text
-~/GitHub/envy.code-workspace -> ~/GitHub/dotfiles/application_configs/vscode/workspace.envy.code-workspace
+~/GitHub/envy.code-workspace -> ~/GitHub/personal_credentials/vscode/workspace.envy.code-workspace
 ```
 
-The link must live in the repo's parent directory (`~/GitHub`, or
-`~/HelloFreshProjects` on the HelloFresh laptop) because the workspace's
-project folders are relative siblings of `dotfiles/`.
+The link must live in the repo's parent directory (`~/GitHub`, or the
+equivalent repos dir on a client machine) because the workspace's project
+folders are relative siblings of `dotfiles/`.
 
-For a new machine, add
-`application_configs/vscode/workspace.<host>.code-workspace` to the repo and
-run the deploy — no manifest change is needed:
+For a new personal machine, add
+`personal_credentials/vscode/workspace.<host>.code-workspace` and run the
+deploy — no manifest change is needed:
 
 ```bash
 cd ~/GitHub/dotfiles
