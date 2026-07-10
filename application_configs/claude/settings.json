@@ -15,9 +15,6 @@
   "autoUpdatesChannel": "latest",
   "cleanupPeriodDays": 730,
   "feedbackSurveyRate": 0,
-  "env": {
-    "DISABLE_TELEMETRY": "1"
-  },
   "tui": "fullscreen",
   "theme": "auto",
   "preferredNotifChannel": "terminal_bell",
