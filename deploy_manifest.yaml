@@ -189,3 +189,24 @@
     Not linked: $PROFILE dot-sources this file (". <path>"), so the profile is
     config-path indirection rather than a link. See
     docs/setup_windows_workstation_personal.md.
+
+# --- Per-repo .env links ---
+
+- name: book_bot_env
+  repo: ../personal_credentials/personal.env
+  dest:
+    darwin: "{repo_parent}/Book-Bot/.env"
+    linux: "{repo_parent}/Book-Bot/.env"
+  requires:
+    - "{repo_parent}/Book-Bot"
+    - "{repo_parent}/personal_credentials"
+  note: >-
+    Standard per-repo .env symlink to personal.env (same pattern as
+    postgrest_auth_env in personal_manifest.yaml). Deployment-critical on
+    elitedesk: Book-Bot/deploy/compose.elitedesk.yaml interpolates
+    POSTGRES_USER / POSTGRES_PASSWORD / POSTGREST_JWT_SECRET from this link.
+    On dev machines it supplies the JWT secret + superuser creds for
+    Book-Bot's scripts while leaving the app in SQLite dev mode
+    (personal.env sets no POSTGREST_URL). Lives here rather than the
+    personal_credentials overlay because it needs no hosts whitelist —
+    the requires pair already scopes it to machines with both repos cloned.
