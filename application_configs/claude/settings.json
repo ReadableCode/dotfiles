@@ -21,6 +21,9 @@
   "tui": "fullscreen",
   "theme": "auto",
   "preferredNotifChannel": "terminal_bell",
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
   "hooks": {
     "Notification": [
       {
