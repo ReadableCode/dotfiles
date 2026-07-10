@@ -1,25 +1,35 @@
 # VS Code Cleanup
 
-Runbook for applying the July 2026 VS Code cleanup to another machine. The
-settings themselves (`application_configs/vscode/settings.*.json`) are already
-committed and deployed via `deploy_configs.py`, so **do not re-edit settings** —
-this doc only covers the per-machine work: extension removals and health
-checks. This is written so Claude Code (or another AI agent) can execute it
-on any machine.
+Runbook for applying the VS Code cleanup to another machine. The settings
+themselves (`application_configs/vscode/settings.*.json`) are already committed
+and deployed via `deploy_configs.py`, so **do not re-edit settings** — this doc
+only covers the per-machine work: extension removals and health checks. This is
+written so Claude Code (or another AI agent) can execute it on any machine.
 
 ## Background
 
 An audit of the envy multiroot workspace (28 folders) found the slowness was
-mostly: git autofetch across ~26 repos every 3 minutes (now 900s in settings),
-GitLens duplicating that git churn, a handful of broken extension installs,
-and ~17 extensions with no matching usage in any repo. Terminal/tmux and the
-Python/Jupyter stack were healthy and untouched.
+mostly: git autofetch across ~26 repositories every 3 minutes (now 900s in
+settings), GitLens duplicating that git churn, a handful of broken extension
+installs, and ~17 extensions with no matching usage in any repository.
+Terminal/tmux and the Python/Jupyter stack were healthy and untouched.
+
+A second pass (July 2026) on a Linux Remote-SSH host extended the list: it
+removed both SQLFluff extensions (one crashing on activation every session),
+both GitHub Actions extensions (one failing on the GitHub repos API), and a set
+of low-usage extensions Jason confirmed he doesn't use (PlantUML, Helm
+Intellisense, XML Tools, PowerShell, ChatGPT/Codex). It kept SQLite Viewer, and
+confirmed several keeps by repository evidence (Terraform, YAML, Makefile Tools,
+Live Preview, Container Tools). See the remote-server section for the CLI
+mechanics, which differ from a plain `code` install.
 
 ## Extensions to remove
 
 Run on the target machine (adjust `code` to `code-insiders`/`codium` if
-applicable). Skipping ones that aren't installed is fine — the loop tolerates
-that.
+applicable; on a Remote-SSH host use `code-server` — see the remote-server
+section). Skipping ones that aren't installed is fine — the loop tolerates
+that. Order matters where noted: an extension **pack must be uninstalled before
+its members**, or the member's uninstall is refused.
 
 ```bash
 for e in \
@@ -36,6 +46,16 @@ for e in \
     negokaz.live-server-preview \
     george-alisson.html-preview-vscode \
     donjayamanne.githistory \
+    sqlfluff.vscode-sqlfluff \
+    dorzey.vscode-sqlfluff \
+    github.vscode-github-actions \
+    me-dutour-mathieu.vscode-github-actions \
+    jebbs.plantuml \
+    tim-koehler.helm-intellisense \
+    dotjoshjohnson.xml \
+    ms-vscode.powershell \
+    openai.chatgpt \
+    formulahendry.docker-extension-pack \
     formulahendry.docker-explorer \
     sergey-tihon.openxml-explorer \
     ms-dotnettools.vscode-dotnet-runtime; do
@@ -50,12 +70,22 @@ Why each one goes:
 | gitlens | Heavy background git work; replaced by built-in blame settings (`git.blame.*`) + Git Graph for the tree view |
 | vsliveshare | Broken against current VS Code API, unused |
 | shell-format | Broken install (missing wasm), removed rather than reinstalled |
-| rust-analyzer | No Rust in any repo |
-| azure-repos / remotehub / remote-repositories | Remote-repo browsing, unused |
+| rust-analyzer | No Rust in any repository |
+| azure-repos / remotehub / remote-repositories | Remote-repository browsing, unused |
 | npm-intellisense / node-module-intellisense | Barely any JS/TS work |
 | gather | Abandoned by Microsoft |
-| live-server-preview / html-preview-vscode | Redundant with Live Server (`ritwickdey.liveserver`, kept) |
+| live-server-preview / html-preview-vscode | Redundant with the kept live-preview extension (`ms-vscode.live-server` or `ritwickdey.liveserver`) |
 | githistory | Redundant with Git Graph (`mhutchie.git-graph`, kept) |
+| sqlfluff.vscode-sqlfluff | Broken — crashes on activation every session (`command 'sqlfluff.quickfix.excludeRule' already exists`); SQL is linted per-repo, not in-editor |
+| dorzey.vscode-sqlfluff | Old SQLFluff publisher; orphaned leftover after the move to the `sqlfluff.*` publisher |
+| github.vscode-github-actions | Fails to activate (`HttpError: Not Found` on the GitHub repos API); Actions aren't edited in-editor |
+| me-dutour-mathieu.vscode-github-actions | Third-party GitHub Actions duplicate |
+| jebbs.plantuml | UML diagram preview; only one `.puml` file across all repositories |
+| tim-koehler.helm-intellisense | Helm chart autocomplete; only one `Chart.yaml` across all repositories |
+| dotjoshjohnson.xml | XML formatting/tree view; not used |
+| ms-vscode.powershell | PowerShell language support; the few `.ps1` files aren't edited here |
+| openai.chatgpt | OpenAI in-editor assistant; overlaps with Claude Code (kept) |
+| docker-extension-pack | Wrapper pack around docker-explorer, redundant with the official Docker extensions — remove **before** docker-explorer or that uninstall is refused |
 | docker-explorer | Redundant with the official Docker extensions |
 | openxml-explorer | Raw Office-XML inspection, not used (Excel viewing stays via `gc-excelviewer`) |
 | vscode-dotnet-runtime | Only existed as a dependency of openxml-explorer — remove it **after** openxml-explorer or the uninstall is refused |
@@ -65,7 +95,37 @@ Why each one goes:
 - **Windows**: keep `mark-wiemer.vscode-autohotkey-plus-plus` — AHK scripts
   are actively edited there. It was removed on macOS only.
 - **Remote-SSH hosts** have their own remote extension sets; apply the same
-  removal list on the remote side where the extensions appear.
+  removal list on the remote side where the extensions appear. See below.
+
+## Remote-SSH / code-server hosts
+
+On a machine reached through Remote-SSH (a `~/.vscode-server` directory is
+present), the plain `code` CLI does not work from a normal shell — it prints
+"Command is only available in WSL or inside a Visual Studio Code terminal." Use
+the server's own offline CLI instead; it operates directly on the remote
+extension directory without a running instance:
+
+```bash
+CS=~/.vscode-server/cli/servers/Stable-<commit>/server/bin/code-server
+"$CS" --list-extensions --show-versions
+"$CS" --uninstall-extension <publisher.name>
+```
+
+Pick the newest `Stable-<commit>` directory. Notes:
+
+- `code-server` unregisters the extension from `extensions.json` but often
+  leaves its directory on disk (marked in
+  `~/.vscode-server/extensions/.obsolete`) while the running extension host
+  still holds handles. Remove the leftover
+  `~/.vscode-server/extensions/<publisher.name>-<version>/` directory manually
+  for a clean state.
+- Removals take effect on the next **window reload / reconnect** — the running
+  extension host keeps them in memory until then.
+- A machine may also carry a second, stale local set under `~/.vscode/extensions/`
+  from an old native install. Older versions have no `extensions.json` (they
+  scan directories), so just delete the matching `<publisher.name>-<version>/`
+  directories there too. Apply the same remove list to whichever of our removed
+  IDs are present.
 
 ## Intentional keep list
 
@@ -74,27 +134,42 @@ mypy-type-checker, python-envs), Jupyter stack (jupyter, renderers, keymap,
 cell-tags, slideshow — `# %%` code cells are used everywhere), ruff (herdstone
 only, configured per-repo), claude-code, go, swiftlang.swift-vscode +
 llvm-vs-code-extensions.lldb-dap (Swift debugging needs lldb-dap), remote-ssh
-pack, Docker official extensions, git-graph, liveserver, markdownlint,
-prettier, prettier-sql, sqltools (+ pg driver), rainbow-csv, gc-excelviewer,
-gitignore, github-actions, open-in-github, dracula theme, great-icons,
+pack, Docker official extensions (`docker.docker`, `ms-azuretools.vscode-docker`,
+`ms-azuretools.vscode-containers`), git-graph, live preview
+(`ms-vscode.live-server`) or Live Server (`ritwickdey.liveserver`) — keep
+whichever is present, markdownlint, prettier, prettier-sql, sqltools (+ pg
+driver), rainbow-csv, gc-excelviewer, sqlite-viewer (`qwtel.sqlite-viewer`),
+gitignore, terraform (`hashicorp.terraform`, heavily used), yaml
+(`redhat.vscode-yaml`, schema validation used everywhere), makefile-tools
+(`ms-vscode.makefile-tools`), open-in-github, dracula theme, great-icons,
 markdown-mermaid, graphviz-interactive-preview, pdf, stl-viewer, tailscale.
 
 ## Instructions for Claude on other machines
 
-1. Run `code --list-extensions` and diff against the remove/keep lists above.
+1. Run `code --list-extensions` (or `code-server --list-extensions` on a
+   Remote-SSH host — see the remote-server section) and diff against the
+   remove/keep lists above.
 2. For any installed extension **not explicitly listed here**, do NOT silently
    uninstall it. Ask Jason about each one, giving a short plain-language
-   description of what it does, whether anything in his repos appears to use
-   it, and a keep/remove recommendation — then act on his answers.
-3. Check the newest full session under the VS Code logs dir
-   (`~/Library/Application Support/Code/logs/` on macOS, `%APPDATA%\Code\logs`
-   on Windows, `~/.config/Code/logs` on Linux) for extensions that fail to
-   activate, repeated errors, or unresponsive-extension-host events, and
-   report findings.
+   description of what it does, whether anything in his repositories appears to
+   use it, and a keep/remove recommendation — then act on his answers.
+3. Check the newest full session under the VS Code logs dir for extensions that
+   fail to activate, repeated errors, or unresponsive-extension-host events, and
+   report findings. Locations: `~/Library/Application Support/Code/logs/`
+   (macOS), `%APPDATA%\Code\logs` (Windows), `~/.config/Code/logs` (Linux
+   local), and `~/.vscode-server/data/logs/` (Remote-SSH host — the relevant one
+   when connected remotely).
 4. Watch for stale state the logs reveal: linters pointed at deleted `.venv`s
    (fix with `uv sync` — Jason uses uv, never pip), workspace folders that no
    longer exist, and stale git submodule declarations.
 5. Settings deploy via git — never hand-edit the live settings file; edit
-   `application_configs/vscode/` in this repo if a settings change is truly
-   needed, and never override the per-repo linter configs (na-finops's are
-   carefully tuned and live in that repo).
+   `application_configs/vscode/` in this repository if a settings change is
+   truly needed, and never override the per-repo linter configs (na-finops's are
+   carefully tuned and live in that repository).
+6. After removing extensions, also prune the multiroot workspace file's
+   `extensions.recommendations` list so it no longer recommends anything you
+   uninstalled (otherwise VS Code nags to reinstall them), and drop any now-dead
+   settings keys tied to removed extensions (e.g. `sqlfluff.dialect`). Jason's
+   workspace file `hellofreshjason.code-workspace` is a symlink into
+   `hellofresh_credentials/vscode/` — resolve the symlink and edit the real
+   target.
