@@ -20,6 +20,9 @@
   "remote.SSH.useLocalServer": true,
   // Git
   "git.autofetch": true,
+  "git.autofetchPeriod": 900,
+  "git.blame.editorDecoration.enabled": true,
+  "git.blame.statusBarItem.enabled": true,
   "git.confirmSync": false,
   "git.openRepositoryInParentFolders": "always",
   "git.alwaysShowStagedChangesResourceGroup": true,
@@ -48,7 +51,6 @@
     "editor.formatOnSave": true,
   },
   "[shellscript]": {
-    "editor.defaultFormatter": "foxundermoon.shell-format",
     "editor.detectIndentation": false,
     "editor.insertSpaces": false,
     "editor.tabSize": 4, // You can change this to your preferred tab size
@@ -59,9 +61,6 @@
   },
   "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
-  },
-  "[terraform]": {
-    "editor.defaultFormatter": "hashicorp.terraform",
   },
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode",
@@ -89,17 +88,6 @@
   "Prettier-SQL.denseOperators": true,
   "Prettier-SQL.keywordCase": "upper",
   "Prettier-SQL.SQLFlavourOverride": "snowflake",
-  // TODO Tree
-  "todo-tree.general.rootFolder": "${workspaceFolder}",
-  "todo-tree.tree.showCountsInTree": true,
-  "todo-tree.regex.regexCaseSensitive": false,
-  "todo-tree.general.showActivityBarBadge": true,
-  "todo-tree.general.statusBar": "top three",
-  "todo-tree.filtering.excludeGlobs": [
-    "**/node_modules/*/**",
-    "**/*.egg-info",
-    "**/todo.py",
-  ],
   // Notebooks
   "jupyter.interactiveWindow.creationMode": "perFile",
   "jupyter.askForKernelRestart": false,
@@ -155,7 +143,6 @@
   // Terminal
   "python.terminal.executeInFileDir": true,
   "terminal.integrated.enableMultiLinePasteWarning": "never",
-  "powershell.cwd": "/Users/jason/GitHub",
   // Security
   "security.workspace.trust.enabled": false,
   "interactiveWindow.executeWithShiftEnter": true,
@@ -325,8 +312,6 @@
   "git.addAICoAuthor": "off",
   "githubPullRequests.pullPR": false,
   "github.pullRequest.showOnStartup": false,
-  "gitlens.ai.model": "vscode",
-  "gitlens.ai.vscode.model": "copilotcli:claude-sonnet-4.6",
   "workbench.browser.enableRemoteProxy": true,
   "workbench.browser.searchEngine": "google",
   "workbench.browser.showInTitleBar": true,
