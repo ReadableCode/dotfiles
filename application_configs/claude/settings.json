@@ -1,10 +1,52 @@
 {
-  "includeCoAuthoredBy": false,
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh"
+  },
+  "showTurnDuration": true,
+  "showMessageTimestamps": true,
+  "terminalProgressBarEnabled": true,
   "model": "claude-fable-5[1m]",
   "effortLevel": "medium",
   "autoUpdatesChannel": "latest",
+  "cleanupPeriodDays": 730,
+  "feedbackSurveyRate": 0,
+  "env": {
+    "DISABLE_TELEMETRY": "1"
+  },
   "tui": "fullscreen",
   "theme": "auto",
+  "preferredNotifChannel": "terminal_bell",
+  "hooks": {
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v afplay >/dev/null 2>&1; then afplay /System/Library/Sounds/Ping.aiff; elif command -v paplay >/dev/null 2>&1; then paplay /usr/share/sounds/freedesktop/stereo/message.oga; elif command -v powershell.exe >/dev/null 2>&1; then powershell.exe -NoProfile -c '[console]::beep(1200,200)'; fi",
+            "async": true,
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if command -v afplay >/dev/null 2>&1; then afplay /System/Library/Sounds/Purr.aiff; elif command -v paplay >/dev/null 2>&1; then paplay /usr/share/sounds/freedesktop/stereo/complete.oga; elif command -v powershell.exe >/dev/null 2>&1; then powershell.exe -NoProfile -c '[console]::beep(800,200)'; fi",
+            "async": true,
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "enabledPlugins": {
     "swift-lsp@claude-plugins-official": true
   }
