@@ -1,27 +1,11 @@
 {
+  "cleanupPeriodDays": 730,
   "attribution": {
     "commit": "",
     "pr": "",
     "sessionUrl": false
   },
-  "statusLine": {
-    "type": "command",
-    "command": "bash ~/.claude/statusline.sh"
-  },
-  "showTurnDuration": true,
-  "showMessageTimestamps": true,
-  "terminalProgressBarEnabled": true,
   "model": "claude-fable-5[1m]",
-  "effortLevel": "medium",
-  "autoUpdatesChannel": "latest",
-  "cleanupPeriodDays": 730,
-  "feedbackSurveyRate": 0,
-  "tui": "fullscreen",
-  "theme": "auto",
-  "preferredNotifChannel": "terminal_bell",
-  "remoteControlAtStartup": true,
-  "inputNeededNotifEnabled": true,
-  "agentPushNotifEnabled": true,
   "hooks": {
     "Notification": [
       {
@@ -29,8 +13,8 @@
           {
             "type": "command",
             "command": "if command -v afplay >/dev/null 2>&1; then afplay /System/Library/Sounds/Ping.aiff; elif command -v paplay >/dev/null 2>&1; then paplay /usr/share/sounds/freedesktop/stereo/message.oga; elif command -v powershell.exe >/dev/null 2>&1; then powershell.exe -NoProfile -c '[console]::beep(1200,200)'; fi",
-            "async": true,
-            "timeout": 10
+            "timeout": 10,
+            "async": true
           }
         ]
       }
@@ -41,14 +25,30 @@
           {
             "type": "command",
             "command": "if command -v afplay >/dev/null 2>&1; then afplay /System/Library/Sounds/Purr.aiff; elif command -v paplay >/dev/null 2>&1; then paplay /usr/share/sounds/freedesktop/stereo/complete.oga; elif command -v powershell.exe >/dev/null 2>&1; then powershell.exe -NoProfile -c '[console]::beep(800,200)'; fi",
-            "async": true,
-            "timeout": 10
+            "timeout": 10,
+            "async": true
           }
         ]
       }
     ]
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline.sh"
+  },
   "enabledPlugins": {
     "swift-lsp@claude-plugins-official": true
-  }
+  },
+  "feedbackSurveyRate": 0,
+  "effortLevel": "high",
+  "autoUpdatesChannel": "latest",
+  "tui": "fullscreen",
+  "theme": "auto",
+  "preferredNotifChannel": "terminal_bell",
+  "showTurnDuration": true,
+  "showMessageTimestamps": true,
+  "terminalProgressBarEnabled": true,
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
 }
