@@ -2,7 +2,7 @@
   "attribution": {
     "commit": "",
     "pr": "",
-    "sessionUrl": ""
+    "sessionUrl": false
   },
   "statusLine": {
     "type": "command",
