@@ -139,6 +139,15 @@ function gitpullall() {
 
     chmod +x "$bin"
     "$bin" -path "$gitDir" -r
+
+    if command -v uv >/dev/null 2>&1; then
+        # Deploy after the pulls: idempotent, and re-links the hard links
+        # the pulls just orphaned (no-symlink machines like work laptops).
+        echo "Deploying configs..."
+        (cd "$gitDir/dotfiles" && uv run python src/deploy_configs.py)
+    else
+        echo "uv not found, skipping config deploy."
+    fi
 }
 
 ### Script Shortcuts ###

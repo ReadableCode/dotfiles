@@ -271,6 +271,16 @@ function gitpullall {
     if (-not (Test-GitDir)) { return }
     $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
     & $binary -path $gitDir -r
+    if (Get-Command uv -ErrorAction SilentlyContinue) {
+        # Deploy after the pulls: idempotent, and re-links the hard links
+        # the pulls just orphaned (no-symlink machines like work laptops).
+        Write-Host "Deploying configs..." -ForegroundColor Green
+        Push-Location (Join-Path $gitDir 'dotfiles')
+        uv run python src/deploy_configs.py
+        Pop-Location
+    } else {
+        Write-Host "uv not found, skipping config deploy." -ForegroundColor Yellow
+    }
 }
 
 ### Script Shortcuts ###
