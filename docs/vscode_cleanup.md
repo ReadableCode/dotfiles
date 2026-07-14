@@ -23,6 +23,14 @@ confirmed several keeps by repository evidence (Terraform, YAML, Makefile Tools,
 Live Preview, Container Tools). See the remote-server section for the CLI
 mechanics, which differ from a plain `code` install.
 
+A third pass (July 2026, MacbookProM5) added removals Jason confirmed: the C#
+stack (`ms-dotnettools.csdevkit`, `ms-dotnettools.csharp`, and their
+`vscode-dotnet-runtime` dependency — no C# in any repository; uninstalling the
+csdevkit pack also removes csharp) and `github.vscode-pull-request-github`
+(PRs are handled via `gh`/browser). Clarification: the ruff keep's
+"herdstone only" refers to the **herdstone repo** being present on the machine
+(its ruff config is `backends/python/pyproject.toml`), not a hostname.
+
 ## Extensions to remove
 
 Run on the target machine (adjust `code` to `code-insiders`/`codium` if
@@ -58,6 +66,9 @@ for e in \
     formulahendry.docker-extension-pack \
     formulahendry.docker-explorer \
     sergey-tihon.openxml-explorer \
+    github.vscode-pull-request-github \
+    ms-dotnettools.csdevkit \
+    ms-dotnettools.csharp \
     ms-dotnettools.vscode-dotnet-runtime; do
     code --uninstall-extension "$e"
 done
@@ -88,7 +99,9 @@ Why each one goes:
 | docker-extension-pack | Wrapper pack around docker-explorer, redundant with the official Docker extensions — remove **before** docker-explorer or that uninstall is refused |
 | docker-explorer | Redundant with the official Docker extensions |
 | openxml-explorer | Raw Office-XML inspection, not used (Excel viewing stays via `gc-excelviewer`) |
-| vscode-dotnet-runtime | Only existed as a dependency of openxml-explorer — remove it **after** openxml-explorer or the uninstall is refused |
+| vscode-pull-request-github | In-editor GitHub PR/issue review; PRs are handled via `gh` CLI and browser |
+| csdevkit / csharp | C# Dev Kit + language support; no C# in any repository. Uninstall the csdevkit **pack first** — it takes csharp with it |
+| vscode-dotnet-runtime | Only existed as a dependency of openxml-explorer / csdevkit — remove it **after** those or the uninstall is refused |
 
 ## Platform exceptions
 
