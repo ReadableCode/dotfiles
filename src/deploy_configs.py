@@ -87,6 +87,26 @@ def status_line(status, name, text, name_width=22):
     return f"{label}{name:<{name_width}}  {text}".rstrip()
 
 
+def _term_width():
+    try:
+        return min(shutil.get_terminal_size().columns, 100)
+    except (OSError, ValueError):
+        return 80
+
+
+def print_section(title, count, color):
+    """Section divider: a colored '── Title (n) ────' rule across the terminal."""
+    prefix = f"── {title} ({count}) "
+    print(paint(prefix + "─" * max(1, _term_width() - len(prefix)), color))
+
+
+def fit_text(text, width):
+    """Truncate prose to width with an ellipsis (paths are never passed through this)."""
+    if width < 10 or len(text) <= width:
+        return text
+    return text[: width - 3].rstrip() + "..."
+
+
 def _info_detail(row, platform_key):
     """Explanation text for rows that are skipped by design."""
     if row["action"] == "none":
@@ -223,7 +243,7 @@ def deploy_config(
 
     if repo_exists and not system_exists:
         action = create_link(repo_path, system_path)
-        print(f"  {action} {system_path} -> {repo_path}")
+        print(f"  {action} {system_path}\n         -> {repo_path}")
         return action
     if not repo_exists and system_exists:
         return _ingest_system_file(repo_path, system_path, ingest_system_if_exists)
@@ -241,7 +261,7 @@ def _ingest_system_file(repo_path, system_path, ingest_system_if_exists):
     shutil.move(system_path, repo_path)
     print(f"  moved {system_path} into repo at {repo_path}")
     action = create_link(repo_path, system_path)
-    print(f"  {action} {system_path} -> {repo_path}")
+    print(f"  {action} {system_path}\n         -> {repo_path}")
     return "ingested"
 
 
@@ -250,11 +270,11 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
         print(f"  both versions exist; skipping replacement of {system_path} - no changes made")
         return "skipped"
     backup_path = backup_system_file(system_path, repo_path, backup_root=backup_root, repo_root=repo_root)
-    print(f"  backed up {system_path} to {backup_path}")
+    print(f"  backed up {system_path}\n         -> {backup_path}")
     os.remove(system_path)
     print("  replaced system version with the repo version (local edits live only in the backup)")
     action = create_link(repo_path, system_path)
-    print(f"  {action} {system_path} -> {repo_path}")
+    print(f"  {action} {system_path}\n         -> {repo_path}")
     return "replaced"
 
 
@@ -560,25 +580,43 @@ def planned_action(status):
 
 def run_status(plan, platform_key):
     """
-    Combined health report + dry run: one row per manifest entry showing its
-    current state and, when unhealthy, what deploy would do about it. Read-only;
-    exits non-zero when anything needs attention (cron-able drift check).
+    Combined health report + dry run, grouped into sections (least interesting
+    first, problems last so they stay on screen): not applicable -> healthy ->
+    needs attention. Read-only; exits non-zero when anything needs attention
+    (cron-able drift check).
     """
     name_width = max([len(row["name"]) for row in plan] + [4])
-    status_counts: dict = {}
+    info, healthy, unhealthy = [], [], []
     for row in plan:
         if row["action"] != "apply":
-            print(status_line(row["action"].upper(), row["name"], _info_detail(row, platform_key), name_width))
+            info.append((row["action"].upper(), row, _info_detail(row, platform_key)))
             continue
         status, detail = classify_entry(row["repo"], row["dest"])
+        (healthy if status in HEALTHY_STATUSES else unhealthy).append((status, row, detail))
+
+    if info:
+        detail_width = _term_width() - 18 - name_width
+        print_section("Not applicable on this machine", len(info), "dim")
+        for status, row, detail in info:
+            print("  " + status_line(status, row["name"], fit_text(detail, detail_width), name_width))
+        print()
+    if healthy:
+        print_section("Healthy", len(healthy), "green")
+        for status, row, _ in healthy:
+            print("  " + status_line(status, row["name"], row["dest"], name_width))
+        print()
+    if unhealthy:
+        print_section("Needs attention", len(unhealthy), "red")
+        for status, row, detail in unhealthy:
+            print("  " + status_line(status, row["name"], row["dest"], name_width))
+            print(paint(f"      {detail}", "dim"))
+            print(paint(f"      -> {planned_action(status)}", "dim"))
+        print()
+
+    status_counts: dict = {}
+    for status, _, _ in healthy + unhealthy:
         status_counts[status] = status_counts.get(status, 0) + 1
-        print(status_line(status, row["name"], row["dest"], name_width))
-        if status not in HEALTHY_STATUSES:
-            follow_up = f"{'':<14}{'':<{name_width}}  -> {detail}; {planned_action(status)}"
-            print(paint(follow_up, "dim"))
-    unhealthy = sum(count for status, count in status_counts.items() if status not in HEALTHY_STATUSES)
     summary = ", ".join(f"{count} {status.lower()}" for status, count in sorted(status_counts.items()))
-    print()
     if not summary:
         print("no applicable entries")
     elif unhealthy:
@@ -589,26 +627,52 @@ def run_status(plan, platform_key):
 
 
 def run_deploy(plan, platform_key):
-    """Deploy every applicable manifest entry; correct deployments are no-ops."""
-    counts = {"changed": 0, "noop": 0, "skipped": 0}
+    """
+    Deploy every applicable manifest entry; correct deployments are no-ops.
+
+    Output is grouped into sections ordered least interesting first, so what
+    changed is still on screen when done: not applicable -> already deployed
+    -> changes. Already-correct entries (classify_entry "OK" - the same check
+    deploy_config no-ops on) are listed without redundant per-entry chatter;
+    everything else deploys last, printing what it does as it goes.
+    """
     name_width = max([len(row["name"]) for row in plan] + [4])
-    for row in plan:
-        if row["action"] != "apply":
-            print(status_line(row["action"].upper(), row["name"], _info_detail(row, platform_key), name_width))
-            continue
-        print(paint(row["name"], "bold"))
-        result = deploy_config(row["repo"], row["dest"])
-        if result == "noop":
-            counts["noop"] += 1
-        elif result in ("skipped", "missing"):
-            counts["skipped"] += 1
-        else:
-            counts["changed"] += 1
-    print()
+    info = [row for row in plan if row["action"] != "apply"]
+    apply_rows = [row for row in plan if row["action"] == "apply"]
+    healthy = [row for row in apply_rows if classify_entry(row["repo"], row["dest"])[0] == "OK"]
+    work = [row for row in apply_rows if row not in healthy]
+    counts = {"changed": 0, "noop": len(healthy), "skipped": 0}
+
+    if info:
+        detail_width = _term_width() - 18 - name_width
+        print_section("Not applicable on this machine", len(info), "dim")
+        for row in info:
+            detail = fit_text(_info_detail(row, platform_key), detail_width)
+            print("  " + status_line(row["action"].upper(), row["name"], detail, name_width))
+        print()
+    if healthy:
+        print_section("Already deployed - nothing to do", len(healthy), "green")
+        for row in healthy:
+            name = paint(f"{row['name']:<{name_width}}", "green")
+            print(f"  {name}  {row['dest']}")
+        print()
+    if work:
+        print_section("Changes", len(work), "cyan")
+        for row in work:
+            print("  " + paint(row["name"], "bold"))
+            result = deploy_config(row["repo"], row["dest"])
+            if result == "noop":
+                counts["noop"] += 1
+            elif result in ("skipped", "missing"):
+                counts["skipped"] += 1
+            else:
+                counts["changed"] += 1
+        print()
+
     print(paint(
         f"Deploy complete: {counts['changed']} changed, {counts['noop']} already deployed, "
         f"{counts['skipped']} skipped",
-        "green",
+        "green" if not counts["skipped"] else "yellow",
     ))
     return 0
 
