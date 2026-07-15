@@ -16,8 +16,13 @@ Env keys used (values win in the order: real environment, then --env-file files)
 
     Jira:   JIRA_SERVER (host or URL), JIRA_USER (email), JIRA_TOKEN,
             JIRA_PROJECT (optional default for --project)
-    GitHub: GITHUB_TOKEN or GH_TOKEN; falls back to ``gh auth token`` when gh
-            is installed and logged in.
+    GitHub: GITHUB_TOKEN_ENV naming the var that holds the PAT (e.g.
+            GITHUB_TOKEN_ENV=GH_PAT_ACME - the per-account convention the
+            credentials repos use, so each client env file pins its own
+            account and two accounts can never be confused), or a direct
+            GITHUB_TOKEN / GH_TOKEN. No gh CLI fallback: gh has ONE active
+            account, so falling back from a client repo could silently act
+            as the wrong one.
 
 The last line of stdout for each subcommand is a single JSON object so calling
 agents/scripts can parse results without scraping prose.
@@ -28,7 +33,6 @@ import base64
 import json
 import os
 import re
-import shutil
 import subprocess
 import time
 import urllib.error
@@ -84,8 +88,12 @@ def require_env(*names):
 # ---------------------------------------------------------------- http core
 
 
-def http_json(method, url, headers, payload=None, dry_run=False, timeout=60):
-    """One JSON round-trip. In dry-run mode, print the request and return None."""
+def http_json(method, url, headers, payload=None, dry_run=False, timeout=60, tolerate=()):
+    """
+    One JSON round-trip. In dry-run mode, print the request and return None.
+    HTTP status codes listed in ``tolerate`` return None instead of exiting
+    (for endpoints a token may legitimately be unable to reach).
+    """
     if dry_run:
         print(f"[dry-run] {method} {url}")
         if payload is not None:
@@ -98,6 +106,8 @@ def http_json(method, url, headers, payload=None, dry_run=False, timeout=60):
         with urllib.request.urlopen(request, timeout=timeout) as response:
             raw = response.read()
     except urllib.error.HTTPError as err:
+        if err.code in tolerate:
+            return None
         detail = err.read().decode(errors="replace")[:2000]
         raise SystemExit(f"{method} {url} failed: HTTP {err.code}\n{detail}")
     except urllib.error.URLError as err:
@@ -197,17 +207,27 @@ def cmd_get_ticket(args):
 
 
 def github_token():
+    """
+    The PAT for THIS repo's GitHub account. GITHUB_TOKEN_ENV (set in the
+    calling repo's env file) names the variable holding the token, so each
+    client env file pins its own account's PAT by name; GITHUB_TOKEN/GH_TOKEN
+    still work directly. Deliberately no ``gh auth token`` fallback - gh has
+    one active account, and a silent fallback from a client repo could create
+    PRs or request reviews as the wrong identity.
+    """
+    indirect = os.environ.get("GITHUB_TOKEN_ENV", "")
+    if indirect:
+        token = os.environ.get(indirect, "")
+        if not token:
+            raise SystemExit(f"GITHUB_TOKEN_ENV names {indirect!r}, which is empty or unset")
+        return token
     for var in ("GITHUB_TOKEN", "GH_TOKEN"):
         token = os.environ.get(var, "")
         if token:
             return token
-    gh = shutil.which("gh")
-    if gh:
-        proc = subprocess.run([gh, "auth", "token"], capture_output=True, text=True)
-        if proc.returncode == 0 and proc.stdout.strip():
-            return proc.stdout.strip()
     raise SystemExit(
-        "no GitHub token: set GITHUB_TOKEN in the env file, or install + log in to gh"
+        "no GitHub token: set GITHUB_TOKEN_ENV=<var naming the PAT> "
+        "(or GITHUB_TOKEN directly) in the env file"
     )
 
 
@@ -293,13 +313,25 @@ def bucket_commit_status(status):
 
 
 def collect_check_entries(repo, sha, headers):
-    """All checks for a commit as [{name, bucket}], newest run per name winning."""
+    """
+    All checks for a commit as ([{name, bucket}], check_runs_visible).
+
+    check_runs_visible is False when the check-runs API 403s: fine-grained
+    PATs cannot be granted the Checks permission AT ALL (a GitHub limitation -
+    it briefly existed and was pulled; only GitHub Apps get it), so with such
+    a token only legacy commit statuses are reported and callers must surface
+    that the Actions-based checks are invisible rather than implying green.
+    """
     latest = {}  # name -> (started_at, bucket)
     page = 1
+    check_runs_visible = True
     while True:
         query = urllib.parse.urlencode({"per_page": CHECKS_PER_PAGE, "page": page})
         data = http_json("GET", f"{GITHUB_API}/repos/{repo}/commits/{sha}/check-runs?{query}",
-                         headers)
+                         headers, tolerate=(403,))
+        if data is None:
+            check_runs_visible = False
+            break
         runs = data.get("check_runs", [])
         for run in runs:
             name = run.get("name") or "<unnamed>"
@@ -313,7 +345,8 @@ def collect_check_entries(repo, sha, headers):
     for status in combined.get("statuses", []):  # already latest-per-context
         name = status.get("context") or "<unnamed>"
         latest[name] = ("", bucket_commit_status(status))
-    return [{"name": name, "bucket": bucket} for name, (_, bucket) in sorted(latest.items())]
+    entries = [{"name": name, "bucket": bucket} for name, (_, bucket) in sorted(latest.items())]
+    return entries, check_runs_visible
 
 
 def rollup(entries, ignore_substrings):
@@ -353,8 +386,9 @@ def cmd_pr_status(args):
     deadline = time.monotonic() + args.timeout
     while True:
         pull = resolve_pr(repo, headers, args.pr)  # refetched each poll: pushes move the head sha
-        entries = collect_check_entries(repo, pull["head"]["sha"], headers)
+        entries, check_runs_visible = collect_check_entries(repo, pull["head"]["sha"], headers)
         report = rollup(entries, args.ignore)
+        report["check_runs_visible"] = check_runs_visible
         if not args.wait or report["failed"] or not report["pending"]:
             break
         if time.monotonic() >= deadline:
@@ -365,6 +399,10 @@ def cmd_pr_status(args):
         time.sleep(args.interval)
     report.update({"pr": pull["number"], "url": pull["html_url"]})
     state = "GREEN" if report["green"] else ("FAILED" if report["failed"] else "PENDING")
+    if not report["check_runs_visible"]:
+        print("WARNING: check runs (GitHub Actions) are NOT visible to this token - "
+              "fine-grained PATs cannot be granted the Checks permission (GitHub limitation); "
+              "this report covers legacy commit statuses only")
     emit(f"PR #{pull['number']} checks: {state} "
          f"(pass={report['passed']} fail={len(report['failed'])} "
          f"pending={len(report['pending'])} skip={report['skipped']} "

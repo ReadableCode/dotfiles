@@ -55,23 +55,30 @@ def test_github_token_prefers_env_var(monkeypatch):
     assert ticket_pr.github_token() == "tok_env"
 
 
-def test_github_token_falls_back_to_gh(monkeypatch):
+def test_github_token_env_indirection(monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    monkeypatch.delenv("GH_TOKEN", raising=False)
-    monkeypatch.setattr(ticket_pr.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setenv("GITHUB_TOKEN_ENV", "GH_PAT_ACME")
+    monkeypatch.setenv("GH_PAT_ACME", "tok_acme")
+    assert ticket_pr.github_token() == "tok_acme"
 
-    class FakeProc:
-        returncode = 0
-        stdout = "tok_gh\n"
 
-    monkeypatch.setattr(ticket_pr.subprocess, "run", lambda *a, **k: FakeProc())
-    assert ticket_pr.github_token() == "tok_gh"
+def test_github_token_env_indirection_beats_direct_token(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok_wrong_account")
+    monkeypatch.setenv("GITHUB_TOKEN_ENV", "GH_PAT_ACME")
+    monkeypatch.setenv("GH_PAT_ACME", "tok_acme")
+    assert ticket_pr.github_token() == "tok_acme"
+
+
+def test_github_token_env_indirection_unset_target_errors(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN_ENV", "GH_PAT_ACME")
+    monkeypatch.delenv("GH_PAT_ACME", raising=False)
+    with pytest.raises(SystemExit, match="GH_PAT_ACME"):
+        ticket_pr.github_token()
 
 
 def test_github_token_errors_when_nothing_available(monkeypatch):
-    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
-    monkeypatch.delenv("GH_TOKEN", raising=False)
-    monkeypatch.setattr(ticket_pr.shutil, "which", lambda name: None)
+    for var in ("GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN_ENV"):
+        monkeypatch.delenv(var, raising=False)
     with pytest.raises(SystemExit):
         ticket_pr.github_token()
 
