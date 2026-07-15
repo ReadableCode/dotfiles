@@ -16,6 +16,7 @@ dependencies = [
     "scp>=0.15.0",
     "speedtest-cli>=2.1.3",
     "tabulate>=0.9.0",
+    "textual>=1.0.0",
     "types-paramiko>=4.0.0.20250822",
     "pyyaml>=6.0.2",
 ]
