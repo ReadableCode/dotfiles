@@ -13,8 +13,14 @@ uv run python src/status_board.py           # the live board (q quits, r refresh
 uv run python src/status_board.py --once    # one static render, no TUI (sanity check)
 ```
 
-PR titles are terminal hyperlinks — click to open in the browser (works in
-iTerm2, WezTerm, Kitty, recent Windows Terminal, etc.).
+PR titles are clickable. Inside the TUI the click is handled by the app
+itself (Textual owns the mouse, so terminal-native hyperlinks don't fire) and
+opens the panel's `browser:` if set — e.g. `browser: edge` sends a work
+account's PRs to Edge while everything else uses the OS default. Recognized
+names: `edge`, `chrome`, `firefox`, `safari`; anything else is passed through
+as the app/binary name. In `--once` output the titles are plain OSC 8
+hyperlinks handled by the terminal (iTerm2, WezTerm, Kitty, recent Windows
+Terminal), which always use the OS default browser.
 
 ## Where panels come from
 
@@ -23,7 +29,7 @@ On startup the board loads, in order:
 1. `statusboard.yaml` in this repo's root, if present — tracked in the public
    repo, so **secrets-free panels only**;
 2. `<context>_statusboard.yaml` in every sibling `*_credentials` repo
-   (e.g. `fourteen_foods_credentials/fourteen_foods_statusboard.yaml`).
+   (e.g. `acme_credentials/acme_statusboard.yaml`).
 
 A machine only shows the panels of the credentials repos it has cloned —
 clone a client's credentials repo and its panels appear, no central registry
@@ -37,11 +43,11 @@ refreshes) and `note`.
 ### `ssh_command` — run a command on a remote machine and show its output
 
 ```yaml
-- name: ff_vm_cron_jobs
+- name: acme_vm_cron_jobs
   type: ssh_command
-  host: ssh14vm            # inventory name or alias
-  jump: ssh14              # optional jump hop (inventory name or alias)
-  command: "bash ~/GitHub/fourteen_foods/backend/scripts/job_status.sh"
+  host: sshacmevm          # inventory name or alias
+  jump: sshacme            # optional jump hop (inventory name or alias)
+  command: "bash ~/GitHub/acme/scripts/job_status.sh"
   interval: 300
   timeout: 90
 ```
@@ -71,7 +77,24 @@ ANSI colors in the command's output are rendered as-is.
   interval: 180
 ```
 
-Uses the search API (`is:open is:pr review-requested:<you>`); the account is
+Shows every open PR the account is waiting on or being waited for — three
+account-wide searches (`review-requested:`, `reviewed-by:`, `author:`), so
+new repos are covered automatically. Each PR's reviews are then fetched to
+badge the rows:
+
+- `✏` you have an **unsubmitted draft review** — you wrote comments but never
+  clicked "Submit review", so the author cannot see them; shown first and
+  loudest because everyone is silently waiting on everyone
+- `●` review requested — genuinely needs your review
+- `✋` you requested changes — waiting on the author, not on you (shown even
+  when a re-request or team request keeps the PR in your queue)
+- `💬` you commented without approving/blocking and no request is pending
+- `⬆` your own open PR, with the aggregate verdict of everyone else's
+  reviews (`✓ approved` / `✗ changes requested` / `⧗ awaiting review`)
+- `◌` draft PR — anyone's, yours included: greyed and sorted last, parked
+  until it's marked ready, nothing to approve
+
+PRs you approved with nothing further pending are dropped. The account is
 whoever the token belongs to, so two accounts = two panels with different
 `token_env` names. Two panels can also share ONE account with different
 fine-grained tokens: the search only returns repos a token was granted, so a
@@ -98,13 +121,13 @@ Org tokens must be SSO-authorized or searches silently return nothing
 ### `bitbucket_prs` — open PRs listing you as reviewer
 
 ```yaml
-- name: ff_bitbucket_prs
+- name: acme_bitbucket_prs
   type: bitbucket_prs
   workspace: some-workspace
   repos: [repo-a, repo-b]   # omit to scan every repo in the workspace (slower)
   username_env: BB_USERNAME
   app_password_env: BB_APP_PASSWORD
-  env_file: fourteen_foods.env
+  env_file: acme.env
 ```
 
 Auth is a Bitbucket app password (Account settings → App passwords, scopes:

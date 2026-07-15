@@ -293,7 +293,13 @@ def fetch_ssh_command(panel, credentials_root, local_hostname=""):
 
 
 def fetch_github_prs(panel):
-    """PRs whose review is requested from the token's account, via the GitHub search API."""
+    """
+    Every open PR the token's account is waiting on or waited for, across all
+    repos the token can see (search-wide - no per-repo config): PRs whose
+    review is requested, PRs already reviewed (badged "waiting on author" when
+    the account's latest review requested changes), and the account's own open
+    PRs with their aggregate review status.
+    """
     token = resolve_secret(panel, "token_env")
     api = panel.get("api_url", DEFAULT_GITHUB_API).rstrip("/")
     headers = {
@@ -305,29 +311,32 @@ def fetch_github_prs(panel):
     if user_response.status_code != 200:
         return PanelResult.error(f"GitHub /user returned {user_response.status_code} (bad/expired token?)")
     login = user_response.json()["login"]
+
     # A fine-grained token only surfaces repos it was granted, so a panel's
     # scope is primarily the TOKEN's repo selection; the optional ``search``
     # qualifiers refine on top (e.g. -repo:owner/name to keep two panels of
     # the same account from overlapping when one token sees everything).
-    query = f"is:open is:pr archived:false review-requested:{login} {panel.get('search', '')}".strip()
-    search_response = requests.get(
-        f"{api}/search/issues",
-        params={"q": query, "sort": "updated", "per_page": 50},
-        headers=headers,
-        timeout=DEFAULT_HTTP_TIMEOUT,
-    )
-    if search_response.status_code != 200:
-        return PanelResult.error(f"GitHub search returned {search_response.status_code}: {search_response.text[:200]}")
-    rows = []
-    for item in search_response.json().get("items", []):
-        repo = item["repository_url"].split("/repos/", 1)[-1]
-        rows.append(
-            {
-                "text": f"{repo}#{item['number']}  {item['title']}",
-                "url": item["html_url"],
-                "meta": f"by {item['user']['login']} · updated {_age(item['updated_at'])} ago",
-            }
+    def search(qualifiers):
+        query = f"is:open is:pr archived:false {qualifiers} {panel.get('search', '')}".strip()
+        response = requests.get(
+            f"{api}/search/issues",
+            params={"q": query, "sort": "updated", "per_page": 50},
+            headers=headers,
+            timeout=DEFAULT_HTTP_TIMEOUT,
         )
+        if response.status_code != 200:
+            raise ValueError(f"GitHub search returned {response.status_code}: {response.text[:200]}")
+        return response.json().get("items", [])
+
+    requested = search(f"review-requested:{login}")
+    reviewed = search(f"reviewed-by:{login} -author:{login}")
+    mine = search(f"author:{login}")
+    review_states = {
+        item["html_url"]: _pr_review_states(api, headers, item)
+        for item in {i["html_url"]: i for i in requested + reviewed + mine}.values()
+    }
+    rows, summary = classify_github_prs(login, requested, reviewed, mine, review_states)
+
     # SAML orgs silently drop their repos from search results (a plain 200
     # with fewer items, no marker header) until the token is SSO-authorized -
     # probe each org the account belongs to, or an unauthorized token looks
@@ -339,7 +348,110 @@ def fetch_github_prs(panel):
             f"(github.com -> Settings -> Developer settings -> your token -> Configure SSO); "
             f"{len(rows)} PRs visible without them ({login})"
         )
-    return PanelResult(True, "links", rows, f"{len(rows)} awaiting review ({login})")
+    return PanelResult(True, "links", rows, f"{summary} ({login})")
+
+
+def _pr_review_states(api, headers, item):
+    """
+    Latest submitted review state per reviewer login for one search item
+    (chronological walk, so later reviews overwrite earlier ones; a DISMISSED
+    review resets that reviewer to no active state).
+    """
+    repo = item["repository_url"].split("/repos/", 1)[-1]
+    response = requests.get(
+        f"{api}/repos/{repo}/pulls/{item['number']}/reviews",
+        params={"per_page": 100},
+        headers=headers,
+        timeout=DEFAULT_HTTP_TIMEOUT,
+    )
+    if response.status_code != 200:
+        return {}
+    states: dict = {}
+    for review in response.json():
+        user = (review.get("user") or {}).get("login")
+        state = review.get("state")
+        # PENDING = the caller's own unsubmitted draft (the API never shows
+        # anyone else's) - kept so the board can flag it: the author cannot
+        # see a draft, so it reads as "no review yet" to everyone else.
+        if not user or state not in ("APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"):
+            continue
+        states[user] = None if state == "DISMISSED" else state
+    return {user: state for user, state in states.items() if state}
+
+
+def classify_github_prs(login, requested, reviewed, mine, review_states):
+    """
+    Turn the three searches into ordered, badged link rows. Returns
+    (rows, summary). Buckets, in display order:
+
+    - my UNSUBMITTED draft review (state PENDING): flagged loudest - a draft
+      is invisible to the author, so until I hit "Submit review" nobody knows
+      I responded and everyone is waiting on everyone;
+    - "changes requested" by me (my latest review, whether or not I'm still
+      in the requested-reviewers list - a re-request or team request keeps a
+      PR there): waiting on the AUTHOR, not on me;
+    - review requested and I have not blocked it: genuinely needs my review;
+    - reviewed with only a comment and no pending request: soft state, shown
+      so it isn't forgotten;
+    - my own open PRs, with the aggregate verdict of everyone else's reviews;
+    - DRAFT PRs - anyone's, mine included - greyed at the very bottom:
+      parked on purpose, nothing for anyone to approve yet.
+
+    Approved-by-me PRs with no new request are dropped - nothing is waited on.
+    """
+    drafts, need, waiting, commented, own, parked = [], [], [], [], [], []
+    seen = set()
+    for item in requested + reviewed:
+        if item["html_url"] in seen:
+            continue
+        seen.add(item["html_url"])
+        if item.get("draft"):
+            parked.append(_github_row(item, "◌", "dim", "draft · parked, nothing to approve", dim=True))
+            continue
+        my_state = review_states.get(item["html_url"], {}).get(login)
+        is_requested = any(i["html_url"] == item["html_url"] for i in requested)
+        if my_state == "PENDING":
+            drafts.append(_github_row(item, "✏", "bold red", "UNSUBMITTED draft review - the author can't see it"))
+        elif my_state == "CHANGES_REQUESTED":
+            waiting.append(_github_row(item, "✋", "bold yellow", "you requested changes"))
+        elif is_requested:
+            need.append(_github_row(item, "●", "bold cyan", None))
+        elif my_state == "COMMENTED":
+            commented.append(_github_row(item, "💬", "dim", "you commented"))
+    for item in mine:
+        if item.get("draft"):
+            parked.append(_github_row(item, "◌", "dim", "your draft · parked, nothing to approve", dim=True))
+            continue
+        others = {u: s for u, s in review_states.get(item["html_url"], {}).items() if u != login}
+        if "CHANGES_REQUESTED" in others.values():
+            verdict = "✗ changes requested"
+        elif "APPROVED" in others.values():
+            verdict = "✓ approved"
+        else:
+            verdict = "⧗ awaiting review"
+        own.append(_github_row(item, "⬆", "bold magenta", f"your PR · {verdict}"))
+    rows = drafts + need + waiting + commented + own + parked
+    summary = f"{len(need)} to review · {len(waiting)} on author · {len(own)} yours"
+    if drafts:
+        summary = f"{len(drafts)} UNSUBMITTED · {summary}"
+    if parked:
+        summary += f" · {len(parked)} parked"
+    return rows, summary
+
+
+def _github_row(item, badge, badge_style, note, dim=False):
+    repo = item["repository_url"].split("/repos/", 1)[-1]
+    meta = f"by {item['user']['login']} · updated {_age(item['updated_at'])} ago"
+    if note:
+        meta += f" · {note}"
+    return {
+        "badge": badge,
+        "badge_style": badge_style,
+        "text": f"{repo}#{item['number']}  {item['title']}",
+        "url": item["html_url"],
+        "meta": meta,
+        "dim": dim,
+    }
 
 
 def _github_sso_blocked_orgs(api, headers):

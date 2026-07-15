@@ -2,11 +2,15 @@
 # Imports #
 
 import argparse
+import platform
+import subprocess
 import sys
 import time
+import webbrowser
 
 from config import grandparent_dir, parent_dir
 from rich.console import Console
+from rich.style import Style
 from rich.text import Text
 from utils.host_tools import get_uppercase_hostname
 from utils.statusboard_tools import fetch_panel, load_panels
@@ -17,13 +21,77 @@ from utils.statusboard_tools import fetch_panel, load_panels
 REPO_ROOT = parent_dir
 CREDENTIALS_ROOT = grandparent_dir
 
+# Panel `browser:` values -> platform-specific launch names. Anything not in
+# this table is passed through as the app/binary name verbatim.
+BROWSER_APPS = {
+    "edge": {"Darwin": "Microsoft Edge", "Windows": "msedge", "Linux": "microsoft-edge"},
+    "chrome": {"Darwin": "Google Chrome", "Windows": "chrome", "Linux": "google-chrome"},
+    "firefox": {"Darwin": "Firefox", "Windows": "firefox", "Linux": "firefox"},
+    "safari": {"Darwin": "Safari"},
+}
+
+
+# %%
+# Browser launching #
+
+
+def browser_open_argv(browser, url, system=None):
+    """
+    The argv that opens url in the named browser on this platform, or None
+    when no browser is named (caller falls back to the OS default handler).
+    """
+    if not browser:
+        return None
+    system = system or platform.system()
+    app = BROWSER_APPS.get(browser.lower(), {}).get(system, browser)
+    if system == "Darwin":
+        return ["open", "-a", app, url]
+    if system == "Windows":
+        # `start` resolves app-execution aliases like msedge/chrome
+        return ["cmd", "/c", "start", "", app, url]
+    return [app, url]
+
+
+def open_link(url, browser=None):
+    """Open url in the panel's configured browser, or the OS default when none is set."""
+    argv = browser_open_argv(browser, url)
+    if argv is None:
+        webbrowser.open(url)
+        return
+    subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 # %%
 # Rendering #
 
 
-def result_renderable(result):
-    """Turn a PanelResult into a rich renderable (used by both the TUI and --once)."""
+def legend_text():
+    """One-line key for the PR badge symbols, shown at the bottom of the board."""
+    text = Text()
+    for index, (badge, style, label) in enumerate([
+        ("✏", "bold red", "unsubmitted draft"),
+        ("●", "bold cyan", "needs your review"),
+        ("✋", "bold yellow", "waiting on author"),
+        ("💬", "dim", "you commented"),
+        ("⬆", "bold magenta", "your PR"),
+        ("◌", "dim", "draft, parked"),
+    ]):
+        if index:
+            text.append("   ", style="dim")
+        text.append(badge, style=style)
+        text.append(f" {label}", style="dim")
+    return text
+
+
+def result_renderable(result, browser=None, tui=False):
+    """
+    Turn a PanelResult into a rich renderable (used by both the TUI and --once).
+
+    Link rows render differently per mode: --once emits plain OSC 8 hyperlinks
+    (the terminal handles clicks), but inside the TUI Textual captures the
+    mouse, so rows carry an @click action meta that routes through
+    app.action_open_link - which is also what honors the panel's browser.
+    """
     if not result.ok:
         return Text(result.body, style="red")
     if result.kind == "ansi":
@@ -34,7 +102,17 @@ def result_renderable(result):
     for index, row in enumerate(result.body):
         if index:
             text.append("\n")
-        text.append(row["text"], style=f"bold link {row['url']}")
+        if row.get("badge"):
+            text.append(f"{row['badge']} ", style=row.get("badge_style", ""))
+        dim = bool(row.get("dim"))
+        if tui:
+            style = Style(
+                bold=not dim, dim=dim, underline=True,
+                meta={"@click": f"app.open_link({row['url']!r}, {browser!r})"},
+            )
+        else:
+            style = Style(bold=not dim, dim=dim, link=row["url"])
+        text.append(row["text"], style=style)
         if row.get("meta"):
             text.append(f"\n    {row['meta']}", style="dim")
     return text
@@ -94,7 +172,8 @@ def build_app(panels, local_hostname):
             self.set_class(not result.ok, "error")
             state = result.summary or ("ok" if result.ok else "error")
             self.border_subtitle = f"{state} · {time.strftime('%H:%M:%S')}"
-            self.query_one(".panel-output", Static).update(result_renderable(result))
+            renderable = result_renderable(result, browser=self.panel.get("browser"), tui=True)
+            self.query_one(".panel-output", Static).update(renderable)
             # the poll timer fires one interval after the previous FIRE, not
             # after completion - anchor the countdown to fetch start so the
             # bar reaches full just as the timer actually fires
@@ -130,6 +209,7 @@ def build_app(panels, local_hostname):
         .panel-footer ProgressBar { width: 1fr; }
         .panel-footer Bar { width: 1fr; }
         .panel-countdown { color: $text-muted; margin-left: 2; }
+        .legend { height: 1; padding: 0 2; }
         """
 
         def compose(self) -> ComposeResult:
@@ -137,11 +217,15 @@ def build_app(panels, local_hostname):
             with VerticalScroll():
                 for panel in panels:
                     yield Panel(panel)
+            yield Static(legend_text(), classes="legend")
             yield Footer()
 
         def action_refresh_all(self):
             for widget in self.query(Panel):
                 widget.refresh_panel()
+
+        def action_open_link(self, url, browser=None):
+            open_link(url, browser)
 
     return StatusBoardApp
 
@@ -159,6 +243,7 @@ def run_once(panels, local_hostname):
         console.rule(f"[bold]{panel['name']}[/bold] · {state}", style="green" if result.ok else "red")
         console.print(result_renderable(result))
         console.print()
+    console.print(legend_text())
     return 0
 
 
