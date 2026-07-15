@@ -85,9 +85,12 @@ badge the rows:
 - `✏` you have an **unsubmitted draft review** — you wrote comments but never
   clicked "Submit review", so the author cannot see them; shown first and
   loudest because everyone is silently waiting on everyone
-- `●` review requested — genuinely needs your review
-- `✋` you requested changes — waiting on the author, not on you (shown even
-  when a re-request or team request keeps the PR in your queue)
+- `●` review requested — genuinely needs your review; when the author
+  re-requests you after a changes-requested review, the PR returns here
+  marked "re-requested after your changes"
+- `✋` you requested changes — waiting on the author, not on you (a
+  team-level request keeps a PR searchable without putting it back in your
+  personal queue)
 - `💬` you commented without approving/blocking and no request is pending
 - `⬆` your own open PR, with the aggregate verdict of everyone else's
   reviews (`✓ approved` / `✗ changes requested` / `⧗ awaiting review`)

@@ -276,3 +276,16 @@ def test_classify_github_prs_parks_all_drafts_last():
     ]
     assert all(r["dim"] for r in rows if r["badge"] == "◌")
     assert summary == "1 to review · 0 on author · 0 yours · 2 parked"
+
+
+def test_classify_github_prs_rerequest_returns_to_needs_review():
+    pr = gh_item("acme/app", 14)
+    states = {pr["html_url"]: {"me": "CHANGES_REQUESTED"}}
+    # not personally re-requested (e.g. team request) -> still waiting on author
+    rows, _ = statusboard_tools.classify_github_prs("me", [pr], [], [], states)
+    assert rows[0]["badge"] == "✋"
+    # author explicitly re-requested me -> back to needs review, round two
+    rows, summary = statusboard_tools.classify_github_prs("me", [pr], [], [], states, {pr["html_url"]})
+    assert rows[0]["badge"] == "●"
+    assert "re-requested after your changes" in rows[0]["meta"]
+    assert summary == "1 to review · 0 on author · 0 yours"
