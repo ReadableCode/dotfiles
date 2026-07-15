@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ticket + PR workflow harness shared by company repos (na-finops, fourteen_foods, ...).
+"""Ticket + PR workflow harness shared by company repos.
 
 Stdlib-only on purpose: callable from any repo with a bare ``python3``, no venv or
 installed CLIs required. Credentials come from the calling repo's env file:
