@@ -131,9 +131,20 @@ alias srcaliases='source ~/.zshrc'
 
 ### Functions ###
 
+# syncplex = the media remote CLI/TUI; syncdrive = mirror configured media
+# onto a drive (defaults to /Users/jason/Media, pass a path to override).
 function syncplex() {
     [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    run_python_script "$gitDir/Sync_plex/src/plex_scraper.py" /Users/jason/Media
+    uv run --project "$gitDir/Sync_Plex/backends/python" syncplex "$@"
+}
+
+function syncdrive() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    if [ "$#" -eq 0 ]; then
+        uv run --project "$gitDir/Sync_Plex/backends/python" syncplex-drive-sync /Users/jason/Media
+    else
+        uv run --project "$gitDir/Sync_Plex/backends/python" syncplex-drive-sync "$@"
+    fi
 }
 
 ### Machine-local overrides (not synced) ###
