@@ -35,7 +35,6 @@ for directory in directories:
 
 sys.path.append(file_dir)
 sys.path.append(parent_dir)
-sys.path.append(grandparent_dir)
 sys.path.append(src_dir)
 sys.path.append(src_utils_dir)
 
