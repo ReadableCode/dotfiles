@@ -13,7 +13,7 @@ import time
 import yaml
 from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
-from utils.host_tools import get_uppercase_hostname
+from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
     credentials_context,
     find_credentials_dirs,

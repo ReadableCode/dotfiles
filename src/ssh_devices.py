@@ -10,7 +10,7 @@ import pandas as pd
 import paramiko
 from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
-from utils.display_tools import pprint_df, pprint_dict, print_logger  # noqa F401
+from readable_utils.display_tools import pprint_df, pprint_dict, print_logger  # noqa F401
 
 # %%
 # Variables #

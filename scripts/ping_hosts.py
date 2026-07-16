@@ -10,7 +10,7 @@ import time
 
 import pandas as pd
 from config_scripts import grandparent_dir  # noqa: F401
-from src.utils.display_tools import pprint_df
+from readable_utils.display_tools import pprint_df
 
 # %%
 # Functions #

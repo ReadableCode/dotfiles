@@ -12,7 +12,7 @@ from config import grandparent_dir, parent_dir
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
-from utils.host_tools import get_uppercase_hostname
+from readable_utils.host_tools import get_uppercase_hostname
 from utils.statusboard_tools import fetch_panel, load_panels
 
 # %%

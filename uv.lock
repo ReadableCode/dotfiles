@@ -329,6 +329,7 @@ dependencies = [
     { name = "psycopg2-binary" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "readable-utils", extra = ["postgres"] },
     { name = "requests" },
     { name = "scp" },
     { name = "speedtest-cli" },
@@ -353,6 +354,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
+    { name = "readable-utils", extras = ["postgres"], git = "https://github.com/ReadableCode/readable_utils.git?tag=v0.1.3" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "scp", specifier = ">=0.15.0" },
     { name = "speedtest-cli", specifier = ">=2.1.3" },
@@ -1321,6 +1323,22 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ee/1c/bf8cd66730a866b16db8483286078892b7f6536f8c389fb46e4beba0a970/pyzmq-26.2.0-pp310-pypy310_pp73-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:160c7e0a5eb178011e72892f99f918c04a131f36056d10d9c1afb223fc952c2d", size = 794312, upload-time = "2024-08-22T09:01:30.592Z" },
     { url = "https://files.pythonhosted.org/packages/71/43/91fa4ff25bbfdc914ab6bafa0f03241d69370ef31a761d16bb859f346582/pyzmq-26.2.0-pp310-pypy310_pp73-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:2c4a71d5d6e7b28a47a394c0471b7e77a0661e2d651e7ae91e0cab0a587859ca", size = 752775, upload-time = "2024-08-22T09:01:32.459Z" },
     { url = "https://files.pythonhosted.org/packages/ec/d2/3b2ab40f455a256cb6672186bea95cd97b459ce4594050132d71e76f0d6f/pyzmq-26.2.0-pp310-pypy310_pp73-win_amd64.whl", hash = "sha256:90412f2db8c02a3864cbfc67db0e3dcdbda336acf1c469526d3e869394fe001c", size = 550762, upload-time = "2024-08-22T09:01:34.136Z" },
+]
+
+[[package]]
+name = "readable-utils"
+version = "0.1.3"
+source = { git = "https://github.com/ReadableCode/readable_utils.git?tag=v0.1.3#ef5ac3af07099eeb1fc9654b1d65fa4dbc7c9f59" }
+dependencies = [
+    { name = "pandas" },
+    { name = "python-dotenv" },
+    { name = "pytz" },
+    { name = "tabulate" },
+]
+
+[package.optional-dependencies]
+postgres = [
+    { name = "psycopg2-binary" },
 ]
 
 [[package]]

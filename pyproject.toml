@@ -19,6 +19,7 @@ dependencies = [
     "textual>=1.0.0",
     "types-paramiko>=4.0.0.20250822",
     "pyyaml>=6.0.2",
+    "readable-utils[postgres]",
 ]
 
 [tool.pytest.ini_options]
@@ -44,6 +45,9 @@ force_sort_within_sections = false
 [tool.mypy]
 ignore_missing_imports = true
 show_error_codes = true
+
+[tool.uv.sources]
+readable-utils = { git = "https://github.com/ReadableCode/readable_utils.git", tag = "v0.1.3" }
 
 [dependency-groups]
 dev = [

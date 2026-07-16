@@ -7,9 +7,9 @@ import config_scripts  # noqa: F401
 import pandas as pd
 import speedtest
 from dotenv import load_dotenv
-from src.utils.date_tools import get_current_datetime
-from src.utils.display_tools import pprint_df, pprint_ls
-from src.utils.postgres_tools import (
+from readable_utils.date_tools import get_current_datetime
+from readable_utils.display_tools import pprint_df, pprint_ls
+from readable_utils.postgres_tools import (
     ensure_database_exists,
     get_pool,
     list_all_databases,

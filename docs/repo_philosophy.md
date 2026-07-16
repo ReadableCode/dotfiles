@@ -62,15 +62,17 @@ they are not folded into the private grab-bag repo even when small.
 ## Shared `src/utils/`
 
 Several personal repos need the same wrappers (Google Sheets via pygsheets,
-display/formatting helpers, config loading, etc.). The canonical copies live
-in this repo's `src/utils/`; other repos carry their own copies rather than
-importing across repo boundaries, because:
+display/formatting helpers, config loading, etc.). The **canonical versions
+live in the public `readable_utils` package repo**
+(github.com/ReadableCode/readable_utils), which personal repos consume as a
+uv git dependency pinned to a tag
+(`readable-utils @ git+https://... , tag = "vX.Y.Z"`), installing only the
+extras they need (`[google]`, `[postgres]`, `[s3]`, `[ntfy]`).
 
-- there is no published package, and work-context repos cannot depend on a
-  personal remote anyway;
-- each repo must work standalone when cloned alone.
+This repo consumes it the same way — `uv run` fetches it on first sync like
+any other dependency, so no copies live here. `src/utils/` holds only
+dotfiles-specific modules (`inventory_tools`, `statusboard_tools`), not
+shared helpers.
 
-The cost is drift: copies are meant to stay verbatim with the canonical
-version here, so when improving a util, improve it here first and re-copy
-outward. (Personal repos may alternatively consume a shared package as a uv
-git dependency; work-context repos always vendor.)
+The one exception: **work-context repos** never depend on personal remotes;
+they vendor whatever they need.

@@ -5,7 +5,7 @@ import json
 import os
 
 from config import data_dir
-from utils.host_tools import get_uppercase_hostname
+from readable_utils.host_tools import get_uppercase_hostname
 
 # %%
 # Variables #
