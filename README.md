@@ -1,5 +1,11 @@
 # dotfiles
 
+Portable knowledge base + toolkit, cloned onto every machine (personal and
+work). It codifies things I know how to do and carries the configs and
+tooling every context depends on; context-specific layers come from sibling
+`*_credentials` repos. See `docs/repo_philosophy.md` for what belongs here
+versus in sibling repos.
+
 ## Running with uv
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency and

@@ -13,15 +13,22 @@ WSL, Android (Termux), Raspberry Pi, and iPad/Pythonista.
 There is no single "app" — it's a toolbox. Most entry points are individual
 scripts under `src/` and `scripts/`.
 
+This repo is cloned onto **every** machine, including work machines, so
+anything needed at any job must live here (portable tooling like
+`ticket_pr.py` and `status_board.py` is here on purpose); anything
+context-specific lives in that context's sibling `*_credentials` repo, and
+recurring homelab jobs live in `personal-automation`. See
+`docs/repo_philosophy.md` before proposing to move something out.
+
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines from `deploy_manifest.yaml` plus overlay manifests (`<context>_manifest.yaml`) discovered in sibling `*_credentials` repos; manifest `hosts:` names must exist in the union of the `*_credentials` host inventories (`<context>_hosts.json`, legacy fallback `hosts.json`). `status_board.py` is a long-lived Textual TUI showing remote job status (over SSH, jump hops built from the inventories via `-J`) and PRs awaiting review, panels discovered from `<context>_statusboard.yaml` in sibling `*_credentials` repos (see `docs/setup_status_board.md`). `pull_*.py`, `chrome_bookmarks.py`, `ssh_devices.py` pull data/configs. Shared helpers in `src/utils/`. Homelab-only jobs (Bitwarden backup, Minecraft log tools) live in the local `~/GitHub/personal-automation` repo, not here. |
+| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines from `deploy_manifest.yaml` plus overlay manifests (`<context>_manifest.yaml`) discovered in sibling `*_credentials` repos; manifest `hosts:` names must exist in the union of the `*_credentials` host inventories (`<context>_hosts.json`, legacy fallback `hosts.json`). `status_board.py` is a long-lived Textual TUI showing remote job status (over SSH, jump hops built from the inventories via `-J`) and PRs awaiting review, panels discovered from `<context>_statusboard.yaml` in sibling `*_credentials` repos (see `docs/setup_status_board.md`). `chrome_bookmarks.py`, `ssh_devices.py` pull data/configs. Shared helpers in `src/utils/`. Homelab-only jobs (Bitwarden backup, Home Assistant/router config pulls, log rotation) live in the local `~/GitHub/personal-automation` repo, not here. |
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
-| `go_apps/` | Small Go tools (`git_puller`, client/server, syncthing cleanup). Prebuilt binaries are committed. |
+| `go_apps/` | Small Go tools (`git_puller`, syncthing cleanup). Prebuilt binaries are committed. The ping/command client-server moved to its own repo (`ReadableCode/go-client-server`). |
 | `docs/` | Setup/how-to docs (one per topic). Surfaced via mkdocs. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
 | `pythonista/` | iOS Pythonista scripts. |
