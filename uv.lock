@@ -354,7 +354,7 @@ requires-dist = [
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "readable-utils", extras = ["postgres"], git = "https://github.com/ReadableCode/readable_utils.git?tag=v0.2.0" },
+    { name = "readable-utils", extras = ["postgres"], git = "https://github.com/ReadableCode/readable_utils.git?tag=v0.2.1" },
     { name = "requests", specifier = ">=2.32.3" },
     { name = "scp", specifier = ">=0.15.0" },
     { name = "speedtest-cli", specifier = ">=2.1.3" },
@@ -1327,8 +1327,8 @@ wheels = [
 
 [[package]]
 name = "readable-utils"
-version = "0.2.0"
-source = { git = "https://github.com/ReadableCode/readable_utils.git?tag=v0.2.0#79be5e84e66230df890bd67fb3d3747fe7847417" }
+version = "0.2.1"
+source = { git = "https://github.com/ReadableCode/readable_utils.git?tag=v0.2.1#23b545ca7cd97b47ba2261b1c80eb2073b3be049" }
 dependencies = [
     { name = "pandas" },
     { name = "python-dotenv" },
