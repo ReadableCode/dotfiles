@@ -1,0 +1,4 @@
+GIT_AUTHOR_NAME=Jason Christiansen
+GIT_AUTHOR_EMAIL=jasonwchristiansen@gmail.com
+GIT_COMMITTER_NAME=Jason Christiansen
+GIT_COMMITTER_EMAIL=jasonwchristiansen@gmail.com

@@ -1,0 +1,1 @@
+Run cat ~/.claude/settings.json, then make an empty commit on a throwaway local branch, show me git log -1 --pretty=full, and delete the branch. Don't push anything."
