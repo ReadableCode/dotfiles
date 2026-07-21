@@ -297,8 +297,8 @@ def fetch_github_prs(panel):
     Every open PR the token's account is waiting on or waited for, across all
     repos the token can see (search-wide - no per-repo config): PRs whose
     review is requested, PRs already reviewed (badged "waiting on author" when
-    the account's latest review requested changes), and the account's own open
-    PRs with their aggregate review status.
+    the account's latest review requested changes and nothing was pushed
+    since), and the account's own open PRs with their aggregate review status.
     """
     token = resolve_secret(panel, "token_env")
     api = panel.get("api_url", DEFAULT_GITHUB_API).rstrip("/")
@@ -331,27 +331,42 @@ def fetch_github_prs(panel):
     requested = search(f"review-requested:{login}")
     reviewed = search(f"reviewed-by:{login} -author:{login}")
     mine = search(f"author:{login}")
-    review_states = {
-        item["html_url"]: _pr_review_states(api, headers, item)
-        for item in {i["html_url"]: i for i in requested + reviewed + mine}.values()
-    }
-    # Submitting a review clears you from requested_reviewers, so appearing
-    # there again after a changes-requested review means the author explicitly
-    # re-requested you (a team request matches the search but not this list) -
-    # checked only for that subset to keep the extra API calls rare.
-    rerequested = set()
-    for item in requested:
-        if review_states.get(item["html_url"], {}).get(login) != "CHANGES_REQUESTED":
+    review_states, review_commits = {}, {}
+    for item in {i["html_url"]: i for i in requested + reviewed + mine}.values():
+        states, commits = _pr_review_states(api, headers, item)
+        review_states[item["html_url"]] = states
+        review_commits[item["html_url"]] = commits
+    # Two signals unstick a changes-requested PR, probed with one PR-detail
+    # call each (only for that subset, to keep the extra API calls rare):
+    # appearing in requested_reviewers again means the author explicitly
+    # re-requested me (submitting a review clears me from that list, and a
+    # team request matches the search but not the list); a head sha that
+    # moved past the sha my review was submitted against means the author
+    # pushed since - GitHub keeps my blocking review active across pushes,
+    # so without this the PR would sit at "you requested changes" forever.
+    rerequested, updated_since = set(), set()
+    requested_urls = {i["html_url"] for i in requested}
+    for item in {i["html_url"]: i for i in requested + reviewed}.values():
+        url = item["html_url"]
+        if review_states.get(url, {}).get(login) != "CHANGES_REQUESTED":
             continue
         repo = item["repository_url"].split("/repos/", 1)[-1]
         response = requests.get(
             f"{api}/repos/{repo}/pulls/{item['number']}", headers=headers, timeout=DEFAULT_HTTP_TIMEOUT
         )
-        if response.status_code == 200:
-            reviewers = [user.get("login") for user in response.json().get("requested_reviewers", [])]
-            if login in reviewers:
-                rerequested.add(item["html_url"])
-    rows, summary = classify_github_prs(login, requested, reviewed, mine, review_states, rerequested)
+        if response.status_code != 200:
+            continue
+        detail = response.json()
+        reviewers = [user.get("login") for user in detail.get("requested_reviewers", [])]
+        head_sha = (detail.get("head") or {}).get("sha")
+        reviewed_sha = review_commits.get(url, {}).get(login)
+        if url in requested_urls and login in reviewers:
+            rerequested.add(url)
+        elif head_sha and reviewed_sha and head_sha != reviewed_sha:
+            updated_since.add(url)
+    rows, summary = classify_github_prs(
+        login, requested, reviewed, mine, review_states, rerequested, updated_since
+    )
 
     # SAML orgs silently drop their repos from search results (a plain 200
     # with fewer items, no marker header) until the token is SSO-authorized -
@@ -371,7 +386,10 @@ def _pr_review_states(api, headers, item):
     """
     Latest submitted review state per reviewer login for one search item
     (chronological walk, so later reviews overwrite earlier ones; a DISMISSED
-    review resets that reviewer to no active state).
+    review resets that reviewer to no active state). Returns
+    (states, commit_ids): commit_ids maps each active reviewer to the head
+    sha their latest review was submitted against, so callers can tell
+    whether the branch has moved since.
     """
     repo = item["repository_url"].split("/repos/", 1)[-1]
     response = requests.get(
@@ -381,8 +399,9 @@ def _pr_review_states(api, headers, item):
         timeout=DEFAULT_HTTP_TIMEOUT,
     )
     if response.status_code != 200:
-        return {}
+        return {}, {}
     states: dict = {}
+    commits: dict = {}
     for review in response.json():
         user = (review.get("user") or {}).get("login")
         state = review.get("state")
@@ -392,25 +411,34 @@ def _pr_review_states(api, headers, item):
         if not user or state not in ("APPROVED", "CHANGES_REQUESTED", "COMMENTED", "DISMISSED", "PENDING"):
             continue
         states[user] = None if state == "DISMISSED" else state
-    return {user: state for user, state in states.items() if state}
+        commits[user] = review.get("commit_id")
+    active = {user: state for user, state in states.items() if state}
+    return active, {user: commits.get(user) for user in active}
 
 
-def classify_github_prs(login, requested, reviewed, mine, review_states, rerequested=frozenset()):
+def classify_github_prs(login, requested, reviewed, mine, review_states, rerequested=frozenset(),
+                        updated_since=frozenset()):
     """
     Turn the three searches into ordered, badged link rows. Returns
     (rows, summary). ``rerequested`` is the set of PR urls where I appear in
     requested_reviewers DESPITE having a changes-requested review - only an
     explicit re-request by the author puts me back there, so those PRs return
-    to "needs my review". Buckets, in display order:
+    to "needs my review". ``updated_since`` is the set of PR urls whose head
+    moved past the sha my changes-requested review was submitted against -
+    the author pushed something (maybe an unrelated merge, but a second look
+    beats never seeing it again), so those also return to "needs my review";
+    an explicit re-request wins when both signals are present. Buckets, in
+    display order:
 
     - my UNSUBMITTED draft review (state PENDING): flagged loudest - a draft
       is invisible to the author, so until I hit "Submit review" nobody knows
       I responded and everyone is waiting on everyone;
-    - "changes requested" by me and NOT re-requested (a team-level request
-      matches the search without putting me back personally): waiting on the
-      AUTHOR, not on me;
+    - "changes requested" by me, not re-requested (a team-level request
+      matches the search without putting me back personally) and nothing
+      pushed since: waiting on the AUTHOR, not on me;
     - review requested and I have not blocked it - including re-requests
-      after my changes-requested review, marked so I know it's round two;
+      and new pushes after my changes-requested review, marked so I know
+      it's round two;
     - reviewed with only a comment and no pending request: soft state, shown
       so it isn't forgotten;
     - my own open PRs, with the aggregate verdict of everyone else's reviews;
@@ -434,6 +462,8 @@ def classify_github_prs(login, requested, reviewed, mine, review_states, rereque
             drafts.append(_github_row(item, "✏", "bold red", "UNSUBMITTED draft review - the author can't see it"))
         elif my_state == "CHANGES_REQUESTED" and item["html_url"] in rerequested:
             need.append(_github_row(item, "●", "bold cyan", "re-requested after your changes"))
+        elif my_state == "CHANGES_REQUESTED" and item["html_url"] in updated_since:
+            need.append(_github_row(item, "●", "bold cyan", "updated since your changes - re-review?"))
         elif my_state == "CHANGES_REQUESTED":
             waiting.append(_github_row(item, "✋", "bold yellow", "you requested changes"))
         elif is_requested:
@@ -445,13 +475,7 @@ def classify_github_prs(login, requested, reviewed, mine, review_states, rereque
             parked.append(_github_row(item, "◌", "dim", "your draft · parked, nothing to approve", dim=True))
             continue
         others = {u: s for u, s in review_states.get(item["html_url"], {}).items() if u != login}
-        if "CHANGES_REQUESTED" in others.values():
-            verdict = "✗ changes requested"
-        elif "APPROVED" in others.values():
-            verdict = "✓ approved"
-        else:
-            verdict = "⧗ awaiting review"
-        own.append(_github_row(item, "⬆", "bold magenta", f"your PR · {verdict}"))
+        own.append(_github_row(item, "⬆", "bold magenta", f"your PR · {_own_pr_verdict(others)}"))
     rows = drafts + need + waiting + commented + own + parked
     summary = f"{len(need)} to review · {len(waiting)} on author · {len(own)} yours"
     if drafts:
@@ -459,6 +483,15 @@ def classify_github_prs(login, requested, reviewed, mine, review_states, rereque
     if parked:
         summary += f" · {len(parked)} parked"
     return rows, summary
+
+
+def _own_pr_verdict(others):
+    """Aggregate verdict of everyone else's reviews on one of my own PRs."""
+    if "CHANGES_REQUESTED" in others.values():
+        return "✗ changes requested"
+    if "APPROVED" in others.values():
+        return "✓ approved"
+    return "⧗ awaiting review"
 
 
 def _github_row(item, badge, badge_style, note, dim=False):

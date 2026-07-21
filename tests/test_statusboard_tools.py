@@ -289,3 +289,40 @@ def test_classify_github_prs_rerequest_returns_to_needs_review():
     assert rows[0]["badge"] == "●"
     assert "re-requested after your changes" in rows[0]["meta"]
     assert summary == "1 to review · 0 on author · 0 yours"
+
+
+def test_classify_github_prs_pushed_since_returns_to_needs_review():
+    pr = gh_item("acme/app", 15)
+    states = {pr["html_url"]: {"me": "CHANGES_REQUESTED"}}
+    # head moved past the sha my review was submitted against -> back to needs review
+    rows, summary = statusboard_tools.classify_github_prs(
+        "me", [], [pr], [], states, updated_since={pr["html_url"]}
+    )
+    assert rows[0]["badge"] == "●"
+    assert "updated since your changes" in rows[0]["meta"]
+    assert summary == "1 to review · 0 on author · 0 yours"
+    # an explicit re-request wins over the pushed-since signal
+    rows, _ = statusboard_tools.classify_github_prs(
+        "me", [pr], [], [], states, {pr["html_url"]}, {pr["html_url"]}
+    )
+    assert "re-requested after your changes" in rows[0]["meta"]
+
+
+def test_pr_review_states_tracks_commit_ids(monkeypatch):
+    reviews = [
+        {"user": {"login": "me"}, "state": "CHANGES_REQUESTED", "commit_id": "aaa111"},
+        {"user": {"login": "bob"}, "state": "APPROVED", "commit_id": "bbb222"},
+        {"user": {"login": "eve"}, "state": "COMMENTED", "commit_id": "ccc333"},
+        {"user": {"login": "eve"}, "state": "DISMISSED", "commit_id": "ddd444"},
+    ]
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self):
+            return reviews
+
+    monkeypatch.setattr(statusboard_tools.requests, "get", lambda *a, **k: FakeResponse())
+    states, commits = statusboard_tools._pr_review_states("https://api.github.com", {}, gh_item("acme/app", 16))
+    assert states == {"me": "CHANGES_REQUESTED", "bob": "APPROVED"}
+    assert commits == {"me": "aaa111", "bob": "bbb222"}
