@@ -43,7 +43,25 @@ alias githubdir='cd $gitDir'
 
 ### Python ###
 
-alias venvactivate='source ./.venv/bin/activate'
+unalias venvactivate 2>/dev/null
+
+venvactivate() {
+    local dir="$PWD"
+    while [ "$dir" != "/" ]; do
+        if [ -d "$dir/.venv" ]; then
+            if [ -f "$dir/.venv/bin/activate" ]; then
+                source "$dir/.venv/bin/activate"
+                return
+            elif [ -f "$dir/.venv/Scripts/activate" ]; then
+                source "$dir/.venv/Scripts/activate"
+                return
+            fi
+        fi
+        dir=$(dirname "$dir")
+    done
+    echo "venvactivate: no .venv found in $PWD or any parent directory" >&2
+    return 1
+}
 
 alias venvdeactivate='deactivate'
 

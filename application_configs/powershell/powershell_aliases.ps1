@@ -139,18 +139,18 @@ function finance {
 ### Python ###
 
 function venvactivate {
-    # Set the path to the virtual environment's Activate.ps1 script
-    $venvPath = Join-Path (Get-Location) '.venv\Scripts\activate.ps1'
-
-    # Check if the script exists
-    if (Test-Path $venvPath) {
-        Write-Host "Activating virtual environment..." -ForegroundColor Green
-        # Source the script to activate the environment
-        & $venvPath
+    # Walk upward from the current directory looking for a .venv folder
+    $dir = Get-Item -Path (Get-Location)
+    while ($null -ne $dir) {
+        $venvPath = Join-Path $dir.FullName '.venv\Scripts\activate.ps1'
+        if (Test-Path $venvPath) {
+            Write-Host "Activating virtual environment: $venvPath" -ForegroundColor Green
+            & $venvPath
+            return
+        }
+        $dir = $dir.Parent
     }
-    else {
-        Write-Host "Virtual environment activation script not found at: $venvPath" -ForegroundColor Red
-    }
+    Write-Host "venvactivate: no .venv found in $(Get-Location) or any parent directory" -ForegroundColor Red
 }
 
 function venvdeactivate { deactivate }
