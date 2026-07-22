@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 
 import config_test_utils  # noqa F401
 import pytest
@@ -84,6 +85,38 @@ def test_panel_validation(tmp_path, panel, match):
         statusboard_tools.load_panels(str(tmp_path))
 
 
+GOOD_LOG_LINK = {"pattern": r"^\S+ +(\S+)", "command": "tail -F ~/logs/{job}.log"}
+
+
+@pytest.mark.parametrize(
+    "log_link, match",
+    [
+        ("nope", "mapping with 'pattern' and 'command'"),
+        ({"pattern": r"(\S+)"}, "mapping with 'pattern' and 'command'"),
+        ({"pattern": "(", "command": "tail {job}"}, "does not compile"),
+        ({"pattern": r"\S+", "command": "tail {job}"}, "needs a capture group"),
+        ({"pattern": r"(\S+)", "command": "tail x.log"}, "must contain a {job} placeholder"),
+    ],
+)
+def test_log_link_validation(tmp_path, log_link, match):
+    make_credentials_repo(tmp_path, "acme", panels=[dict(SSH_PANEL, log_link=log_link)])
+    with pytest.raises(ValueError, match=re.escape(match)):
+        statusboard_tools.load_panels(str(tmp_path))
+
+
+def test_log_link_only_on_ssh_command(tmp_path):
+    panel = {"name": "x", "type": "github_prs", "token_env": "T", "log_link": GOOD_LOG_LINK}
+    make_credentials_repo(tmp_path, "acme", panels=[panel])
+    with pytest.raises(ValueError, match="only supported on ssh_command"):
+        statusboard_tools.load_panels(str(tmp_path))
+
+
+def test_log_link_valid_loads(tmp_path):
+    make_credentials_repo(tmp_path, "acme", panels=[dict(SSH_PANEL, log_link=GOOD_LOG_LINK)])
+    panels, _ = statusboard_tools.load_panels(str(tmp_path))
+    assert panels[0]["log_link"] == GOOD_LOG_LINK
+
+
 def test_load_panels_single_config_escape_hatch(tmp_path):
     config_path = write_yaml(os.path.join(str(tmp_path), "solo.yaml"), [SSH_PANEL])
     panels, config_paths = statusboard_tools.load_panels("/nonexistent", config_path=config_path)
@@ -127,6 +160,17 @@ def test_build_ssh_argv_skips_jump_when_running_on_jump_host(tmp_path):
     panel = dict(SSH_PANEL, _base_dir=repo)
     argv = statusboard_tools.build_ssh_argv(panel, str(tmp_path), local_hostname="LAPTOP-1.local")
     assert "-J" not in argv
+
+
+def test_build_ssh_argv_command_override(tmp_path):
+    repo = make_credentials_repo(tmp_path, "acme", hosts=ACME_HOSTS)
+    panel = dict(SSH_PANEL, _base_dir=repo)
+    argv = statusboard_tools.build_ssh_argv(
+        panel, str(tmp_path), local_hostname="ENVY", command="tail -F ~/logs/git_pull.log"
+    )
+    # same chain as the panel's own fetch, only the remote command differs
+    assert argv[argv.index("-J") + 1] == "jdoe@10.0.0.10:2222"
+    assert argv[-2:] == ["svc_acme@10.0.0.20", "tail -F ~/logs/git_pull.log"]
 
 
 def test_build_ssh_argv_target_port(tmp_path):
@@ -186,6 +230,34 @@ def test_browser_open_argv():
     assert browser_open_argv("chrome", url, system="Linux") == ["google-chrome", url]
     # unknown names pass through as the app/binary name
     assert browser_open_argv("Brave Browser", url, system="Darwin") == ["open", "-a", "Brave Browser", url]
+
+
+# %%
+# Log-link row marking #
+
+
+def test_mark_log_links_marks_job_tokens():
+    from rich.text import Text
+    from src.status_board import mark_log_links
+
+    board = (
+        "cron job status  (2026-07-22)\n"
+        "● FAIL  git_pull      5m ago\n"
+        "● ok    hme_ingest    2h ago\n"
+        "3 ok · 1 failed\n"
+    )
+    text = mark_log_links(Text(board), {"pattern": r"^● \S+ +(\S+)", "command": "tail -F {job}"}, "vm_jobs")
+    clicks = [
+        (text.plain[span.start:span.end], span.style.meta["@click"])
+        for span in text.spans
+        if getattr(span.style, "meta", {}).get("@click")
+    ]
+    assert clicks == [
+        ("git_pull", "app.view_log('vm_jobs', 'git_pull')"),
+        ("hme_ingest", "app.view_log('vm_jobs', 'hme_ingest')"),
+    ]
+    # header and summary lines stay plain
+    assert all(job in ("git_pull", "hme_ingest") for job, _ in clicks)
 
 
 # %%

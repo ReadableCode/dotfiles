@@ -67,6 +67,27 @@ Requirements: non-interactive key auth to every hop (connections use
 because `-J` tunnels through it — this works on Windows OpenSSH Server too).
 ANSI colors in the command's output are rendered as-is.
 
+#### `log_link` — click a row to follow its log
+
+An `ssh_command` panel whose rows correspond to log files (like a cron
+board) can make each row clickable:
+
+```yaml
+  log_link:
+    pattern: '^[●○] \S+ +(\S+)'          # first capture group = the job token
+    command: "tail -n 200 -F ~/logs/{job}.log"
+```
+
+`pattern` is matched against every line of the panel's output
+(multiline); the **first capture group** in each match is underlined and
+made clickable in the TUI. Clicking pushes a full-screen follow pane that
+runs `command` (with `{job}` replaced by the captured, shell-quoted token)
+over the **same host/jump chain the panel already uses**, streaming output
+live — `tail -F` keeps following across log rotation. Press `esc` or `q`
+to return to the board (the remote tail is killed on exit). `--once` output
+is unaffected: a terminal can't host the follow pane, so the rows stay
+plain text there.
+
 ### `github_prs` — PRs awaiting your review, one panel per account
 
 ```yaml

@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -150,6 +151,31 @@ def _validate_panel(panel, config_path):
             f"Statusboard panel '{panel['name']}' in {config_path} "
             f"(type {panel['type']}) is missing required keys: {', '.join(missing)}"
         )
+    if panel.get("log_link"):
+        _validate_log_link(panel, config_path)
+
+
+def _validate_log_link(panel, config_path):
+    """
+    ``log_link`` makes an ssh_command panel's output rows clickable: ``pattern``
+    is a regex whose first capture group pulls a job token out of each output
+    line, and ``command`` is the remote command (with ``{job}`` substituted)
+    the TUI streams in a follow pane when the row is clicked.
+    """
+    prefix = f"Statusboard panel '{panel['name']}' in {config_path}"
+    if panel["type"] != "ssh_command":
+        raise ValueError(f"{prefix}: log_link is only supported on ssh_command panels")
+    log_link = panel["log_link"]
+    if not isinstance(log_link, dict) or not log_link.get("pattern") or not log_link.get("command"):
+        raise ValueError(f"{prefix}: log_link must be a mapping with 'pattern' and 'command' keys")
+    try:
+        compiled = re.compile(log_link["pattern"])
+    except re.error as error:
+        raise ValueError(f"{prefix}: log_link pattern does not compile: {error}")
+    if compiled.groups < 1:
+        raise ValueError(f"{prefix}: log_link pattern needs a capture group (the job token)")
+    if "{job}" not in log_link["command"]:
+        raise ValueError(f"{prefix}: log_link command must contain a {{job}} placeholder")
 
 
 # %%
@@ -196,10 +222,12 @@ def ssh_destination(host):
     return f"{user}@{host['hostname']}" if user else host["hostname"]
 
 
-def build_ssh_argv(panel, credentials_root, local_hostname=""):
+def build_ssh_argv(panel, credentials_root, local_hostname="", command=None):
     """
     Build the full ssh argv for an ssh_command panel, resolving ``host`` and
-    the optional ``jump`` hop from the host inventories.
+    the optional ``jump`` hop from the host inventories. ``command`` overrides
+    the panel's own command (same host/hop chain) - used by the log-follow
+    pane to stream a tail over the connection the panel already defines.
 
     The jump hop is injected as ``-J user@host:port`` so the chain lives
     entirely in the panel config + inventories - deliberately NOT in any
@@ -221,7 +249,7 @@ def build_ssh_argv(panel, credentials_root, local_hostname=""):
             argv += ["-J", spec]
     if target.get("port"):
         argv += ["-p", str(target["port"])]
-    argv += [ssh_destination(target), panel["command"]]
+    argv += [ssh_destination(target), command or panel["command"]]
     return argv
 
 
