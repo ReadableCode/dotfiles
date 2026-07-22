@@ -23,6 +23,15 @@ Env keys used (values win in the order: real environment, then --env-file files)
             GITHUB_TOKEN / GH_TOKEN. No gh CLI fallback: gh has ONE active
             account, so falling back from a client repo could silently act
             as the wrong one.
+    Bitbucket Cloud: BITBUCKET_USER (Atlassian account email) plus
+            BITBUCKET_TOKEN_ENV naming the var holding the API token
+            (same indirection convention as GitHub), or a direct
+            BITBUCKET_TOKEN. Auth is Basic email:token.
+
+The PR provider (GitHub vs Bitbucket Cloud) is detected from the origin
+remote's host, so the same subcommands work in any checkout. With an explicit
+--repo and no usable origin remote, GitHub is assumed unless --repo starts
+with "bitbucket:" (e.g. --repo bitbucket:workspace/slug).
 
 The last line of stdout for each subcommand is a single JSON object so calling
 agents/scripts can parse results without scraping prose.
@@ -40,6 +49,7 @@ import urllib.parse
 import urllib.request
 
 GITHUB_API = "https://api.github.com"
+BITBUCKET_API = "https://api.bitbucket.org/2.0"
 CHECKS_PER_PAGE = 100
 
 
@@ -249,12 +259,23 @@ def git_output(*cmd):
 def resolve_repo(explicit):
     """owner/name from --repo, else from the current directory's origin remote."""
     if explicit:
-        return explicit
+        return explicit.partition(":")[2] if explicit.startswith("bitbucket:") else explicit
     url = git_output("remote", "get-url", "origin")
-    match = re.search(r"github\.com[:/](.+?)(?:\.git)?/?$", url)
+    match = re.search(r"(?:github\.com|bitbucket\.org)[:/](.+?)(?:\.git)?/?$", url)
     if not match:
         raise SystemExit(f"cannot parse owner/repo from origin remote: {url}")
     return match.group(1)
+
+
+def resolve_provider(explicit):
+    """'github' or 'bitbucket', from --repo's prefix else the origin remote host."""
+    if explicit and explicit.startswith("bitbucket:"):
+        return "bitbucket"
+    try:
+        url = git_output("remote", "get-url", "origin")
+    except SystemExit:
+        return "github"
+    return "bitbucket" if "bitbucket.org" in url else "github"
 
 
 def resolve_pr(repo, headers, number):
@@ -270,20 +291,112 @@ def resolve_pr(repo, headers, number):
     return pulls[0]
 
 
+# ---------------------------------------------------------------- bitbucket
+
+
+def bitbucket_token():
+    """
+    The API token for THIS repo's Bitbucket workspace. Same indirection
+    convention as GitHub: BITBUCKET_TOKEN_ENV (set in the calling repo's env
+    file) names the variable holding the token so each client env file pins
+    its own account; BITBUCKET_TOKEN still works directly.
+    """
+    indirect = os.environ.get("BITBUCKET_TOKEN_ENV", "")
+    if indirect:
+        token = os.environ.get(indirect, "")
+        if not token:
+            raise SystemExit(f"BITBUCKET_TOKEN_ENV names {indirect!r}, which is empty or unset")
+        return token
+    token = os.environ.get("BITBUCKET_TOKEN", "")
+    if token:
+        return token
+    raise SystemExit(
+        "no Bitbucket token: set BITBUCKET_TOKEN_ENV=<var naming the API token> "
+        "(or BITBUCKET_TOKEN directly) in the env file"
+    )
+
+
+def bitbucket_headers():
+    user = require_env("BITBUCKET_USER")
+    encoded = base64.b64encode(f"{user}:{bitbucket_token()}".encode()).decode()
+    return {"Authorization": f"Basic {encoded}"}
+
+
+def bb_paginate(url, headers):
+    """Yield every item from a Bitbucket paged collection (follows .next)."""
+    while url:
+        data = http_json("GET", url, headers)
+        yield from data.get("values", [])
+        url = data.get("next")
+
+
+def bb_resolve_pr(repo, headers, number):
+    """Fetch the Bitbucket PR by id, or find the open PR for the current branch."""
+    base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests"
+    if number:
+        return http_json("GET", f"{base_url}/{number}", headers)
+    branch = git_output("rev-parse", "--abbrev-ref", "HEAD")
+    query = urllib.parse.urlencode({"q": f'source.branch.name = "{branch}" AND state = "OPEN"'})
+    pulls = list(bb_paginate(f"{base_url}?{query}", headers))
+    if not pulls:
+        raise SystemExit(f"no open PR found for branch {branch!r} in {repo}")
+    return pulls[0]
+
+
+def bb_pr_url(pull, repo):
+    return (pull.get("links", {}).get("html", {}) or {}).get(
+        "href", f"https://bitbucket.org/{repo}/pull-requests/{pull.get('id', 0)}")
+
+
+def bucket_bitbucket_status(status):
+    state = (status.get("state") or "").upper()
+    if state == "SUCCESSFUL":
+        return "pass"
+    if state == "INPROGRESS":
+        return "pending"
+    if state == "STOPPED":
+        return "skip"
+    return "fail"  # FAILED / ERROR
+
+
 def cmd_create_pr(args):
     repo = resolve_repo(args.repo)
-    headers = github_headers()
     head = args.head or git_output("rev-parse", "--abbrev-ref", "HEAD")
+    body = args.body or ""
+    if args.body_file:
+        with open(args.body_file, encoding="utf-8") as handle:
+            body = handle.read()
+
+    if resolve_provider(args.repo) == "bitbucket":
+        headers = bitbucket_headers()
+        base = args.base
+        if not base:
+            if args.dry_run:
+                base = "<default-branch>"
+            else:
+                base = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}",
+                                 headers)["mainbranch"]["name"]
+        payload = {
+            "title": args.title,
+            "description": body,
+            "source": {"branch": {"name": head}},
+            "destination": {"branch": {"name": base}},
+            "draft": args.draft,
+        }
+        response = http_json("POST", f"{BITBUCKET_API}/repositories/{repo}/pullrequests",
+                             headers, payload=payload, dry_run=args.dry_run)
+        number = response["id"] if response else 0
+        url = bb_pr_url(response or {}, repo)
+        emit(f"Created PR #{number}: {url}", {"number": number, "url": url})
+        return
+
+    headers = github_headers()
     base = args.base
     if not base:
         if args.dry_run:
             base = "<default-branch>"
         else:
             base = http_json("GET", f"{GITHUB_API}/repos/{repo}", headers)["default_branch"]
-    body = args.body or ""
-    if args.body_file:
-        with open(args.body_file, encoding="utf-8") as handle:
-            body = handle.read()
     payload = {"title": args.title, "head": head, "base": base, "body": body, "draft": args.draft}
     response = http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls", headers,
                          payload=payload, dry_run=args.dry_run)
@@ -377,16 +490,29 @@ def rollup(entries, ignore_substrings):
 
 def cmd_pr_status(args):
     repo = resolve_repo(args.repo)
-    headers = github_headers()
+    provider = resolve_provider(args.repo)
     if args.dry_run:
         print(f"[dry-run] would poll checks for PR #{args.pr or '<current branch>'} in {repo}")
         emit("dry run", {"failed": [], "pending": [], "passed": 0, "skipped": 0,
                          "ignored": [], "green": True, "dry_run": True})
         return
+    headers = bitbucket_headers() if provider == "bitbucket" else github_headers()
     deadline = time.monotonic() + args.timeout
     while True:
-        pull = resolve_pr(repo, headers, args.pr)  # refetched each poll: pushes move the head sha
-        entries, check_runs_visible = collect_check_entries(repo, pull["head"]["sha"], headers)
+        # refetched each poll: pushes move the head sha
+        if provider == "bitbucket":
+            pull = bb_resolve_pr(repo, headers, args.pr)
+            sha = pull["source"]["commit"]["hash"]
+            statuses = bb_paginate(
+                f"{BITBUCKET_API}/repositories/{repo}/commit/{sha}/statuses", headers)
+            entries = sorted(
+                ({"name": s.get("key") or s.get("name") or "<unnamed>",
+                  "bucket": bucket_bitbucket_status(s)} for s in statuses),
+                key=lambda e: e["name"])
+            check_runs_visible = True  # one status system; nothing hidden by token type
+        else:
+            pull = resolve_pr(repo, headers, args.pr)
+            entries, check_runs_visible = collect_check_entries(repo, pull["head"]["sha"], headers)
         report = rollup(entries, args.ignore)
         report["check_runs_visible"] = check_runs_visible
         if not args.wait or report["failed"] or not report["pending"]:
@@ -397,20 +523,66 @@ def cmd_pr_status(args):
         print(f"waiting on {len(report['pending'])} check(s): "
               f"{', '.join(report['pending'][:5])} ...", flush=True)
         time.sleep(args.interval)
-    report.update({"pr": pull["number"], "url": pull["html_url"]})
+    if provider == "bitbucket":
+        report.update({"pr": pull["id"], "url": bb_pr_url(pull, repo)})
+    else:
+        report.update({"pr": pull["number"], "url": pull["html_url"]})
     state = "GREEN" if report["green"] else ("FAILED" if report["failed"] else "PENDING")
     if not report["check_runs_visible"]:
         print("WARNING: check runs (GitHub Actions) are NOT visible to this token - "
               "fine-grained PATs cannot be granted the Checks permission (GitHub limitation); "
               "this report covers legacy commit statuses only")
-    emit(f"PR #{pull['number']} checks: {state} "
+    emit(f"PR #{report['pr']} checks: {state} "
          f"(pass={report['passed']} fail={len(report['failed'])} "
          f"pending={len(report['pending'])} skip={report['skipped']} "
          f"ignored={len(report['ignored'])})", report)
 
 
+def bb_find_member(workspace, headers, query):
+    """Match a workspace member by nickname or display name (case-insensitive)."""
+    wanted = query.lower()
+    for member in bb_paginate(f"{BITBUCKET_API}/workspaces/{workspace}/members", headers):
+        user = member.get("user", {})
+        names = {(user.get("nickname") or "").lower(), (user.get("display_name") or "").lower()}
+        if wanted in names:
+            return user
+    return None
+
+
 def cmd_request_review(args):
     repo = resolve_repo(args.repo)
+    if resolve_provider(args.repo) == "bitbucket":
+        headers = bitbucket_headers()
+        pull = None if args.dry_run else bb_resolve_pr(repo, headers, args.pr)
+        number = pull["id"] if pull else (args.pr or 0)
+        workspace = repo.split("/")[0]
+        reviewers = [] if args.dry_run else [
+            {"account_id": r["account_id"]} for r in pull.get("reviewers", [])
+            if r.get("account_id")
+        ]
+        for name in args.reviewer:
+            if args.dry_run:
+                print(f"[dry-run] would look up workspace member {name!r}")
+                continue
+            user = bb_find_member(workspace, headers, name)
+            if user is None or not user.get("account_id"):
+                raise SystemExit(f"no Bitbucket workspace member matched {name!r}")
+            entry = {"account_id": user["account_id"]}
+            if entry not in reviewers:
+                reviewers.append(entry)
+        payload = {"title": pull["title"] if pull else "<title>", "reviewers": reviewers}
+        http_json("PUT", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
+                  headers, payload=payload, dry_run=args.dry_run)
+        if args.dry_run:
+            return
+        refreshed = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
+                              headers)
+        names = [r.get("display_name") or r.get("nickname") or "?"
+                 for r in refreshed.get("reviewers", [])]
+        emit(f"Requested review on PR #{number} from: {', '.join(names)}",
+             {"number": number, "requested_reviewers": names})
+        return
+
     headers = github_headers()
     pull = None if args.dry_run else resolve_pr(repo, headers, args.pr)
     number = pull["number"] if pull else (args.pr or 0)
@@ -433,7 +605,7 @@ def cmd_request_review(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Jira ticket + GitHub PR workflow harness (see module docstring)")
+        description="Jira ticket + GitHub/Bitbucket PR workflow harness (see module docstring)")
     parser.add_argument("--env-file", action="append", default=[],
                         help="dotenv file(s) to load; repeatable; real env vars win")
     parser.add_argument("--dry-run", action="store_true",
@@ -480,7 +652,7 @@ def build_parser():
     review.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     review.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
     review.add_argument("--reviewer", action="append", required=True,
-                        help="GitHub login; repeatable")
+                        help="GitHub login / Bitbucket nickname or display name; repeatable")
     review.set_defaults(func=cmd_request_review)
     return parser
 

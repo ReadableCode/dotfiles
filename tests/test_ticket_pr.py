@@ -107,6 +107,60 @@ def test_resolve_repo_explicit_wins(monkeypatch):
     assert ticket_pr.resolve_repo("owner/name") == "owner/name"
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "git@bitbucket.org:fourteenfoods/prep-station.git",
+        "https://bitbucket.org/fourteenfoods/prep-station.git",
+        "https://bitbucket.org/fourteenfoods/prep-station",
+    ],
+)
+def test_resolve_repo_parses_bitbucket_urls(monkeypatch, url):
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: url)
+    assert ticket_pr.resolve_repo(None) == "fourteenfoods/prep-station"
+
+
+def test_resolve_provider_from_origin(monkeypatch):
+    monkeypatch.setattr(
+        ticket_pr, "git_output", lambda *a: "git@bitbucket.org:ws/slug.git"
+    )
+    assert ticket_pr.resolve_provider(None) == "bitbucket"
+    monkeypatch.setattr(
+        ticket_pr, "git_output", lambda *a: "git@github.com:owner/name.git"
+    )
+    assert ticket_pr.resolve_provider(None) == "github"
+
+
+def test_resolve_provider_bitbucket_prefix(monkeypatch):
+    monkeypatch.setattr(
+        ticket_pr, "git_output", lambda *a: pytest.fail("should not call git")
+    )
+    assert ticket_pr.resolve_provider("bitbucket:ws/slug") == "bitbucket"
+    assert ticket_pr.resolve_repo("bitbucket:ws/slug") == "ws/slug"
+
+
+def test_bitbucket_token_env_indirection(monkeypatch):
+    monkeypatch.delenv("BITBUCKET_TOKEN", raising=False)
+    monkeypatch.setenv("BITBUCKET_TOKEN_ENV", "BB_TOKEN_ACME")
+    monkeypatch.setenv("BB_TOKEN_ACME", "sekrit")
+    assert ticket_pr.bitbucket_token() == "sekrit"
+
+
+def test_bitbucket_token_indirection_unset_target_errors(monkeypatch):
+    monkeypatch.setenv("BITBUCKET_TOKEN_ENV", "BB_TOKEN_ACME")
+    monkeypatch.delenv("BB_TOKEN_ACME", raising=False)
+    with pytest.raises(SystemExit):
+        ticket_pr.bitbucket_token()
+
+
+def test_bucket_bitbucket_status():
+    assert ticket_pr.bucket_bitbucket_status({"state": "SUCCESSFUL"}) == "pass"
+    assert ticket_pr.bucket_bitbucket_status({"state": "INPROGRESS"}) == "pending"
+    assert ticket_pr.bucket_bitbucket_status({"state": "STOPPED"}) == "skip"
+    assert ticket_pr.bucket_bitbucket_status({"state": "FAILED"}) == "fail"
+    assert ticket_pr.bucket_bitbucket_status({}) == "fail"
+
+
 # ---------------------------------------------------------------- check bucketing
 
 
