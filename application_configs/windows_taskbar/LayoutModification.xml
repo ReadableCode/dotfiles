@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows taskbar pin order — the Windows translation of the macOS dock order
+  documented in docs/setup_mac_workstation.md ("Set app order on Dock").
+
+  Order in this file == left-to-right pin order on the taskbar.
+  Apps that are not installed on a given machine are silently skipped by
+  Windows, so this one file is safe to apply on every Windows box.
+
+  Apply with: scripts/apply_taskbar_layout.ps1
+  Mapping table + which macOS entries have no Windows counterpart:
+  docs/setup_windows_workstation_personal.md ("Set app order on Taskbar").
+-->
+<LayoutModificationTemplate
+    xmlns="http://schemas.microsoft.com/Start/2014/LayoutModification"
+    xmlns:defaultlayout="http://schemas.microsoft.com/Start/2014/FullDefaultLayout"
+    xmlns:start="http://schemas.microsoft.com/Start/2014/StartLayout"
+    xmlns:taskbar="http://schemas.microsoft.com/Start/2014/TaskbarLayout"
+    Version="1">
+  <CustomTaskbarLayoutCollection PinListPlacement="Replace">
+    <defaultlayout:TaskbarLayout>
+      <taskbar:TaskbarPinList>
+        <!-- Finder -->
+        <taskbar:DesktopApp DesktopApplicationID="Microsoft.Windows.Explorer" />
+        <!-- App Store -->
+        <taskbar:UWA AppUserModelID="Microsoft.WindowsStore_8wekyb3d8bbwe!App" />
+        <!-- Settings -->
+        <taskbar:UWA AppUserModelID="windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel" />
+        <!-- Terminal -->
+        <taskbar:UWA AppUserModelID="Microsoft.WindowsTerminal_8wekyb3d8bbwe!App" />
+        <!-- Reminders -->
+        <taskbar:UWA AppUserModelID="Microsoft.Todos_8wekyb3d8bbwe!App" />
+        <!-- Notes -->
+        <taskbar:UWA AppUserModelID="Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe!App" />
+        <!-- Chrome -->
+        <taskbar:DesktopApp DesktopApplicationID="Chrome" />
+        <!-- Edge -->
+        <taskbar:DesktopApp DesktopApplicationID="MSEdge" />
+        <!-- Atlas -> ChatGPT web app -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chrome Apps\ChatGPT.lnk" />
+        <!-- Messages + Phone + Phone Mirroring -->
+        <taskbar:UWA AppUserModelID="Microsoft.YourPhone_8wekyb3d8bbwe!App" />
+        <!-- Contacts -->
+        <taskbar:UWA AppUserModelID="Microsoft.M365Companions_8wekyb3d8bbwe!People" />
+        <!-- Mail -> Gmail web app -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chrome Apps\Gmail (1).lnk" />
+        <!-- Calendar -> Google Calendar web app -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chrome Apps\Google Calendar (1).lnk" />
+        <!-- Claude -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Anthropic\Claude.lnk" />
+        <!-- VSCode -->
+        <taskbar:DesktopApp DesktopApplicationID="Microsoft.VisualStudioCode" />
+        <!-- Messenger (web app; desktop build is Facebook.MessengerDesktop) -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chrome Apps\Messenger.lnk" />
+        <!-- Discord -->
+        <taskbar:DesktopApp DesktopApplicationID="com.squirrel.Discord.Discord" />
+        <!-- Slack -->
+        <taskbar:DesktopApp DesktopApplicationID="com.squirrel.slack.slack" />
+        <!-- Meet -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chrome Apps\Google Meet.lnk" />
+        <!-- Teams -->
+        <taskbar:UWA AppUserModelID="MSTeams_8wekyb3d8bbwe!MSTeams" />
+        <!-- Plex -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\Plex\Plex.lnk" />
+        <!-- YTMusic -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%APPDATA%\Microsoft\Windows\Start Menu\Programs\Chrome Apps\YouTube Music.lnk" />
+        <!-- Parsec -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\Parsec\Parsec.lnk" />
+        <!-- VNCViewer -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\RealVNC\VNC Viewer.lnk" />
+        <!-- GLKVM -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\GLKVM.lnk" />
+        <!-- Tailscale -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\Tailscale.lnk" />
+        <!-- OpenVPN -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\OpenVPN\OpenVPN GUI.lnk" />
+        <!-- Wireguard -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\WireGuard.lnk" />
+        <!-- Steam -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\Steam\Steam.lnk" />
+        <!-- Epic Games -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\Epic Games Launcher.lnk" />
+        <!-- Activity Monitor -> Task Manager -->
+        <taskbar:DesktopApp DesktopApplicationLinkPath="%ProgramData%\Microsoft\Windows\Start Menu\Programs\System Tools\Task Manager.lnk" />
+      </taskbar:TaskbarPinList>
+    </defaultlayout:TaskbarLayout>
+  </CustomTaskbarLayoutCollection>
+</LayoutModificationTemplate>

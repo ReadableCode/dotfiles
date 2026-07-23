@@ -103,6 +103,120 @@ Notes:
 * Move docs and pictures locations to OneDrive
   * Right click on each one and select a new folder in OneDrive to move them to and click yes to move and confirm
 
+## Set app order on Taskbar
+
+The Windows translation of the macOS dock order in
+[setup_mac_workstation.md](./setup_mac_workstation.md) ("Set app order on
+Dock"). Same sequence, left to right; the Start button, Search and Task View
+are fixed taskbar elements on Windows and are not pins, so they are not in the
+list.
+
+| # | macOS dock | Windows pin | Pin identity |
+|---|------------|-------------|--------------|
+| 1 | Finder | File Explorer | `Microsoft.Windows.Explorer` |
+| - | Apps (Launchpad) | *(none — Start menu "All apps", not pinnable)* | — |
+| 2 | App Store | Microsoft Store | `Microsoft.WindowsStore_8wekyb3d8bbwe!App` |
+| 3 | Settings | Settings | `windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel` |
+| 4 | Terminal | Windows Terminal | `Microsoft.WindowsTerminal_8wekyb3d8bbwe!App` |
+| 5 | Reminders | Microsoft To Do | `Microsoft.Todos_8wekyb3d8bbwe!App` |
+| 6 | Notes | Sticky Notes | `Microsoft.MicrosoftStickyNotes_8wekyb3d8bbwe!App` |
+| - | Bitwarden | *(not installed on Windows)* | — |
+| 7 | Chrome | Google Chrome | `Chrome` |
+| 8 | Edge | Microsoft Edge | `MSEdge` |
+| 9 | Atlas | ChatGPT web app | `Chrome Apps\ChatGPT.lnk` |
+| 10 | Messages / Phone / Phone Mirroring | Phone Link (all three in one app) | `Microsoft.YourPhone_8wekyb3d8bbwe!App` |
+| - | FaceTime | *(no Windows equivalent)* | — |
+| 11 | Contacts | People | `Microsoft.M365Companions_8wekyb3d8bbwe!People` |
+| 12 | Mail | Gmail web app | `Chrome Apps\Gmail (1).lnk` |
+| 13 | Calendar | Google Calendar web app | `Chrome Apps\Google Calendar (1).lnk` |
+| 14 | Claude | Claude | `Anthropic\Claude.lnk` |
+| 15 | VSCode | Visual Studio Code | `Microsoft.VisualStudioCode` |
+| 16 | Messenger | Messenger web app | `Chrome Apps\Messenger.lnk` |
+| 17 | Discord | Discord | `com.squirrel.Discord.Discord` |
+| 18 | Slack | Slack | `com.squirrel.slack.slack` |
+| 19 | Meet | Google Meet web app | `Chrome Apps\Google Meet.lnk` |
+| 20 | Teams | Microsoft Teams | `MSTeams_8wekyb3d8bbwe!MSTeams` |
+| 21 | Plex | Plex | `Plex\Plex.lnk` |
+| - | YouTube | *(no YouTube web app installed — only YouTube Music)* | — |
+| 22 | YTMusic | YouTube Music web app | `Chrome Apps\YouTube Music.lnk` |
+| 23 | Parsec | Parsec | `Parsec\Parsec.lnk` |
+| 24 | VNCViewer | VNC Viewer | `RealVNC\VNC Viewer.lnk` |
+| 25 | GLKVM | GLKVM | `GLKVM.lnk` |
+| - | Moonlight | *(not installed — Sunshine is the host half, not the client)* | — |
+| 26 | Tailscale | Tailscale | `Tailscale.lnk` |
+| 27 | OpenVPN | OpenVPN GUI | `OpenVPN\OpenVPN GUI.lnk` |
+| 28 | Wireguard | WireGuard | `WireGuard.lnk` |
+| 29 | Steam | Steam | `Steam\Steam.lnk` |
+| 30 | Epic Games | Epic Games Launcher | `Epic Games Launcher.lnk` |
+| 31 | Activity Monitor | Task Manager | `System Tools\Task Manager.lnk` |
+| - | Shortcuts | *(no Windows equivalent — closest is Power Automate)* | — |
+
+`.lnk` identities are Start menu shortcut paths, under
+`%ProgramData%\Microsoft\Windows\Start Menu\Programs\` for machine-wide apps and
+`%APPDATA%\Microsoft\Windows\Start Menu\Programs\` for per-user apps (Chrome web
+apps, Claude). The full paths live in the layout XML below.
+
+### Applying the order
+
+Windows 11 has no supported "pin these apps in this order" command — the
+`taskbarpin` shell verb is gone and `Import-StartLayout` is unsupported on
+Windows 11. The only mechanism that takes an ordered list is the taskbar layout
+XML (`<CustomTaskbarLayoutCollection>`), where document order *is* left-to-right
+pin order and **apps that are not installed are silently skipped**, which is why
+one file works on every machine without installing anything to fill the gaps.
+
+The layout lives at
+[application_configs/windows_taskbar/LayoutModification.xml](../application_configs/windows_taskbar/LayoutModification.xml);
+[scripts/apply_taskbar_layout.ps1](../scripts/apply_taskbar_layout.ps1) applies
+it per user, without group policy:
+
+```powershell
+# normal (non-elevated) powershell - pins are per-user HKCU state
+cd ~\GitHub\dotfiles\scripts
+.\apply_taskbar_layout.ps1 -DryRun   # show what resolves and what gets skipped
+.\apply_taskbar_layout.ps1           # back up, apply, restart explorer
+```
+
+What the script does, and why each step is needed:
+
+1. Backs up the current pins (`User Pinned\TaskBar\*.lnk` plus the `Taskband`
+   registry key) to `%LOCALAPPDATA%\dotfiles\taskbar_backups\<timestamp>`;
+   `-RestoreFrom <folder>` puts them back.
+2. Rescues shortcuts the layout points at that only exist as a pin — Chrome web
+   apps pinned straight from Chrome (ChatGPT) have no Start menu `.lnk`, so it
+   copies the pin into `Chrome Apps\` first. Skipping this step loses the pin
+   when the pins are cleared.
+3. Copies the XML to `%LOCALAPPDATA%\Microsoft\Windows\Shell\LayoutModification.xml`.
+4. Clears existing pins and the `Taskband` key. Required: layout pins are
+   appended *after* whatever the user already pinned, so leftover pins would
+   corrupt the order.
+5. Restarts Explorer, which reads the XML (it stamps `LayoutXMLLastModified`
+   under the `Taskband` key). **Sign out and back in to materialize the pins** —
+   except on very recent builds, Explorer only draws the new layout at sign-in,
+   so between the script finishing and signing back in the taskbar shows no
+   pins at all. Verify afterwards: `User Pinned\TaskBar` should contain a
+   `.lnk` per pin again.
+
+Pins stay editable afterwards — dragging or unpinning still works, and nothing
+re-applies the layout behind your back. Re-run the script after editing the XML.
+
+Alternatives that were considered and rejected:
+
+* **Local group policy** (Computer/User Configuration → Start Menu and Taskbar →
+  Start Layout → path to the XML). Supported, but it re-applies on every policy
+  refresh and reverts manual changes unless every pin carries `PinGeneration`.
+  Overkill for a personal machine.
+* **Exporting the `Taskband` registry blob from a hand-arranged machine.** Works
+  as a backup/restore (which is what step 1 uses it for), but the blob is opaque
+  binary containing per-machine paths, so it is neither reviewable in git nor
+  portable between hosts.
+* **`Shell.Application` `InvokeVerb("taskbarpin")`.** The Windows 10 method;
+  Microsoft removed the verb on Windows 11.
+
+Note: this is ~31 pins. On a narrow display the centered taskbar will run out of
+room — Settings → Personalization → Taskbar → Taskbar behaviors → "Combine
+taskbar buttons" and left-aligning the taskbar buy back space.
+
 ## Git Setup
 
 * Follow instructions in [setup_git.md](./setup_git.md)
