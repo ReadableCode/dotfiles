@@ -163,7 +163,8 @@ def create_link(repo_path, system_path):
         os.symlink(repo_path, system_path)
         return "symlinked"
     except OSError:
-        if system == "Windows":
+        # os.link cannot hard-link directories, so the Windows fallback is files-only
+        if system == "Windows" and not os.path.isdir(repo_path):
             os.link(repo_path, system_path)
             print("  symlink denied - created a hard link instead; after git pull, "
                   "run status/deploy to catch and fix orphaned hard links")
@@ -191,7 +192,7 @@ def is_deployed(repo_path, system_path):
 
 def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None):
     """
-    Copy system_path to <backup_root>/<repo-relative path>.<timestamp>.
+    Copy system_path (file or directory) to <backup_root>/<repo-relative path>.<timestamp>.
 
     Backups live under data/config_backups (data/ is gitignored) so they never
     appear as clutter next to tracked configs.
@@ -204,7 +205,10 @@ def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, f"{relative_path}.{timestamp}")
     os.makedirs(os.path.dirname(backup_path), exist_ok=True)
-    shutil.copy2(system_path, backup_path)
+    if os.path.isdir(system_path):
+        shutil.copytree(system_path, backup_path, symlinks=True)
+    else:
+        shutil.copy2(system_path, backup_path)
     return backup_path
 
 
@@ -276,7 +280,10 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
         return "skipped"
     backup_path = backup_system_file(system_path, repo_path, backup_root=backup_root, repo_root=repo_root)
     print(f"  backed up {system_path}\n         -> {backup_path}")
-    os.remove(system_path)
+    if os.path.isdir(system_path):
+        shutil.rmtree(system_path)
+    else:
+        os.remove(system_path)
     print("  replaced system version with the repo version (local edits live only in the backup)")
     action = create_link(repo_path, system_path)
     print(f"  {action} {system_path}\n         -> {repo_path}")
@@ -568,7 +575,7 @@ def classify_entry(repo_path, system_path):
             return "OK", "link resolves to repo file"
         return "WRONG_TARGET", f"link resolves to {os.path.realpath(system_path)}"
     if os.path.isdir(system_path):
-        return "NOT_A_LINK", "destination is a directory, expected a file link"
+        return "NOT_A_LINK", "destination is a real directory; deploy would back it up and replace it with a link"
     if is_hard_link_to(repo_path, system_path):
         return "OK", "hard link shares the repo file's inode"
     if _file_hash(system_path) == _file_hash(repo_path):
