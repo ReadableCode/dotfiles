@@ -43,6 +43,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -368,6 +369,9 @@ def cmd_create_pr(args):
             body = handle.read()
 
     if resolve_provider(args.repo) == "bitbucket":
+        if args.label:
+            print("WARNING: --label is ignored on Bitbucket (PRs have no label API)",
+                  file=sys.stderr)
         headers = bitbucket_headers()
         base = args.base
         if not base:
@@ -402,7 +406,11 @@ def cmd_create_pr(args):
                          payload=payload, dry_run=args.dry_run)
     number = response["number"] if response else 0
     url = response["html_url"] if response else f"https://github.com/{repo}/pull/0"
-    emit(f"Created PR #{number}: {url}", {"number": number, "url": url})
+    if args.label:
+        # Labels live on the issues endpoint; add them after the PR exists.
+        http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{number}/labels", headers,
+                  payload={"labels": args.label}, dry_run=args.dry_run)
+    emit(f"Created PR #{number}: {url}", {"number": number, "url": url, "labels": args.label})
 
 
 def bucket_check_run(run):
@@ -634,6 +642,8 @@ def build_parser():
     create_pr.add_argument("--head", help="head branch (default: current branch)")
     create_pr.add_argument("--base", help="base branch (default: repo default branch)")
     create_pr.add_argument("--draft", action="store_true")
+    create_pr.add_argument("--label", action="append", default=[],
+                           help="PR label to add after creation; repeatable (GitHub only)")
     create_pr.set_defaults(func=cmd_create_pr)
 
     status = sub.add_parser("pr-status", help="bucket a PR's checks into a green/failed report")

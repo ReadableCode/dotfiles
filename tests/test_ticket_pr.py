@@ -249,6 +249,32 @@ def test_create_pr_dry_run(monkeypatch, capsys):
     assert result["number"] == 0
 
 
+def test_create_pr_dry_run_with_labels(monkeypatch, capsys):
+    """Labels are added via the issues endpoint after the PR is created."""
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "ABC-0-test-branch")
+    out = _run_cli(
+        [
+            "--dry-run",
+            "create-pr",
+            "--repo",
+            "owner/name",
+            "--title",
+            "ABC-0 Test",
+            "--label",
+            "team: alpha",
+            "--label",
+            "squad: beta",
+        ],
+        monkeypatch,
+        capsys,
+    )
+    assert "[dry-run] POST https://api.github.com/repos/owner/name/pulls" in out
+    assert "[dry-run] POST https://api.github.com/repos/owner/name/issues/0/labels" in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["labels"] == ["team: alpha", "squad: beta"]
+
+
 def test_request_review_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     out = _run_cli(

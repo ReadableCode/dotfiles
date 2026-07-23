@@ -822,3 +822,103 @@ def test_deploy_then_second_run_reports_no_changes(tmp_path, fake_home, monkeypa
 
 
 # %%
+
+
+# %%
+# Removals and prune #
+
+
+def _removals(monkeypatch, entries):
+    """Point load_removals at an in-memory removals list."""
+    monkeypatch.setattr(deploy_configs, "load_removals", lambda: entries)
+
+
+def test_prune_candidates_come_from_removals_and_skip_still_wanted_dests(monkeypatch, fake_home):
+    """A dest some entry still wants is never pruned, even if a removals line names it."""
+    _removals(monkeypatch, [
+        {"name": "dead", "dest": {"darwin": "~/.gone"}},
+        {"name": "revived", "dest": {"darwin": "~/.keep"}},
+    ])
+    entries = [{"name": "keep", "repo": "r.txt", "dest": {"darwin": "~/.keep"}}]
+    candidates = deploy_configs.build_prune_candidates(entries, "darwin", "ENVY")
+    assert [dest for dest, _ in candidates] == [os.path.join(str(fake_home), ".gone")]
+    assert candidates[0][1] == "removals:dead"
+
+
+def test_prune_candidates_respect_requires_and_hosts(monkeypatch, fake_home):
+    """A repo this machine never cloned has no link to prune; a hosts filter still applies."""
+    _removals(monkeypatch, [
+        {"name": "uncloned", "dest": {"darwin": "~/.a"}, "requires": "~/never-cloned-repo"},
+        {"name": "other_host", "dest": {"darwin": "~/.b"}, "hosts": ["SOMEOTHERBOX"]},
+    ])
+    assert deploy_configs.build_prune_candidates([], "darwin", "ENVY") == []
+
+
+def test_prune_removes_orphaned_symlink_only_with_apply(tmp_path, fake_home):
+    source = write_file(os.path.join(str(tmp_path), "src.md"), "x")
+    dest = os.path.join(str(fake_home), "skills", "old", "SKILL.md")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    os.symlink(source, dest)
+    candidates = [(dest, "removals:old")]
+
+    deploy_configs.run_prune(candidates, apply_changes=False)
+    assert os.path.lexists(dest), "dry run must not delete"
+
+    deploy_configs.run_prune(candidates, apply_changes=True)
+    assert not os.path.lexists(dest)
+    # the emptied skill-style dir is cleaned up too, and the source is untouched
+    assert not os.path.isdir(os.path.dirname(dest))
+    assert os.path.exists(source)
+
+
+def test_prune_removes_dangling_symlink_and_leaves_real_dirs(tmp_path, fake_home):
+    dangling = os.path.join(str(fake_home), "dangling.md")
+    os.symlink(os.path.join(str(tmp_path), "deleted.md"), dangling)
+    real_dir = os.path.join(str(fake_home), "realdir")
+    os.makedirs(real_dir, exist_ok=True)
+
+    deploy_configs.run_prune(
+        [(dangling, "removals:x"), (real_dir, "removals:y")], apply_changes=True
+    )
+    assert not os.path.lexists(dangling), "a dangling symlink is still ours to remove"
+    assert os.path.isdir(real_dir), "a real directory is never pruned"
+
+
+def test_prune_removes_hard_link_style_regular_file(fake_home):
+    """The Windows fallback: a hard link is a plain file once its source is gone."""
+    dest = write_file(os.path.join(str(fake_home), "hardlinked.md"), "stale content")
+    deploy_configs.run_prune([(dest, "removals:old")], apply_changes=True)
+    assert not os.path.exists(dest)
+
+
+def test_prune_is_idempotent_when_targets_are_already_gone(fake_home, capsys):
+    dest = os.path.join(str(fake_home), "never-existed.md")
+    assert deploy_configs.run_prune([(dest, "removals:x")], apply_changes=True) == 0
+    assert "already absent 1" in capsys.readouterr().out
+
+
+def test_load_removals_rejects_entry_without_dest(tmp_path, monkeypatch):
+    removals_path = os.path.join(str(tmp_path), "x_removals.yaml")
+    with open(removals_path, "w", encoding="utf-8") as handle:
+        yaml.safe_dump([{"name": "no_dest"}], handle)
+    monkeypatch.setattr(deploy_configs, "discover_removals", lambda: [removals_path])
+    with pytest.raises(ValueError, match="'name' and 'dest'"):
+        deploy_configs.load_removals()
+
+
+def test_real_removals_files_parse_and_name_no_still_wanted_dest():
+    """The committed seed must stay loadable, and must never target a live entry."""
+    removals = deploy_configs.load_removals()
+    for entry in removals:
+        assert entry.get("name") and entry.get("dest"), entry
+    entries, _ = deploy_configs.load_manifests()
+    for platform_key in ("darwin", "linux", "windows"):
+        wanted = {
+            row["dest"]
+            for row in deploy_configs.build_plan(entries, platform_key, "ENVY")
+            if row["action"] == "apply" and row["dest"]
+        }
+        targeted = {
+            deploy_configs.resolve_dest(entry, platform_key, "ENVY") for entry in removals
+        }
+        assert not (wanted & targeted), f"removals would delete a live dest on {platform_key}"

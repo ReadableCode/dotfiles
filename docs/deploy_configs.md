@@ -19,6 +19,11 @@ uv run python src/deploy_configs.py
 # Read-only report: current health of every entry PLUS what deploy would do
 # about anything unhealthy. Exits non-zero on drift, so it can run from cron.
 uv run python src/deploy_configs.py status
+
+# Remove managed links that no manifest entry wants any more. Dry run by
+# default; --apply actually deletes. See "Removing an entry" below.
+uv run python src/deploy_configs.py prune
+uv run python src/deploy_configs.py prune --apply
 ```
 
 There used to be separate `--dry-run` and `--status` modes; they showed the
@@ -184,3 +189,53 @@ If the destination already has a live config file, deploy backs it up and
 replaces it with a link to the repo version (see behavior above) — so make
 sure any local edits worth keeping are in the repo file *before* deploying,
 or fish them out of `data/config_backups/` afterwards.
+
+
+## Removing an entry (and cleaning up its links)
+
+Deploy is manifest-driven: it only ever inspects destinations that a *current*
+entry names. So deleting an entry does **not** remove the link it created — the
+tool simply stops looking at it, and what is left behind differs per platform:
+
+| Platform | Link type | Left behind after the source file is deleted |
+| --- | --- | --- |
+| macOS / Linux | symlink | A dangling symlink — visibly broken, but nothing removes it. |
+| Windows (admin / Developer Mode) | symlink | Same dangling symlink. |
+| Windows (unprivileged) | **hard link** | A **real file holding the old content**. It looks valid, and a hard link has no readable target, so nothing can tell it came from deploy. |
+
+Cleanup is therefore an explicit, committed **list of files that must not
+exist**, not something inferred from the filesystem or remembered per machine.
+Per-machine state would be useless here: the machine that deletes the manifest
+entry is almost never the only machine holding the link, and it has no way to
+reach into the others. A committed list travels with the repo, so every machine
+cleans itself up on its next prune.
+
+The list lives in a **removals file**:
+
+- `deploy_removals.yaml` in dotfiles, and/or
+- `<context>_removals.yaml` in any sibling `*_credentials` repo (discovered
+  exactly like `<context>_manifest.yaml`, so a client's dead paths stay in that
+  client's private repo).
+
+Entries use the same `dest` / `requires` / `hosts` schema as a manifest entry
+but carry **no `repo:` key** — the source file is already gone. `requires` still
+gates on the checkout existing, so a repo a machine never cloned has no link to
+prune.
+
+So the workflow is:
+
+1. Delete the entry from the manifest.
+2. Add its `dest` to the relevant removals file.
+3. `prune` (dry run) to see what would go, then `prune --apply`.
+4. Once every machine has pruned, the line can be dropped from the file.
+
+`prune` never touches a real directory, removes a file only if a removals entry
+names it, cleans up a directory left empty behind a removed file (e.g. a skill
+folder), and **ignores any dest a live manifest entry still wants** — so
+re-adding an entry beats a stale removals line instead of the two fighting.
+Running it twice is a no-op; already-gone paths are just reported as absent.
+
+Pruning is deliberately a separate command: deleting files should never be a
+side effect of a routine deploy. `status` still *reports* anything the removals
+list still finds on disk (and exits non-zero for it) so a cron drift check
+notices.

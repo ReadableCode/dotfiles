@@ -34,6 +34,7 @@ REPO_ROOT = parent_dir
 MANIFEST_PATH = os.path.join(REPO_ROOT, "deploy_manifest.yaml")
 BACKUP_ROOT = os.path.join(REPO_ROOT, "data", "config_backups")
 
+
 PLATFORM_KEYS = {"Darwin": "darwin", "Linux": "linux", "Windows": "windows"}
 
 # Filename tokens accepted per platform when resolving <base>.<token>.<ext>
@@ -210,6 +211,54 @@ def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None)
     else:
         shutil.copy2(system_path, backup_path)
     return backup_path
+
+
+# %%
+# Removals #
+
+
+def discover_removals():
+    """
+    Locate every removals file: an optional deploy_removals.yaml in dotfiles plus,
+    for each sibling ``*_credentials`` repo, an optional ``<context>_removals.yaml``.
+
+    A removals file is the committed list of destinations that must NOT exist any
+    more. It is deliberately shared state, not machine state: the machine that
+    deletes a manifest entry is almost never the only machine holding the link it
+    created, so the list has to travel with the repo for every other machine to
+    clean itself up on its next prune.
+    """
+    files = []
+    base = os.path.join(REPO_ROOT, "deploy_removals.yaml")
+    if os.path.exists(base):
+        files.append(base)
+    for credentials_dir in find_credentials_dirs(grandparent_dir):
+        overlay = os.path.join(credentials_dir, f"{credentials_context(credentials_dir)}_removals.yaml")
+        if os.path.exists(overlay):
+            files.append(overlay)
+    return files
+
+
+def load_removals():
+    """Parse every discovered removals file into entries with 'name' and 'dest' (no 'repo' - the source is gone)."""
+    entries = []
+    seen: dict = {}
+    for path in discover_removals():
+        with open(path, "r", encoding="utf-8") as handle:
+            parsed = yaml.safe_load(handle) or []
+        if not isinstance(parsed, list):
+            raise ValueError(f"Removals file {path} must be a YAML list of entries")
+        for entry in parsed:
+            if not isinstance(entry, dict) or "name" not in entry or "dest" not in entry:
+                raise ValueError(f"Removal entry must be a mapping with 'name' and 'dest' keys: {entry}")
+            if entry["name"] in seen:
+                raise ValueError(
+                    f"Duplicate removal entry name '{entry['name']}' in {path} "
+                    f"(already defined in {seen[entry['name']]})"
+                )
+            seen[entry["name"]] = path
+            entries.append(entry)
+    return entries
 
 
 # %%
@@ -597,7 +646,7 @@ def planned_action(status):
     return descriptions.get(status, "unknown")
 
 
-def run_status(plan, platform_key):
+def run_status(plan, platform_key, prune_candidates=None):
     """
     Combined health report + dry run, grouped into sections (least interesting
     first, problems last so they stay on screen): not applicable -> healthy ->
@@ -632,6 +681,15 @@ def run_status(plan, platform_key):
             print(paint(f"      -> {planned_action(status)}", "dim"))
         print()
 
+    orphans = [(dest, reason) for dest, reason in (prune_candidates or []) if os.path.lexists(dest)]
+    if orphans:
+        print_section("Orphaned - no manifest entry wants these", len(orphans), "yellow")
+        for dest, reason in orphans:
+            print(f"  {dest}")
+            print(paint(f"      {reason}", "dim"))
+            print(paint("      -> run 'deploy_configs.py prune --apply' to remove", "dim"))
+        print()
+
     status_counts: dict = {}
     for status, _, _ in healthy + unhealthy:
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -640,9 +698,11 @@ def run_status(plan, platform_key):
         print("no applicable entries")
     elif unhealthy:
         print(paint(f"drift detected: {summary} - run deploy to fix", "red"))
+    elif orphans:
+        print(paint(f"{summary}; {len(orphans)} orphaned - run prune to remove", "yellow"))
     else:
         print(paint(f"all healthy: {summary}", "green"))
-    return 1 if unhealthy else 0
+    return 1 if (unhealthy or orphans) else 0
 
 
 def run_deploy(plan, platform_key):
@@ -697,6 +757,97 @@ def run_deploy(plan, platform_key):
 
 
 # %%
+# Prune #
+
+
+def build_prune_candidates(entries, platform_key, hostname, repo_root=None):
+    """
+    Every destination the removals files say must not exist, as sorted
+    (dest, reason).
+
+    A destination that some manifest entry still wants is never a candidate, so
+    re-adding an entry silently wins over a stale removals line instead of the
+    two fighting each other.
+    """
+    repo_root = repo_root or REPO_ROOT
+    wanted = {
+        row["dest"]
+        for row in build_plan(entries, platform_key, hostname, repo_root)
+        if row["action"] == "apply" and row["dest"]
+    }
+    candidates: dict = {}
+    for entry in load_removals():
+        if not host_allowed(entry, hostname):
+            continue
+        dest = resolve_dest(entry, platform_key, hostname, repo_root)
+        # requires gates on the checkout existing, same as a manifest entry: a repo
+        # this machine never cloned has no link to prune.
+        if not dest or dest in wanted or not requires_satisfied(entry, {}, hostname, repo_root):
+            continue
+        candidates.setdefault(dest, f"removals:{entry['name']}")
+    return sorted(candidates.items())
+
+
+def classify_prune_target(dest):
+    """(removable, description) for a prune candidate that exists on disk."""
+    if os.path.islink(dest):
+        return True, "symlink"
+    if os.path.isdir(dest):
+        # never rmtree: a real directory here means something other than a deployed file
+        return False, "real directory - left in place"
+    if os.path.isfile(dest):
+        # A hard link is indistinguishable from a regular file once its source is
+        # gone, so the removals list is the authority that it was ours.
+        return True, "hard link / regular file"
+    return False, "special file - left in place"
+
+
+def run_prune(candidates, apply_changes=False):
+    """
+    Delete the destinations the removals files list, wherever they still exist.
+    Dry run unless apply_changes: deleting files should never be a side effect of
+    a normal deploy.
+    """
+    removed = skipped = absent = 0
+
+    print_section(
+        "Prune - removing" if apply_changes else "Prune - dry run (pass --apply to remove)",
+        len(candidates),
+        "cyan" if apply_changes else "yellow",
+    )
+    for dest, reason in candidates:
+        if not os.path.lexists(dest):
+            absent += 1
+            continue
+        removable, description = classify_prune_target(dest)
+        if not removable:
+            print(f"  {paint('SKIP', 'yellow')}  {dest}  ({description}; {reason})")
+            skipped += 1
+            continue
+        if apply_changes:
+            os.remove(dest)
+            try:  # a skill-style dir is left empty behind its removed file
+                os.rmdir(os.path.dirname(dest))
+            except OSError:
+                pass
+            print(f"  {paint('REMOVED', 'green')}  {dest}  ({description}; {reason})")
+        else:
+            print(f"  {paint('WOULD REMOVE', 'yellow')}  {dest}  ({description}; {reason})")
+        removed += 1
+    print()
+
+    if not candidates:
+        print(paint("nothing to prune", "green"))
+        return 0
+    verb = "removed" if apply_changes else "would remove"
+    print(paint(
+        f"Prune complete: {verb} {removed}, skipped {skipped}, already absent {absent}",
+        "yellow" if skipped else "green",
+    ))
+    return 0
+
+
+# %%
 # Main #
 
 
@@ -707,13 +858,19 @@ def parse_args(argv=None):
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["deploy", "status"],
+        choices=["deploy", "status", "prune"],
         default="deploy",
         help="deploy (default) creates the links; status is a read-only combined "
-        "drift report + dry run (non-zero exit on drift)",
+        "drift report + dry run (non-zero exit on drift); prune removes managed "
+        "links no manifest wants any more (dry run unless --apply)",
     )
     parser.add_argument("--status", action="store_true", help="same as the status command")
     parser.add_argument("--dry-run", action="store_true", help="deprecated alias for the status command")
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="prune only: actually remove the orphaned links (default is a dry run)",
+    )
     parser.add_argument(
         "--manifest",
         default=None,
@@ -736,8 +893,14 @@ def main(argv=None):
     print(f"manifests: {manifests_label}")
     print()
     plan = build_plan(entries, platform_key, hostname)
+    # --manifest is the single-file test escape hatch: it skips overlay discovery,
+    # so it must skip removals discovery too or an isolated run would
+    # report the real machine's orphans.
+    candidates = [] if args.manifest else build_prune_candidates(entries, platform_key, hostname)
+    if args.command == "prune":
+        return run_prune(candidates, apply_changes=args.apply)
     if args.status or args.dry_run or args.command == "status":
-        return run_status(plan, platform_key)
+        return run_status(plan, platform_key, candidates)
     return run_deploy(plan, platform_key)
 
 
