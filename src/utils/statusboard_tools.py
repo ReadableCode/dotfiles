@@ -560,9 +560,14 @@ def _github_sso_blocked_orgs(api, headers):
 
 def fetch_bitbucket_prs(panel):
     """
-    Open PRs listing the app-password's account as a reviewer, across the
-    panel's ``repos`` list (or every repo in ``workspace`` when omitted -
-    slower, one API call per repo page).
+    Open PRs that involve the app-password's account - either as a reviewer or
+    as the AUTHOR (the github_prs panel shows both, so this one must too) -
+    across the panel's ``repos`` list (or every repo in ``workspace`` when
+    omitted - slower, one API call per repo page).
+
+    ``participants`` is not in the list endpoint's default serialization, so
+    it is requested explicitly; without it every PR would read as "awaiting
+    review" regardless of who already approved.
     """
     auth = (resolve_secret(panel, "username_env"), resolve_secret(panel, "app_password_env"))
     user_response = requests.get(f"{BITBUCKET_API}/user", auth=auth, timeout=DEFAULT_HTTP_TIMEOUT)
@@ -571,22 +576,88 @@ def fetch_bitbucket_prs(panel):
     uuid = user_response.json()["uuid"]
     workspace = panel["workspace"]
     repos = panel.get("repos") or _bitbucket_workspace_repos(workspace, auth)
-    rows = []
+    found = []
     for repo in repos:
         url = f"{BITBUCKET_API}/repositories/{workspace}/{repo}/pullrequests"
-        params = {"q": f'state="OPEN" AND reviewers.uuid="{uuid}"', "pagelen": 50}
+        params = {
+            "q": f'state="OPEN" AND (reviewers.uuid="{uuid}" OR author.uuid="{uuid}")',
+            "pagelen": 50,
+            "fields": "+values.participants,+values.draft",
+        }
         response = requests.get(url, params=params, auth=auth, timeout=DEFAULT_HTTP_TIMEOUT)
         if response.status_code != 200:
             return PanelResult.error(f"Bitbucket {workspace}/{repo} returned {response.status_code}")
-        for pr in response.json().get("values", []):
-            rows.append(
-                {
-                    "text": f"{repo}#{pr['id']}  {pr['title']}",
-                    "url": pr["links"]["html"]["href"],
-                    "meta": f"by {pr['author']['display_name']} · updated {_age(pr['updated_on'])} ago",
-                }
-            )
-    return PanelResult(True, "links", rows, f"{len(rows)} awaiting review ({workspace})")
+        found += [(repo, pr) for pr in response.json().get("values", [])]
+    rows, summary = classify_bitbucket_prs(uuid, found)
+    return PanelResult(True, "links", rows, f"{summary} ({workspace})")
+
+
+def classify_bitbucket_prs(uuid, found):
+    """
+    Turn (repo_slug, pr) pairs into ordered, badged link rows - the Bitbucket
+    counterpart of classify_github_prs, using the same badges so both panels
+    read the same way. Buckets, in display order:
+
+    - review requested and I have not voted: needs my review;
+    - I requested changes: waiting on the AUTHOR, not on me;
+    - my own open PRs, with the aggregate verdict of everyone else's votes;
+    - draft PRs - anyone's, mine included - greyed at the bottom.
+
+    PRs I already approved are dropped (nothing is waited on). Bitbucket has
+    no "commented" participant state, so there is no equivalent of the GitHub
+    💬 bucket, and no unsubmitted-draft-review state to flag.
+    """
+    need, waiting, own, parked = [], [], [], []
+    for repo, pr in found:
+        author_uuid = (pr.get("author") or {}).get("uuid")
+        participants = pr.get("participants") or []
+        mine = author_uuid == uuid
+        if pr.get("draft"):
+            note = "your draft · parked, nothing to approve" if mine else "draft · parked, nothing to approve"
+            parked.append(_bitbucket_row(repo, pr, "◌", "dim", note, dim=True))
+            continue
+        if mine:
+            others = [p for p in participants if (p.get("user") or {}).get("uuid") != uuid]
+            own.append(_bitbucket_row(repo, pr, "⬆", "bold magenta", f"your PR · {_bitbucket_verdict(others)}"))
+            continue
+        my_state = next(
+            (p.get("state") for p in participants if (p.get("user") or {}).get("uuid") == uuid), None
+        )
+        if my_state == "approved":
+            continue
+        if my_state == "changes_requested":
+            waiting.append(_bitbucket_row(repo, pr, "✋", "bold yellow", "you requested changes"))
+        else:
+            need.append(_bitbucket_row(repo, pr, "●", "bold cyan", None))
+    rows = need + waiting + own + parked
+    summary = f"{len(need)} to review · {len(waiting)} on author · {len(own)} yours"
+    if parked:
+        summary += f" · {len(parked)} parked"
+    return rows, summary
+
+
+def _bitbucket_verdict(others):
+    """Aggregate verdict of everyone else's votes on one of my own PRs."""
+    states = [participant.get("state") for participant in others]
+    if "changes_requested" in states:
+        return "✗ changes requested"
+    if "approved" in states:
+        return "✓ approved"
+    return "⧗ awaiting review"
+
+
+def _bitbucket_row(repo, pr, badge, badge_style, note, dim=False):
+    meta = f"by {pr['author']['display_name']} · updated {_age(pr['updated_on'])} ago"
+    if note:
+        meta += f" · {note}"
+    return {
+        "badge": badge,
+        "badge_style": badge_style,
+        "text": f"{repo}#{pr['id']}  {pr['title']}",
+        "url": pr["links"]["html"]["href"],
+        "meta": meta,
+        "dim": dim,
+    }
 
 
 def _bitbucket_workspace_repos(workspace, auth):

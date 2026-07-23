@@ -398,3 +398,106 @@ def test_pr_review_states_tracks_commit_ids(monkeypatch):
     states, commits = statusboard_tools._pr_review_states("https://api.github.com", {}, gh_item("acme/app", 16))
     assert states == {"me": "CHANGES_REQUESTED", "bob": "APPROVED"}
     assert commits == {"me": "aaa111", "bob": "bbb222"}
+
+
+# %%
+# Bitbucket PR classification #
+
+
+def bb_pr(number, author_uuid="{alice}", participants=(), **extra):
+    return dict(
+        {
+            "id": number,
+            "title": f"PR {number}",
+            "author": {"uuid": author_uuid, "display_name": "Alice"},
+            "updated_on": "2026-07-15T12:00:00+00:00",
+            "links": {"html": {"href": f"https://bitbucket.org/ws/repo/pull-requests/{number}"}},
+            "participants": list(participants),
+        },
+        **extra,
+    )
+
+
+def test_classify_bitbucket_prs_buckets_and_order():
+    me = "{me}"
+    fresh = bb_pr(1)                                                              # reviewer, no vote -> needs review
+    blocked = bb_pr(2, participants=[{"user": {"uuid": me}, "state": "changes_requested"}])
+    approved = bb_pr(3, participants=[{"user": {"uuid": me}, "state": "approved"}])  # dropped
+    my_open = bb_pr(4, author_uuid=me, participants=[{"user": {"uuid": "{bob}"}, "state": "approved"}])
+    rows, summary = statusboard_tools.classify_bitbucket_prs(
+        me, [("repo", fresh), ("repo", blocked), ("repo", approved), ("repo", my_open)]
+    )
+    assert [(r["badge"], r["url"]) for r in rows] == [
+        ("●", fresh["links"]["html"]["href"]),
+        ("✋", blocked["links"]["html"]["href"]),
+        ("⬆", my_open["links"]["html"]["href"]),
+    ]
+    assert summary == "1 to review · 1 on author · 1 yours"
+    assert "your PR · ✓ approved" in rows[-1]["meta"]
+    assert rows[0]["text"] == "repo#1  PR 1"
+
+
+def test_classify_bitbucket_prs_own_pr_verdicts():
+    me = "{me}"
+    for participants, verdict in [
+        ([{"user": {"uuid": "{bob}"}, "state": "changes_requested"},
+          {"user": {"uuid": "{eve}"}, "state": "approved"}], "✗ changes requested"),
+        ([{"user": {"uuid": "{bob}"}, "state": "approved"}], "✓ approved"),
+        ([], "⧗ awaiting review"),
+        ([{"user": {"uuid": me}, "state": "approved"}], "⧗ awaiting review"),  # my own vote doesn't count
+    ]:
+        rows, _ = statusboard_tools.classify_bitbucket_prs(
+            me, [("repo", bb_pr(5, author_uuid=me, participants=participants))]
+        )
+        assert verdict in rows[0]["meta"]
+
+
+def test_classify_bitbucket_prs_parks_all_drafts_last():
+    me = "{me}"
+    my_draft = bb_pr(6, author_uuid=me, draft=True)
+    their_draft = bb_pr(7, draft=True)
+    fresh = bb_pr(8)
+    rows, summary = statusboard_tools.classify_bitbucket_prs(
+        me, [("repo", my_draft), ("repo", their_draft), ("repo", fresh)]
+    )
+    assert [(r["badge"], r["url"]) for r in rows] == [
+        ("●", fresh["links"]["html"]["href"]),
+        ("◌", my_draft["links"]["html"]["href"]),
+        ("◌", their_draft["links"]["html"]["href"]),
+    ]
+    assert all(r["dim"] for r in rows if r["badge"] == "◌")
+    assert summary == "1 to review · 0 on author · 0 yours · 2 parked"
+
+
+def test_fetch_bitbucket_prs_queries_authored_and_reviewed(monkeypatch):
+    calls = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, payload):
+            self.payload = payload
+
+        def json(self):
+            return self.payload
+
+    def fake_get(url, **kwargs):
+        calls.append((url, kwargs.get("params") or {}))
+        if url.endswith("/user"):
+            return FakeResponse({"uuid": "{me}"})
+        return FakeResponse({"values": [bb_pr(9, author_uuid="{me}")]})
+
+    monkeypatch.setattr(statusboard_tools.requests, "get", fake_get)
+    monkeypatch.setattr(statusboard_tools, "resolve_secret", lambda panel, key: "x")
+    result = statusboard_tools.fetch_bitbucket_prs(
+        {"name": "bb", "type": "bitbucket_prs", "workspace": "ws", "repos": ["repo"],
+         "username_env": "U", "app_password_env": "P"}
+    )
+    query = calls[-1][1]["q"]
+    assert 'reviewers.uuid="{me}"' in query and 'author.uuid="{me}"' in query
+    assert "participants" in calls[-1][1]["fields"]
+    assert [row["badge"] for row in result.body] == ["⬆"]
+    assert result.summary == "0 to review · 0 on author · 1 yours (ws)"
+
+
+# %%
