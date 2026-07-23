@@ -565,9 +565,15 @@ def fetch_bitbucket_prs(panel):
     across the panel's ``repos`` list (or every repo in ``workspace`` when
     omitted - slower, one API call per repo page).
 
-    ``participants`` is not in the list endpoint's default serialization, so
-    it is requested explicitly; without it every PR would read as "awaiting
-    review" regardless of who already approved.
+    Involvement is decided CLIENT-SIDE from the plain ``state="OPEN"`` listing
+    rather than a ``q=author.uuid/reviewers.uuid`` filter: Bitbucket's PR search
+    index lags and mishandles those fields (an ``author.uuid`` match flips
+    between 1 and 0 across seconds, and OR-ing it with ``reviewers.uuid`` drops
+    both halves to 0), so a server-side filter silently hides your own PRs. The
+    unfiltered listing is consistent. ``participants``/``reviewers`` are not in
+    the list endpoint's default serialization, so they are requested
+    explicitly - ``reviewers`` to tell whether I'm a requested reviewer,
+    ``participants`` for who has already voted.
     """
     auth = (resolve_secret(panel, "username_env"), resolve_secret(panel, "app_password_env"))
     user_response = requests.get(f"{BITBUCKET_API}/user", auth=auth, timeout=DEFAULT_HTTP_TIMEOUT)
@@ -580,16 +586,25 @@ def fetch_bitbucket_prs(panel):
     for repo in repos:
         url = f"{BITBUCKET_API}/repositories/{workspace}/{repo}/pullrequests"
         params = {
-            "q": f'state="OPEN" AND (reviewers.uuid="{uuid}" OR author.uuid="{uuid}")',
+            "state": "OPEN",
             "pagelen": 50,
-            "fields": "+values.participants,+values.draft",
+            "fields": "+values.participants,+values.reviewers,+values.draft",
         }
         response = requests.get(url, params=params, auth=auth, timeout=DEFAULT_HTTP_TIMEOUT)
         if response.status_code != 200:
             return PanelResult.error(f"Bitbucket {workspace}/{repo} returned {response.status_code}")
-        found += [(repo, pr) for pr in response.json().get("values", [])]
+        for pr in response.json().get("values", []):
+            if _bitbucket_involves(uuid, pr):
+                found.append((repo, pr))
     rows, summary = classify_bitbucket_prs(uuid, found)
     return PanelResult(True, "links", rows, f"{summary} ({workspace})")
+
+
+def _bitbucket_involves(uuid, pr):
+    """True when I authored the PR or am one of its requested reviewers."""
+    if (pr.get("author") or {}).get("uuid") == uuid:
+        return True
+    return any(reviewer.get("uuid") == uuid for reviewer in pr.get("reviewers") or [])
 
 
 def classify_bitbucket_prs(uuid, found):

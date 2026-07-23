@@ -469,8 +469,27 @@ def test_classify_bitbucket_prs_parks_all_drafts_last():
     assert summary == "1 to review · 0 on author · 0 yours · 2 parked"
 
 
-def test_fetch_bitbucket_prs_queries_authored_and_reviewed(monkeypatch):
+def test_bitbucket_involves_author_or_reviewer():
+    me = "{me}"
+    assert statusboard_tools._bitbucket_involves(me, bb_pr(1, author_uuid=me))
+    assert statusboard_tools._bitbucket_involves(
+        me, bb_pr(2, author_uuid="{alice}", reviewers=[{"uuid": me}])
+    )
+    # neither author nor reviewer -> not mine to show
+    assert not statusboard_tools._bitbucket_involves(
+        me, bb_pr(3, author_uuid="{alice}", reviewers=[{"uuid": "{bob}"}])
+    )
+
+
+def test_fetch_bitbucket_prs_filters_client_side_no_uuid_query(monkeypatch):
+    """The flaky server-side uuid filter is gone: list state=OPEN, filter locally."""
     calls = []
+    me = "{me}"
+    listing = [
+        bb_pr(9, author_uuid=me),                                   # mine
+        bb_pr(10, author_uuid="{alice}", reviewers=[{"uuid": me}]),  # I'm a reviewer, no vote yet
+        bb_pr(11, author_uuid="{alice}", reviewers=[{"uuid": "{bob}"}]),  # not involved -> excluded
+    ]
 
     class FakeResponse:
         status_code = 200
@@ -484,8 +503,8 @@ def test_fetch_bitbucket_prs_queries_authored_and_reviewed(monkeypatch):
     def fake_get(url, **kwargs):
         calls.append((url, kwargs.get("params") or {}))
         if url.endswith("/user"):
-            return FakeResponse({"uuid": "{me}"})
-        return FakeResponse({"values": [bb_pr(9, author_uuid="{me}")]})
+            return FakeResponse({"uuid": me})
+        return FakeResponse({"values": listing})
 
     monkeypatch.setattr(statusboard_tools.requests, "get", fake_get)
     monkeypatch.setattr(statusboard_tools, "resolve_secret", lambda panel, key: "x")
@@ -493,11 +512,12 @@ def test_fetch_bitbucket_prs_queries_authored_and_reviewed(monkeypatch):
         {"name": "bb", "type": "bitbucket_prs", "workspace": "ws", "repos": ["repo"],
          "username_env": "U", "app_password_env": "P"}
     )
-    query = calls[-1][1]["q"]
-    assert 'reviewers.uuid="{me}"' in query and 'author.uuid="{me}"' in query
-    assert "participants" in calls[-1][1]["fields"]
-    assert [row["badge"] for row in result.body] == ["⬆"]
-    assert result.summary == "0 to review · 0 on author · 1 yours (ws)"
+    list_params = calls[-1][1]
+    assert "q" not in list_params                      # no unreliable uuid search
+    assert list_params["state"] == "OPEN"
+    assert "reviewers" in list_params["fields"] and "participants" in list_params["fields"]
+    assert [row["badge"] for row in result.body] == ["●", "⬆"]  # PR 11 excluded
+    assert result.summary == "1 to review · 0 on author · 1 yours (ws)"
 
 
 # %%
