@@ -357,7 +357,7 @@ def test_build_plan_classifies_rows(fake_home):
     plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root="/repo")
     actions = {row["name"]: row["action"] for row in plan}
     assert actions == {"a": "apply", "b": "skip_platform", "c": "none", "d": "skip_host"}
-    assert plan[0]["repo"] == os.path.join("/repo", "f1")
+    assert plan[0]["repo"] == os.path.normpath(os.path.join("/repo", "f1"))
     assert plan[0]["dest"] == os.path.join(str(fake_home), ".f1")
 
 
@@ -493,7 +493,9 @@ def test_resolve_repo_variant_missing_everything_stays_bare(tmp_path):
 def test_resolve_dest_expands_host_and_repo_parent_placeholders():
     entry = {"dest": {"darwin": "{repo_parent}/{host}.code-workspace"}}
     dest = deploy_configs.resolve_dest(entry, "darwin", "ENVY.ASUSROUTER", repo_root="/parent/dotfiles")
-    assert dest == "/parent/envy.code-workspace"
+    # normpath: expand_path returns native separators, so this is
+    # \parent\envy.code-workspace on Windows and /parent/... on POSIX
+    assert dest == os.path.normpath("/parent/envy.code-workspace")
 
 
 def test_build_plan_resolves_variant_and_placeholders(tmp_path):

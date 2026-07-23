@@ -135,10 +135,16 @@
   dest:
     darwin: ~/.config/git/ignore
     linux: ~/.config/git/ignore
+    windows: ~/.config/git/ignore
   note: >-
     ~/.config/git/ignore is git's default global ignore path (no gitconfig entry
     needed). Candidate for config-path indirection instead of a link:
     git config --global core.excludesFile <repo path>.
+    Git for Windows sets HOME from USERPROFILE and honours the same default
+    path, so windows uses the identical dest. It was missing here until
+    2026-07-23, which meant **/.claude/settings.local.json was never ignored on
+    Windows machines - the deployed symlinks showed up as untracked changes in
+    every repo and VS Code offered to commit them.
 
 # --- Claude ---
 

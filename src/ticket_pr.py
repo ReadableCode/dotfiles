@@ -10,7 +10,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
 Subcommands: create-ticket, get-ticket, create-pr, pr-status, request-review.
 Every subcommand honors the global ``--dry-run`` flag, which prints the HTTP
 request(s) it would make and returns canned identifiers instead of touching the
-network — use it to exercise calling workflows without creating real tickets/PRs.
+network - use it to exercise calling workflows without creating real tickets/PRs.
 
 Env keys used (values win in the order: real environment, then --env-file files):
 

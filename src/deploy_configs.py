@@ -95,9 +95,14 @@ def _term_width():
 
 
 def print_section(title, count, color):
-    """Section divider: a colored '── Title (n) ────' rule across the terminal."""
-    prefix = f"── {title} ({count}) "
-    print(paint(prefix + "─" * max(1, _term_width() - len(prefix)), color))
+    """Section divider: a colored '-- Title (n) ----' rule across the terminal.
+
+    ASCII only: Windows consoles default to cp1252, which cannot encode box
+    drawing characters, and printing one raised UnicodeEncodeError before the
+    report finished. Keep every character written to stdout in this file ASCII.
+    """
+    prefix = f"-- {title} ({count}) "
+    print(paint(prefix + "-" * max(1, _term_width() - len(prefix)), color))
 
 
 def fit_text(text, width):
@@ -457,10 +462,15 @@ def expand_path(raw_path, hostname="", repo_root=None):
     short hostname (same token as variant filenames) and {repo_parent} the
     directory containing the DOTFILES checkout (e.g. ~/GitHub) - always, even
     for entries loaded from an overlay manifest.
+
+    Returns a path in the platform's native separators. Manifest dest strings
+    are written with forward slashes, so on Windows an expanded ~ produced
+    mixed separators ("C:\\Users\\jason\\GitHub/load-log/.env") that leaked into
+    the status report. normpath is a no-op on POSIX.
     """
     raw_path = raw_path.replace("{host}", short_host_token(hostname))
     raw_path = raw_path.replace("{repo_parent}", os.path.dirname(repo_root or REPO_ROOT))
-    return os.path.expanduser(raw_path)
+    return os.path.normpath(os.path.expanduser(raw_path))
 
 
 def resolve_dest(entry, platform_key, hostname="", repo_root=None):
@@ -490,8 +500,10 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
         row = {
             "name": entry["name"],
             # each entry's repo path resolves against its own manifest's repo root
-            # (overlay entries live in their *_credentials repo, not in dotfiles)
-            "repo": os.path.join(entry.get("_base_dir") or repo_root, entry["repo"]),
+            # (overlay entries live in their *_credentials repo, not in dotfiles).
+            # normpath because manifest repo values use forward slashes, which
+            # os.path.join leaves untouched inside the joined segment.
+            "repo": os.path.normpath(os.path.join(entry.get("_base_dir") or repo_root, entry["repo"])),
             "method": entry.get("method", "symlink"),
             "note": entry.get("note", ""),
             "requires": None,
