@@ -166,16 +166,27 @@ pin order and **apps that are not installed are silently skipped**, which is why
 one file works on every machine without installing anything to fill the gaps.
 
 The layout lives at
-[application_configs/windows_taskbar/LayoutModification.xml](../application_configs/windows_taskbar/LayoutModification.xml);
-[scripts/apply_taskbar_layout.ps1](../scripts/apply_taskbar_layout.ps1) applies
-it per user, without group policy:
+[application_configs/windows_taskbar/LayoutModification.xml](../application_configs/windows_taskbar/LayoutModification.xml)
+and [scripts/apply_taskbar_layout.ps1](../scripts/apply_taskbar_layout.ps1)
+stages it:
 
 ```powershell
 # normal (non-elevated) powershell - pins are per-user HKCU state
 cd ~\GitHub\dotfiles\scripts
 .\apply_taskbar_layout.ps1 -DryRun   # show what resolves and what gets skipped
-.\apply_taskbar_layout.ps1           # back up, apply, restart explorer
+.\apply_taskbar_layout.ps1           # back up, stage, clear old pins
+# sign out and back in - the pins only appear at sign-in
+.\apply_taskbar_layout.ps1 -RemovePolicy   # then unlock Start, keep the pins
 ```
+
+**A sign-out/in is mandatory.** Tested on 26200: dropping the XML at
+`%LOCALAPPDATA%\Microsoft\Windows\Shell\LayoutModification.xml` and restarting
+Explorer makes Explorer *read* the file (it stamps `LayoutXMLLastModified` under
+`Taskband`) but pin nothing — with or without the Start Layout policy set, and
+with `Taskband` deleted first. Explorer only materializes a taskbar layout at
+sign-in. Between running the script and signing back in the taskbar has **no
+pins at all**, so run it when you're about to log out or reboot. (Instant apply
+exists only on Insider builds ≥ 26200.5722.)
 
 What the script does, and why each step is needed:
 
@@ -187,25 +198,44 @@ What the script does, and why each step is needed:
    copies the pin into `Chrome Apps\` first. Skipping this step loses the pin
    when the pins are cleared.
 3. Copies the XML to `%LOCALAPPDATA%\Microsoft\Windows\Shell\LayoutModification.xml`.
-4. Clears existing pins and the `Taskband` key. Required: layout pins are
+4. Sets the Start Layout policy (`HKCU\SOFTWARE\Policies\Microsoft\Windows\Explorer`
+   → `StartLayoutFile` + `LockedStartLayout=1`) pointing at the repo XML. That
+   key is admin-writable only, so this step goes through `gsudo` and prompts for
+   UAC. This is what actually applies the layout at sign-in.
+5. Clears existing pins and the `Taskband` key. Required: layout pins are
    appended *after* whatever the user already pinned, so leftover pins would
    corrupt the order.
-5. Restarts Explorer, which reads the XML (it stamps `LayoutXMLLastModified`
-   under the `Taskband` key). **Sign out and back in to materialize the pins** —
-   except on very recent builds, Explorer only draws the new layout at sign-in,
-   so between the script finishing and signing back in the taskbar shows no
-   pins at all. Verify afterwards: `User Pinned\TaskBar` should contain a
-   `.lnk` per pin again.
+6. Restarts Explorer and tells you to sign out.
 
-Pins stay editable afterwards — dragging or unpinning still works, and nothing
-re-applies the layout behind your back. Re-run the script after editing the XML.
+After signing back in, `-RemovePolicy` deletes those two policy values: the
+pins persist, the Start menu unlocks, and the pins go back to being freely
+draggable/unpinnable. Leave the policy in place and the layout is re-enforced on
+every policy refresh, which undoes manual pin changes. Re-run the whole script
+after editing the XML.
+
+Verify after sign-in — `User Pinned\TaskBar` should hold a `.lnk` per pin:
+
+```powershell
+Get-ChildItem "$env:APPDATA\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar" -Filter *.lnk | Select-Object -ExpandProperty Name
+```
+
+To read the live taskbar (running apps and pins) without a screenshot, enumerate
+`Shell_TrayWnd` buttons through UI Automation — handy for confirming what
+actually got pinned:
+
+```powershell
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes
+$root = [System.Windows.Automation.AutomationElement]::RootElement
+$cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ClassNameProperty, "Shell_TrayWnd")
+$tray = $root.FindFirst([System.Windows.Automation.TreeScope]::Children, $cond)
+$btn = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Button)
+$tray.FindAll([System.Windows.Automation.TreeScope]::Descendants, $btn) | ForEach-Object { $_.Current.Name }
+```
 
 Alternatives that were considered and rejected:
 
-* **Local group policy** (Computer/User Configuration → Start Menu and Taskbar →
-  Start Layout → path to the XML). Supported, but it re-applies on every policy
-  refresh and reverts manual changes unless every pin carries `PinGeneration`.
-  Overkill for a personal machine.
+* **The per-user layout file on its own** (no policy). Cleanest on paper, but on
+  build 26200 Explorer reads it and pins nothing — see the note above.
 * **Exporting the `Taskband` registry blob from a hand-arranged machine.** Works
   as a backup/restore (which is what step 1 uses it for), but the blob is opaque
   binary containing per-machine paths, so it is neither reviewable in git nor

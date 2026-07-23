@@ -34,6 +34,11 @@
     Path to a backup folder created by an earlier run; restores those pins
     instead of applying the layout.
 
+.PARAMETER RemovePolicy
+    Removes the Start Layout policy values written by an apply run. Do this
+    after the layout has come up at sign-in: the pins persist, the Start menu
+    unlocks, and the pins become editable again. Needs elevation (gsudo).
+
 .EXAMPLE
     .\apply_taskbar_layout.ps1 -DryRun
 
@@ -48,7 +53,8 @@
 param(
     [string]$LayoutFile = (Join-Path $PSScriptRoot "..\application_configs\windows_taskbar\LayoutModification.xml"),
     [switch]$DryRun,
-    [string]$RestoreFrom
+    [string]$RestoreFrom,
+    [switch]$RemovePolicy
 )
 
 $ErrorActionPreference = "Stop"
@@ -56,6 +62,7 @@ $ErrorActionPreference = "Stop"
 $PinDir = Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar"
 $ShellDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\Shell"
 $TaskbandKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Taskband"
+$PolicyKey = "HKCU:\SOFTWARE\Policies\Microsoft\Windows\Explorer"
 $BackupRoot = Join-Path $env:LOCALAPPDATA "dotfiles\taskbar_backups"
 
 
@@ -140,6 +147,54 @@ function Save-ReferencedShortcuts {
 }
 
 
+# HKCU\Software\Policies is admin-writable only, so these go through gsudo. The
+# elevated session is the same user, so it writes the same HKCU hive.
+function Invoke-Elevated {
+    param([string]$Body)
+
+    if (-not (Get-Command gsudo -ErrorAction SilentlyContinue)) {
+        Write-Warning "gsudo not found - run this in an elevated powershell:"
+        Write-Host $Body
+        return $false
+    }
+
+    $tmp = Join-Path $env:TEMP ("taskbar_policy_{0}.ps1" -f ([guid]::NewGuid().ToString("N")))
+    Set-Content -Path $tmp -Value $Body -Encoding UTF8
+    try {
+        & gsudo powershell -NoProfile -ExecutionPolicy Bypass -File $tmp | Out-Host
+        return $true
+    }
+    finally {
+        Remove-Item $tmp -Force -ErrorAction SilentlyContinue
+    }
+}
+
+
+function Set-LayoutPolicy {
+    param([string]$Path)
+
+    $body = @"
+`$pol = '$PolicyKey'
+if (-not (Test-Path `$pol)) { New-Item -Path `$pol -Force | Out-Null }
+New-ItemProperty -Path `$pol -Name StartLayoutFile -Value '$Path' -PropertyType ExpandString -Force | Out-Null
+New-ItemProperty -Path `$pol -Name LockedStartLayout -Value 1 -PropertyType DWord -Force | Out-Null
+"@
+    return (Invoke-Elevated -Body $body)
+}
+
+
+function Clear-LayoutPolicy {
+    $body = @"
+`$pol = '$PolicyKey'
+if (Test-Path `$pol) {
+    Remove-ItemProperty -Path `$pol -Name StartLayoutFile -Force -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path `$pol -Name LockedStartLayout -Force -ErrorAction SilentlyContinue
+}
+"@
+    return (Invoke-Elevated -Body $body)
+}
+
+
 function Restart-Explorer {
     Get-Process explorer -ErrorAction SilentlyContinue | Stop-Process -Force
     # Explorer as shell restarts itself; start one only if it did not come back
@@ -152,11 +207,24 @@ function Restart-Explorer {
 }
 
 
+# --- remove policy mode -----------------------------------------------------
+
+if ($RemovePolicy) {
+    if (Clear-LayoutPolicy) {
+        Write-Host "Start Layout policy removed - pins stay, Start menu unlocks." -ForegroundColor Green
+    }
+    return
+}
+
+
 # --- restore mode -----------------------------------------------------------
 
 if ($RestoreFrom) {
     if (-not (Test-Path $RestoreFrom)) { throw "Backup folder not found: $RestoreFrom" }
     Write-Host "Restoring taskbar pins from $RestoreFrom" -ForegroundColor Cyan
+
+    # otherwise the layout would reapply over the restored pins at next sign-in
+    Clear-LayoutPolicy | Out-Null
 
     Get-Process explorer -ErrorAction SilentlyContinue | Stop-Process -Force
     Get-ChildItem -Path $PinDir -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force
@@ -224,11 +292,20 @@ Write-Host "Backed up current pins to $backup" -ForegroundColor Cyan
 New-Item -ItemType Directory -Path $ShellDir -Force | Out-Null
 Copy-Item -LiteralPath $LayoutFile -Destination (Join-Path $ShellDir "LayoutModification.xml") -Force
 
+# The per-user layout file alone is not enough on current builds - Explorer
+# re-reads it on every restart and pins nothing. The Start Layout policy is what
+# makes the layout apply, and only at sign-in.
+Set-LayoutPolicy -Path $LayoutFile | Out-Null
+
 Get-Process explorer -ErrorAction SilentlyContinue | Stop-Process -Force
 Get-ChildItem -Path $PinDir -Filter *.lnk -ErrorAction SilentlyContinue | Remove-Item -Force
 Remove-Item -Path $TaskbandKey -Recurse -Force -ErrorAction SilentlyContinue
 Restart-Explorer
 
 Write-Host ""
-Write-Host "Applied. If the taskbar still shows the old pins, sign out and back in." -ForegroundColor Green
-Write-Host ("Undo: .\apply_taskbar_layout.ps1 -RestoreFrom `"{0}`"" -f $backup) -ForegroundColor Green
+Write-Host "Staged. The taskbar has NO pins until you sign out and back in -" -ForegroundColor Yellow
+Write-Host "Explorer only materializes the layout at sign-in." -ForegroundColor Yellow
+Write-Host ""
+Write-Host "After signing back in:" -ForegroundColor Green
+Write-Host "  .\apply_taskbar_layout.ps1 -RemovePolicy    # unlock Start, keep the pins" -ForegroundColor Green
+Write-Host ("Undo instead: .\apply_taskbar_layout.ps1 -RestoreFrom `"{0}`"" -f $backup) -ForegroundColor Green
