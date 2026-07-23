@@ -343,6 +343,36 @@ function startjupyterlab {
 
 ### AI Shortcuts ###
 
+# On machines where Claude Code can't be installed directly (e.g. the work
+# laptop), the VS Code Remote/server extension ships a full `claude` binary.
+# Resolve it dynamically each call so it survives the extension's version-folder
+# churn (a new anthropic.claude-code-<version> dir is created on every update).
+# Only defined when there's no native `claude` on PATH, so it never shadows a
+# real install on other machines.
+# Intended to run from the VS Code integrated terminal: we invoke the binary
+# plainly (no CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL), so it inherits VS Code's env
+# for IDE integration and will auto-(re)install the extension if it's missing.
+if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    function claude {
+        $extRoots = @(
+            (Join-Path $env:USERPROFILE '.vscode-server\extensions'),
+            (Join-Path $env:USERPROFILE '.vscode-server-insiders\extensions'),
+            (Join-Path $env:USERPROFILE '.local\share\code-server\extensions')
+        )
+        $bin = $extRoots |
+            Where-Object { Test-Path $_ } |
+            ForEach-Object { Get-ChildItem $_ -Directory -Filter 'anthropic.claude-code-*' -ErrorAction SilentlyContinue } |
+            ForEach-Object { Get-ChildItem $_.FullName -Recurse -Filter 'claude.exe' -ErrorAction SilentlyContinue } |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+        if (-not $bin) {
+            Write-Error "claude.exe not found under any VS Code extensions dir (is the Claude Code extension installed?)"
+            return
+        }
+        & $bin.FullName @args
+    }
+}
+
 function startollama {
     if (Get-Command ollama -ErrorAction SilentlyContinue) {
         ollama serve
