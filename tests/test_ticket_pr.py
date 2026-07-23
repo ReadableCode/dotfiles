@@ -89,15 +89,15 @@ def test_github_token_errors_when_nothing_available(monkeypatch):
 @pytest.mark.parametrize(
     "url",
     [
-        "git@github.com:hellofresh/na-finops.git",
-        "https://github.com/hellofresh/na-finops.git",
-        "https://github.com/hellofresh/na-finops",
-        "ssh://git@github.com/hellofresh/na-finops.git",
+        "git@github.com:owner/name.git",
+        "https://github.com/owner/name.git",
+        "https://github.com/owner/name",
+        "ssh://git@github.com/owner/name.git",
     ],
 )
 def test_resolve_repo_parses_origin_urls(monkeypatch, url):
     monkeypatch.setattr(ticket_pr, "git_output", lambda *a: url)
-    assert ticket_pr.resolve_repo(None) == "hellofresh/na-finops"
+    assert ticket_pr.resolve_repo(None) == "owner/name"
 
 
 def test_resolve_repo_explicit_wins(monkeypatch):
@@ -110,14 +110,14 @@ def test_resolve_repo_explicit_wins(monkeypatch):
 @pytest.mark.parametrize(
     "url",
     [
-        "git@bitbucket.org:fourteenfoods/prep-station.git",
-        "https://bitbucket.org/fourteenfoods/prep-station.git",
-        "https://bitbucket.org/fourteenfoods/prep-station",
+        "git@bitbucket.org:workspace/slug.git",
+        "https://bitbucket.org/workspace/slug.git",
+        "https://bitbucket.org/workspace/slug",
     ],
 )
 def test_resolve_repo_parses_bitbucket_urls(monkeypatch, url):
     monkeypatch.setattr(ticket_pr, "git_output", lambda *a: url)
-    assert ticket_pr.resolve_repo(None) == "fourteenfoods/prep-station"
+    assert ticket_pr.resolve_repo(None) == "workspace/slug"
 
 
 def test_resolve_provider_from_origin(monkeypatch):
@@ -286,7 +286,7 @@ def test_request_review_dry_run(monkeypatch, capsys):
             "--pr",
             "12",
             "--reviewer",
-            "csmith1133",
+            "reviewer-login",
         ],
         monkeypatch,
         capsys,
