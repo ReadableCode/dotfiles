@@ -15,10 +15,10 @@ from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
-    credentials_context,
-    find_credentials_dirs,
+    find_overlay_dirs,
     load_inventory_hostnames,
     load_union_inventory_hostnames,
+    overlay_context,
 )
 
 # %%
@@ -220,7 +220,9 @@ def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None)
 def discover_removals():
     """
     Locate every removals file: an optional deploy_removals.yaml in dotfiles plus,
-    for each sibling ``*_credentials`` repo, an optional ``<context>_removals.yaml``.
+    for each sibling overlay repo, an optional ``<context>_removals.yaml``
+    (see find_overlay_dirs - every ``*_credentials`` repo, plus any sibling that
+    opts in by declaring one of these files).
 
     A removals file is the committed list of destinations that must NOT exist any
     more. It is deliberately shared state, not machine state: the machine that
@@ -232,8 +234,8 @@ def discover_removals():
     base = os.path.join(REPO_ROOT, "deploy_removals.yaml")
     if os.path.exists(base):
         files.append(base)
-    for credentials_dir in find_credentials_dirs(grandparent_dir):
-        overlay = os.path.join(credentials_dir, f"{credentials_context(credentials_dir)}_removals.yaml")
+    for overlay_dir in find_overlay_dirs(grandparent_dir):
+        overlay = os.path.join(overlay_dir, f"{overlay_context(overlay_dir)}_removals.yaml")
         if os.path.exists(overlay):
             files.append(overlay)
     return files
@@ -346,16 +348,18 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
 def discover_manifests():
     """
     Locate every manifest to load: the main deploy_manifest.yaml (repo paths
-    relative to REPO_ROOT) plus, for each sibling ``*_credentials`` repo, an
-    optional overlay manifest named ``<context>_manifest.yaml`` whose repo
-    paths are relative to that credentials repo's root. Returns a list of
-    (manifest_path, base_dir) pairs, overlays sorted for determinism.
+    relative to REPO_ROOT) plus, for each sibling overlay repo, an optional
+    overlay manifest named ``<context>_manifest.yaml`` whose repo paths are
+    relative to that overlay repo's root. Overlay repos are every
+    ``*_credentials`` repo plus any sibling that opts in by declaring such a
+    file (see find_overlay_dirs). Returns a list of (manifest_path, base_dir)
+    pairs, overlays sorted for determinism.
     """
     manifests = [(os.path.join(REPO_ROOT, "deploy_manifest.yaml"), REPO_ROOT)]
-    for credentials_dir in find_credentials_dirs(grandparent_dir):
-        overlay = os.path.join(credentials_dir, f"{credentials_context(credentials_dir)}_manifest.yaml")
+    for overlay_dir in find_overlay_dirs(grandparent_dir):
+        overlay = os.path.join(overlay_dir, f"{overlay_context(overlay_dir)}_manifest.yaml")
         if os.path.exists(overlay):
-            manifests.append((overlay, credentials_dir))
+            manifests.append((overlay, overlay_dir))
     return manifests
 
 
@@ -386,8 +390,8 @@ def load_manifests(manifest_path=None, inventory_path=None):
                 raise ValueError(
                     f"Manifest entry '{entry['name']}' in {path} uses a hosts filter; hosts "
                     "filters are only allowed in overlay manifests (move the entry to the "
-                    "relevant <context>_manifest.yaml, whose credentials repo carries the "
-                    "inventory that validates those names)"
+                    "relevant <context>_manifest.yaml, which travels with the clones that "
+                    "know those machine names)"
                 )
             if entry["name"] in seen:
                 raise ValueError(

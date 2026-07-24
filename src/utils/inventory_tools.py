@@ -29,6 +29,40 @@ def credentials_context(credentials_dir):
     return os.path.basename(os.path.normpath(credentials_dir))[: -len(CREDENTIALS_SUFFIX)]
 
 
+def overlay_context(overlay_dir):
+    """
+    Context token of any overlay repo: a ``*_credentials`` repo drops the
+    suffix (``acme_credentials`` -> ``acme``), any other repo is its own
+    directory name (``acme_dev`` -> ``acme_dev``).
+    """
+    name = os.path.basename(os.path.normpath(overlay_dir))
+    return name[: -len(CREDENTIALS_SUFFIX)] if name.endswith(CREDENTIALS_SUFFIX) else name
+
+
+def find_overlay_dirs(overlay_root):
+    """
+    Return every sibling repo that may contribute deploy overlays: all the
+    ``*_credentials`` repos, plus any other sibling that opts in by declaring a
+    ``<dirname>_manifest.yaml`` or ``<dirname>_removals.yaml`` at its root.
+
+    The opt-in form exists so an overlay can live in a repo that is NOT cloned
+    everywhere its credentials repo is. A credentials repo travels to the
+    machines that need that context's secrets; an overlay carrying config which
+    must NOT reach those machines has to be gated by a different clone, and the
+    only reliable gate is the repo it lives in. Sorted for determinism.
+    """
+    dirs = list(find_credentials_dirs(overlay_root))
+    seen = set(dirs)
+    for path in sorted(glob.glob(os.path.join(glob.escape(overlay_root), "*"))):
+        if path in seen or not os.path.isdir(path):
+            continue
+        context = overlay_context(path)
+        if any(os.path.exists(os.path.join(path, f"{context}_{kind}.yaml")) for kind in ("manifest", "removals")):
+            dirs.append(path)
+            seen.add(path)
+    return sorted(dirs)
+
+
 def find_inventory_paths(credentials_root):
     """
     Locate the host inventory file of every ``*_credentials`` repo under

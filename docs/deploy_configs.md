@@ -70,20 +70,34 @@ intentionally do **not** use links (e.g. nvim on Windows via
 `XDG_CONFIG_HOME`, the PowerShell profile via dot-sourcing), so the manifest
 is a complete inventory of deployed configs, not just a link list.
 
-## Overlay manifests from `*_credentials` repos
+## Overlay manifests from sibling repos
 
 Private configs never live in this public repo — they live in sibling
 credentials repos (see
 [client_credentials_repos.md](./client_credentials_repos.md)). On every run,
 `deploy_configs.py` loads `deploy_manifest.yaml` first and then discovers one
-optional overlay per directory matching `../*_credentials` (sorted for
-determinism): `<context>_manifest.yaml`, where `<context>` is the directory
-name minus the `_credentials` suffix — e.g. `acme_credentials` contributes
-`acme_manifest.yaml`. Overlay entries use the exact same schema; the only
-difference is that their `repo:` paths resolve against **that credentials
-repo's root**, not the dotfiles root. The `{repo_parent}` placeholder always
-expands to the dotfiles checkout's parent (e.g. `~/GitHub`) no matter which
-manifest an entry came from.
+optional overlay per sibling **overlay repo** (sorted for determinism):
+`<context>_manifest.yaml`. Overlay entries use the exact same schema; the only
+difference is that their `repo:` paths resolve against **that overlay repo's
+root**, not the dotfiles root. The `{repo_parent}` placeholder always expands
+to the dotfiles checkout's parent (e.g. `~/GitHub`) no matter which manifest an
+entry came from.
+
+An overlay repo is either of:
+
+- any directory matching `../*_credentials` — `<context>` is the directory name
+  minus the suffix, so `acme_credentials` contributes `acme_manifest.yaml`;
+- **any other sibling repo that opts in** by declaring a manifest named after
+  itself — `<context>` is the full directory name, so `acme_dev` contributes
+  `acme_dev_manifest.yaml`.
+
+The opt-in form exists because a credentials repo travels to every machine that
+needs that context's secrets — including the client's own machines. Config that
+must reach *some* of those machines and not others cannot be gated by that
+clone, so it lives in a repo with the narrower clone set and rides that repo's
+own overlay instead. Entries there still point `repo:` back across at the
+credentials repo (`repo: ../acme_credentials/<file>`, with a matching
+`requires:`) when the payload itself is a secret that must stay private.
 
 Entry `name`s must be unique across **all** loaded manifests — a duplicate
 fails loudly naming both manifest files. The loaded set is printed as a
@@ -213,9 +227,10 @@ cleans itself up on its next prune.
 The list lives in a **removals file**:
 
 - `deploy_removals.yaml` in dotfiles, and/or
-- `<context>_removals.yaml` in any sibling `*_credentials` repo (discovered
-  exactly like `<context>_manifest.yaml`, so a client's dead paths stay in that
-  client's private repo).
+- `<context>_removals.yaml` in any sibling overlay repo (discovered exactly like
+  `<context>_manifest.yaml` — `*_credentials` repos, plus any sibling that opts
+  in by declaring one — so a client's dead paths stay in that client's private
+  repo).
 
 Entries use the same `dest` / `requires` / `hosts` schema as a manifest entry
 but carry **no `repo:` key** — the source file is already gone. `requires` still

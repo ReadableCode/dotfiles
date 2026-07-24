@@ -22,6 +22,18 @@ minus the `_credentials` suffix):
 
 Both files are optional per repo; a repo contributes only what it declares.
 
+### When an overlay must NOT follow the credentials clone
+
+A credentials repo is cloned on every machine that needs that context's
+secrets, the client's own machines included. Config that must reach only
+*some* of them therefore cannot live in an overlay gated by that clone. Any
+sibling repo can carry its own overlay by declaring `<dirname>_manifest.yaml`
+(and/or `<dirname>_removals.yaml`) — full directory name, no suffix dropped —
+so a repo like `acme_dev` that is cloned only on personal machines gates its
+entries by its own presence. Secret payloads still stay in the credentials
+repo; the narrower overlay just points `repo:` back across at them with a
+matching `requires:`.
+
 ## How the dotfiles tools consume them
 
 - **Deploy** — `deploy_configs.py` loads `deploy_manifest.yaml` plus every

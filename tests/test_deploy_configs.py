@@ -191,6 +191,43 @@ def test_credentials_repo_without_manifest_contributes_nothing(overlay_tree):
     assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
 
 
+def test_non_credentials_repo_opts_in_as_overlay_by_declaring_its_own_manifest(overlay_tree):
+    # a sibling repo that is NOT *_credentials contributes an overlay named after
+    # its own directory, so config it carries follows THAT clone rather than the
+    # credentials clone (context token keeps the full dirname - no suffix to drop)
+    write_manifest_at(
+        str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
+        [{"name": "acme_dev_conf", "repo": "configs/dev.json", "dest": {"darwin": "~/.dev"}}],
+    )
+    entries, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == [
+        "deploy_manifest.yaml",
+        "acme_manifest.yaml",
+        "acme_dev_manifest.yaml",
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY")
+    rows = {row["name"]: row for row in plan}
+    assert rows["acme_dev_conf"]["repo"] == os.path.join(str(overlay_tree), "acme_dev", "configs", "dev.json")
+
+
+def test_sibling_repo_without_a_matching_manifest_name_is_not_an_overlay(overlay_tree):
+    # only <dirname>_manifest.yaml opts a plain repo in; an unrelated yaml does not
+    write_manifest_at(
+        str(overlay_tree / "acme_dev" / "some_manifest.yaml"),
+        [{"name": "ignored", "repo": "f1", "dest": {"darwin": "~/.f1"}}],
+    )
+    _, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
+
+
+def test_non_credentials_repo_can_contribute_removals(overlay_tree):
+    write_manifest_at(
+        str(overlay_tree / "acme_dev" / "acme_dev_removals.yaml"),
+        [{"name": "dead_dev_conf", "dest": {"darwin": "~/.dev"}}],
+    )
+    assert [entry["name"] for entry in deploy_configs.load_removals()] == ["dead_dev_conf"]
+
+
 def write_inventory_at(path, names):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as file_handle:
