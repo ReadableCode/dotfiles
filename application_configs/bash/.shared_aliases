@@ -183,32 +183,106 @@ alias speed='speedtest-cli'
 
 ### SSH Shortcuts (loaded from <gitDir>/*_credentials host inventories) ###
 
+# Short, lowercase local hostname — zsh sets HOST, bash sets HOSTNAME, and
+# neither is guaranteed, so fall back to the command and strip any domain.
+_ssh_local_hostname() {
+    local name="${HOSTNAME:-}"
+    [[ -z "$name" ]] && name="${HOST:-}"
+    [[ -z "$name" ]] && name="$(hostname 2>/dev/null)"
+    name="${name%%.*}"
+    printf '%s' "$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+}
+
 # Loads ssh aliases from a hosts.json-style inventory file.
+#
+# A host record may carry "jump": "<name-or-alias>" naming another host in the
+# same inventory that can reach it — the pattern for a machine only routable
+# from inside a VPN a different box holds. The hop is baked into the alias as
+# `ssh -J user@jump:port`, so the chain lives in the inventory and NOT in any
+# machine's ~/.ssh/config: nothing outside this repo constellation needs
+# editing, and every machine that clones the credentials repo gets it. This
+# mirrors what status_board.py's build_ssh_argv does for its ssh_command
+# panels (see dotfiles/docs/setup_status_board.md).
+#
+# The hop is dropped when the alias is loaded ON the jump machine itself —
+# there it is already inside the VPN and the target is direct. Needs
+# non-interactive key auth to both hops and AllowTcpForwarding on the jump's
+# sshd (the default, and true of Windows OpenSSH Server).
 _load_ssh_hosts() {
     local hosts_file="$1"
     [[ -f "$hosts_file" ]] || return 0
     command -v python3 >/dev/null 2>&1 || return 0
-    local _alias _user _host _port _ssh_cmd
-    while IFS=$'\t' read -r _alias _user _host _port; do
+    local _alias _user _host _port _jump _ssh_cmd _local
+    _local="$(_ssh_local_hostname)"
+    # US (0x1f), not tab: IFS-whitespace collapses runs of delimiters, so a
+    # host with no port but a jump would shift the jump spec into _port.
+    while IFS=$'\x1f' read -r _alias _user _host _port _jump; do
         [[ -z "$_alias" || -z "$_user" ]] && continue
         _ssh_cmd="ssh"
+        [[ -n "$_jump" ]] && _ssh_cmd="$_ssh_cmd -J $_jump"
         [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
         _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
         alias "$_alias"="$_ssh_cmd"
-    done < <(python3 - "$hosts_file" <<'PYEOF'
+    done < <(_ssh_hosts_reader | python3 - "$hosts_file" "$_local")
+}
+
+# The reader script above, kept in its OWN function rather than as a heredoc
+# inside the <(...) process substitution. Bash scans a process substitution
+# for its closing paren by counting quotes, and it does not exempt heredoc
+# bodies: a lone apostrophe in a Python comment opens a quote that swallows
+# the paren, and the whole file then fails to source with "bad substitution".
+# Emitting it through a plain pipe keeps the Python text away from that
+# scanner, so comments here can be written normally.
+_ssh_hosts_reader() {
+    cat <<'PYEOF'
 import json
 import sys
 
 with open(sys.argv[1]) as f:
     inventory = json.load(f)
-for host in inventory.get("hosts", []):
+hosts = inventory.get("hosts", [])
+local_short = (sys.argv[2] if len(sys.argv) > 2 else "").split(".")[0].lower()
+
+
+def host_names(host):
+    return [name for name in [host.get("name", "")] + list(host.get("aliases") or []) if name]
+
+
+def find_host(token):
+    wanted = token.strip().lower()
+    for host in hosts:
+        if any(name.lower() == wanted for name in host_names(host)):
+            return host
+    return None
+
+
+def jump_spec(host):
+    """-J destination for a host's "jump" hop, or "" when there is none to make."""
+    token = host.get("jump")
+    if not token:
+        return ""
+    # Resolved within THIS inventory only: a context's hosts live together in
+    # one file, and each file is loaded by its own _load_ssh_hosts call.
+    jump = find_host(token)
+    if jump is None:
+        return ""
+    # Already on the jump machine: it holds the VPN, so the target is direct.
+    if local_short and local_short in [name.split(".")[0].lower() for name in host_names(jump)]:
+        return ""
+    user = jump.get("ssh_user") or jump.get("user") or ""
+    target = jump.get("hostname") or jump.get("name", "")
+    spec = f"{user}@{target}" if user else target
+    return f"{spec}:{jump['port']}" if jump.get("port") else spec
+
+
+for host in hosts:
     user = host.get("ssh_user") or host.get("user") or ""
     target = host.get("hostname") or host.get("name", "")
     port = host.get("port") or ""
+    spec = jump_spec(host)
     for alias in host.get("aliases") or []:
-        print(f"{alias}\t{user}\t{target}\t{port}")
+        print("\x1f".join([alias, user, str(target), str(port), spec]))
 PYEOF
-)
 }
 
 # Each sibling repo matching <gitDir>/*_credentials may carry a host

@@ -484,17 +484,48 @@ function showwifi {
 
 ### SSH Shortcuts (loaded from <gitDir>\*_credentials host inventories) ###
 
+# Every name a host answers to in the inventory: its name plus its aliases.
+function Get-InventoryHostNames($invHost) {
+    @(@($invHost.name) + @($invHost.aliases)) | Where-Object { $_ }
+}
+
+# -J destination for a host's "jump" hop, or '' when there is no hop to make.
+# See the _load_ssh_hosts comment in application_configs/bash/.shared_aliases —
+# this is the PowerShell twin and must stay behaviourally identical.
+function Get-SshJumpSpec($invHost, $allHosts, [string]$localShort) {
+    if (-not $invHost.PSObject.Properties['jump'] -or -not $invHost.jump) { return '' }
+    $wanted = "$($invHost.jump)".Trim().ToLower()
+    # Resolved within THIS inventory only, matching the bash loader.
+    $jump = $allHosts | Where-Object {
+        (Get-InventoryHostNames $_ | ForEach-Object { $_.ToLower() }) -contains $wanted
+    } | Select-Object -First 1
+    if (-not $jump) { return '' }
+    # Already on the jump machine: it holds the VPN, so the target is direct.
+    $jumpShort = Get-InventoryHostNames $jump | ForEach-Object { ($_ -split '\.')[0].ToLower() }
+    if ($localShort -and $jumpShort -contains $localShort) { return '' }
+
+    $jumpUser = if ($jump.PSObject.Properties['ssh_user']) { $jump.ssh_user } elseif ($jump.PSObject.Properties['user']) { $jump.user } else { '' }
+    $jumpTarget = if ($jump.PSObject.Properties['hostname']) { $jump.hostname } else { $jump.name }
+    $spec = if ($jumpUser) { "$jumpUser@$jumpTarget" } else { "$jumpTarget" }
+    $jumpPort = if ($jump.PSObject.Properties['port']) { $jump.port } else { '' }
+    if ($jumpPort) { return "${spec}:${jumpPort}" }
+    return $spec
+}
+
 # Loads ssh aliases from a hosts.json-style inventory file.
 function Import-SshHostAliases([string]$hostsFile) {
     if (-not $hostsFile -or -not (Test-Path $hostsFile)) { return }
     $hostInventory = Get-Content $hostsFile -Raw | ConvertFrom-Json
+    $localShort = ($env:COMPUTERNAME -split '\.')[0].ToLower()
     foreach ($invHost in $hostInventory.hosts) {
         $user = if ($invHost.PSObject.Properties['ssh_user']) { $invHost.ssh_user } elseif ($invHost.PSObject.Properties['user']) { $invHost.user } else { '' }
         $hostTarget = if ($invHost.PSObject.Properties['hostname']) { $invHost.hostname } else { $invHost.name }
         $port = if ($invHost.PSObject.Properties['port']) { $invHost.port } else { '' }
+        $jumpSpec = Get-SshJumpSpec $invHost $hostInventory.hosts $localShort
 
         $sshArgs = "$user@$hostTarget"
         if ($port) { $sshArgs = "-p $port $sshArgs" }
+        if ($jumpSpec) { $sshArgs = "-J $jumpSpec $sshArgs" }
 
         foreach ($alias in @($invHost.aliases)) {
             if ($alias -and $user) {

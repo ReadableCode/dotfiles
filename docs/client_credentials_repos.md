@@ -35,6 +35,43 @@ Both files are optional per repo; a repo contributes only what it declares.
 - **Shell ssh aliases** — the shell startup files build ssh aliases from every
   `*_credentials` inventory they find, so cloning a client's credentials repo
   onto a machine is all it takes to get that client's hosts.
+  (`_load_ssh_hosts` in `application_configs/bash/.shared_aliases`, and its
+  twin `Import-SshHostAliases` in
+  `application_configs/powershell/powershell_aliases.ps1` — keep the two
+  behaviourally identical.)
+
+### Inventory `jump:` — hosts behind a VPN another machine holds
+
+A host record may name another host in the **same inventory** that can reach
+it:
+
+```json
+{
+  "name": "acme-vm-01",
+  "hostname": "172.20.10.101",
+  "user": "svc_linux",
+  "aliases": ["sshacmevm"],
+  "jump": "sshacme"
+}
+```
+
+The generated alias then carries the hop — `ssh -J user@jump:port
+user@target` — so a machine that is **not** on the VPN reaches the target
+through the machine that is. The hop is resolved at shell-startup time and
+dropped when the alias is built **on the jump machine itself**, which is
+already inside the VPN.
+
+This deliberately keeps the chain in the inventory rather than in any
+machine's `~/.ssh/config`: nothing outside the repo constellation needs
+editing, every machine that clones the credentials repo gets it on every
+platform, and there is one source of truth to change when an address moves.
+It is the same reasoning — and the same resulting argv — as
+`build_ssh_argv` in `status_board.py` (see `setup_status_board.md`), which
+builds its own `-J` chain for `ssh_command` panels.
+
+Requirements are the board's: non-interactive key auth to both hops, and
+`AllowTcpForwarding` on the jump host's sshd (the default, and true of
+Windows OpenSSH Server).
 
 Deploying a client's configs on a machine therefore requires exactly two
 clones: `dotfiles` and that client's `*_credentials` repo. Entries whose
