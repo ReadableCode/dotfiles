@@ -193,7 +193,10 @@ _ssh_local_hostname() {
     printf '%s' "$(echo "$name" | tr '[:upper:]' '[:lower:]')"
 }
 
-# Loads ssh aliases from a hosts.json-style inventory file.
+# Loads ssh aliases from a hosts.json-style inventory file. A host may also
+# declare "vnc_aliases" (plus optional "vnc_hostname" when the screen-sharing
+# target differs from the ssh one, e.g. a Tailscale address); those become
+# `open vnc://user@host` aliases on macOS and are skipped elsewhere.
 #
 # A host record may carry "jump": "<name-or-alias>" naming another host in the
 # same inventory that can reach it — the pattern for a machine only routable
@@ -212,12 +215,19 @@ _load_ssh_hosts() {
     local hosts_file="$1"
     [[ -f "$hosts_file" ]] || return 0
     command -v python3 >/dev/null 2>&1 || return 0
-    local _alias _user _host _port _jump _ssh_cmd _local
+    local _kind _alias _user _host _port _jump _ssh_cmd _local
     _local="$(_ssh_local_hostname)"
     # US (0x1f), not tab: IFS-whitespace collapses runs of delimiters, so a
     # host with no port but a jump would shift the jump spec into _port.
-    while IFS=$'\x1f' read -r _alias _user _host _port _jump; do
-        [[ -z "$_alias" || -z "$_user" ]] && continue
+    while IFS=$'\x1f' read -r _kind _alias _user _host _port _jump; do
+        [[ -z "$_alias" ]] && continue
+        if [[ "$_kind" == "vnc" ]]; then
+            # macOS built-in Screen Sharing; no vnc:// handler elsewhere.
+            [[ "$OSTYPE" == "darwin"* ]] || continue
+            alias "$_alias"="open vnc://${_user:+${_user}@}${_host}"
+            continue
+        fi
+        [[ -z "$_user" ]] && continue
         _ssh_cmd="ssh"
         [[ -n "$_jump" ]] && _ssh_cmd="$_ssh_cmd -J $_jump"
         [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
@@ -281,7 +291,13 @@ for host in hosts:
     port = host.get("port") or ""
     spec = jump_spec(host)
     for alias in host.get("aliases") or []:
-        print("\x1f".join([alias, user, str(target), str(port), spec]))
+        print("\x1f".join(["ssh", alias, user, str(target), str(port), spec]))
+    # Screen-sharing aliases (macOS-only on the client side; the loader skips
+    # them elsewhere). vnc_hostname lets the VNC target differ from the ssh
+    # one — e.g. a Tailscale address reachable off-LAN.
+    vnc_target = host.get("vnc_hostname") or host.get("hostname") or host.get("name", "")
+    for alias in host.get("vnc_aliases") or []:
+        print("\x1f".join(["vnc", alias, user, str(vnc_target), "", ""]))
 PYEOF
 }
 

@@ -50,7 +50,11 @@ matching `requires:`.
   (`_load_ssh_hosts` in `application_configs/bash/.shared_aliases`, and its
   twin `Import-SshHostAliases` in
   `application_configs/powershell/powershell_aliases.ps1` — keep the two
-  behaviourally identical.)
+  behaviourally identical.) A host may also declare `vnc_aliases` (with an
+  optional `vnc_hostname` when the screen-sharing target differs from the ssh
+  one, e.g. a Tailscale address); these become macOS-only
+  `open vnc://user@host` aliases and are intentionally absent from the
+  PowerShell twin.
 
 ### Inventory `jump:` — hosts behind a VPN another machine holds
 
