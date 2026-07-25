@@ -272,12 +272,12 @@ def resolve_secret(panel, key):
     if env_file:
         env_path = os.path.join(panel["_base_dir"], os.path.expanduser(env_file))
         if not os.path.exists(env_path):
-            raise ValueError(f"Panel '{panel['name']}': env_file {env_path} does not exist")
+            raise ValueError(f"'{panel['name']}': env_file {env_path} does not exist")
         value = _parse_env_file(env_path).get(var_name)
         if value:
             return value
     raise ValueError(
-        f"Panel '{panel['name']}': env var {var_name} is not set"
+        f"'{panel['name']}': env var {var_name} is not set"
         + (f" and not found in {panel['env_file']}" if panel.get("env_file") else " (no env_file configured)")
     )
 
