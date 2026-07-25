@@ -8,6 +8,10 @@ overlapping meetings between clients are visible at a glance. It covers
 and every event is badged with your attendance state, so what you merely got
 invited to never blends in with what you actually accepted.
 
+![calendar board TUI with three source columns](./assets/calendar_board_tui.png)
+*(demo data — two client Outlook accounts and a personal Google account,
+with a cross-client double booking flagged in both columns)*
+
 It is deliberately a **separate TUI from the status board**, not a tab inside
 it: each board refreshes on its own cadence without redrawing the other, and
 tmux panes/windows already do the side-by-side or tabbing better than one
