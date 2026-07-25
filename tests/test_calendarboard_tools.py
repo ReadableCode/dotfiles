@@ -271,6 +271,74 @@ def test_mark_conflicts_resets_stale_flags():
 
 
 # %%
+# Grid: lanes and hour range #
+
+
+def test_assign_lanes_splits_overlaps_into_side_by_side_lanes():
+    a = event(utc(2026, 7, 25, 9), utc(2026, 7, 25, 10), title="a")
+    b = event(utc(2026, 7, 25, 9, 30), utc(2026, 7, 25, 10, 30), title="b")  # overlaps a -> lane 1
+    c = event(utc(2026, 7, 25, 10), utc(2026, 7, 25, 11), title="c")  # a has ended -> reuses lane 0
+    pto = event(utc(2026, 7, 25), utc(2026, 7, 26), all_day=True)  # banner row, not a lane
+    placed, lane_count = calendarboard_tools.assign_lanes([c, pto, b, a])
+    assert lane_count == 2
+    assert [(item["title"], lane) for item, lane in placed] == [("a", 0), ("b", 1), ("c", 0)]
+
+
+def test_assign_lanes_empty_and_single():
+    assert calendarboard_tools.assign_lanes([]) == ([], 1)
+    solo = event(utc(2026, 7, 25, 9), utc(2026, 7, 25, 10))
+    assert calendarboard_tools.assign_lanes([solo]) == ([(solo, 0)], 1)
+
+
+def test_grid_hour_range_defaults_and_widens_never_narrows():
+    tz = timezone.utc
+    day = date(2026, 7, 25)
+    inside = event(utc(2026, 7, 25, 9), utc(2026, 7, 25, 10))
+    assert calendarboard_tools.grid_hour_range([inside], day, tz=tz) == (7, 19)
+    early = event(utc(2026, 7, 25, 6, 30), utc(2026, 7, 25, 7))
+    late = event(utc(2026, 7, 25, 20, 0), utc(2026, 7, 25, 21, 15))  # ends 21:15 -> bottom at 22
+    assert calendarboard_tools.grid_hour_range([early, late], day, tz=tz) == (6, 22)
+    # all-day events never move the axis
+    pto = event(utc(2026, 7, 25), utc(2026, 7, 26), all_day=True)
+    assert calendarboard_tools.grid_hour_range([pto], day, tz=tz) == (7, 19)
+
+
+def test_grid_hour_range_clamps_overnight_spillover():
+    tz = timezone.utc
+    day = date(2026, 7, 25)
+    overnight = event(utc(2026, 7, 24, 23), utc(2026, 7, 25, 1))   # started yesterday
+    redeye = event(utc(2026, 7, 25, 23), utc(2026, 7, 26, 1))      # ends tomorrow
+    assert calendarboard_tools.grid_hour_range([overnight], day, tz=tz) == (0, 19)
+    assert calendarboard_tools.grid_hour_range([redeye], day, tz=tz) == (7, 24)
+
+
+def test_grid_renderable_places_blocks_on_shared_axis():
+    from src.calendar_board import grid_renderable
+
+    tz = timezone.utc
+    day = date(2026, 7, 25)
+    a = event(utc(2026, 7, 25, 9), utc(2026, 7, 25, 10), title="planning", response="organizer")
+    b = event(utc(2026, 7, 25, 9, 30), utc(2026, 7, 25, 10, 30), title="clientB sync")
+    mark = calendarboard_tools.mark_conflicts([a, b])
+    assert all(item["conflict"] for item in mark)
+    columns_data = [
+        {"name": "acme", "color": "cyan", "summary": "1 cal", "ok": True, "error": "", "events": [a]},
+        {"name": "beta", "color": None, "summary": "1 cal", "ok": True, "error": "", "events": [b]},
+        {"name": "broken", "color": None, "summary": "", "ok": False, "error": "boom", "events": []},
+    ]
+    plain = grid_renderable(columns_data, day, 120, tz=tz).plain
+    lines = plain.split("\n")
+    assert lines[0].split() == ["acme", "beta", "broken"]
+    assert "boom" in lines[1]
+    hour_rows = {line[:5]: index for index, line in enumerate(lines) if line[:5].strip()}
+    assert "07:00" in hour_rows and "18:00" in hour_rows  # default working-day axis
+    nine = lines[hour_rows["09:00"]]
+    assert "★09:00 planning" in nine  # a's block label on the shared 09:00 row
+    half_past = lines[hour_rows["09:00"] + 1]
+    assert "✓09:30 clientB sync" in half_past
+
+
+# %%
 # Fetch dispatch #
 
 

@@ -2,15 +2,28 @@
 
 `src/calendar_board.py` is a long-lived Textual TUI that shows every
 configured calendar account — Google Calendar and Outlook on the web
-(Microsoft Graph) — as **columns side by side for one day at a time**, so
-overlapping meetings between clients are visible at a glance. It covers
-**all** of each account's calendars (secondary and subscribed ones included),
-and every event is badged with your attendance state, so what you merely got
-invited to never blends in with what you actually accepted.
+(Microsoft Graph) — **side by side for one day at a time**, so overlapping
+meetings between clients are visible at a glance. It covers **all** of each
+account's calendars (secondary and subscribed ones included), and every
+event is badged with your attendance state, so what you merely got invited
+to never blends in with what you actually accepted.
 
-![calendar board TUI with three source columns](./assets/calendar_board_tui.png)
-*(demo data — two client Outlook accounts and a personal Google account,
-with a cross-client double booking flagged in both columns)*
+The default view is a Google-Calendar-style **time grid**: a shared vertical
+time axis, one column per account, events drawn as colored blocks positioned
+and sized by their times — a cross-client double booking is two blocks at
+the same height before the `‼` flag even registers. Overlapping events
+within one account split into side-by-side sub-lanes, all-day events sit in
+a banner row above the axis, and a red rule marks the current time on
+today's grid.
+
+![calendar board grid view](./assets/calendar_board_grid.png)
+*(demo data — two client Outlook accounts and a personal Google account;
+red blocks are cross-source overlaps, the strikethrough event is declined)*
+
+`v` flips to the **agenda view** — the same day as compact per-account
+lists, better when titles matter more than geometry:
+
+![calendar board agenda view](./assets/calendar_board_agenda.png)
 
 It is deliberately a **separate TUI from the status board**, not a tab inside
 it: each board refreshes on its own cadence without redrawing the other, and
@@ -23,13 +36,16 @@ cd ~/GitHub/dotfiles
 uv sync
 uv run python src/calendar_board.py                       # the live board
 uv run python src/calendar_board.py --once --days 3       # static print, no TUI
+uv run python src/calendar_board.py --once --grid         # static print of the time grid
 uv run python src/calendar_board.py --auth acme_outlook   # one-time token minting (below)
 ```
 
-Keys: `←`/`→` previous/next day · `t` today · `r` refresh all · `q` quit.
+Keys: `←`/`→` previous/next day · `t` today · `v` grid/agenda ·
+`z` zoom the grid's rows (30 → 15 → 60 minutes) · `r` refresh all · `q` quit.
 
-Each event row shows a badge, the local time range, the title, and (dimmed)
-which of the account's calendars it lives on:
+Each agenda row (and each grid block's label) shows a badge, the local time
+range, and the title; the agenda also names (dimmed) which of the account's
+calendars the event lives on:
 
 - `★` you are the organizer
 - `✓` accepted

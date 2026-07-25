@@ -319,6 +319,56 @@ def events_for_day(events, day, tz=None):
     return sorted(selected, key=lambda event: (not event["all_day"], event["start"]))
 
 
+def assign_lanes(events):
+    """
+    Google-Calendar-style lane packing for ONE source's timed day events:
+    overlapping events split into side-by-side sub-columns ("lanes") so both
+    blocks stay visible on the grid. Greedy first-free-lane assignment over
+    the events sorted by start. Returns (placed, lane_count) where placed is
+    a list of (event, lane_index); all-day events are the banner row's
+    problem and are skipped here.
+    """
+    timed = sorted(
+        (event for event in events if not event["all_day"]),
+        key=lambda event: (event["start"], event["end"]),
+    )
+    lane_ends: list = []
+    placed = []
+    for event in timed:
+        for lane, busy_until in enumerate(lane_ends):
+            if event["start"] >= busy_until:
+                lane_ends[lane] = event["end"]
+                placed.append((event, lane))
+                break
+        else:
+            lane_ends.append(event["end"])
+            placed.append((event, len(lane_ends) - 1))
+    return placed, max(1, len(lane_ends))
+
+
+def grid_hour_range(events, day, tz=None, day_start=7, day_end=19):
+    """
+    The [start_hour, end_hour) span the day grid must cover: the working-day
+    default, widened (never narrowed) so no timed event falls off the top or
+    bottom. Events spilling in from an adjacent day (overnight meetings)
+    clamp to this day's midnights.
+    """
+    start_hour, end_hour = day_start, day_end
+    for event in events:
+        if event["all_day"]:
+            continue
+        start_local = event["start"].astimezone(tz)
+        end_local = event["end"].astimezone(tz)
+        if start_local.date() < day:
+            start_hour = 0
+        elif start_local.date() == day:
+            start_hour = min(start_hour, start_local.hour)
+        if end_local.date() > day or (end_local.date() == day and end_local.hour >= day_end):
+            boundary = end_local.hour + (1 if (end_local.minute or end_local.second) else 0)
+            end_hour = 24 if end_local.date() > day else max(end_hour, min(boundary, 24))
+    return start_hour, max(end_hour, start_hour + 1)
+
+
 def mark_conflicts(events):
     """
     Flag every pair of overlapping timed events across the whole list - the
