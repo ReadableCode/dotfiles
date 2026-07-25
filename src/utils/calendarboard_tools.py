@@ -22,10 +22,12 @@ DEFAULT_HTTP_TIMEOUT = 30
 GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_API = "https://www.googleapis.com/calendar/v3"
-GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar.readonly"
+# Consent is read/write so the refresh tokens minted by --auth keep working
+# when event-writing features land; the board itself only ever reads.
+GOOGLE_SCOPE = "https://www.googleapis.com/auth/calendar"
 
 GRAPH_API = "https://graph.microsoft.com/v1.0"
-GRAPH_SCOPE = "offline_access https://graph.microsoft.com/Calendars.Read"
+GRAPH_SCOPE = "offline_access https://graph.microsoft.com/Calendars.ReadWrite"
 
 # Normalized attendance states, in "how much this needs your eyes" order.
 RESPONSE_STATES = ("organizer", "accepted", "tentative", "needs_action", "declined")
@@ -159,11 +161,24 @@ def _validate_source(source, config_path):
             f"Calendarboard source '{source['name']}' in {config_path} "
             f"(type {source['type']}) is missing required keys: {', '.join(missing)}"
         )
-    if source.get("calendars") is not None and not isinstance(source["calendars"], list):
-        raise ValueError(
-            f"Calendarboard source '{source['name']}' in {config_path}: 'calendars' must be a list "
-            f"of calendar names/ids (omit the key entirely to show every calendar)"
-        )
+    for key in ("calendars", "exclude_calendars"):
+        if source.get(key) is not None and not isinstance(source[key], list):
+            raise ValueError(
+                f"Calendarboard source '{source['name']}' in {config_path}: '{key}' must be a list "
+                f"of calendar names/ids (omit the key entirely for no filtering)"
+            )
+
+
+def _calendar_matches(tokens, name, primary, calendar_id):
+    for token in tokens:
+        token = str(token).strip().lower()
+        if token == "primary" and primary:
+            return True
+        if name and token == name.lower():
+            return True
+        if calendar_id and token == str(calendar_id).lower():
+            return True
+    return False
 
 
 def calendar_selected(source, name, primary=False, calendar_id=None):
@@ -173,19 +188,16 @@ def calendar_selected(source, name, primary=False, calendar_id=None):
     board is to catch meetings on secondary calendars too). Otherwise entries
     match the calendar's display name or id case-insensitively, and the
     special token ``primary`` matches the account's default calendar.
+    ``exclude_calendars:`` (same matching) always wins over inclusion — it
+    lets two sources share one account without showing a calendar twice.
     """
+    excluded = source.get("exclude_calendars")
+    if excluded and _calendar_matches(excluded, name, primary, calendar_id):
+        return False
     wanted = source.get("calendars")
     if not wanted:
         return True
-    for token in wanted:
-        token = str(token).strip().lower()
-        if token == "primary" and primary:
-            return True
-        if name and token == name.lower():
-            return True
-        if calendar_id and token == str(calendar_id).lower():
-            return True
-    return False
+    return _calendar_matches(wanted, name, primary, calendar_id)
 
 
 # %%

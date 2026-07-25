@@ -79,7 +79,10 @@ two or three columns, which is the intended width.
 Every source takes `name`, `type`, optional `interval` (seconds between
 refreshes, default 300), optional `calendars` (list of calendar names/ids to
 show; **omit to show every calendar the account has** — the special token
-`primary` matches the account's default calendar), optional `color` (a border
+`primary` matches the account's default calendar), optional `exclude_calendars`
+(same matching, always wins — define two sources on the same account's
+credentials, one excluding a calendar and one including only it, to split one
+account into separate columns), optional `color` (a border
 color to tell columns apart faster), and optional `env_file` (relative to the
 config's repo) that secrets resolve from. As with the status board, tokens
 resolve from the real environment first, then the `env_file` — credentials
@@ -110,10 +113,12 @@ One-time setup per Google account:
 3. Run `uv run python src/calendar_board.py --auth personal_google` **on a
    machine with a browser** (the flow catches the redirect on localhost —
    Google's device flow doesn't allow the Calendar scope), approve the
-   read-only calendar scope, and paste the printed refresh-token line into
-   the env file.
+   calendar scope, and paste the printed refresh-token line into the env
+   file.
 
-The board only ever requests `calendar.readonly`.
+The consent asks for read/write (`auth/calendar`) so the minted refresh token
+survives future event-writing features without a re-auth; the board itself
+only ever reads.
 
 ### `outlook_calendar` — Outlook on the web, via Microsoft Graph
 
@@ -135,9 +140,9 @@ exactly what Outlook on the web shows. One-time setup per account:
    work accounts* if it should serve outlook.com too). No redirect URI
    needed, but **enable "Allow public client flows"** (Authentication blade)
    — that is what lets the device-code flow work without a client secret.
-2. API permissions → Microsoft Graph → **Delegated** → `Calendars.Read` and
-   `offline_access`. Client-locked-down tenants may need an admin to grant
-   consent.
+2. API permissions → Microsoft Graph → **Delegated** → `Calendars.ReadWrite`
+   and `offline_access` (read/write for the same no-re-auth reason as above).
+   Client-locked-down tenants may need an admin to grant consent.
 3. Put the app's client id in the env file, then run
    `uv run python src/calendar_board.py --auth acme_outlook` — the
    device-code flow prints a URL + code, so the browser can be on **any**
