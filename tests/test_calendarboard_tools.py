@@ -384,7 +384,7 @@ def test_fetch_google_events_selects_calendars_and_normalizes(monkeypatch):
     event_urls = [url for url, _ in calls if url.endswith("/events")]
     assert len(event_urls) == 2  # Birthdays skipped
     assert all(item["source"] == "personal_google" for item in result.events)
-    assert result.summary == "2 cal · 2 events"
+    assert result.summary == ""
 
 
 def test_fetch_outlook_events_requests_utc_and_pages(monkeypatch):

@@ -9,16 +9,19 @@ event is badged with your attendance state, so what you merely got invited
 to never blends in with what you actually accepted.
 
 The default view is a Google-Calendar-style **time grid**: a shared vertical
-time axis, one column per account, events drawn as colored blocks positioned
-and sized by their times — a cross-client double booking is two blocks at
-the same height before the `‼` flag even registers. Overlapping events
+time axis, one column per account, events drawn as blocks positioned and
+sized by their times, **every block in its calendar's configured color**
+(attendance lives in the badge; a double-booked block keeps its color and
+flags itself with `‼` and bold red text) — a cross-client double booking is
+two blocks at the same height before the flag even registers. Overlapping events
 within one account split into side-by-side sub-lanes, all-day events sit in
 a banner row above the axis, and a red rule marks the current time on
 today's grid.
 
 ![calendar board grid view](./assets/calendar_board_grid.png)
 *(demo data — two client Outlook accounts and a personal Google account;
-red blocks are cross-source overlaps, the strikethrough event is declined)*
+`‼`-tagged blocks are cross-source overlaps, the strikethrough event is
+declined)*
 
 `v` flips to the **agenda view** — the same day as compact per-account
 lists, better when titles matter more than geometry:
@@ -40,8 +43,27 @@ uv run python src/calendar_board.py --once --grid         # static print of the 
 uv run python src/calendar_board.py --auth acme_outlook   # one-time token minting (below)
 ```
 
-Keys: `←`/`→` previous/next day · `t` today · `v` grid/agenda ·
-`z` zoom the grid's rows (30 → 15 → 60 minutes) · `r` refresh all · `q` quit.
+Keys: `←`/`→` previous/next page (a day, or a week in the week views) ·
+`⇧←`/`⇧→` jump a week · `t` today · `d` cycle the day span (`1`/`3`/`5`/`7`
+jump straight there: one day, rolling 3-day, Mon–Fri work week, Sun–Sat
+week — the multi-day views show one column per DAY with every source merged
+into it, blocks colored by source and tagged with the source's initial
+letter, the legend line mapping both back; spans too wide for the terminal
+are skipped with a warning instead of wrapping into garbage) ·
+`v` grid/agenda · `z` zoom the grid's
+rows (30 → 15 → 60 minutes) · `r` refresh all · `q` quit — all shown as
+reminders in the footer.
+
+The TUI grid always covers the full 00:00–24:00 day and scrolls (mouse
+wheel, or `↑`/`↓`/`PgUp`/`PgDn`), landing an hour above now on today and at
+07:00 elsewhere; the `--once` printout stays compact (working hours widened
+to fit the day's events). Block titles word-wrap down the block, ending in
+`…` when the block is too short for the text. **Click any block** (timed or
+all-day) for a detail card — time span, attendance, calendar, location,
+organizer, the attendee list with per-person response badges, description,
+and the meeting link; `esc` (or a click outside the card) returns to the
+board. Details ride along on each fetch, so a source's cards fill in after
+its first refresh.
 
 Each agenda row (and each grid block's label) shows a badge, the local time
 range, and the title; the agenda also names (dimmed) which of the account's
@@ -82,7 +104,9 @@ show; **omit to show every calendar the account has** — the special token
 `primary` matches the account's default calendar), optional `exclude_calendars`
 (same matching, always wins — define two sources on the same account's
 credentials, one excluding a calendar and one including only it, to split one
-account into separate columns), optional `color` (a border
+account into separate columns), optional `order` (an integer fixing column
+order across all configs — ordered sources come first, ties and unordered
+sources keep discovery order), optional `color` (a border
 color to tell columns apart faster), and optional `env_file` (relative to the
 config's repo) that secrets resolve from. As with the status board, tokens
 resolve from the real environment first, then the `env_file` — credentials

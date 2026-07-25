@@ -124,6 +124,9 @@ def load_sources(credentials_root, repo_root=None, config_path=None):
             source["_base_dir"] = base_dir
             source["_config"] = path
             sources.append(source)
+    # optional per-source ``order:`` fixes column order across configs (stable:
+    # unordered sources keep discovery order, after any ordered ones)
+    sources.sort(key=lambda source: source.get("order", float("inf")))
     return sources, [path for path, _ in located]
 
 
@@ -160,6 +163,10 @@ def _validate_source(source, config_path):
         raise ValueError(
             f"Calendarboard source '{source['name']}' in {config_path} "
             f"(type {source['type']}) is missing required keys: {', '.join(missing)}"
+        )
+    if source.get("order") is not None and not isinstance(source["order"], int):
+        raise ValueError(
+            f"Calendarboard source '{source['name']}' in {config_path}: 'order' must be an integer"
         )
     for key in ("calendars", "exclude_calendars"):
         if source.get(key) is not None and not isinstance(source[key], list):
@@ -255,7 +262,30 @@ def normalize_google_event(event, calendar_name):
         "all_day": all_day,
         "response": _google_response(event),
         "conflict": False,
+        "details": {
+            "location": event.get("location") or "",
+            "organizer": (event.get("organizer") or {}).get("displayName")
+            or (event.get("organizer") or {}).get("email") or "",
+            "attendees": [
+                (
+                    attendee.get("displayName") or attendee.get("email") or "?",
+                    GOOGLE_RESPONSE_MAP.get(attendee.get("responseStatus"), "needs_action"),
+                )
+                for attendee in event.get("attendees") or []
+            ],
+            "description": _clip_description(event.get("description")),
+            "link": event.get("hangoutLink") or event.get("htmlLink") or "",
+        },
     }
+
+
+def _clip_description(raw, limit=500):
+    """Squash an event description to something a detail pane can show (strip HTML-ish noise, cap length)."""
+    if not raw:
+        return ""
+    text = re.sub(r"<[^>]+>", " ", str(raw))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text[: limit - 1] + "…" if len(text) > limit else text
 
 
 def _google_response(event):
@@ -292,6 +322,21 @@ def normalize_graph_event(event, calendar_name):
         "all_day": all_day,
         "response": response,
         "conflict": False,
+        "details": {
+            "location": (event.get("location") or {}).get("displayName") or "",
+            "organizer": ((event.get("organizer") or {}).get("emailAddress") or {}).get("name")
+            or ((event.get("organizer") or {}).get("emailAddress") or {}).get("address") or "",
+            "attendees": [
+                (
+                    (attendee.get("emailAddress") or {}).get("name")
+                    or (attendee.get("emailAddress") or {}).get("address") or "?",
+                    GRAPH_RESPONSE_MAP.get((attendee.get("status") or {}).get("response"), "needs_action"),
+                )
+                for attendee in event.get("attendees") or []
+            ],
+            "description": _clip_description(event.get("bodyPreview")),
+            "link": ((event.get("onlineMeeting") or {}).get("joinUrl")) or event.get("webLink") or "",
+        },
     }
 
 
@@ -468,7 +513,7 @@ def fetch_google_events(source, window_start, window_end):
             if event:
                 event["source"] = source["name"]
                 events.append(event)
-    return SourceResult(True, events, f"{len(selected)} cal · {len(events)} events")
+    return SourceResult(True, events)
 
 
 # %%
@@ -546,7 +591,7 @@ def fetch_outlook_events(source, window_start, window_end):
             if event:
                 event["source"] = source["name"]
                 events.append(event)
-    return SourceResult(True, events, f"{len(selected)} cal · {len(events)} events")
+    return SourceResult(True, events)
 
 
 # %%
