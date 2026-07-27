@@ -247,6 +247,9 @@ def grid_renderable(columns_data, day, width, tz=None, slot_minutes=30, now=None
     """
     if not columns_data:
         return Text("no sources", style="dim")
+    # no_wrap: a row wider than the widget must crop, never soft-wrap - one
+    # wrapped row shifts every hour line below it off its events
+    text = Text(no_wrap=True)
     count = len(columns_data)
     column_width = max(8, (width - GRID_GUTTER - count) // count)
     if full_day:
@@ -257,20 +260,23 @@ def grid_renderable(columns_data, day, width, tz=None, slot_minutes=30, now=None
     total_slots = (end_hour - start_hour) * 60 // slot_minutes
     packed, now_slots = _pack_grid_columns(columns_data, day, start_hour, slot_minutes, total_slots, tz, now)
 
-    text = Text()
     _append_grid_header(text, columns_data, column_width, width)
     for slot in range(total_slots):
         text.append("\n")
         minutes = start_hour * 60 + slot * slot_minutes
         on_hour = minutes % 60 == 0
+        # the hour line is the row's BOTTOM edge (underline), so it sits on the
+        # boundary between hours and a block starting on the hour begins right
+        # below its line instead of straddling it
+        hour_below = (minutes + slot_minutes) % 60 == 0
         label = f"{minutes // 60:02d}:00" if on_hour else ""
         gutter_now = any(slot == now_slot for now_slot in now_slots)
         text.append(_pad(label, GRID_GUTTER), style="bold red" if gutter_now else "dim")
         for (cells, lane_count), now_slot in zip(packed, now_slots):
             if slot == now_slot:
                 fill, fill_style = "─", "red"
-            elif on_hour:
-                fill, fill_style = "╌", "dim"
+            elif hour_below:
+                fill, fill_style = " ", "dim underline"
             else:
                 fill, fill_style = " ", ""
             text.append(fill if fill != " " else " ", style=fill_style)
@@ -437,8 +443,18 @@ def _page_step(day_span):
     return day_span if day_span in (1, 3) else 7
 
 
+def _grid_width(app):
+    """
+    The width the grid Static actually gets: the scroll view's inner area
+    minus its scrollbar. content_size still includes the scrollbar, and
+    rendering to it makes every row 2 cells too wide - the rows then
+    soft-wrap, shifting each hour line below the wrap off its events.
+    """
+    return app.query_one("#grid-view").scrollable_content_region.width
+
+
 def _span_fits(app, span, source_count):
-    width = app.query_one("#grid-view").content_size.width
+    width = _grid_width(app)
     return span == 1 or width >= span_min_width(span, source_count)
 
 
@@ -462,7 +478,7 @@ def _app_set_span(app, span, source_count, columns):
 
 def _shrink_span_to_fit(app, source_count):
     """Drop to the widest span the terminal can draw (resize protection); 1 always fits."""
-    width = app.query_one("#grid-view").content_size.width
+    width = _grid_width(app)
     span = app.day_span
     while width > 0 and span > 1 and width < span_min_width(span, source_count):
         span = max(choice for choice in DAY_SPAN_CHOICES if choice < span)
@@ -498,11 +514,10 @@ def _app_render_day(app, columns):
 
 def _app_render_grid(app, columns_data):
     # pre-layout width may be 0: rendered too wide once, on_resize fixes it
-    grid_view = app.query_one("#grid-view")
     renderable = grid_renderable(
         columns_data,
         app.view_date,
-        max(grid_view.content_size.width, 40),
+        max(_grid_width(app), 40),
         slot_minutes=app.slot_minutes,
         now=datetime.now().astimezone(),
         full_day=True,  # the TUI shows 00-24 and scrolls; --once stays compact
@@ -827,7 +842,10 @@ def build_app(sources, start_date):
             Binding("q", "quit", "quit"),
         ]
         CSS = """
-        #grid-view { height: 1fr; padding: 0 1; }
+        /* stable gutter: the scrollbar's 2 cells are reserved even while the
+           grid is short (loading), so _grid_width never changes under us when
+           content growth pops the scrollbar in */
+        #grid-view { height: 1fr; padding: 0 1; scrollbar-gutter: stable; }
         /* blocks carry @click meta; without this Textual repaints them in the
            theme's link colors (white-ish text). Keep the blocks' own colors,
            and signal clickability on hover instead. */
