@@ -338,6 +338,89 @@ def test_grid_renderable_places_blocks_on_shared_axis():
     assert "✓09:30 clientB sync" in half_past
 
 
+def test_grid_renderable_rows_fit_width_and_never_wrap():
+    # one soft-wrapped row shifts every hour line below it off its events, so
+    # the grid must always fit the width it was asked for (and crop otherwise)
+    from src.calendar_board import grid_renderable
+
+    tz = timezone.utc
+    day = date(2026, 7, 25)
+    long_title = "quarterly planning with a very long meeting title that overflows"
+    columns_data = [
+        {
+            "name": "acme",
+            "color": None,
+            "summary": "1 cal",
+            "ok": True,
+            "error": "",
+            "events": [event(utc(2026, 7, 25, 9), utc(2026, 7, 25, 10), title=long_title)],
+        }
+        for _ in range(3)
+    ]
+    for width in (40, 61, 90):
+        rendered = grid_renderable(columns_data, day, width, tz=tz)
+        assert rendered.no_wrap
+        assert max(len(line) for line in rendered.plain.split("\n")) <= width
+
+
+def test_grid_hour_lines_sit_on_the_row_boundary():
+    # the hour line is drawn as an underline on the row ABOVE the hour, so a
+    # block starting on the hour begins below its line instead of straddling it
+    from src.calendar_board import grid_renderable
+
+    tz = timezone.utc
+    day = date(2026, 7, 25)
+    columns_data = [{"name": "acme", "color": None, "summary": "", "ok": True, "error": "", "events": []}]
+    rendered = grid_renderable(columns_data, day, 40, tz=tz)
+    lines = rendered.plain.split("\n")
+    hour_rows = {line[:5]: index for index, line in enumerate(lines) if line[:5].strip()}
+
+    def row_styles(index):
+        start = sum(len(line) + 1 for line in lines[:index])
+        return {
+            str(span.style)
+            for span in rendered.spans
+            if span.start < start + len(lines[index]) and span.end > start
+        }
+
+    assert any("underline" in style for style in row_styles(hour_rows["09:00"] - 1))
+    assert not any("underline" in style for style in row_styles(hour_rows["09:00"]))
+
+
+def test_app_grid_renders_at_the_static_widgets_width(monkeypatch):
+    # regression: rendering at the scroll view's content_size (which still
+    # includes the scrollbar's 2 cells) soft-wrapped every row, knocking the
+    # blocks off their hour lines - and resizing never recovered
+    import asyncio
+
+    from src import calendar_board
+
+    monkeypatch.setattr(
+        calendar_board,
+        "fetch_source",
+        lambda source, window_start, window_end: calendarboard_tools.SourceResult(True, []),
+    )
+    widths = []
+    real = calendar_board.grid_renderable
+
+    def recording(columns_data, day, width, **kwargs):
+        widths.append(width)
+        return real(columns_data, day, width, **kwargs)
+
+    monkeypatch.setattr(calendar_board, "grid_renderable", recording)
+    app = calendar_board.build_app([{"name": "a", "type": "google_calendar", "interval": 9999}], date.today())()
+
+    async def run():
+        async with app.run_test(size=(100, 30)) as pilot:
+            await pilot.pause(0.5)
+            assert widths[-1] == app.query_one("#grid").size.width == 96
+            await pilot.resize_terminal(60, 30)
+            await pilot.pause(0.5)
+            assert widths[-1] == app.query_one("#grid").size.width == 56
+
+    asyncio.run(run())
+
+
 # %%
 # Fetch dispatch #
 
