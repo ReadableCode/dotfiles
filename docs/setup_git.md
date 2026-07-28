@@ -155,6 +155,21 @@ git --version
     # press enter to accept defaults
     ```
 
+* To create an additional key or with a different name, note that in
+  PowerShell `~` is NOT expanded when passed to native commands like
+  `ssh-keygen` (it fails with `Saving key "~/.ssh/..." failed: No such file
+  or directory`) — use an explicit path instead:
+
+  ```powershell
+  ssh-keygen -t rsa -b 4096 -f "$env:USERPROFILE\.ssh\key_name"
+  ```
+
+  In Git Bash `~` works fine:
+
+  ```bash
+  ssh-keygen -t rsa -b 4096 -f ~/.ssh/key_name
+  ```
+
 * Run the following command and copy just the key to GitHub:
 
     ```bash
