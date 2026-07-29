@@ -3,24 +3,36 @@ echo "Sourced: ~/.zshrc"
 ### Terminal Config ###
 
 # History Configuration
-export HISTFILE=~/.zsh_history
-export HISTSIZE=1000000
-export SAVEHIST=1000000
+# Keep everything, forever. Deliberately NOT exported: an exported HISTFILE is
+# inherited by child shells (bash has no config on macOS) which then write their
+# own history into this file.
+HISTFILE=~/.zsh_history
+HISTSIZE=1000000
+SAVEHIST=1000000
 
 # Set history options
-setopt SHARE_HISTORY          # Share history across all sessions (implies APPEND + INC_APPEND)
-setopt HIST_IGNORE_DUPS       # Don't record duplicate entries
-setopt HIST_IGNORE_ALL_DUPS   # Delete old duplicate entries
+setopt APPEND_HISTORY         # Append to the file; never rewrite it wholesale
+setopt INC_APPEND_HISTORY     # Write each command as it runs, not at exit
+setopt SHARE_HISTORY          # Share history across all running sessions
+setopt EXTENDED_HISTORY       # Save timestamp and duration
 setopt HIST_IGNORE_SPACE      # Don't record entries starting with space
-setopt HIST_SAVE_NO_DUPS      # Don't write duplicate entries to history file
 setopt HIST_REDUCE_BLANKS     # Remove superfluous blanks
 setopt HIST_VERIFY            # Show command with history expansion before running
-setopt EXTENDED_HISTORY       # Save timestamp and duration
+# Never set HIST_IGNORE_ALL_DUPS / HIST_SAVE_NO_DUPS / HIST_IGNORE_DUPS: they
+# force a full rewrite of the history file on every write and permanently delete
+# the older copy of any repeated command. Duplicates are harmless; keep them.
 
-# Force load existing history
-if [[ -r "$HISTFILE" ]]; then
-    fc -R "$HISTFILE"
-fi
+# zsh's `history` builtin is `fc -l`, which defaults to only the last 16 events
+# -- unlike bash, where a bare `history` prints everything. Override it so
+# `history` and `history | grep ...` show the whole thing. A function rather
+# than an alias so explicit arguments (`history -50`, `history 1 20`) still work.
+history() {
+    if (( $# )); then
+        builtin fc -l "$@"
+    else
+        builtin fc -l 1
+    fi
+}
 
 # Aliases for better history viewing
 alias hist='fc -l 1'              # Show all history
