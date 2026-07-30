@@ -267,6 +267,26 @@ function openbranchdiffs {
     code @($changedFiles)
 }
 
+# Fuzzy-pick a branch (most recently committed first, remotes included) and switch to it.
+# Esc aborts; picking a remote-only branch creates the local tracking branch via git switch.
+function gsw {
+    if (-not (Get-Command fzf -ErrorAction SilentlyContinue)) {
+        Write-Host "fzf is not installed" -ForegroundColor Red
+        return
+    }
+    git rev-parse --git-dir 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Not a Git repository." -ForegroundColor Red
+        return
+    }
+    $branch = git branch -a --sort=-committerdate --format='%(refname:short)' |
+        ForEach-Object { $_ -replace '^origin/', '' } |
+        Where-Object { $_ -ne 'HEAD' } |
+        Select-Object -Unique |
+        fzf --preview 'git log --oneline --color=always -10 {}' --ansi
+    if ($branch) { git switch $branch }
+}
+
 function gitpullall {
     if (-not (Test-GitDir)) { return }
     $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"

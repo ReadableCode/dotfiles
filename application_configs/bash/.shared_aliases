@@ -135,6 +135,17 @@ function openbranchdiffs() {
     code "${files[@]}"
 }
 
+# Fuzzy-pick a branch (most recently committed first, remotes included) and switch to it.
+# Esc aborts; picking a remote-only branch creates the local tracking branch via git switch.
+function gsw() {
+    command -v fzf >/dev/null 2>&1 || { echo "fzf is not installed" >&2; return 1; }
+    git rev-parse --git-dir >/dev/null 2>&1 || { echo "Not a git repository." >&2; return 1; }
+    git branch -a --sort=-committerdate --format='%(refname:short)' \
+        | sed 's|^origin/||' | grep -vx 'HEAD' | awk '!seen[$0]++' \
+        | fzf --preview 'git log --oneline --color=always -10 {}' --ansi \
+        | xargs -r git switch
+}
+
 function gitpullall() {
     local arch os bin
     arch=$(uname -m)
