@@ -1,0 +1,8 @@
+# ~/.ssh/config - macOS variant (resolved over the bare default by
+# deploy_configs.py; see that file for the fragment scheme). Identical except
+# for the Colima include: Colima writes ssh entries for its VMs there on Macs
+# where it is installed, and the pattern matching nothing on other Macs is
+# silently ignored.
+
+Include ~/.colima/ssh_config
+Include config.d/*.conf

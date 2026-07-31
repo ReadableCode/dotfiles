@@ -1,0 +1,12 @@
+# ~/.ssh/config - deployed as a symlink by deploy_configs.py (entry ssh_config
+# in personal_credentials/personal_manifest.yaml; personal machines only).
+#
+# Deliberately machine-neutral: every real Host entry lives in a
+# ~/.ssh/config.d/*.conf fragment deployed by whichever overlay manifest owns
+# it, so each context's hosts follow that context's clones. Do not add Host
+# entries here - put them in the right fragment. A relative Include resolves
+# against ~/.ssh (OpenSSH rule, same on Windows OpenSSH), and an Include
+# pattern that matches nothing is silently ignored, so this file is safe on
+# every platform and on machines with no fragments deployed yet.
+
+Include config.d/*.conf

@@ -89,6 +89,18 @@ Requirements are the board's: non-interactive key auth to both hops, and
 `AllowTcpForwarding` on the jump host's sshd (the default, and true of
 Windows OpenSSH Server).
 
+The one thing aliases cannot cover is a tool that addresses the target by
+**raw IP** and shells out to ssh itself (an rsync job pulling a cache off
+such a VM) — it never sees a shell alias. For that case the same hop is
+mirrored in an ssh_config *fragment*: the base `~/.ssh/config` (dotfiles
+`application_configs/ssh/config`, deployed by `personal_manifest.yaml` on
+personal machines only) is nothing but `Include config.d/*.conf`, and each
+overlay deploys its own `~/.ssh/config.d/<context>.conf` — a client's jump
+fragment lives in `acme_credentials/ssh/` but deploys from the `acme_dev`
+overlay, because the hop is wrong on the client's own machines. Keep a
+fragment in sync with its inventory when an address moves; the inventory
+stays the source of truth.
+
 Deploying a client's configs on a machine therefore requires exactly two
 clones: `dotfiles` and that client's `*_credentials` repo. Entries whose
 destinations live inside other repo checkouts should use the manifest
