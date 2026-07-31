@@ -139,8 +139,8 @@ def load_panels(credentials_root, repo_root=None, config_path=None):
             panel["_base_dir"] = base_dir
             panel["_config"] = path
             # context token for visual grouping: the credentials repo the
-            # panel travels with ("fourteen_foods", "personal", ...), or the
-            # dotfiles repo's own directory name for the root config
+            # panel travels with ("acme", "personal", ...), or the dotfiles
+            # repo's own directory name for the root config
             panel["_context"] = overlay_context(base_dir)
             panels.append(panel)
     return panels, [path for path, _ in located]

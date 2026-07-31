@@ -35,6 +35,11 @@ A machine only shows the panels of the credentials repos it has cloned —
 clone a client's credentials repo and its panels appear, no central registry
 to edit. Panel names must be unique across all loaded configs.
 
+Panels are **grouped visually by the repo they came from**: each config's
+panels sit together inside a double-bordered box titled with the context
+(`acme`, `personal`, …), so one glance separates one context's world from
+another's. In `--once` output the groups become heavy section rules.
+
 ## Panel types
 
 Every panel takes `name`, `type`, optional `interval` (seconds between
@@ -66,6 +71,42 @@ Requirements: non-interactive key auth to every hop (connections use
 `AllowTcpForwarding` enabled on the jump host's sshd (the default; needed
 because `-J` tunnels through it — this works on Windows OpenSSH Server too).
 ANSI colors in the command's output are rendered as-is.
+
+#### `host_stats` — htop-style disk / cpu / memory meters for the host
+
+Add `host_stats: true` to any `ssh_command` panel to get a row of htop-style
+gradient meters for the host:
+
+```
+disk / ▕██████████████████░░░░▏  80% 48G of 60G    cpu ▕█░░░…▏   4% load 0.19 0.15 0.22 · 4 cores    mem ▕███░░░…▏  13% 2.0G of 15.6G
+```
+
+Each bar fills with a smooth green→yellow→red ramp (the same scale htop
+paints its meters with), and the readout is colored by how full the resource
+is. The remote host emits one machine-readable line; **all rendering happens
+locally**, so the meters look identical everywhere they appear: pinned under
+a command panel's output (below the scroll region, so a tall cron board
+never pushes them out of view), as the entire body of a stats-only panel,
+and in `--once` output.
+
+Everything comes from numbers the kernel already maintains — nothing is
+installed or tracked on the host: `df -Pk /` for disk, `/proc/loadavg` for
+CPU (the same 1/5/15-minute averages `top`'s header shows, so a panel on a
+5-minute `interval` reads the 5-minute column as its per-refresh average —
+the cpu bar is the 5-minute load over the core count), and `free -m` for
+memory. Linux keeps no memory average, so the `mem` figure is a
+point-in-time reading at fetch. Linux hosts only.
+
+A panel can also be **stats-only** — set `host_stats: true` and omit
+`command` entirely for a host that has nothing else to report:
+
+```yaml
+- name: acme_vm_stats
+  type: ssh_command
+  host: sshacmevm
+  host_stats: true
+  interval: 300
+```
 
 #### `log_link` — click a row to follow its log
 
