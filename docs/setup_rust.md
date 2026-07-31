@@ -112,7 +112,7 @@ the existing `## Path Mods ###` block so the `cargo\bin` directory is on
 `PATH` and `RUSTUP_HOME` / `CARGO_HOME` are exported for every session:
 
 ```powershell
-if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
+if ($env:COMPUTERNAME -eq 'WORK-LAPTOP') {
     $paths = @(
         'C:\Windows\System32',
         'C:\Users\jason.christiansen\userapps\nvim-win64\bin',

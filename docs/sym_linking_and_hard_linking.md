@@ -55,7 +55,7 @@ ln -s /path/to/src/file
 For example, linking a VS Code settings file out of the repo:
 
 ```bash
-ln -s /home/jason/HelloFresh/GDrive/Projects/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
+ln -s /home/jason/Work/GDrive/Projects/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
 ```
 
 ### Hard linking on Linux
@@ -98,8 +98,8 @@ the repo at all. The one-off manual equivalent:
 
 ```powershell
 New-Item -ItemType HardLink `
-  -Path "C:\Users\jason.christiansen\GitHub\fflap-2229.code-workspace" `
-  -Target "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\workspace.fflap-2229.code-workspace"
+  -Path "C:\Users\jason.christiansen\GitHub\workhost.code-workspace" `
+  -Target "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\workspace.workhost.code-workspace"
 ```
 
 The trade-off (see the inode section above): `git pull` orphans hard links

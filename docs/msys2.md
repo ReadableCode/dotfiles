@@ -1,6 +1,6 @@
 # MSYS2 Package Management
 
-This file documents how to manage MSYS2 packages on the Windows host (FFLAP-2229) via the user-scope MSYS2 install at C:\msys64\.
+This file documents how to manage MSYS2 packages on the work Windows host via the user-scope MSYS2 install at C:\msys64\.
 
 ## Capture currently installed packages
 

@@ -123,7 +123,7 @@ Why each one goes:
 | openxml-explorer | Raw Office-XML inspection, not used (Excel viewing stays via `gc-excelviewer`) |
 | todo-tree | TODO/FIXME sidebar tree; activates on startup and scans every workspace folder — ripgrep/search covers the same ground |
 | docxreader | In-editor `.docx` viewer; no `.docx`/`.dotx` files in any repository |
-| terraform | **Reversal of an earlier keep.** Jason confirmed he does not use it. The "heavily used" note came from file count, not from him — the only `.tf` files are 10 under `na-finops/terraform/`, which he doesn't edit in-editor. It also activates at startup via `workspaceContains:**/*.tf,**/*.tfvars` and was the noisiest extension log in the session |
+| terraform | **Reversal of an earlier keep.** Jason confirmed he does not use it. The "heavily used" note came from file count, not from him — the only `.tf` files are 10 under one work repo's `terraform/`, which he doesn't edit in-editor. It also activates at startup via `workspaceContains:**/*.tf,**/*.tfvars` and was the noisiest extension log in the session |
 | vscode-pull-request-github | In-editor GitHub PR/issue review; PRs are handled via `gh` CLI and browser |
 | csdevkit / csharp | C# Dev Kit + language support. **Conditional** — remove only where no C# project exists (kept on Windows, see Platform exceptions). Uninstall the csdevkit **pack first** — it takes csharp with it |
 | vscode-dotnet-runtime | Only existed as a dependency of openxml-explorer / csdevkit — remove it **after** those or the uninstall is refused, and keep it wherever csdevkit is kept |
@@ -133,7 +133,7 @@ Why each one goes:
 - **Windows**: keep `mark-wiemer.vscode-autohotkey-plus-plus` — AHK scripts
   are actively edited there. It was removed on macOS only.
 - **Windows**: keep `ms-vscode.powershell` — ~16 `.ps1` scripts live across
-  `dotfiles/scripts/`, `na-faba`, `na-finops`, and `Our_Cash`, and they are
+  `dotfiles/scripts/` and several work repos, and they are
   maintained from the Windows box. The remove-list entry applies to macOS/Linux
   only.
 - **Windows**: keep the C# stack (`ms-dotnettools.csdevkit`,
@@ -261,8 +261,8 @@ built-in**, so it shows up activating in `exthost.log` while being absent from
    belong on which machine is Jason's call.
 6. Settings deploy via git — never hand-edit the live settings file; edit
    `application_configs/vscode/` in this repository if a settings change is
-   truly needed, and never override the per-repo linter configs (na-finops's are
-   carefully tuned and live in that repository).
+   truly needed, and never override the per-repo linter configs (some work repos' are
+   carefully tuned and live in those repositories).
 7. After removing extensions, also prune the multiroot workspace file's
    `extensions.recommendations` list so it no longer recommends anything you
    uninstalled (otherwise VS Code nags to reinstall them), and drop any now-dead
@@ -271,7 +271,7 @@ built-in**, so it shows up activating in `exthost.log` while being absent from
    into a sibling `*_credentials/vscode/workspace.<host>.code-workspace` —
    resolve the symlink and edit the real target. As of the RyzenWhite pass the
    only files carrying a `recommendations` list are
-   `hellofresh_credentials/vscode/workspace.hellofreshjason.code-workspace` and
-   `fourteen_foods_credentials/vscode/workspace.fflap-2229.code-workspace`, and
+   the two work contexts' `*_credentials/vscode/workspace.<host>.code-workspace`
+   files, and
    both list keep-list extensions only — nothing to prune. `workspace.ryzenwhite`
    has no `extensions` block and empty `settings`.

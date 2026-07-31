@@ -62,8 +62,8 @@ Key behaviors:
   `sudo bash ~/GitHub/Docker/scripts/redeploy.sh <service> [service...]`
 - This replaced the old single-repo `charlie-personal-website/redeploy.sh`
   root cron entry (2026-07).
-- The fourteen_foods server runs the same pattern separately
-  (`fourteen_foods/backend/scripts/git_pull.sh`, user `svc_linux`).
+- A client's server runs the same pattern separately (its backend
+  repo's `scripts/git_pull.sh`, user `svc_linux`).
 
 ## Compose conventions (`Docker/docker_compose_projects.yaml`)
 
