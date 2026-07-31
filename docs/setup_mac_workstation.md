@@ -352,3 +352,8 @@ System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule 
 ## Docker Setup
 
 - Follow instructions in [setup_docker.md](./setup_docker.md)
+
+## T3 Code Setup
+
+- Installed by the Brewfile (`cask "t3-code"`); to connect agents and set up
+  providers, follow instructions in [setup_t3_code.md](./setup_t3_code.md)
