@@ -2,6 +2,7 @@
 # Imports #
 
 import argparse
+import colorsys
 import platform
 import re
 import shlex
@@ -9,6 +10,7 @@ import subprocess
 import sys
 import time
 import webbrowser
+from itertools import groupby
 
 from config import grandparent_dir, parent_dir
 from readable_utils.host_tools import get_uppercase_hostname
@@ -61,6 +63,77 @@ def open_link(url, browser=None):
         webbrowser.open(url)
         return
     subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# %%
+# Host-stats meters #
+
+METER_WIDTH = 22
+METER_FILLED, METER_EMPTY = "█", "░"
+
+
+def ramp_style(fraction):
+    """
+    Hex color for a 0..1 fullness fraction: a smooth green -> yellow -> red
+    HSV ramp (hue 120° down to 0°), the same scale htop paints its meters
+    with - calm at empty, alarming at full.
+    """
+    fraction = min(max(fraction, 0.0), 1.0)
+    hue = (1.0 - fraction) * 120.0 / 360.0
+    red, green, blue = colorsys.hsv_to_rgb(hue, 0.75, 0.95)
+    return f"#{int(red * 255):02x}{int(green * 255):02x}{int(blue * 255):02x}"
+
+
+def append_meter(text, label, fraction, value):
+    """
+    Append one htop-style meter to text: dim label, bracketed gradient bar
+    (each filled cell colored by its own position on the ramp, so the bar
+    visibly "heats up" as it fills), and the value readout colored by the
+    overall fullness.
+    """
+    fraction = min(max(fraction, 0.0), 1.0)
+    text.append(f"{label} ", style="bold")
+    text.append("▕", style="grey35")
+    filled = round(fraction * METER_WIDTH)
+    for cell in range(METER_WIDTH):
+        if cell < filled:
+            text.append(METER_FILLED, style=ramp_style((cell + 0.5) / METER_WIDTH))
+        else:
+            text.append(METER_EMPTY, style="grey30")
+    text.append("▏", style="grey35")
+    text.append(f" {value}", style=ramp_style(fraction))
+
+
+def stats_renderable(stats):
+    """
+    One line of htop-style meters for a parsed host-stats dict: disk on /,
+    CPU (5-minute load average over core count - the kernel's own average for
+    a 5-minute refresh), and current memory. Rendered identically wherever
+    host stats appear: pinned under a command panel, as a stats-only panel's
+    body, and in --once output.
+    """
+    if not stats:
+        return Text("host stats unavailable", style="dim italic")
+    text = Text()
+    disk_fraction = stats["disk_used_kb"] / (stats["disk_total_kb"] or 1)
+    append_meter(
+        text, "disk /", disk_fraction,
+        f"{disk_fraction:>4.0%} {stats['disk_used_kb'] / 1048576:.0f}G of {stats['disk_total_kb'] / 1048576:.0f}G",
+    )
+    text.append("    ")
+    load_1m, load_5m, load_15m = stats["load"]
+    cpus = stats["cpus"] or 1
+    append_meter(
+        text, "cpu", load_5m / cpus,
+        f"{load_5m / cpus:>4.0%} load {load_1m:.2f} {load_5m:.2f} {load_15m:.2f} · {cpus} cores",
+    )
+    text.append("    ")
+    mem_fraction = stats["mem_used_mb"] / (stats["mem_total_mb"] or 1)
+    append_meter(
+        text, "mem", mem_fraction,
+        f"{mem_fraction:>4.0%} {stats['mem_used_mb'] / 1024:.1f}G of {stats['mem_total_mb'] / 1024:.1f}G",
+    )
+    return text
 
 
 # %%
@@ -214,24 +287,24 @@ def build_log_tail_screen():
     return LogTailScreen
 
 
-def build_app(panels, local_hostname):
+def build_panel_widget(local_hostname):
     """
-    Construct the Textual app class lazily so --once (and the unit tests)
-    never need textual imported at module import time.
+    Construct the Panel widget class lazily (same reason as build_app:
+    --once and the unit tests never import textual).
     """
-    from textual.app import App, ComposeResult
-    from textual.containers import Horizontal, Vertical, VerticalScroll
-    from textual.widgets import Footer, Header, Label, ProgressBar, Static
-
-    panels_by_name = {panel["name"]: panel for panel in panels}
-    LogTailScreen = build_log_tail_screen()
+    from textual.app import ComposeResult
+    from textual.containers import Horizontal, Vertical
+    from textual.widgets import Label, ProgressBar, Static
 
     class Panel(Vertical):
         """
         One board panel: bordered output area that refetches itself on its own
         interval (panels poll independently), with a real-time bar at the
         bottom filling toward the next poll - indeterminate while a fetch is
-        actually in flight.
+        actually in flight. host_stats panels get a stats strip pinned BELOW
+        the (possibly clipped) output scroll region so the meters never
+        scroll out of view; a stats-only panel renders the meters as its
+        body, which reads identically since there is no output above them.
         """
 
         def __init__(self, panel):
@@ -239,9 +312,12 @@ def build_app(panels, local_hostname):
             self.panel = panel
             self.border_title = panel["name"]
             self.deadline = None  # monotonic time of the next scheduled poll; None = fetching
+            self.stats_only = bool(panel.get("host_stats")) and not panel.get("command")
 
         def compose(self) -> ComposeResult:
             yield Static("loading…", markup=False, classes="panel-output")
+            if self.panel.get("host_stats") and not self.stats_only:
+                yield Static("", markup=False, classes="panel-stats")
             with Horizontal(classes="panel-footer"):
                 yield ProgressBar(total=None, show_eta=False, show_percentage=False)
                 yield Label("refreshing…", classes="panel-countdown")
@@ -267,14 +343,19 @@ def build_app(panels, local_hostname):
             self.set_class(not result.ok, "error")
             state = result.summary or ("ok" if result.ok else "error")
             self.border_subtitle = f"{state} · {time.strftime('%H:%M:%S')}"
-            renderable = result_renderable(
-                result,
-                browser=self.panel.get("browser"),
-                tui=True,
-                log_link=self.panel.get("log_link"),
-                panel_name=self.panel["name"],
-            )
+            if self.stats_only and result.ok:
+                renderable = stats_renderable(result.stats)
+            else:
+                renderable = result_renderable(
+                    result,
+                    browser=self.panel.get("browser"),
+                    tui=True,
+                    log_link=self.panel.get("log_link"),
+                    panel_name=self.panel["name"],
+                )
             self.query_one(".panel-output", Static).update(renderable)
+            for stats_widget in self.query(".panel-stats"):
+                stats_widget.update(stats_renderable(result.stats) if result.ok else Text())
             # the poll timer fires one interval after the previous FIRE, not
             # after completion - anchor the countdown to fetch start so the
             # bar reaches full just as the timer actually fires
@@ -292,20 +373,47 @@ def build_app(panels, local_hostname):
             minutes, seconds = divmod(int(remaining), 60)
             self.query_one(".panel-countdown", Label).update(f"next in {minutes}m{seconds:02d}s")
 
+    return Panel
+
+
+def build_app(panels, local_hostname):
+    """
+    Construct the Textual app class lazily so --once (and the unit tests)
+    never need textual imported at module import time.
+    """
+    from textual.app import App, ComposeResult
+    from textual.containers import Vertical, VerticalScroll
+    from textual.widgets import Footer, Header, Static
+
+    panels_by_name = {panel["name"]: panel for panel in panels}
+    LogTailScreen = build_log_tail_screen()
+    Panel = build_panel_widget(local_hostname)
+
     class StatusBoardApp(App):
         TITLE = "status board"
         BINDINGS = [("q", "quit", "quit"), ("r", "refresh_all", "refresh all")]
         CSS = """
+        .context-group {
+            border: double $secondary;
+            border-title-color: $secondary;
+            border-title-style: bold;
+            border-title-align: left;
+            height: auto;
+            margin: 0 1 1 1;
+            padding: 1 1 0 1;
+        }
         Panel {
-            border: round $primary;
+            border: round $primary 40%;
             border-title-color: $accent;
             height: auto;
             max-height: 30;
-            margin: 0 1 1 1;
+            margin: 0 0 1 0;
             padding: 0 1;
         }
+        Panel:hover { border: round $primary; }
         Panel.error { border: round red; }
         .panel-output { height: auto; max-height: 26; overflow-y: auto; }
+        .panel-stats { height: 1; margin-top: 1; }
         .panel-footer { height: 1; margin-top: 1; }
         .panel-footer ProgressBar { width: 1fr; }
         .panel-footer Bar { width: 1fr; }
@@ -321,8 +429,15 @@ def build_app(panels, local_hostname):
         def compose(self) -> ComposeResult:
             yield Header(show_clock=True)
             with VerticalScroll():
-                for panel in panels:
-                    yield Panel(panel)
+                # one bordered box per context, in config-discovery order -
+                # panels from the same statusboard config are contiguous, so
+                # a plain groupby keeps each credentials repo's panels
+                # together under its own labeled rectangle
+                for context, group in groupby(panels, key=lambda p: p["_context"]):
+                    with Vertical(classes="context-group") as box:
+                        box.border_title = f" {context.replace('_', ' ')} "
+                        for panel in group:
+                            yield Panel(panel)
             yield Static(legend_text(), classes="legend")
             yield Footer()
 
@@ -349,11 +464,18 @@ def build_app(panels, local_hostname):
 def run_once(panels, local_hostname):
     """Fetch every panel sequentially and print a static board (sanity check / headless use)."""
     console = Console()
+    last_context = None
     for panel in panels:
+        if panel["_context"] != last_context:
+            last_context = panel["_context"]
+            console.rule(f"[bold]══ {last_context.replace('_', ' ')} ══[/bold]", style="cyan", characters="═")
         result = fetch_panel(panel, CREDENTIALS_ROOT, local_hostname)
         state = result.summary or ("ok" if result.ok else "error")
         console.rule(f"[bold]{panel['name']}[/bold] · {state}", style="green" if result.ok else "red")
-        console.print(result_renderable(result))
+        if result.body or not (result.ok and panel.get("host_stats")):
+            console.print(result_renderable(result))
+        if result.ok and panel.get("host_stats"):
+            console.print(stats_renderable(result.stats))
         console.print()
     console.print(legend_text())
     return 0

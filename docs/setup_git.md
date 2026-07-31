@@ -288,6 +288,44 @@ git config receive.denyCurrentBranch updateInstead
   git clone --separate-git-dir path/to/folder/for/.git/contents <repo-url>
   ```
 
+## Ignore untracked local-only files without touching .gitignore (.git/info/exclude)
+
+* Every repo has a per-clone ignore file at `.git/info/exclude`. It works
+  exactly like `.gitignore` but is never committed and never leaves the
+  machine — use it for files that only exist on your clone (e.g.
+  manifest-deployed `CLAUDE.md` / `.claude/` / `.mcp.json` symlinks in client
+  repos whose tracked `.gitignore` you can't add rules to).
+
+* This is per-repo and per-machine: setting it up on one machine does nothing
+  for another machine, and a fresh clone starts with an empty exclude file.
+  Repos whose tracked `.gitignore` already covers the files (e.g. a root
+  `/*.md` rule) need nothing.
+
+* To add the overlay rules in a repo that lacks the tracked rules, run in the
+  repo root:
+
+  ```bash
+  cat >> .git/info/exclude <<'EOF'
+
+  # --- claude overlay (local only, never committed) ---
+  # Ignore locally-deployed CLAUDE.md / .claude/ / .mcp.json symlinks so they
+  # cannot be committed here. Kept in .git/info/exclude rather than .gitignore
+  # because these files only ever exist on this machine.
+  /*.md
+  /*.json
+  /.*/
+  EOF
+  ```
+
+* To verify a file is ignored and see which rule/file is doing it:
+
+  ```bash
+  git check-ignore -v CLAUDE.md
+  ```
+
+* Note the rules only ignore **untracked** files — if the file is already
+  tracked/committed, ignore rules have no effect on it.
+
 ## Resolve Common Problems
 
 ### Git diff and Git status don't show the updated files as changed

@@ -14,6 +14,7 @@ from utils.inventory_tools import (
     credentials_context,
     find_credentials_dirs,
     find_inventory_paths,
+    overlay_context,
 )
 
 # %%
@@ -27,6 +28,24 @@ DEFAULT_SSH_TIMEOUT = 60
 DEFAULT_HTTP_TIMEOUT = 30
 DEFAULT_GITHUB_API = "https://api.github.com"
 BITBUCKET_API = "https://api.bitbucket.org/2.0"
+
+# One machine-readable line of host stats appended to (or standing in for) an
+# ssh_command panel's remote command when ``host_stats`` is set. Reads only
+# numbers the kernel already maintains - df for the root filesystem,
+# /proc/loadavg (the same 1/5/15-minute CPU averages top's header shows, so a
+# 5-minute refresh reads the 5-minute column with nothing tracked on the
+# host), and free for current memory (Linux keeps no memory average, so that
+# one is a point-in-time reading). Linux hosts only. The board strips this
+# line off the output and renders it locally as meter bars, so every
+# host_stats panel looks identical regardless of what else it runs.
+STATS_MARKER = "@@STATS@@"
+HOST_STATS_COMMAND = (
+    f"printf '{STATS_MARKER} disk=%s load=%s cpu=%s mem=%s\\n' "
+    "\"$(df -Pk / | awk 'NR==2{print $3\"/\"$2}')\" "
+    "\"$(cut -d' ' -f1-3 /proc/loadavg | tr ' ' ',')\" "
+    "\"$(nproc)\" "
+    "\"$(free -m | awk 'NR==2{print $3\"/\"$2}')\""
+)
 
 # ssh options used for every panel connection: never prompt (this runs
 # unattended in a long-lived TUI), fail fast when a hop is unreachable, and
@@ -50,14 +69,17 @@ class PanelResult:
 
     kind is "ansi" (body: raw terminal text to render as-is) or "links"
     (body: list of {"text", "url", "meta"} rows the TUI turns into clickable
-    lines). A failed fetch has ok=False and the error text in body.
+    lines). A failed fetch has ok=False and the error text in body. stats is
+    the parsed host-stats dict when the panel collects them (None otherwise,
+    or when the remote failed to emit/parse them).
     """
 
-    def __init__(self, ok, kind, body, summary=""):
+    def __init__(self, ok, kind, body, summary="", stats=None):
         self.ok = ok
         self.kind = kind
         self.body = body
         self.summary = summary
+        self.stats = stats
         self.fetched_at = time.time()
 
     @classmethod
@@ -116,6 +138,10 @@ def load_panels(credentials_root, repo_root=None, config_path=None):
             seen[panel["name"]] = path
             panel["_base_dir"] = base_dir
             panel["_config"] = path
+            # context token for visual grouping: the credentials repo the
+            # panel travels with ("fourteen_foods", "personal", ...), or the
+            # dotfiles repo's own directory name for the root config
+            panel["_context"] = overlay_context(base_dir)
             panels.append(panel)
     return panels, [path for path, _ in located]
 
@@ -146,6 +172,14 @@ def _validate_panel(panel, config_path):
         "bitbucket_prs": ("workspace", "username_env", "app_password_env"),
     }[panel["type"]]
     missing = [key for key in required if not panel.get(key)]
+    if panel.get("host_stats"):
+        if panel["type"] != "ssh_command":
+            raise ValueError(
+                f"Statusboard panel '{panel['name']}' in {config_path}: "
+                f"host_stats is only supported on ssh_command panels"
+            )
+        # a stats-only panel is valid: host_stats stands in for the command
+        missing = [key for key in missing if key != "command"]
     if missing:
         raise ValueError(
             f"Statusboard panel '{panel['name']}' in {config_path} "
@@ -222,6 +256,19 @@ def ssh_destination(host):
     return f"{user}@{host['hostname']}" if user else host["hostname"]
 
 
+def panel_command(panel):
+    """
+    The remote command an ssh_command panel actually runs: its own command,
+    the host-stats one-liner, or both - stats separated from the command's
+    output by a blank line so the board reads as output-then-footer.
+    """
+    if not panel.get("host_stats"):
+        return panel["command"]
+    if not panel.get("command"):
+        return HOST_STATS_COMMAND
+    return f"{panel['command']}; echo; {HOST_STATS_COMMAND}"
+
+
 def build_ssh_argv(panel, credentials_root, local_hostname="", command=None):
     """
     Build the full ssh argv for an ssh_command panel, resolving ``host`` and
@@ -249,7 +296,7 @@ def build_ssh_argv(panel, credentials_root, local_hostname="", command=None):
             argv += ["-J", spec]
     if target.get("port"):
         argv += ["-p", str(target["port"])]
-    argv += [ssh_destination(target), command or panel["command"]]
+    argv += [ssh_destination(target), command or panel_command(panel)]
     return argv
 
 
@@ -317,7 +364,47 @@ def fetch_ssh_command(panel, credentials_root, local_hostname=""):
     if completed.returncode != 0 and not completed.stdout.strip():
         detail = completed.stderr.strip() or f"ssh exited {completed.returncode}"
         return PanelResult.error(detail)
-    return PanelResult(True, "ansi", completed.stdout.rstrip(), f"exit {completed.returncode}")
+    output = completed.stdout.rstrip()
+    stats = None
+    if panel.get("host_stats"):
+        output, stats = _split_host_stats(output)
+    return PanelResult(True, "ansi", output, f"exit {completed.returncode}", stats=stats)
+
+
+def _split_host_stats(output):
+    """
+    Split the trailing STATS_MARKER line off a command's output and parse it,
+    returning (body, stats_dict_or_None). When the last line isn't the marker
+    - the remote command somehow swallowed it - the output is returned
+    untouched with no stats.
+    """
+    body, _, last = output.rpartition("\n")
+    if not last.startswith(STATS_MARKER):
+        return output, None
+    return body.rstrip(), _parse_host_stats(last)
+
+
+def _parse_host_stats(line):
+    """
+    ``@@STATS@@ disk=used_kb/total_kb load=1m,5m,15m cpu=n mem=used_mb/total_mb``
+    -> structured dict, or None when any field is missing/garbled (a partial
+    stats line renders as "unavailable" rather than taking the panel down).
+    """
+    try:
+        fields = dict(item.split("=", 1) for item in line.split()[1:])
+        disk_used, disk_total = (int(value) for value in fields["disk"].split("/"))
+        mem_used, mem_total = (int(value) for value in fields["mem"].split("/"))
+        load_1m, load_5m, load_15m = (float(value) for value in fields["load"].split(","))
+        return {
+            "disk_used_kb": disk_used,
+            "disk_total_kb": disk_total,
+            "load": (load_1m, load_5m, load_15m),
+            "cpus": int(fields["cpu"]),
+            "mem_used_mb": mem_used,
+            "mem_total_mb": mem_total,
+        }
+    except (KeyError, ValueError):
+        return None
 
 
 def fetch_github_prs(panel):

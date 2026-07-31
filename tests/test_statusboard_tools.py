@@ -53,11 +53,12 @@ def test_discover_finds_overlays_and_repo_root_config(tmp_path):
     assert [os.path.basename(path) for path, _ in configs] == ["statusboard.yaml", "acme_statusboard.yaml"]
 
 
-def test_load_panels_stamps_base_dir_and_defaults_interval(tmp_path):
+def test_load_panels_stamps_base_dir_context_and_defaults_interval(tmp_path):
     repo = make_credentials_repo(tmp_path, "acme", panels=[SSH_PANEL])
     panels, config_paths = statusboard_tools.load_panels(str(tmp_path))
     assert len(panels) == 1 and len(config_paths) == 1
     assert panels[0]["_base_dir"] == repo
+    assert panels[0]["_context"] == "acme"
     assert panels[0]["interval"] == statusboard_tools.DEFAULT_INTERVALS["ssh_command"]
 
 
@@ -109,6 +110,99 @@ def test_log_link_only_on_ssh_command(tmp_path):
     make_credentials_repo(tmp_path, "acme", panels=[panel])
     with pytest.raises(ValueError, match="only supported on ssh_command"):
         statusboard_tools.load_panels(str(tmp_path))
+
+
+def test_host_stats_only_on_ssh_command(tmp_path):
+    panel = {"name": "x", "type": "github_prs", "token_env": "T", "host_stats": True}
+    make_credentials_repo(tmp_path, "acme", panels=[panel])
+    with pytest.raises(ValueError, match="host_stats is only supported on ssh_command"):
+        statusboard_tools.load_panels(str(tmp_path))
+
+
+def test_host_stats_makes_command_optional(tmp_path):
+    stats_only = {"name": "vm_stats", "type": "ssh_command", "host": "sshvm", "host_stats": True}
+    make_credentials_repo(tmp_path, "acme", panels=[stats_only])
+    panels, _ = statusboard_tools.load_panels(str(tmp_path))
+    assert panels[0]["host_stats"] is True
+    # without host_stats a missing command is still an error (covered in test_panel_validation)
+
+
+def test_panel_command_composition():
+    plain = {"command": "bash x.sh"}
+    stats_only = {"host_stats": True}
+    both = {"command": "bash x.sh", "host_stats": True}
+    assert statusboard_tools.panel_command(plain) == "bash x.sh"
+    assert statusboard_tools.panel_command(stats_only) == statusboard_tools.HOST_STATS_COMMAND
+    assert statusboard_tools.panel_command(both) == (
+        f"bash x.sh; echo; {statusboard_tools.HOST_STATS_COMMAND}"
+    )
+
+
+def test_build_ssh_argv_appends_host_stats(tmp_path):
+    repo = make_credentials_repo(tmp_path, "acme", hosts=ACME_HOSTS)
+    panel = dict(SSH_PANEL, host_stats=True, _base_dir=repo)
+    argv = statusboard_tools.build_ssh_argv(panel, str(tmp_path), local_hostname="ENVY")
+    assert argv[-1] == f"bash x.sh; echo; {statusboard_tools.HOST_STATS_COMMAND}"
+    # an explicit command override (the log-follow pane) never picks up the stats line
+    argv = statusboard_tools.build_ssh_argv(panel, str(tmp_path), local_hostname="ENVY", command="tail -F x.log")
+    assert argv[-1] == "tail -F x.log"
+
+
+STATS_LINE = "@@STATS@@ disk=50331648/62914560 load=0.19,0.15,0.22 cpu=4 mem=2018/15992"
+PARSED_STATS = {
+    "disk_used_kb": 50331648,
+    "disk_total_kb": 62914560,
+    "load": (0.19, 0.15, 0.22),
+    "cpus": 4,
+    "mem_used_mb": 2018,
+    "mem_total_mb": 15992,
+}
+
+
+def make_fake_run(stdout, returncode=0):
+    class FakeCompleted:
+        pass
+
+    FakeCompleted.returncode = returncode
+    FakeCompleted.stdout = stdout
+    FakeCompleted.stderr = ""
+    return lambda *args, **kwargs: FakeCompleted()
+
+
+def test_fetch_ssh_command_splits_stats_marker_into_stats(tmp_path, monkeypatch):
+    repo = make_credentials_repo(tmp_path, "acme", hosts=ACME_HOSTS)
+    panel = dict(SSH_PANEL, host_stats=True, _base_dir=repo)
+    monkeypatch.setattr(
+        statusboard_tools.subprocess, "run", make_fake_run(f"job rows\n21 ok - 2 failed\n{STATS_LINE}\n")
+    )
+    result = statusboard_tools.fetch_ssh_command(panel, str(tmp_path))
+    assert result.body == "job rows\n21 ok - 2 failed"
+    assert result.summary == "exit 0"
+    assert result.stats == PARSED_STATS
+
+
+def test_fetch_ssh_command_stats_only_panel(tmp_path, monkeypatch):
+    repo = make_credentials_repo(tmp_path, "acme", hosts=ACME_HOSTS)
+    panel = {"name": "vm_stats", "type": "ssh_command", "host": "sshvm", "host_stats": True, "_base_dir": repo}
+    monkeypatch.setattr(statusboard_tools.subprocess, "run", make_fake_run(f"{STATS_LINE}\n"))
+    result = statusboard_tools.fetch_ssh_command(panel, str(tmp_path))
+    assert result.body == ""
+    assert result.stats == PARSED_STATS
+
+
+def test_fetch_ssh_command_missing_stats_line_leaves_output_untouched(tmp_path, monkeypatch):
+    repo = make_credentials_repo(tmp_path, "acme", hosts=ACME_HOSTS)
+    panel = dict(SSH_PANEL, host_stats=True, _base_dir=repo)
+    monkeypatch.setattr(statusboard_tools.subprocess, "run", make_fake_run("job rows\nlast line\n"))
+    result = statusboard_tools.fetch_ssh_command(panel, str(tmp_path))
+    assert result.body == "job rows\nlast line"
+    assert result.stats is None
+
+
+def test_parse_host_stats_garbled_line_returns_none():
+    assert statusboard_tools._parse_host_stats("@@STATS@@ disk=oops load=1,2,3 cpu=4 mem=1/2") is None
+    assert statusboard_tools._parse_host_stats("@@STATS@@ disk=1/2 load=1,2 cpu=4 mem=1/2") is None
+    assert statusboard_tools._parse_host_stats("@@STATS@@") is None
 
 
 def test_log_link_valid_loads(tmp_path):
@@ -230,6 +324,57 @@ def test_browser_open_argv():
     assert browser_open_argv("chrome", url, system="Linux") == ["google-chrome", url]
     # unknown names pass through as the app/binary name
     assert browser_open_argv("Brave Browser", url, system="Darwin") == ["open", "-a", "Brave Browser", url]
+
+
+# %%
+# Host-stats meters #
+
+
+def test_ramp_style_scales_green_to_red():
+    from src.status_board import ramp_style
+
+    def rgb(fraction):
+        color = ramp_style(fraction)
+        return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
+
+    empty_r, empty_g, _ = rgb(0.0)
+    full_r, full_g, _ = rgb(1.0)
+    assert empty_g > empty_r        # empty end is green
+    assert full_r > full_g          # full end is red
+    assert rgb(-1) == rgb(0.0) and rgb(2) == rgb(1.0)  # clamped
+
+
+def test_stats_renderable_meters_and_values():
+    from src.status_board import (
+        METER_EMPTY,
+        METER_FILLED,
+        METER_WIDTH,
+        stats_renderable,
+    )
+
+    text = stats_renderable(PARSED_STATS)
+    plain = text.plain
+    # three labeled meters, each a full-width bracketed bar
+    assert plain.count("▕") == 3 and plain.count("▏") == 3
+    for segment in plain.split("▕")[1:]:
+        bar = segment.split("▏")[0]
+        assert len(bar) == METER_WIDTH
+        assert set(bar) <= {METER_FILLED, METER_EMPTY}
+    # readouts: disk 80%, cpu load/cores 4%, mem 13%
+    assert " 80% 48G of 60G" in plain
+    assert "load 0.19 0.15 0.22 · 4 cores" in plain
+    assert " 13% 2.0G of 15.6G" in plain
+    # disk bar is mostly full, cpu bar nearly empty
+    disk_bar = plain.split("▕")[1].split("▏")[0]
+    cpu_bar = plain.split("▕")[2].split("▏")[0]
+    assert disk_bar.count(METER_FILLED) == round(0.8 * METER_WIDTH)
+    assert cpu_bar.count(METER_FILLED) <= 1
+
+
+def test_stats_renderable_handles_missing_stats():
+    from src.status_board import stats_renderable
+
+    assert "unavailable" in stats_renderable(None).plain
 
 
 # %%
