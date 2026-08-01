@@ -172,12 +172,18 @@ function gitpullall() {
 	echo ""
 
     if command -v uv >/dev/null 2>&1; then
+        # Offer missing clones after the pulls (the pulls refresh the
+        # <context>_repos.yaml configs in the *_credentials repos) and BEFORE
+        # the deploy, since a fresh clone may be a deploy target.
+        printf '\033[1;36m%s\033[0m\n' '──────────────  Checking for repos to clone  ──────────────'
+        (cd "$gitDir/dotfiles" && uv run python src/clone_repos.py)
+        echo ""
         # Deploy after the pulls: idempotent, and re-links the hard links
         # the pulls just orphaned (no-symlink machines like work laptops).
         printf '\033[1;36m%s\033[0m\n' '──────────────  Deploying configs  ──────────────'
         (cd "$gitDir/dotfiles" && uv run python src/deploy_configs.py)
     else
-        echo "uv not found, skipping config deploy."
+        echo "uv not found, skipping repo clone check and config deploy."
     fi
 }
 

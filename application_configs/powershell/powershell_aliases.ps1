@@ -294,6 +294,14 @@ function gitpullall {
     Write-Host ""
     Write-Host ""
     if (Get-Command uv -ErrorAction SilentlyContinue) {
+        # Offer missing clones after the pulls (the pulls refresh the
+        # <context>_repos.yaml configs in the *_credentials repos) and BEFORE
+        # the deploy, since a fresh clone may be a deploy target.
+        Write-Host "==============  Checking for repos to clone  ==============" -ForegroundColor Cyan
+        Push-Location (Join-Path $gitDir 'dotfiles')
+        uv run python src/clone_repos.py
+        Pop-Location
+        Write-Host ""
         # Deploy after the pulls: idempotent, and re-links the hard links
         # the pulls just orphaned (no-symlink machines like work laptops).
         Write-Host "==============  Deploying configs  ==============" -ForegroundColor Cyan
@@ -301,7 +309,7 @@ function gitpullall {
         uv run python src/deploy_configs.py
         Pop-Location
     } else {
-        Write-Host "uv not found, skipping config deploy." -ForegroundColor Yellow
+        Write-Host "uv not found, skipping repo clone check and config deploy." -ForegroundColor Yellow
     }
 }
 
