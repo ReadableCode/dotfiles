@@ -192,6 +192,26 @@ cd ../app_lists
 brew bundle
 ```
 
+### SQL Server ODBC driver (msodbcsql17)
+
+Needed only on machines that run pyodbc code against SQL Server (connection
+strings name "ODBC Driver 17 for SQL Server", so install 17, not 18). Not in
+the Brewfile on purpose: the tap needs an explicit `brew trust` first, which
+would fail a fresh machine's unattended `brew bundle` run.
+
+```bash
+brew tap microsoft/mssql-release https://github.com/Microsoft/homebrew-mssql-release
+brew trust microsoft/mssql-release
+HOMEBREW_ACCEPT_EULA=Y brew install msodbcsql17
+```
+
+If pyodbc still reports the driver missing, the pip wheel is ignoring
+Homebrew's config; point it there explicitly:
+
+```bash
+export ODBCSYSINI=/opt/homebrew/etc
+```
+
 ### Cleaning up brew to get disk space back
 
 ```bash
