@@ -31,7 +31,7 @@ lists, better when titles matter more than geometry:
 It is deliberately a **separate TUI from the status board**, not a tab inside
 it: each board refreshes on its own cadence without redrawing the other, and
 tmux panes/windows already do the side-by-side or tabbing better than one
-merged app would (see [setup_status_board.md](./setup_status_board.md) for the
+merged app would (see the sibling `status_board` repo's README for the
 same viewing-over-ssh tricks — both boards render fine from Blink/Termius).
 
 ```bash
@@ -184,7 +184,7 @@ says so and `--auth` re-mints it.
 Two independent TUIs, composed with tmux however the day demands:
 
 ```bash
-tmux new-session -s boards 'uv run python src/status_board.py' \; \
+tmux new-session -s boards 'uv run --project ~/GitHub/status_board python ~/GitHub/status_board/src/status_board.py' \; \
      split-window -h 'uv run python src/calendar_board.py' \; \
      select-layout even-horizontal
 ```

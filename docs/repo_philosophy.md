@@ -28,9 +28,12 @@ That covers:
   - `ticket_pr.py` — ticket/PR workflow harness. Deliberately stdlib-only so
     any repo in any context can invoke it with bare `python3`; credentials
     come from the calling repo's env, never from here.
-  - `status_board.py` — TUI over remote jobs and PRs, panels discovered from
-    sibling `*_credentials` repos.
   - `git_puller` — keeps the repo constellation pulled on every machine.
+
+  The same "travels with every machine" reasoning can also justify a tool
+  getting its own repo cloned alongside: the status board TUI (remote jobs
+  and PRs, panels discovered from sibling `*_credentials` repos) now lives
+  in the sibling `status_board` repo (github.com/ReadableCode/status_board).
 
 ## Context overlays: sibling `*_credentials` repos
 
@@ -71,8 +74,8 @@ extras they need (`[google]`, `[postgres]`, `[s3]`, `[ntfy]`).
 
 This repo consumes it the same way — `uv run` fetches it on first sync like
 any other dependency, so no copies live here. `src/utils/` holds only
-dotfiles-specific modules (`inventory_tools`, `statusboard_tools`), not
-shared helpers.
+dotfiles-specific modules (`inventory_tools`, `secret_tools`,
+`calendarboard_tools`), not shared helpers.
 
 The one exception: **work-context repos** never depend on personal remotes;
 they vendor whatever they need.

@@ -215,8 +215,8 @@ _ssh_local_hostname() {
 # `ssh -J user@jump:port`, so the chain lives in the inventory and NOT in any
 # machine's ~/.ssh/config: nothing outside this repo constellation needs
 # editing, and every machine that clones the credentials repo gets it. This
-# mirrors what status_board.py's build_ssh_argv does for its ssh_command
-# panels (see dotfiles/docs/setup_status_board.md). Raw-IP tools that never
+# mirrors what build_ssh_argv in the sibling status_board repo does for its
+# ssh_command panels (see that repo's README). Raw-IP tools that never
 # see aliases (rsync shelling out to ssh) get the same hop from the deployed
 # ~/.ssh/config.d fragments instead - see docs/client_credentials_repos.md.
 #

@@ -10,7 +10,7 @@ from urllib.parse import quote, urlencode
 import requests
 import yaml
 from utils.inventory_tools import credentials_context, find_credentials_dirs
-from utils.statusboard_tools import resolve_secret
+from utils.secret_tools import resolve_secret
 
 # %%
 # Variables #

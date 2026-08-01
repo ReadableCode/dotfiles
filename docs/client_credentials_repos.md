@@ -82,8 +82,8 @@ machine's `~/.ssh/config`: nothing outside the repo constellation needs
 editing, every machine that clones the credentials repo gets it on every
 platform, and there is one source of truth to change when an address moves.
 It is the same reasoning — and the same resulting argv — as
-`build_ssh_argv` in `status_board.py` (see `setup_status_board.md`), which
-builds its own `-J` chain for `ssh_command` panels.
+`build_ssh_argv` in the sibling `status_board` repo (see that repo's
+README), which builds its own `-J` chain for `ssh_command` panels.
 
 Requirements are the board's: non-interactive key auth to both hops, and
 `AllowTcpForwarding` on the jump host's sshd (the default, and true of
