@@ -44,6 +44,15 @@ can hold a live `~/.vscode-server` set of its own (it is reachable via
 Remote-SSH), so the remote-server procedure applies on Windows too — with
 `code-server.cmd` in place of `code-server`.
 
+A fifth pass (August 2026, envy) **moved `mhutchie.git-graph` off the keep
+list**. An A/B bisect (same multiroot workspace opened via `code -n
+--disable-extension ...`) traced severe Source Control pane scroll lag to it:
+with only Git Graph disabled the pane was smooth, with everything else disabled
+but Git Graph enabled it was not. Its cost scales with repository count, so the
+~30-repo multiroot workspaces are the worst case. It is also unmaintained
+(no release since ~2021), and current VS Code ships a built-in commit graph
+(the "Graph" section of the Source Control view) that covers the same need.
+
 ## Extensions to remove
 
 Run on the target machine (adjust `code` to `code-insiders`/`codium` if
@@ -91,7 +100,8 @@ for e in \
     github.vscode-pull-request-github \
     ms-dotnettools.csdevkit \
     ms-dotnettools.csharp \
-    ms-dotnettools.vscode-dotnet-runtime; do
+    ms-dotnettools.vscode-dotnet-runtime \
+    mhutchie.git-graph; do
     code --uninstall-extension "$e"
 done
 ```
@@ -100,7 +110,7 @@ Why each one goes:
 
 | Extension | Reason |
 |---|---|
-| gitlens | Heavy background git work; replaced by built-in blame settings (`git.blame.*`) + Git Graph for the tree view |
+| gitlens | Heavy background git work; replaced by built-in blame settings (`git.blame.*`) + the built-in Source Control Graph view |
 | vsliveshare | Broken against current VS Code API, unused |
 | shell-format | Broken install (missing wasm), removed rather than reinstalled |
 | rust-analyzer | Heavy, activates at startup via `workspaceContains:Cargo.toml`. **Conditional** — remove where no Rust project exists. Removed on RyzenWhite even though `Data_Tool_Pack_RS` / `Rust_Tutorial` are present: both dormant 10+ months and neither is in the workspace, so a reinstall on demand is cheaper than the startup cost |
@@ -108,7 +118,7 @@ Why each one goes:
 | npm-intellisense / node-module-intellisense | Barely any JS/TS work |
 | gather | Abandoned by Microsoft |
 | live-server-preview / html-preview-vscode | Redundant with the kept live-preview extension (`ms-vscode.live-server` or `ritwickdey.liveserver`) |
-| githistory | Redundant with Git Graph (`mhutchie.git-graph`, kept) |
+| githistory | Redundant with the built-in Source Control Graph view |
 | sqlfluff.vscode-sqlfluff | Broken — crashes on activation every session (`command 'sqlfluff.quickfix.excludeRule' already exists`); SQL is linted per-repo, not in-editor |
 | dorzey.vscode-sqlfluff | Old SQLFluff publisher; orphaned leftover after the move to the `sqlfluff.*` publisher |
 | github.vscode-github-actions | Fails to activate (`HttpError: Not Found` on the GitHub repos API); Actions aren't edited in-editor |
@@ -127,6 +137,7 @@ Why each one goes:
 | vscode-pull-request-github | In-editor GitHub PR/issue review; PRs are handled via `gh` CLI and browser |
 | csdevkit / csharp | C# Dev Kit + language support. **Conditional** — remove only where no C# project exists (kept on Windows, see Platform exceptions). Uninstall the csdevkit **pack first** — it takes csharp with it |
 | vscode-dotnet-runtime | Only existed as a dependency of openxml-explorer / csdevkit — remove it **after** those or the uninstall is refused, and keep it wherever csdevkit is kept |
+| git-graph | **Reversal of an earlier keep.** Bisect-confirmed cause of Source Control pane scroll lag on envy — it does per-repository watching/decoration work, so multiroot workspaces with ~30 repos multiply its cost. Unmaintained since ~2021; the built-in Source Control Graph view replaces it |
 
 ## Platform exceptions
 
@@ -197,7 +208,7 @@ cell-tags, slideshow — `# %%` code cells are used everywhere), ruff (herdstone
 only, configured per-repo), claude-code, go, swiftlang.swift-vscode +
 llvm-vs-code-extensions.lldb-dap (Swift debugging needs lldb-dap), remote-ssh
 pack, Docker official extensions (`docker.docker`, `ms-azuretools.vscode-docker`,
-`ms-azuretools.vscode-containers`), git-graph, live preview
+`ms-azuretools.vscode-containers`), live preview
 (`ms-vscode.live-server`) or Live Server (`ritwickdey.liveserver`) — keep
 whichever is present, markdownlint, prettier, prettier-sql, sqltools (+ pg
 driver), rainbow-csv, gc-excelviewer, sqlite-viewer (`qwtel.sqlite-viewer`),
