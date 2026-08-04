@@ -208,7 +208,15 @@ function ta() {
     # =name pins has-session to an exact match — bare names prefix-match, so
     # a leftover "main-envy-123" view would otherwise count as "main".
     if tmux has-session -t "=$base" 2>/dev/null; then
-        tmux new-session -t "$base" -s "${base}-$(_ssh_local_hostname)-$$" \; set-option destroy-unattached on
+        # View names must be UNIQUE PER CLIENT: if a name collides (re-used
+        # shell pid, ta re-run after detach), new-session would attach the
+        # second client into the FIRST client's view and the two screens
+        # mirror each other — bump the name until it's free.
+        local view="${base}-$(_ssh_local_hostname)-$$"
+        while tmux has-session -t "=$view" 2>/dev/null; do
+            view="${view}-$RANDOM"
+        done
+        tmux new-session -t "$base" -s "$view" \; set-option destroy-unattached on
     else
         tmux new-session -s "$base"
     fi
