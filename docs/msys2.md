@@ -1,6 +1,29 @@
-# MSYS2 Package Management
+# MSYS2
 
-This file documents how to manage MSYS2 packages on the work Windows host via the user-scope MSYS2 install at C:\msys64\.
+The single doc for MSYS2 on Windows: installing it, managing its packages
+(source of truth: `app_lists/msys2_packages.txt`), and the tmux workflow.
+Referenced by the workstation setup docs and
+[setup_windows_msys64_weasyprint.md](./setup_windows_msys64_weasyprint.md) /
+[setup_rust.md](./setup_rust.md), which assume MSYS2 is present.
+
+## Install MSYS2
+
+Requires winget (installed earlier in the workstation setup docs). The same
+command works on a normal machine and on a locked-down work machine with no
+admin rights — winget installs MSYS2 user-scope:
+
+```powershell
+winget install --id MSYS2.MSYS2 -e --accept-source-agreements --accept-package-agreements
+```
+
+If winget itself is unavailable (some locked-down work images), download the
+self-extracting archive from msys2.org and extract it into your user profile —
+no admin needed either way.
+
+Install location varies: winget user-scope lands in
+`%LOCALAPPDATA%\MSYS2\msys64`; older/manual installs live at `C:\msys64`.
+The commands below are written against `C:\msys64` — substitute your actual
+install root if it differs.
 
 ## Capture currently installed packages
 
@@ -13,6 +36,13 @@ C:\msys64\usr\bin\bash.exe -lc "pacman -Qqe | grep -v '^msys2-\|^base\|^filesyst
 The grep filter excludes base MSYS2 system packages so the list only contains tools intentionally added.
 
 ## Install packages from the list on a fresh machine
+
+The list is the inventory of everything intentionally installed across
+machines; a full-list install is for setting up a complete workstation.
+Topic docs that only need specific packages (e.g.
+[setup_rust.md](./setup_rust.md),
+[setup_windows_msys64_weasyprint.md](./setup_windows_msys64_weasyprint.md))
+name their subset and install just those.
 
 From an MSYS2 bash shell (C:\msys64\usr\bin\bash.exe -l):
 

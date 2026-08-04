@@ -60,10 +60,16 @@ Build Tools, and can only write to your user profile. We install everything
 under `C:\Users\<you>\userapps\rust` and use the **GNU toolchain** (which links
 against MinGW gcc) so we don't need MSVC at all.
 
-Prerequisite: MSYS2 with the `mingw-w64-x86_64-gcc` package installed (the path
-mod block below already adds `C:\msys64\mingw64\bin` to `PATH`, which is where
-`gcc.exe` and `ld.exe` live). If you don't have MSYS2 yet, install it portably
-under `userapps` first.
+Prerequisite: MSYS2 (set it up by following [msys2.md](./msys2.md)) with the
+`mingw-w64-x86_64-gcc` package from
+[app_lists/msys2_packages.txt](../app_lists/msys2_packages.txt) installed:
+
+```powershell
+C:\msys64\usr\bin\bash.exe -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc"
+```
+
+The path mod block below already adds `C:\msys64\mingw64\bin` to `PATH`,
+which is where `gcc.exe` and `ld.exe` live.
 
 ### 1. Download the rustup installer
 

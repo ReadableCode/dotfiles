@@ -4,25 +4,22 @@ These instructions install everything **inside your user profile**, so no admin 
 
 ## Install MSYS2 (user-space)
 
-1. Open **PowerShell** (no admin).
-2. Install MSYS2 with `winget`:
+Set up MSYS2 and install the package list by following [msys2.md](./msys2.md).
+
+## GTK3 stack inside MSYS2
+
+WeasyPrint needs these packages from
+[app_lists/msys2_packages.txt](../app_lists/msys2_packages.txt):
+
+- `mingw-w64-x86_64-gtk3`
+- `mingw-w64-x86_64-gobject-introspection`
+- `mingw-w64-x86_64-pango`
+- `mingw-w64-x86_64-gdk-pixbuf2`
+
+Install just these from PowerShell:
 
 ```powershell
-winget install --id MSYS2.MSYS2 -e --accept-source-agreements --accept-package-agreements
-```
-
-This installs MSYS2 into your user profile (for example under `%LOCALAPPDATA%\\MSYS2\\msys64`).
-
-> If you already have MSYS2 at `C:\\msys64`, you can skip this step.
-
-## Install GTK3 stack inside MSYS2
-
-You’ll install GTK3 and related libraries using MSYS2’s package manager `pacman`.
-
-1. In a PowerShell window, run this command to install the required packages in the MSYS2 MinGW 64-bit environment:
-
-```powershell
-C:\\msys64\\usr\\bin\\bash.exe -lc "pacman -Sy --noconfirm mingw-w64-x86_64-gtk3 mingw-w64-x86_64-gobject-introspection mingw-w64-x86_64-pango mingw-w64-x86_64-gdk-pixbuf2"
+C:\msys64\usr\bin\bash.exe -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gtk3 mingw-w64-x86_64-gobject-introspection mingw-w64-x86_64-pango mingw-w64-x86_64-gdk-pixbuf2"
 ```
 
 What these packages are:

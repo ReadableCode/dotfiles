@@ -293,6 +293,10 @@ winget
 
 * If the command does not work after restarting powershell and the file is where epxected, check PATH variable and add the above location to it expanded
 
+#### Install MSYS2
+
+* Follow instructions in [msys2.md](./msys2.md) to install MSYS2 with winget and install the POSIX tools (tmux, rsync, etc.) from the package list
+
 ## Google Chrome
 
 * If not using bootstrap script, install google chrome with winget:
