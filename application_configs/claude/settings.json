@@ -15,6 +15,12 @@
             "command": "if command -v afplay >/dev/null 2>&1; then afplay /System/Library/Sounds/Ping.aiff; elif command -v paplay >/dev/null 2>&1; then paplay /usr/share/sounds/freedesktop/stereo/message.oga; elif command -v powershell.exe >/dev/null 2>&1; then powershell.exe -NoProfile -c '[console]::beep(1200,200)'; fi",
             "timeout": 10,
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$TMUX\" ] && tmux set-option -w -t \"$TMUX_PANE\" @claude_ready 1 || true",
+            "timeout": 5,
+            "async": true
           }
         ]
       }
@@ -26,6 +32,36 @@
             "type": "command",
             "command": "if command -v afplay >/dev/null 2>&1; then afplay /System/Library/Sounds/Purr.aiff; elif command -v paplay >/dev/null 2>&1; then paplay /usr/share/sounds/freedesktop/stereo/complete.oga; elif command -v powershell.exe >/dev/null 2>&1; then powershell.exe -NoProfile -c '[console]::beep(800,200)'; fi",
             "timeout": 10,
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "[ -n \"$TMUX\" ] && tmux set-option -w -t \"$TMUX_PANE\" @claude_ready 1 || true",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$TMUX\" ] && tmux set-option -w -t \"$TMUX_PANE\" -u @claude_ready || true",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$TMUX\" ] && tmux set-option -w -t \"$TMUX_PANE\" -u @claude_ready || true",
+            "timeout": 5,
             "async": true
           }
         ]
