@@ -187,6 +187,33 @@ function gitpullall() {
     fi
 }
 
+### tmux ###
+
+# Attach to a shared tmux session with an INDEPENDENT view per device.
+# Plain `tmux attach` puts every client in the SAME session, and the active
+# window is session state — so tapping a tab on the iPad drags every other
+# screen along. Grouped sessions (new-session -t <group>) share the window
+# list but each keep their own current window: windows opened/closed on one
+# device appear everywhere, tab selection stays per-device.
+#
+# Usage: ta [name]   (default session name: main)
+# First caller creates the real session; later callers get a throwaway view
+# session named <name>-<host>-<pid> with destroy-unattached ON, scoped to
+# that view session only, so disconnecting cleans it up while the group's
+# windows live on. Pairs with aggressive-resize in tmux/.tmux.conf.
+function ta() {
+    command -v tmux >/dev/null 2>&1 || { echo "tmux is not installed" >&2; return 1; }
+    [ -n "$TMUX" ] && { echo "already inside tmux" >&2; return 1; }
+    local base="${1:-main}"
+    # =name pins has-session to an exact match — bare names prefix-match, so
+    # a leftover "main-envy-123" view would otherwise count as "main".
+    if tmux has-session -t "=$base" 2>/dev/null; then
+        tmux new-session -t "$base" -s "${base}-$(_ssh_local_hostname)-$$" \; set-option destroy-unattached on
+    else
+        tmux new-session -s "$base"
+    fi
+}
+
 ### Script Shortcuts ###
 
 alias myupdater='bash $gitDir/dotfiles/scripts/my_updater.sh'
