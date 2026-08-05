@@ -244,6 +244,16 @@ after in-app settings changes. `deploy_configs.py status` catches it; merge
 the in-app edit into the repo copy, then re-deploy to re-link (deploy backs
 the machine file up to `data/config_backups/` first).
 
+**Platform variants (2026-08-05)**: all three files exist as a `*.mac.json`
+variant plus a bare default. Macs auto-resolve the mac variant; Windows and
+Linux (both running the npm `t3` server) fall through to the bare file,
+which must stay within what that pinned server version's schema accepts —
+the server hard-warns on unknown keys/commands ("ignoring invalid keybinding
+entry" in `~/.t3/server.log`, surfaced as config-issue warnings in connected
+clients). Merge Envy's in-app edits into the `*.mac.json` files only, and
+promote settings to the bare files only after confirming the npm build
+accepts them.
+
 ## Remote access from other devices
 
 Preferred path: sign every client (laptop, phone) into the same **T3
@@ -313,6 +323,24 @@ Running notes from daily use — each is either an upstream candidate
 ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
 a doc/automation task in this repo.
 
+- **No verbose transcript view (upstream)**: T3 has no equivalent of Claude
+  Code's verbose mode — tool calls render as truncated summaries with no
+  setting, keybinding command, or provider option to expand them (confirmed
+  against the 0.0.31 schemas: client-settings, server settings, claudeAgent
+  provider config, and the keybinding command enum have nothing). The
+  `verbose`/`viewMode` keys in `~/.claude/settings.json` only affect the
+  Claude Code CLI/desktop TUI; T3 already launches `claude` with
+  `--verbose --output-format stream-json` and does its own rendering, so
+  the data is there — the UI just never shows it. Fix: an upstream
+  transcript view-mode toggle (default/verbose) like Claude Code's.
+- **npm server rejects newer config than its pinned version (this repo,
+  handled)**: the headless `t3` server schema-validates managed configs and
+  warns on anything a newer build wrote — RyzenWhite's `server.log` spammed
+  "ignoring invalid keybinding entry" for `filePicker.toggle` /
+  `projectSearch.toggle`, leftovers from the 0.0.32 nightly's default
+  keybindings after the downgrade to 0.0.31. Handled by the platform
+  variant split in the Settings section (bare files stay server-safe);
+  deploying to RyzenWhite replaces the stale file and clears the warnings.
 - **Settle button hit area (upstream)**: only part of the Settle button
   registers clicks, not the whole visible button. Fix: extend the click target
   to the full button bounds.

@@ -1,0 +1,51 @@
+{
+  "enableAssistantStreaming": true,
+  "textGenerationModelSelection": {
+    "instanceId": "claudeAgent",
+    "model": "claude-opus-5",
+    "options": [
+      {
+        "id": "effort",
+        "value": "high"
+      },
+      {
+        "id": "contextWindow",
+        "value": "1m"
+      }
+    ]
+  },
+  "providerInstances": {
+    "codex": {
+      "driver": "codex",
+      "enabled": false,
+      "config": {
+        "enabled": true,
+        "binaryPath": "codex",
+        "homePath": "",
+        "shadowHomePath": "",
+        "launchArgs": "",
+        "customModels": []
+      }
+    },
+    "grok": {
+      "driver": "grok",
+      "enabled": false,
+      "config": {
+        "enabled": true,
+        "binaryPath": "grok",
+        "customModels": []
+      }
+    },
+    "opencode": {
+      "driver": "opencode",
+      "enabled": false,
+      "config": {
+        "enabled": true,
+        "binaryPath": "opencode",
+        "serverUrl": "",
+        "serverPassword": "",
+        "customModels": []
+      }
+    }
+  }
+}

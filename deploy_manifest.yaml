@@ -165,6 +165,17 @@
 # replaces the deployed link with a plain file - expect NOT_A_LINK drift after
 # in-app settings changes and re-deploy to re-link (merge the in-app edit into
 # the repo copy first; the machine file is backed up to data/config_backups).
+#
+# All three files are split into a mac variant + bare default (2026-08-05):
+# macs resolve <base>.mac.json via the standard variant scheme; Windows and
+# Linux fall through to the bare file, which is the npm-server-safe copy.
+# Reason: the headless `t3` server hard-rejects config keys/commands its
+# pinned version doesn't know (RyzenWhite logged "ignoring invalid keybinding
+# entry" for filePicker.toggle / projectSearch.toggle left behind by a 0.0.32
+# nightly), and the mac desktop's drift-merge workflow is where new-version
+# settings sneak in. Merge Envy's in-app edits into the *.mac.json variant
+# only; promote a setting to the bare file only once the npm server build on
+# the Windows/Linux boxes accepts it.
 
 - name: t3code_settings
   repo: application_configs/t3code/settings.json
@@ -174,7 +185,8 @@
     windows: ~/.t3/userdata/settings.json
   requires: ~/.t3/userdata
   note: >-
-    T3 server settings (provider instances, default model/effort). The
+    T3 server settings (provider instances, default model/effort). Macs get
+    settings.mac.json; Windows/Linux get the bare server-safe file. The
     opencode.serverPassword field must stay empty in this public repo;
     sensitive provider env values live in ~/.t3/userdata/secrets/, never here.
 
@@ -185,6 +197,9 @@
     linux: ~/.t3/userdata/client-settings.json
     windows: ~/.t3/userdata/client-settings.json
   requires: ~/.t3/userdata
+  note: >-
+    Desktop-client UI prefs; headless servers ignore it. Macs get
+    client-settings.mac.json, other platforms the bare file.
 
 - name: t3code_keybindings
   repo: application_configs/t3code/keybindings.json
@@ -193,6 +208,11 @@
     linux: ~/.t3/userdata/keybindings.json
     windows: ~/.t3/userdata/keybindings.json
   requires: ~/.t3/userdata
+  note: >-
+    Macs get keybindings.mac.json, other platforms the bare file. Keep every
+    command in the bare file within the npm server's schema - unknown commands
+    make it log "ignoring invalid keybinding entry" and surface config-issue
+    warnings in connected clients.
 
 # --- Barrier (KVM sharing) ---
 
