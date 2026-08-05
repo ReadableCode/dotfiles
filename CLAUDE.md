@@ -86,6 +86,11 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
   pattern.
 - Match the style of nearby code; respect the flake8 line length (120) and run
   isort before committing.
+- **Commit messages**: plain lowercase description of the change, matching the
+  existing `git log` style ("update t3 setup", "improve deploy harnesses").
+  No scope/app-name prefixes ("t3code:", "feat:", tool names) — a 2026-08-05
+  agent session prefixed a day of commits with `t3code:` and it reads like
+  the app branded the history.
 - Don't commit secrets. `.env` and credential files are gitignored — keep them
   that way.
 
