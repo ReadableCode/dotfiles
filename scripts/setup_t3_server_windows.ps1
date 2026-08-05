@@ -103,16 +103,17 @@ if ($T3ConnectLink) {
     & $t3 connect status
 } else {
     # Surface what the desktop needs for Remote link pairing over the tailnet.
-    # Wait for the server to actually print its startup pairing token.
-    $tokenLine = $null
+    # Wait for the server, then mint a FRESH token (the one in the log may be
+    # stale/consumed on re-runs).
+    $up = $false
     foreach ($i in 1..30) {
-        $tokenLine = Select-String -Path $log -Pattern "Token:" -ErrorAction SilentlyContinue |
-            Select-Object -Last 1
-        if ($tokenLine) { break }
+        if ((Test-NetConnection -ComputerName localhost -Port $Port -WarningAction SilentlyContinue).TcpTestSucceeded) {
+            $up = $true; break
+        }
         Start-Sleep -Seconds 2
     }
-    if (-not $tokenLine) { Write-Error "Server never printed a pairing token after 60s - check $log" }
+    if (-not $up) { Write-Error "Server never opened port $Port after 60s - check $log" }
     if ($TailscaleServe) { tailscale serve status }
-    Write-Output $tokenLine.Line
+    & $t3 auth pairing create
     Write-Output "Pair from the desktop: Add environment -> Remote link -> the https URL above + the token (single-use, short-lived; mint one per client with: t3 auth pairing create - fine over SSH)."
 }
