@@ -1,2 +1,3 @@
 winget install Anthropic.ClaudeCode
 winget install Anthropic.Claude
+winget install T3Tools.T3Code

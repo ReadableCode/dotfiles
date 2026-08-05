@@ -9,8 +9,10 @@ apps. Source: [github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code)
 ## Requirements
 
 - Node.js `^22.16 || ^23.11 || >=24.10` (the Brewfile's `brew "node"` covers
-  this)
-- At least one coding agent CLI installed and authenticated (see below)
+  this) — only for the headless `npx t3` / `t3 serve` paths; the desktop
+  app is self-contained
+- At least one coding agent CLI installed and authenticated (see below) —
+  only on machines that *run* agents; a client-only viewer needs neither
 
 ## Install (macOS)
 
@@ -28,11 +30,27 @@ plus a web UI):
 npx t3@latest
 ```
 
-Other platforms: grab installers from the
-[GitHub releases page](https://github.com/pingdotgg/t3code/releases), or the
+## Install (Windows)
+
+Desktop app via winget — never the website installer, so the package manager
+tracks it like everything else (it's in
+`app_lists/windows_apps_personal_winget.txt`):
+
+```powershell
+winget install T3Tools.T3Code
+```
+
+Headless server instead (the RyzenWhite pattern): don't install the desktop
+app at all — run `scripts/setup_t3_server_windows.ps1`, which installs the
+npm `t3` package pinned to the desktop version and registers the scheduled
+task. See the Windows remotes section.
+
+Phones: the
 [iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) /
 [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)
-apps for remote control.
+apps for remote control. Linux desktop: installers on the
+[GitHub releases page](https://github.com/pingdotgg/t3code/releases) (no
+machine uses this yet).
 
 ## New-Mac setup checklist
 
@@ -89,6 +107,38 @@ the sections below; this is the order that matters.
    sudo defaults write com.apple.network.local-network AllowedWiFiLocalNetworkAddresses -array "192.168.86.0/24"
    sudo defaults write com.apple.network.local-network AllowedEthernetLocalNetworkAddresses -array "192.168.86.0/24"
    ```
+
+## New Windows client-only machine checklist
+
+For a Windows box that just runs the desktop app as a viewer/steering client
+(no local agents, not reachable from other machines, sees only T3
+Connect-linked environments). Much shorter than the Mac list:
+
+1. **Install**: `winget install T3Tools.T3Code` (see Install (Windows) —
+   never the website installer). Verify it grabbed the fleet's stable
+   version, not a nightly — a 0.0.32 nightly is what left RyzenWhite's
+   configs full of entries the 0.0.31 schema rejects. Expect a SmartScreen
+   warning on first run of an unsigned alpha: More info → Run anyway.
+2. **Launch once and sign into the T3 account** (Settings, bottom-left).
+   T3 Connect-linked environments (see the fleet table) appear on their own
+   with their projects and threads — no per-device pairing. Environments
+   whose desktop-app backend is a child process (e.g. Envy) only show while
+   that app is running. Tailscale-Serve machines (RyzenWhite) and SSH-card
+   environments do NOT appear — those are per-client pairings; add them only
+   if this machine actually needs them.
+3. **Deliberately skip the rest**: no Node (desktop app is self-contained),
+   no `claude` CLI (providers auth on the machine *running* the agent — just
+   don't start local threads here), no T3 Connect publishing or
+   `setup_t3_server_windows.ps1` (keeps the machine unreachable and burns no
+   tunnel slot), no Network access toggle.
+4. **Optional managed settings**: if the machine has a dotfiles clone, quit
+   the app, `uv run python src/deploy_configs.py`, relaunch. Windows
+   correctly resolves the bare server-safe config files, not the `.mac.json`
+   variants. With no clone, in-app defaults are fine for a client-only box.
+5. **Verify**: open a thread running on another environment and watch it
+   stream; steering from here works (the backend is event-sourced, clients
+   are subscribers). Don't compose into the same running thread from two
+   machines at once.
 
 ## Connect providers
 
@@ -389,6 +439,11 @@ a doc/automation task in this repo.
   synced normally (seen 2026-08-05 on a Tailscale-paired environment). Fix:
   resubscribe/refresh thread lists when the app foregrounds instead of only
   at launch.
+- **Slash commands don't auto-suggest on mobile (upstream)**: typing `/` in
+  the composer on the phone apps shows no suggestion popup and no
+  autocompletion — the full command name must be typed from memory, unlike
+  the desktop app. Fix: bring the desktop slash-command picker to the mobile
+  composer.
 - **New messages yank the scroll position (upstream)**: while scrolled up
   reading a thread's history, an incoming message auto-scrolls the view to
   the bottom. Fix: only auto-scroll when already at (or near) the bottom;
