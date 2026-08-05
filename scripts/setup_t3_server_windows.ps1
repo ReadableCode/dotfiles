@@ -7,13 +7,13 @@
 #   3. opens an inbound firewall rule for the port
 #   4. registers + starts a logon scheduled task running `t3 serve`, with
 #      output captured to ~\.t3\server.log (a serve started over SSH dies
-#      with the session — the task survives it)
+#      with the session - the task survives it)
 #   5. waits for the port, then mints a SINGLE-USE pairing code and prints it
-#      — paste it into the desktop's Add environment -> Remote link dialog
+#      - paste it into the desktop's Add environment -> Remote link dialog
 #      (host must be http://<lan-ip>:<port>, http:// prefix required).
 # Need another code later (they're single-use, one per client device)?
 #   t3 pair
-# See docs/setup_t3_code.md — note this recipe is still unverified end-to-end.
+# See docs/setup_t3_code.md - note this recipe is still unverified end-to-end.
 
 param(
     [string]$Version = "0.0.31",
@@ -22,7 +22,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# 1. Node check — install via the app lists (choco/winget), not ad-hoc here
+# 1. Node check - install via the app lists (choco/winget), not ad-hoc here
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCmd) {
     Write-Error "node not found on PATH. Install it via app_lists (choco/winget) first."
@@ -72,10 +72,10 @@ foreach ($i in 1..30) {
     Start-Sleep -Seconds 2
 }
 if (-not $up) {
-    Write-Error "Server never opened port $Port after 60s — check $log"
+    Write-Error "Server never opened port $Port after 60s - check $log"
 }
 
 Write-Output ""
-Write-Output "=== Pairing code (single-use — paste into Remote link dialog) ==="
+Write-Output "=== Pairing code (single-use - paste into Remote link dialog) ==="
 & $t3 pair
 Write-Output "=== Desktop host field: http://<this-machine-lan-ip>:$Port ==="
