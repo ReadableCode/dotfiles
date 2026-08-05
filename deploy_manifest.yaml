@@ -154,6 +154,46 @@
 # inventory that validates them. Work-context variants are entries in their
 # client overlay manifests, so nothing here can collide with them.
 
+# --- T3 Code (agent control plane) ---
+
+# Manifest-worthy: settings.json / client-settings.json / keybindings.json.
+# NEVER manage: saved-environments.json (per-machine environment registry with
+# an encrypted bearer token), desktop-settings.json (window-bounds churn),
+# clerk-tokens.json, secrets/, state.sqlite, logs/, environment-id,
+# server-runtime.json. The requires gate keeps deploy from creating ~/.t3 on
+# machines that don't run T3. Electron saves settings via atomic rename, which
+# replaces the deployed link with a plain file - expect NOT_A_LINK drift after
+# in-app settings changes and re-deploy to re-link (merge the in-app edit into
+# the repo copy first; the machine file is backed up to data/config_backups).
+
+- name: t3code_settings
+  repo: application_configs/t3code/settings.json
+  dest:
+    darwin: ~/.t3/userdata/settings.json
+    linux: ~/.t3/userdata/settings.json
+    windows: ~/.t3/userdata/settings.json
+  requires: ~/.t3/userdata
+  note: >-
+    T3 server settings (provider instances, default model/effort). The
+    opencode.serverPassword field must stay empty in this public repo;
+    sensitive provider env values live in ~/.t3/userdata/secrets/, never here.
+
+- name: t3code_client_settings
+  repo: application_configs/t3code/client-settings.json
+  dest:
+    darwin: ~/.t3/userdata/client-settings.json
+    linux: ~/.t3/userdata/client-settings.json
+    windows: ~/.t3/userdata/client-settings.json
+  requires: ~/.t3/userdata
+
+- name: t3code_keybindings
+  repo: application_configs/t3code/keybindings.json
+  dest:
+    darwin: ~/.t3/userdata/keybindings.json
+    linux: ~/.t3/userdata/keybindings.json
+    windows: ~/.t3/userdata/keybindings.json
+  requires: ~/.t3/userdata
+
 # --- Barrier (KVM sharing) ---
 
 - name: barrier_configs
