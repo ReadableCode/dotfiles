@@ -84,7 +84,15 @@ the sections below; this is the order that matters.
    appear in the sidebar. **[agent]** a "Transport error" on a correct
    `http://` host usually means macOS blocked the app's LAN access — check
    System Settings → Privacy & Security → Local Network for "T3 Code
-   (Alpha)" and have Jason approve it; the prompt only appears once.
+   (Alpha)" and have Jason approve it; the prompt only appears once. Better:
+   pre-authorize the LAN subnet system-wide so the per-app prompt never
+   gates connectivity (also documented in
+   [setup_mac_workstation.md](./setup_mac_workstation.md)):
+
+   ```bash
+   sudo defaults write com.apple.network.local-network AllowedWiFiLocalNetworkAddresses -array "192.168.86.0/24"
+   sudo defaults write com.apple.network.local-network AllowedEthernetLocalNetworkAddresses -array "192.168.86.0/24"
+   ```
 
 ## Connect providers
 

@@ -349,6 +349,21 @@ display IDs, so they survive the KVM re-enumerating the monitors.
   cat ~/.ssh/id_rsa.pub
   ```
 
+## Pre-authorize Local Network access for the LAN
+
+macOS's Local Network privacy check (System Settings → Privacy & Security →
+Local Network) blocks each app's LAN traffic until its one-time prompt is
+approved. Symptoms of a missed/denied prompt: "No route to host" from CLI
+tools (e.g. Claude Code) or "Transport error" from T3 Code remote
+environments, against LAN hosts that ping fine from Terminal. The prompt is
+easy to lose and can't be clicked in headless/agent-driven setups, so
+allowlist the home subnet system-wide instead of relying on per-app toggles:
+
+```bash
+sudo defaults write com.apple.network.local-network AllowedWiFiLocalNetworkAddresses -array "192.168.86.0/24"
+sudo defaults write com.apple.network.local-network AllowedEthernetLocalNetworkAddresses -array "192.168.86.0/24"
+```
+
 ## Disable auto punctuation
 
 System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule space to period and other auto punctuation features
