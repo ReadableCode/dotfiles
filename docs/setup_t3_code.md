@@ -335,6 +335,17 @@ a doc/automation task in this repo.
   `client-settings.json` has `sidebarProjectGroupingMode: "repository"` —
   worth testing whether a different grouping mode changes the behavior, but
   the add-wizard refusal suggests it's storage-level, not display-level.
+  **Working workaround (2026-08-05)**: add the *parent* workspace folder
+  (e.g. `~/GitHub`) as the project instead of the repo — a non-repo
+  directory has no repository identity, so the dedup never fires and each
+  machine gets its own project over the same repos. Combine with the naming
+  convention below.
+- **Workaround for the missing environment badges**: prefix project names
+  with the machine (`RW-GitHub`, `Envy-GitHub`) when adding/renaming, so
+  same-named projects on different environments stay distinguishable — and
+  new chats land on the intended backend (a thread composed in the wrong
+  same-named project runs on the wrong machine and won't appear on clients
+  connected to the other one).
 - **New messages yank the scroll position (upstream)**: while scrolled up
   reading a thread's history, an incoming message auto-scrolls the view to
   the bottom. Fix: only auto-scroll when already at (or near) the bottom;
