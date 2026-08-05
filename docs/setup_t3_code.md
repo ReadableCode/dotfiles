@@ -167,12 +167,23 @@ plus the agent CLIs (`claude`, ...) installed and authed there. The launcher
 probes PATH then nvm/asdf/mise/fnm; on the Linux dev box the apt node was v18,
 so Node 24 LTS was installed via the existing nvm and
 `node`/`npm`/`npx` symlinked into `~/.local/bin` (already on the
-non-interactive PATH). The remote server listens on loopback only; the
-desktop reaches it through the SSH tunnel.
+non-interactive PATH). That prep is now scripted —
+[`scripts/setup_t3_server_prereqs_linux.sh`](../scripts/setup_t3_server_prereqs_linux.sh)
+(idempotent: checks the bare-PATH node version, installs Node 24 via nvm if
+needed, links into `~/.local/bin`); run it on the remote from its dotfiles
+clone. The remote server listens on loopback only; the desktop reaches it
+through the SSH tunnel.
 
 **Windows remotes: the SSH card does not work** — T3's remote launch scripts
-are POSIX `sh` only. Instead run a native server on the Windows box and pair
-it as a **Remote link**:
+are POSIX `sh` only. The intended workaround is a native server on the Windows
+box paired as a **Remote link** — **but as of 2026-08-05 this is not working
+yet on RyzenWhite** (see Known issues above); the steps below are the recipe
+being attempted, not a verified setup. The whole recipe is scripted as
+[`scripts/setup_t3_server_windows.ps1`](../scripts/setup_t3_server_windows.ps1)
+— run it on the Windows box (fine over SSH: the serve runs as a logon
+scheduled task, so it survives the session), and it finishes by minting a
+single-use pairing code and printing it to the console it ran in; paste that
+into the desktop's Remote-link dialog. Manual equivalent:
 
 ```powershell
 npm install -g t3@<desktop version>   # done on RyzenWhite (matches 0.0.31)
@@ -277,6 +288,62 @@ How T3 maps onto that:
   hard requirement, the alternative surface is tmux-hosted `claude` sessions
   with Remote Control (phone/web via claude.ai; one connected session at a
   time) or a self-hosted web UI, at the cost of T3's side-by-side thread UI.
+
+## Known issues & recommended fixes (as of 2026-08-05)
+
+Running notes from daily use — each is either an upstream candidate
+([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
+a doc/automation task in this repo.
+
+- **Settle button hit area (upstream)**: only part of the Settle button
+  registers clicks, not the whole visible button. Fix: extend the click target
+  to the full button bounds.
+- **Finished threads can refuse to settle (upstream)**: some threads that are
+  actually done won't settle because T3 still reports them as working, and the
+  settle-error popup offers no way out. Fix: add a **Kill and settle** option
+  to that error dialog so a stuck "working" state can be forced closed.
+- **Projects don't show their machine (upstream)**: neither the sidebar nor
+  the add-project wizard indicates which environment/machine a project runs
+  on, so with several environments connected, same-named projects are
+  indistinguishable. Fix: badge each project with its environment name in both
+  places.
+- **Same repo on two environments can't both be added (upstream)**: adding a
+  project on a second environment silently does nothing when it matches an
+  existing project on another machine — the project is never added. The
+  dedup appears to be by repository identity, not (environment, path), so
+  there is no workaround via distinct clone paths: the same repo with agents
+  on two machines is simply not possible right now. This blocks the core
+  multi-machine use case. Fix: key projects per-environment. Possibly related:
+  `client-settings.json` has `sidebarProjectGroupingMode: "repository"` —
+  worth testing whether a different grouping mode changes the behavior, but
+  the add-wizard refusal suggests it's storage-level, not display-level.
+- **New messages yank the scroll position (upstream)**: while scrolled up
+  reading a thread's history, an incoming message auto-scrolls the view to
+  the bottom. Fix: only auto-scroll when already at (or near) the bottom;
+  otherwise keep the reading position and show a "new messages" jump pill.
+- **Local Network permission is never requested (upstream)**: the app doesn't
+  trigger macOS's Local Network prompt, so LAN connections just fail with
+  "Transport error" and no hint that the OS permission is the cause. Fix:
+  probe/request Local Network access on first LAN connection attempt and
+  surface a pointed error. Workaround until then: the subnet pre-authorization
+  in the new-Mac checklist above.
+- **New SSH connections should offer a T3 connect method (upstream)**: when
+  adding a new SSH connection, the wizard should prompt for a T3 connect
+  method instead of silently assuming the SSH-tunnel launcher — e.g. offer
+  SSH-managed launch vs Remote link pairing at that point.
+- **Remote server install is undocumented / manual (upstream + this repo)**:
+  what the SSH launcher actually installs and runs on the remote (the
+  headless t3 server) isn't documented anywhere, and the prerequisites were
+  hand-built here (Node 24 via nvm + `~/.local/bin` symlinks on the Linux dev
+  box). Upstream fix: document the server install, or better, have the
+  launcher verify/install Node and the server itself. This repo's side is now
+  handled: `scripts/setup_t3_server_prereqs_linux.sh` automates the Linux
+  prereqs and `scripts/setup_t3_server_windows.ps1` automates the (still
+  unverified) Windows server recipe.
+- **Windows remote host setup not working yet**: the Remote-link approach in
+  the Windows section below has not succeeded on RyzenWhite yet — more
+  attempts planned. Treat that section as the intended recipe, not a verified
+  one, and keep the fleet table entry at "deferred" until it works.
 
 ## More docs
 
