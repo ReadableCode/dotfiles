@@ -331,8 +331,19 @@ a doc/automation task in this repo.
   `verbose`/`viewMode` keys in `~/.claude/settings.json` only affect the
   Claude Code CLI/desktop TUI; T3 already launches `claude` with
   `--verbose --output-format stream-json` and does its own rendering, so
-  the data is there — the UI just never shows it. Fix: an upstream
-  transcript view-mode toggle (default/verbose) like Claude Code's.
+  the data is there — the UI just never shows it. Also verified absent in
+  the latest nightly (`t3@0.0.32-nightly.20260805.1008`: client settings
+  gained font options, nothing transcript-related), so upgrading doesn't
+  help. Fix: an upstream transcript view-mode toggle (default/verbose) like
+  Claude Code's — since threads store the full stream-json, it should apply
+  retroactively to existing threads. Interim: click individual tool cards
+  to expand them, or run `claude` in T3's terminal panel (`mod+j`) where
+  `~/.claude/settings.json` `verbose: true` applies.
+- **Links in responses aren't clickable (upstream)**: URLs in assistant
+  responses render as plain text — no way to open one without selecting and
+  copying it by hand (extra painful on the phone apps). Fix: linkify URLs
+  (and markdown links) in the transcript renderer and open them in the
+  system browser.
 - **npm server rejects newer config than its pinned version (this repo,
   handled)**: the headless `t3` server schema-validates managed configs and
   warns on anything a newer build wrote — RyzenWhite's `server.log` spammed
