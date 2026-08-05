@@ -552,8 +552,15 @@ def host_allowed(entry, hostname):
     return any(str(host).upper() in (hostname, short_hostname) for host in hosts)
 
 
-def build_plan(entries, platform_key, hostname, repo_root=None):
-    """Turn manifest entries into plan rows: apply / none / skip_host / skip_platform / skip_requires / skip_variant."""
+def build_plan(entries, platform_key, hostname, repo_root=None, assume_requires=False):
+    """
+    Turn manifest entries into plan rows: apply / none / skip_host / skip_platform / skip_requires / skip_variant.
+
+    assume_requires treats every ``requires`` precondition as met. Deploying
+    never uses it - a missing checkout must still skip. deploy_map.py does, so
+    the fleet-wide map it draws does not change shape depending on which repos
+    the machine that regenerated it happens to have cloned.
+    """
     repo_root = repo_root or REPO_ROOT
     plan = []
     for entry in entries:
@@ -578,7 +585,7 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
             row["dest"] = resolve_dest(entry, platform_key, hostname, repo_root)
             if row["dest"] is None:
                 row["action"] = "skip_platform"
-            elif not requires_satisfied(entry, row, hostname, repo_root):
+            elif not requires_satisfied(entry, row, hostname, repo_root, assume_requires):
                 row["action"] = "skip_requires"
             else:
                 row["repo"], applies = resolve_repo_variant(row["repo"], hostname, platform_key)
@@ -588,11 +595,12 @@ def build_plan(entries, platform_key, hostname, repo_root=None):
     return plan
 
 
-def requires_satisfied(entry, row, hostname, repo_root):
+def requires_satisfied(entry, row, hostname, repo_root, assume_requires=False):
     """
     Apply the optional requires precondition: a path or list of paths
     (placeholder-expanded) that must ALL already exist for the entry to
-    deploy on this machine.
+    deploy on this machine (assume_requires skips the existence check - see
+    build_plan).
 
     Use it for dests inside sibling repo checkouts: without it, deploying on a
     machine that never cloned the repo would silently create the repo's folder
@@ -602,7 +610,7 @@ def requires_satisfied(entry, row, hostname, repo_root):
     ~/.claude, ...) should NOT set requires - creating those dirs is wanted.
     """
     requires = entry.get("requires")
-    if not requires:
+    if not requires or assume_requires:
         return True
     paths = requires if isinstance(requires, list) else [requires]
     expanded = [expand_path(path, hostname, repo_root) for path in paths]
@@ -764,7 +772,7 @@ def run_deploy(plan, platform_key):
 # Prune #
 
 
-def build_prune_candidates(entries, platform_key, hostname, repo_root=None):
+def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assume_requires=False):
     """
     Every destination the removals files say must not exist, as sorted
     (dest, reason).
@@ -776,7 +784,7 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None):
     repo_root = repo_root or REPO_ROOT
     wanted = {
         row["dest"]
-        for row in build_plan(entries, platform_key, hostname, repo_root)
+        for row in build_plan(entries, platform_key, hostname, repo_root, assume_requires)
         if row["action"] == "apply" and row["dest"]
     }
     candidates: dict = {}
@@ -786,7 +794,7 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None):
         dest = resolve_dest(entry, platform_key, hostname, repo_root)
         # requires gates on the checkout existing, same as a manifest entry: a repo
         # this machine never cloned has no link to prune.
-        if not dest or dest in wanted or not requires_satisfied(entry, {}, hostname, repo_root):
+        if not dest or dest in wanted or not requires_satisfied(entry, {}, hostname, repo_root, assume_requires):
             continue
         candidates.setdefault(dest, f"removals:{entry['name']}")
     return sorted(candidates.items())
@@ -862,11 +870,12 @@ def parse_args(argv=None):
     parser.add_argument(
         "command",
         nargs="?",
-        choices=["deploy", "status", "prune"],
+        choices=["deploy", "status", "prune", "map"],
         default="deploy",
         help="deploy (default) creates the links; status is a read-only combined "
         "drift report + dry run (non-zero exit on drift); prune removes managed "
-        "links no manifest wants any more (dry run unless --apply)",
+        "links no manifest wants any more (dry run unless --apply); map only "
+        "regenerates the deployment map (deploy regenerates it too)",
     )
     parser.add_argument("--status", action="store_true", help="same as the status command")
     parser.add_argument("--dry-run", action="store_true", help="deprecated alias for the status command")
@@ -881,7 +890,27 @@ def parse_args(argv=None):
         help="load only this manifest file, repo paths relative to the dotfiles repo root; "
         "skips overlay discovery (for testing)",
     )
+    parser.add_argument(
+        "--no-map",
+        action="store_true",
+        help="deploy only: skip regenerating the deployment map",
+    )
     return parser.parse_args(argv)
+
+
+def regenerate_map(entries, quiet=False):
+    """
+    Refresh the fleet-wide deployment map in the personal credentials repo.
+
+    Best effort by design: the map is a picture of what just happened, so a
+    failure to draw it must never fail (or mask) the deploy that produced it.
+    """
+    import deploy_map
+
+    try:
+        deploy_map.report_map(deploy_map.write_map(entries), quiet=quiet)
+    except Exception as error:  # noqa: BLE001 - never let the report break the deploy
+        print(paint(f"map: could not regenerate ({type(error).__name__}: {error})", "yellow"))
 
 
 def main(argv=None):
@@ -901,11 +930,21 @@ def main(argv=None):
     # so it must skip removals discovery too or an isolated run would
     # report the real machine's orphans.
     candidates = [] if args.manifest else build_prune_candidates(entries, platform_key, hostname)
+    if args.command == "map":
+        regenerate_map(entries)
+        return 0
     if args.command == "prune":
         return run_prune(candidates, apply_changes=args.apply)
     if args.status or args.dry_run or args.command == "status":
         return run_status(plan, platform_key, candidates)
-    return run_deploy(plan, platform_key)
+    result = run_deploy(plan, platform_key)
+    # deploy is the default command and every updater alias runs it bare, so the
+    # map refreshes itself without anyone remembering to ask
+    # (--manifest is the isolated test path; it must not touch the real repos)
+    if not args.manifest and not args.no_map:
+        print()
+        regenerate_map(entries)
+    return result
 
 
 if __name__ == "__main__":

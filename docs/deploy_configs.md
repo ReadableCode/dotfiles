@@ -24,6 +24,10 @@ uv run python src/deploy_configs.py status
 # default; --apply actually deletes. See "Removing an entry" below.
 uv run python src/deploy_configs.py prune
 uv run python src/deploy_configs.py prune --apply
+
+# Redraw the fleet-wide deployment map without deploying anything.
+# See "The deployment map" below; a deploy does this automatically.
+uv run python src/deploy_configs.py map
 ```
 
 There used to be separate `--dry-run` and `--status` modes; they showed the
@@ -204,6 +208,57 @@ replaces it with a link to the repo version (see behavior above) — so make
 sure any local edits worth keeping are in the repo file *before* deploying,
 or fish them out of `data/config_backups/` afterwards.
 
+
+## The deployment map
+
+Every deploy also redraws a **map of the whole fleet**: what each manifest
+entry is, which machines it reaches, and the exact path it lands on. It is
+built by `src/deploy_map.py` from the same `load_manifests()` + `build_plan()`
+the deployer runs — executed once per machine in the host inventories — so it
+can never drift from the manifests the way a hand-kept diagram would.
+
+Two files are written, side by side:
+
+| File | What it is |
+| --- | --- |
+| `deploy_map.html` | One self-contained page (no network, no build step) — a constellation view of contexts → machines, the full entry × machine matrix with the reason each empty cell is empty, and a destination-first filesystem view. Open it straight from the repo. |
+| `deploy_map.json` | The same dataset, indented — the diffable half, so a pull request shows *which* link changed rather than one 350 KB blob. |
+
+Both land in the **personal credentials repo**, and only when that repo is
+cloned on the machine running the deploy:
+
+```
+~/GitHub/personal_credentials/deploy_map.{html,json}
+```
+
+That gate is the point. The map names every machine and every context at once,
+so it must never appear in a client's repo — and it must never appear in this
+public one. A work machine holding only a client's credentials repo silently
+skips the step (`map: personal_credentials is not cloned here - skipped`).
+Nothing is committed automatically; the files just change in that repo, and
+`git diff` there is the review.
+
+The map is written to be a **pure function of the manifests**, so a diff always
+means the fleet actually changed:
+
+- No timestamps, no "generated on <host>" line.
+- Paths are folded back to `~`, with forward slashes, so regenerating from
+  Windows and from macOS produces the same file.
+- `requires:` preconditions are treated as met (`build_plan(...,
+  assume_requires=True)`). A machine that is missing a checkout would really
+  report `skip_requires`, but the map would then change shape depending on
+  which machine happened to redraw it. Platform blocks, `hosts:` filters and
+  per-host variant files *are* evaluated for real, per machine.
+
+Colours and clusters come from the data, not from a hardcoded list: the
+dotfiles manifest is always the first (shared) cluster, and every other context
+takes the next palette slot in alphabetical order. An overlay named
+`<context>_<gate>` folds into `<context>` when that credentials repo is also
+cloned, so one context stays one circle.
+
+`--no-map` skips the redraw for a single deploy; `deploy_configs.py map`
+redraws without deploying. Drawing the map is best effort — if it fails, it
+prints a warning and the deploy result still stands.
 
 ## Removing an entry (and cleaning up its links)
 
