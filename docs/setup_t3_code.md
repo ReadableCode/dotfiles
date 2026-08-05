@@ -342,10 +342,14 @@ a doc/automation task in this repo.
   convention below.
 - **Workaround for the missing environment badges**: prefix project names
   with the machine (`RW-GitHub`, `Envy-GitHub`) when adding/renaming, so
-  same-named projects on different environments stay distinguishable — and
-  new chats land on the intended backend (a thread composed in the wrong
-  same-named project runs on the wrong machine and won't appear on clients
-  connected to the other one).
+  same-named projects on different environments stay distinguishable in the
+  sidebar and in the new-chat picker.
+- **iOS app misses new threads until relaunch (upstream)**: a thread created
+  from another client on a connected environment didn't appear on the
+  iPhone until the app was killed and reopened; after relaunch it showed and
+  synced normally (seen 2026-08-05 on a Tailscale-paired environment). Fix:
+  resubscribe/refresh thread lists when the app foregrounds instead of only
+  at launch.
 - **New messages yank the scroll position (upstream)**: while scrolled up
   reading a thread's history, an incoming message auto-scrolls the view to
   the bottom. Fix: only auto-scroll when already at (or near) the bottom;
