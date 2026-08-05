@@ -49,6 +49,19 @@ PALETTE = [
     "#8be9fd",
 ]
 
+DISK_AREAS = [
+    ("home", "HOME", "shell · editors · ssh"),
+    ("user_claude", "~/.claude", "user-level claude config"),
+    ("repo_claude", "IN A CHECKOUT · CLAUDE", "CLAUDE.md · settings.local · mcp"),
+    ("repo_secrets", "IN A CHECKOUT · SECRETS", ".env · configuration"),
+    ("repo_other", "IN A CHECKOUT · OTHER", "workspaces · git excludes"),
+]
+
+# The disk map answers "where does this file come from", so it keeps {host}
+# symbolic: one ~/GitHub/{host}.code-workspace beats the same file drawn once
+# per machine.
+HOST_PLACEHOLDER = "{host}"
+
 ACTIONS = ["apply", "none", "skip_host", "skip_platform", "skip_variant", "skip_requires"]
 ACTION_CODE = {name: index for index, name in enumerate(ACTIONS)}
 
@@ -110,6 +123,37 @@ def categorize(dest, method):
     if base.endswith(".ahk") or "/.hammerspoon/" in dest:
         return "automation"
     return "other"
+
+
+def disk_area(dest, repo_parent):
+    """
+    The cluster a destination sits in on the disk map: the home-directory areas
+    a config can land in, and - for anything inside a checkout - what kind of
+    file it is, since "every CLAUDE.md" is the question being asked there, not
+    "every file in this one repo".
+    """
+    if not dest.startswith(repo_parent.rstrip("/") + "/"):
+        return "user_claude" if dest.startswith("~/.claude") else "home"
+    category = categorize(dest, "symlink")
+    return {"ai": "repo_claude", "secrets": "repo_secrets"}.get(category, "repo_other")
+
+
+def list_directory(path, limit=40):
+    """
+    A current listing of a directory the manifest links whole, so the map can
+    show what actually rides along with the link (the point of linking a folder
+    rather than its files one by one).
+    """
+    found = []
+    for root, dir_names, file_names in os.walk(path):
+        dir_names[:] = sorted(name for name in dir_names if name != ".git")
+        for name in sorted(file_names):
+            if name == ".DS_Store":
+                continue
+            found.append(os.path.relpath(os.path.join(root, name), path).replace("\\", "/"))
+            if len(found) > limit:
+                return found[:limit], True
+    return found, False
 
 
 def dest_zone(dest, repo_parent):
@@ -278,6 +322,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
 
     _roll_up_entries(mapped, hosts, matrix, variants, dest_table)
     _roll_up_hosts(mapped, hosts, matrix, dest_table, repo_parent)
+    _add_disk_view(mapped, entries, repo_root, credentials_root, repo_parent)
 
     return {
         "meta": {
@@ -293,11 +338,13 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             "nonTargets": sorted(non_targets, key=lambda device: device["name"].lower()),
         },
         "contexts": build_contexts(mapped),
+        "areas": [{"key": key, "label": label, "sub": sub} for key, label, sub in DISK_AREAS],
         "hosts": hosts,
         "entries": mapped,
         "dests": dest_table,
         "matrix": matrix,
         "paths": _build_path_tree(mapped, hosts, matrix, dest_table, repo_parent),
+        "disk": _build_disk_nodes(mapped, repo_parent),
     }
 
 
@@ -355,6 +402,62 @@ def _roll_up_hosts(entries, hosts, matrix, dest_table, repo_parent):
         host["entries"] = received
         host["counts"] = counts
         host["zones"] = dict(sorted(zones.items()))
+
+
+def _add_disk_view(mapped, entries, repo_root, credentials_root, repo_parent):
+    """
+    Per-entry facts the disk map needs: the destination *templates* (``{host}``
+    left symbolic, one per platform block) and, when the source is a directory
+    the manifest links whole, what is currently inside it.
+    """
+    import deploy_configs
+
+    raw = {entry["name"]: entry for entry in entries}
+    for entry in mapped:
+        source = raw[entry["id"]]
+        dest_block = source.get("dest") or {}
+        templates: dict = {}
+        for platform_key in sorted(dest_block):
+            path = portable_path(
+                deploy_configs.expand_path(dest_block[platform_key], HOST_PLACEHOLDER, repo_root)
+            )
+            templates.setdefault(path, []).append(platform_key)
+        entry["diskDests"] = [
+            {"path": path, "platforms": platforms, "area": disk_area(path, repo_parent)}
+            for path, platforms in templates.items()
+        ]
+
+        # the file the entry actually points at, with any ../ traversal resolved:
+        # two manifests in different repos can name one file (an overlay reusing a
+        # dotfiles script), and on the disk map that is one source, not two
+        repo_path = os.path.normpath(os.path.join(source.get("_base_dir") or repo_root, source["repo"]))
+        entry["srcPath"] = os.path.relpath(repo_path, credentials_root).replace("\\", "/")
+        entry["srcRepo"] = entry["srcPath"].split("/")[0]
+        entry["isDir"] = os.path.isdir(repo_path)
+        if entry["isDir"]:
+            contents, truncated = list_directory(repo_path)
+            entry["contents"] = contents
+            entry["contentsTruncated"] = truncated
+
+
+def _build_disk_nodes(mapped, repo_parent):
+    """
+    One node per destination template, carrying every entry that writes there.
+
+    Grouped by path rather than by entry so a location with more than one owner
+    reads as one place on disk, which is how it behaves.
+    """
+    nodes: dict = {}
+    for entry in mapped:
+        for dest in entry["diskDests"]:
+            node = nodes.setdefault(
+                dest["path"],
+                {"path": dest["path"], "area": dest["area"], "zone": dest_zone(dest["path"], repo_parent),
+                 "entries": [], "platforms": []},
+            )
+            node["entries"].append(entry["id"])
+            node["platforms"] = sorted(set(node["platforms"]) | set(dest["platforms"]))
+    return sorted(nodes.values(), key=lambda node: node["path"])
 
 
 def _build_path_tree(entries, hosts, matrix, dest_table, repo_parent):

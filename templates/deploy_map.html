@@ -82,7 +82,7 @@
   .view.on{display:block}
 
   /* ---------- map ---------- */
-  #sky{width:100%;height:100%;display:block;cursor:crosshair}
+  .sky{width:100%;height:100%;display:block;cursor:crosshair}
   .cl-ring{fill:none;stroke-width:1;stroke-dasharray:3 7;opacity:.42}
   .cl-halo{opacity:.13}
   .cl-title{font-size:12px;letter-spacing:.22em;font-weight:600;text-anchor:middle}
@@ -102,11 +102,12 @@
   .node.mute{opacity:.2}
   .node.mute text{opacity:0}
   .node.e text{opacity:0}
-  .node.e.lab text{opacity:1}
+  .node.d text{opacity:0}
+  .node.lab text{opacity:1}
   .edge{fill:none;stroke-width:1.15;opacity:.62;stroke-linecap:round}
   .edge.flow{stroke-dasharray:5 9;animation:flow 1.1s linear infinite}
   @keyframes flow{to{stroke-dashoffset:-14}}
-  #ghost path{fill:none;stroke-width:.6}
+  .g-ghost path{fill:none;stroke-width:.6}
 
   /* ---------- floating card ---------- */
   .card{
@@ -129,6 +130,14 @@
   .card .paths div{word-break:break-all;color:#9fb4cc}
   .card .paths div+div{margin-top:2px}
   .card .note{margin-top:9px;font-size:10.5px;color:#66809b;line-height:1.5}
+  .card.pin{pointer-events:auto}
+  .card .contents{
+    max-height:200px;overflow:auto;font-size:10.5px;line-height:1.65;color:#9fb4cc;
+    border-left:2px solid #253449;padding-left:10px;
+  }
+  .card .contents div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card .contents::-webkit-scrollbar{width:6px}
+  .card .contents::-webkit-scrollbar-thumb{background:#22303f;border-radius:4px}
   .tag{display:inline-block;margin-top:11px;padding:3px 10px;border-radius:999px;font-size:10.5px;letter-spacing:.08em}
 
   .about{
@@ -151,6 +160,7 @@
   .legend span{display:inline-flex;align-items:center;gap:6px}
   .legend i{width:9px;height:9px;border-radius:50%;display:inline-block}
   .legend i.sq{border-radius:3px}
+  .legend i.dash{border-radius:3px;background:transparent;border:1px dashed #9fd8ff}
 
   /* ---------- matrix ---------- */
   .scroll{position:absolute;inset:0;overflow:auto}
@@ -213,6 +223,7 @@
   .zone li .n{color:var(--ink-faint);font-size:10px;white-space:nowrap}
   .zone li.mute{opacity:.2}
 </style>
+</style>
 </head>
 <body>
 <div id="app">
@@ -220,7 +231,8 @@
     <div class="brand"><b>deploy.map</b> <span class="dim">·</span> <span id="stamp" class="dim"></span>
       <span class="dim">·</span><span class="pulse"></span><span id="planline" class="dim"></span></div>
     <div class="tabs">
-      <button class="tab on" data-view="map">Constellation</button>
+      <button class="tab on" data-view="disk">Disk</button>
+      <button class="tab" data-view="fleet">Fleet</button>
       <button class="tab" data-view="matrix">Matrix</button>
       <button class="tab" data-view="paths">Destinations</button>
     </div>
@@ -235,11 +247,11 @@
     <input class="search" id="search" placeholder="filter by name or path…" spellcheck="false">
     <button class="chip" id="ghosttoggle"><span class="dot" style="color:#5b9dff"></span>all links</button>
     <button class="chip" id="aboutbtn">how this was built</button>
-    <div class="hint" id="hint">hover a node · click to pin · click a cluster to isolate</div>
+    <div class="hint" id="hint"></div>
   </div>
 
-  <div class="view on" id="view-map">
-    <svg id="sky" viewBox="0 0 1780 960" preserveAspectRatio="xMidYMid meet">
+  <div class="view on" id="view-disk">
+    <svg class="sky" viewBox="0 0 1780 960" preserveAspectRatio="xMidYMid meet">
       <defs>
         <filter id="glow" x="-120%" y="-120%" width="340%" height="340%">
           <feGaussianBlur stdDeviation="3.2" result="b"/>
@@ -250,32 +262,37 @@
           <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
       </defs>
-      <g id="stars"></g>
-      <g id="clusters"></g>
-      <g id="ghost" opacity=".5"></g>
-      <g id="edges"></g>
-      <g id="nodes"></g>
+      <g class="g-stars"></g><g class="g-clusters"></g><g class="g-ghost"></g>
+      <g class="g-edges"></g><g class="g-nodes"></g>
     </svg>
-    <div class="card" id="card"></div>
-    <div class="legend" id="legend"></div>
+    <div class="legend"></div>
+  </div>
+
+  <div class="view" id="view-fleet">
+    <svg class="sky" viewBox="0 0 1780 960" preserveAspectRatio="xMidYMid meet">
+      <g class="g-stars"></g><g class="g-clusters"></g><g class="g-ghost"></g>
+      <g class="g-edges"></g><g class="g-nodes"></g>
+    </svg>
+    <div class="legend"></div>
   </div>
 
   <div class="view" id="view-matrix"><div class="scroll"><div class="mxwrap" id="mx"></div></div></div>
   <div class="view" id="view-paths"><div class="scroll"><div class="zones" id="zones"></div></div></div>
 </div>
+<div class="card" id="card"></div>
 <div class="tip" id="tip"></div>
 <div class="about" id="about"></div>
-
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
 const {hosts, entries, dests, matrix, paths, meta} = DATA;
 const ACT = meta.actions;
 
-/* ---------------- palette + taxonomy ---------------- */
-/* Every label and colour below comes from the generated dataset, so the page
+/* ---------------- palette + taxonomy ----------------
+   Every label and colour below comes from the generated dataset, so the page
    knows nothing about which contexts exist until it is opened. */
 const CTX = Object.fromEntries(DATA.contexts.map(c => [c.key, c]));
+const AREA = Object.fromEntries(DATA.areas.map(a => [a.key, a]));
 const CATS = meta.categories;
 const OSMETA = {
   darwin: {label:'macOS',   sub:'darwin'},
@@ -284,65 +301,16 @@ const OSMETA = {
 };
 const osMeta = key => OSMETA[key] || {label:key.toUpperCase(), sub:key};
 const MACHINE = '#cfe0f5';
+const DISK = '#9fd8ff';
 
+const E = Object.fromEntries(entries.map((e, i) => [e.id, (e.i = i, e)]));
+const H = Object.fromEntries(hosts.map((h, i) => [h.id, (h.i = i, h)]));
 const byCtx = {};
 entries.forEach(e => (byCtx[e.ctx] = byCtx[e.ctx] || []).push(e));
 const byOs = {};
 hosts.forEach(h => (byOs[h.os] = byOs[h.os] || []).push(h));
 
-/* ---------------- layout ----------------
-   Config clusters fill the left half in a grid, machine clusters run down the
-   right in a staggered column; radii grow with member count. Laid out from the
-   data so a new context or platform just takes its own circle. */
-function layout(){
-  const src = DATA.contexts.filter(c => byCtx[c.key]).map(c => ({key:c.key, kind:'src', n:byCtx[c.key].length}));
-  const dst = meta.platforms.filter(p => byOs[p]).map(p => ({key:p, kind:'dst', n:byOs[p].length}));
-  const out = [];
-  const R = n => 78 + 15 * Math.sqrt(n);
-
-  const cols = Math.min(2, src.length) || 1, rows = Math.ceil(src.length / cols);
-  const cw = (840 - 40) / cols, ch = (900 - 70) / rows;
-  src.forEach((c, i) => {
-    const col = i % cols, row = Math.floor(i / cols);
-    out.push({...c,
-      cx: 40 + cw * (col + .5) + (row % 2 ? 22 : -22),
-      cy: 70 + ch * (row + .5),
-      r: Math.min(R(c.n), cw / 2 - 28, ch / 2 + 14)});
-  });
-
-  const dh = (900 - 70) / (dst.length || 1);
-  dst.forEach((c, i) => {
-    out.push({...c,
-      cx: 1000 + 740 * (.5 + (i % 2 ? .16 : -.16)),
-      cy: 70 + dh * (i + .5),
-      r: Math.min(R(c.n), dh / 2 + 18, 740 / 2 - 40)});
-  });
-  return out;
-}
-const CLUSTERS = layout();
-const CL = Object.fromEntries(CLUSTERS.map(c => [c.key, c]));
-
-function place(members, cluster, seed){
-  const n = members.length, GA = 2.3999632;
-  members.forEach((m, i) => {
-    const rad = cluster.r * 0.80 * Math.sqrt((i + 0.62) / n);
-    const th  = i * GA + seed;
-    m.x = cluster.cx + rad * Math.cos(th);
-    m.y = cluster.cy + rad * Math.sin(th) * 0.94;
-    m.cl = cluster.key;
-  });
-}
-Object.entries(byCtx).forEach(([k, list], i) => place(list, CL[k], 0.7 + i * 1.3));
-Object.entries(byOs).forEach(([k, list], i) => place(list, CL[k], 2.1 + i * 0.9));
-
-const E = Object.fromEntries(entries.map((e, i) => [e.id, (e.i = i, e)]));
-const H = Object.fromEntries(hosts.map((h, i) => [h.id, (h.i = i, h)]));
-
-/* ---------------- state ---------------- */
-const state = {
-  view:'map', pinned:null, hover:null, isolate:null, ghost:true,
-  ctx:new Set(Object.keys(CTX)), cat:new Set(Object.keys(CATS)), q:'',
-};
+/* ---------------- shared helpers ---------------- */
 const NS = 'http://www.w3.org/2000/svg';
 const el = (tag, attrs = {}, parent) => {
   const node = document.createElementNS(NS, tag);
@@ -350,266 +318,479 @@ const el = (tag, attrs = {}, parent) => {
   if (parent) parent.appendChild(node);
   return node;
 };
-const trunc = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
+const trunc = (s, n) => (s || '').length > n ? s.slice(0, n - 1) + '…' : (s || '');
+const esc = s => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const nameList = (names, limit = 3) => names.length <= limit
+  ? names.map(esc).join(', ')
+  : names.slice(0, limit).map(esc).join(', ') + ` <span style="color:#4d5f76">+${names.length - limit}</span>`;
+const row = (k, v) => `<div class="k">${k}</div><div class="v">${v}</div>`;
 const linkPath = (a, b) => {
   const dx = (b.x - a.x) * 0.46;
-  return `M${a.x.toFixed(1)} ${a.y.toFixed(1)}C${(a.x+dx).toFixed(1)} ${a.y.toFixed(1)} ${(b.x-dx).toFixed(1)} ${b.y.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
+  return `M${a.x.toFixed(1)} ${a.y.toFixed(1)}C${(a.x + dx).toFixed(1)} ${a.y.toFixed(1)} ` +
+         `${(b.x - dx).toFixed(1)} ${b.y.toFixed(1)} ${b.x.toFixed(1)} ${b.y.toFixed(1)}`;
 };
-// isolating a config cluster filters configs; isolating a platform filters both sides
-const isoCtx = () => CTX[state.isolate] ? state.isolate : null;
-const isoOs  = () => (meta.platforms.includes(state.isolate) ? state.isolate : null);
+
+/* ---------------- shared filter state ---------------- */
+const state = {
+  view: 'disk', ghost: true,
+  ctx: new Set(Object.keys(CTX)), cat: new Set(Object.keys(CATS)), q: '',
+};
+const card = document.getElementById('card');
+
+/* the matrix and destinations views filter whole entries with the same chips */
 const visibleEntry = e =>
   state.ctx.has(e.ctx) && state.cat.has(e.cat) &&
-  (!isoCtx() || isoCtx() === e.ctx) &&
-  (!isoOs() || e.hosts.some(id => H[id].os === isoOs())) &&
-  (!state.q || e.id.toLowerCase().includes(state.q) || e.src.toLowerCase().includes(state.q) ||
-   e.dests.some(d => d.toLowerCase().includes(state.q)));
-const visibleHost = h =>
-  (!isoOs() || isoOs() === h.os) &&
-  (!state.q || h.id.toLowerCase().includes(state.q) ||
-   h.entries.some(id => E[id].id.includes(state.q) || E[id].dests.some(d => d.toLowerCase().includes(state.q))));
+  (!state.q || `${e.id} ${e.src} ${e.dests.join(' ')} ${e.diskDests.map(d => d.path).join(' ')}`
+    .toLowerCase().includes(state.q));
 
-/* ---------------- starfield ---------------- */
-(function stars(){
-  const g = document.getElementById('stars');
-  let s = 20240617;
+/* ---------------- graph engine ----------------
+   One constellation, two datasets: the disk map wires source files to the
+   places on disk they land, the fleet map wires manifest entries to machines.
+   Everything below is shape-agnostic - a caller hands over clusters, nodes and
+   an adjacency list and gets hover / pin / isolate / filtering for free. */
+function layoutClusters(clusters){
+  const R = n => 74 + 15 * Math.sqrt(Math.max(n, 1));
+  const side = (list, x0, x1, colsHint) => {
+    if (!list.length) return;
+    const cols = Math.min(colsHint, list.length), rows = Math.ceil(list.length / cols);
+    const cw = (x1 - x0) / cols, ch = (900 - 70) / rows;
+    list.forEach((c, i) => {
+      const col = i % cols, rowIndex = Math.floor(i / cols);
+      c.cx = x0 + cw * (col + .5) + (rowIndex % 2 ? 20 : -20);
+      c.cy = 70 + ch * (rowIndex + .5);
+      c.r = Math.min(R(c.count), cw / 2 - 26, ch / 2 + 12);
+    });
+  };
+  side(clusters.filter(c => c.kind === 'src'), 40, 840, 2);
+  const dst = clusters.filter(c => c.kind === 'dst');
+  side(dst, 1000, 1740, dst.length > 3 ? 2 : 1);
+  return clusters;
+}
+
+function placeNodes(nodes, cluster, seed){
+  const n = nodes.length, GA = 2.3999632;
+  nodes.forEach((node, i) => {
+    const rad = cluster.r * 0.80 * Math.sqrt((i + 0.62) / n);
+    const th = i * GA + seed;
+    node.x = cluster.cx + rad * Math.cos(th);
+    node.y = cluster.cy + rad * Math.sin(th) * 0.94;
+  });
+}
+
+function starfield(g, seed){
+  let s = seed;
   const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
   for (let i = 0; i < 240; i++)
-    el('circle', {cx:(rnd()*1780).toFixed(1), cy:(rnd()*960).toFixed(1),
-      r:(rnd()*1.1+.25).toFixed(2), fill:'#9fc4ff', opacity:(rnd()*.16+.03).toFixed(2)}, g);
-})();
+    el('circle', {cx:(rnd() * 1780).toFixed(1), cy:(rnd() * 960).toFixed(1),
+      r:(rnd() * 1.1 + .25).toFixed(2), fill:'#9fc4ff', opacity:(rnd() * .16 + .03).toFixed(2)}, g);
+}
 
-/* ---------------- clusters ---------------- */
-(function drawClusters(){
-  const g = document.getElementById('clusters');
-  CLUSTERS.forEach(c => {
-    const isSrc = c.kind === 'src';
-    const color = isSrc ? CTX[c.key].color : MACHINE;
-    const label = isSrc ? CTX[c.key].label : osMeta(c.key).label;
-    const sub   = isSrc ? CTX[c.key].sub   : osMeta(c.key).sub;
-    const count = isSrc ? byCtx[c.key].length : byOs[c.key].length;
-    const grad = el('radialGradient', {id:'g-' + c.key}, g);
-    el('stop', {offset:'0%',  'stop-color':color, 'stop-opacity':'.11'}, grad);
-    el('stop', {offset:'70%', 'stop-color':color, 'stop-opacity':'.03'}, grad);
-    el('stop', {offset:'100%','stop-color':color, 'stop-opacity':'0'}, grad);
-    el('circle', {cx:c.cx, cy:c.cy, r:c.r * 1.04, fill:`url(#g-${c.key})`, class:'cl-halo'}, g);
-    el('circle', {cx:c.cx, cy:c.cy, r:c.r, class:'cl-ring', stroke:color}, g);
-    const t = el('text', {x:c.cx, y:c.cy - c.r - 26, class:'cl-title', fill:color}, g);
-    t.textContent = label;
-    const s = el('text', {x:c.cx, y:c.cy - c.r - 12, class:'cl-sub'}, g);
-    s.textContent = `${sub} · ${count}`;
-    const box = el('rect', {x:c.cx - 150, y:c.cy - c.r - 40, width:300, height:36, class:'cl-hit'}, g);
-    box.addEventListener('click', ev => {
-      ev.stopPropagation();
-      state.isolate = state.isolate === c.key ? null : c.key;
-      state.pinned = null; refresh();
-    });
-  });
-})();
+function createGraph(cfg){
+  const view = document.getElementById('view-' + cfg.key);
+  const svg = view.querySelector('svg');
+  const layers = {
+    stars: svg.querySelector('.g-stars'), clusters: svg.querySelector('.g-clusters'),
+    ghost: svg.querySelector('.g-ghost'), edges: svg.querySelector('.g-edges'),
+    nodes: svg.querySelector('.g-nodes'),
+  };
+  const byId = Object.fromEntries(cfg.nodes.map(node => [node.id, node]));
+  const adj = cfg.adjacency;
+  const local = {hover:null, pinned:null, isolate:null};
+  const nodeEls = {};
 
-/* ---------------- nodes ---------------- */
-const nodeEls = {};
-(function drawNodes(){
-  const g = document.getElementById('nodes');
-  entries.forEach(e => {
-    const color = CTX[e.ctx].color;
-    const grp = el('g', {class:'node e', 'data-id':'e:' + e.id}, g);
-    const rr = e.hosts.length ? 2.4 + Math.sqrt(e.hosts.length) * 0.95 : 2.6;
-    el('circle', {cx:e.x, cy:e.y, r:15, fill:'transparent', class:'hit'}, grp);
-    el('circle', {cx:e.x, cy:e.y, r:rr + 8, fill:color, class:'halo', filter:'url(#softglow)', opacity:'0'}, grp);
-    el('circle', {cx:e.x, cy:e.y, r:rr + 5, class:'ring', stroke:color}, grp);
-    el('circle', {cx:e.x, cy:e.y, r:rr, class:'core', fill:e.hosts.length ? color : '#33465e', opacity:e.hosts.length ? .95 : .6}, grp);
-    const t = el('text', {x:e.x, y:e.y + rr + 11}, grp);
-    t.textContent = trunc(e.id, 17);
-    grp._n = {kind:'e', ref:e};
-    nodeEls['e:' + e.id] = grp;
-  });
-  hosts.forEach(h => {
-    const grp = el('g', {class:'node h', 'data-id':'h:' + h.id}, g);
-    el('circle', {cx:h.x, cy:h.y, r:16, fill:'transparent', class:'hit'}, grp);
-    el('rect', {x:h.x-8.5, y:h.y-8.5, width:17, height:17, rx:5, fill:MACHINE, class:'halo',
-      filter:'url(#softglow)', opacity:'0'}, grp);
-    el('rect', {x:h.x-8, y:h.y-8, width:16, height:16, rx:5, class:'ring', stroke:MACHINE}, grp);
-    el('rect', {x:h.x-4, y:h.y-4, width:8, height:8, rx:2.4, class:'core', fill:MACHINE, opacity:'.82'}, grp);
-    const t = el('text', {x:h.x, y:h.y + 18}, grp);
-    t.textContent = trunc(h.id, 17);
-    grp._n = {kind:'h', ref:h};
-    nodeEls['h:' + h.id] = grp;
-  });
-  g.querySelectorAll('.node').forEach(n => {
-    n.addEventListener('mouseenter', () => { state.hover = n.dataset.id; refresh(); });
-    n.addEventListener('mouseleave', () => { state.hover = null; refresh(); });
-    n.addEventListener('click', ev => {
+  cfg.clusters.forEach(c => { c.count = cfg.nodes.filter(node => node.cl === c.key).length; });
+  layoutClusters(cfg.clusters);
+  cfg.clusters.forEach((c, i) => placeNodes(cfg.nodes.filter(node => node.cl === c.key), c, 0.7 + i * 1.1));
+
+  starfield(layers.stars, 20240617);
+
+  /* clusters */
+  cfg.clusters.forEach(c => {
+    const grad = el('radialGradient', {id:`g-${cfg.key}-${c.key}`}, layers.clusters);
+    el('stop', {offset:'0%', 'stop-color':c.color, 'stop-opacity':'.11'}, grad);
+    el('stop', {offset:'70%', 'stop-color':c.color, 'stop-opacity':'.03'}, grad);
+    el('stop', {offset:'100%', 'stop-color':c.color, 'stop-opacity':'0'}, grad);
+    el('circle', {cx:c.cx, cy:c.cy, r:c.r * 1.04, fill:`url(#g-${cfg.key}-${c.key})`, class:'cl-halo'}, layers.clusters);
+    el('circle', {cx:c.cx, cy:c.cy, r:c.r, class:'cl-ring', stroke:c.color}, layers.clusters);
+    el('text', {x:c.cx, y:c.cy - c.r - 26, class:'cl-title', fill:c.color}, layers.clusters).textContent = c.label;
+    el('text', {x:c.cx, y:c.cy - c.r - 12, class:'cl-sub'}, layers.clusters).textContent =
+      `${c.sub} · ${c.count}`;
+    const hit = el('rect', {x:c.cx - 150, y:c.cy - c.r - 40, width:300, height:36, class:'cl-hit'}, layers.clusters);
+    hit.addEventListener('click', ev => {
       ev.stopPropagation();
-      state.pinned = state.pinned === n.dataset.id ? null : n.dataset.id;
+      local.isolate = local.isolate === c.key ? null : c.key;
+      local.pinned = null;
       refresh();
     });
   });
-})();
 
-/* ---------------- ghost web ---------------- */
-(function drawGhost(){
-  const g = document.getElementById('ghost');
-  const buckets = {};
-  entries.forEach(e => {
-    e.hosts.forEach(hid => {
-      (buckets[e.ctx] = buckets[e.ctx] || []).push(linkPath(e, H[hid]));
-    });
-  });
-  Object.entries(buckets).forEach(([ctx, list]) => {
-    el('path', {d:list.join(' '), stroke:CTX[ctx].color, opacity:'.042'}, g);
-  });
-})();
-
-/* ---------------- interaction ---------------- */
-const edgeLayer = document.getElementById('edges');
-const card = document.getElementById('card');
-
-function activeId(){ return state.hover || state.pinned; }
-
-function neighbors(id){
-  if (!id) return null;
-  const [kind, key] = [id.slice(0,1), id.slice(2)];
-  if (kind === 'e'){
-    const e = E[key];
-    return {kind:'e', ref:e, others:e.hosts.filter(h => visibleHost(H[h])).map(h => H[h])};
-  }
-  const h = H[key];
-  return {kind:'h', ref:h, others:h.entries.filter(x => visibleEntry(E[x])).map(x => E[x])};
-}
-
-function refresh(){
-  const id = activeId();
-  const near = new Set();
-  edgeLayer.textContent = '';
-  const info = neighbors(id);
-  if (info){
-    info.others.forEach(o => {
-      const [a, b] = info.kind === 'e' ? [info.ref, o] : [o, info.ref];
-      near.add((info.kind === 'e' ? 'h:' : 'e:') + o.id);
-      const color = CTX[(info.kind === 'e' ? info.ref : o).ctx].color;
-      el('path', {d:linkPath(a, b), stroke:color, class:'edge' + (state.pinned === id ? ' flow' : '')}, edgeLayer);
-    });
-  }
-  Object.entries(nodeEls).forEach(([key, node]) => {
-    const n = node._n;
-    const shown = n.kind === 'e' ? visibleEntry(n.ref) : visibleHost(n.ref);
-    const isNear = near.has(key);
-    node.classList.toggle('on', key === id);
-    node.classList.toggle('near', isNear);
-    node.classList.toggle('mute', !shown || (!!id && key !== id && !isNear));
-    node.classList.toggle('lab', key === id || isNear || (!!state.q && shown) ||
-      (!!state.isolate && shown && (state.isolate === n.ref.ctx || state.isolate === n.ref.os)));
-  });
-  drawCard(info);
-  document.getElementById('hint').textContent = state.pinned
-    ? 'pinned — click the node again (or the background) to release'
-    : (state.isolate ? `isolated: ${state.isolate} — click the cluster label again to release`
-                     : 'hover a node · click to pin · click a cluster label to isolate');
-}
-
-function row(k, v){ return `<div class="k">${k}</div><div class="v">${v}</div>`; }
-
-function drawCard(info){
-  if (!info){ card.classList.remove('show'); return; }
-  const {kind, ref, others} = info;
-  let html = '', color, tag;
-  if (kind === 'e'){
-    color = CTX[ref.ctx].color;
-    const cnt = ref.dests.length;
-    html = `<h3><span class="dot" style="background:${color}"></span>${ref.id}</h3>` +
-      `<div class="kv">` +
-      row('source', ref.repo) +
-      row('file', ref.src.split('/').slice(-2).join('/')) +
-      row('manifest', ref.manifest.split('/').pop()) +
-      row('method', ref.method === 'none' ? 'none (by design)' : 'symlink') +
-      row('platforms', ref.platforms.length ? ref.platforms.join(' · ') : '—') +
-      row('host filter', ref.hostsFilter.length ? ref.hostsFilter.length + ' machines' : 'any host') +
-      row('reaches', `<b style="color:${color}">${ref.hosts.length}</b> / ${hosts.length} machines`) +
-      `</div>`;
-    if (cnt){
-      html += `<div class="rule"></div><div class="paths">` +
-        ref.dests.slice(0, 4).map(d => `<div>${d}</div>`).join('') +
-        (cnt > 4 ? `<div style="color:#4d5f76;direction:ltr">+${cnt - 4} more path variants</div>` : '') +
-        `</div>`;
+  /* nodes */
+  cfg.nodes.forEach(node => {
+    const grp = el('g', {class:'node ' + (node.derived ? 'd' : 'e'), 'data-id':node.id}, layers.nodes);
+    const size = node.size || 4;
+    el('circle', {cx:node.x, cy:node.y, r:15, fill:'transparent', class:'hit'}, grp);
+    if (node.shape === 'square' || node.shape === 'folder'){
+      el('rect', {x:node.x - size - 4.5, y:node.y - size - 4.5, width:size * 2 + 9, height:size * 2 + 9,
+        rx:5, fill:node.color, class:'halo', filter:'url(#softglow)', opacity:'0'}, grp);
+      el('rect', {x:node.x - size - 4, y:node.y - size - 4, width:size * 2 + 8, height:size * 2 + 8,
+        rx:5, class:'ring', stroke:node.color}, grp);
+      el('rect', {x:node.x - size, y:node.y - size, width:size * 2, height:size * 2, rx:2.4,
+        class:'core', fill:node.color, opacity:'.85'}, grp);
+      if (node.shape === 'folder')
+        el('rect', {x:node.x - size - 7, y:node.y - size - 7, width:size * 2 + 14, height:size * 2 + 14,
+          rx:6, fill:'none', stroke:node.color, 'stroke-dasharray':'2 3', opacity:'.55'}, grp);
+    } else {
+      el('circle', {cx:node.x, cy:node.y, r:size + 8, fill:node.color, class:'halo',
+        filter:'url(#softglow)', opacity:'0'}, grp);
+      el('circle', {cx:node.x, cy:node.y, r:size + 5, class:'ring', stroke:node.color}, grp);
+      el('circle', {cx:node.x, cy:node.y, r:size, class:'core', fill:node.color,
+        opacity:node.dim ? '.5' : '.95'}, grp);
     }
-    if (ref.note) html += `<div class="rule"></div><div class="note">${trunc(ref.note, 210)}</div>`;
-    tag = `<span class="tag" style="background:${color}1f;color:${color}">${CATS[ref.cat] || ref.cat}</span>`;
-  } else {
-    color = MACHINE;
-    const zones = Object.entries(ref.zones).sort((a,b) => b[1].length - a[1].length).slice(0, 5);
-    const perCtx = {};
-    ref.entries.forEach(x => perCtx[E[x].ctx] = (perCtx[E[x].ctx] || 0) + 1);
-    html = `<h3><span class="dot" style="background:${color}"></span>${ref.name}</h3>` +
-      `<div class="kv">` +
-      row('platform', osMeta(ref.os).label + ' · ' + ref.os) +
-      row('inventory', ref.inventory) +
-      row('receives', `<b>${ref.entries.length}</b> of ${entries.length} configs`) +
-      row('by context', Object.entries(perCtx).map(([k, v]) =>
-        `<span style="color:${CTX[k].color}">${v}</span>`).join(' · ')) +
-      row('skipped', `${ref.counts.skip_platform || 0} platform · ${ref.counts.skip_host || 0} host-filter` +
-        (ref.counts.skip_variant ? ` · ${ref.counts.skip_variant} variant` : '')) +
-      row('prunes', `${ref.prune.length} removals-listed paths`) +
-      `</div><div class="rule"></div><div class="paths">` +
-      zones.map(([z, list]) => `<div>${z} <span style="color:#4d5f76">· ${list.length} file${list.length>1?'s':''}</span></div>`).join('') +
-      `</div>`;
-    tag = `<span class="tag" style="background:#cfe0f51a;color:#cfe0f5">${osMeta(ref.os).sub}</span>`;
+    el('text', {x:node.x, y:node.y + size + 12}, grp).textContent = trunc(node.label, 24);
+    nodeEls[node.id] = grp;
+    grp.addEventListener('mouseenter', () => { local.hover = node.id; refresh(); });
+    grp.addEventListener('mouseleave', () => { local.hover = null; refresh(); });
+    grp.addEventListener('click', ev => {
+      ev.stopPropagation();
+      local.pinned = local.pinned === node.id ? null : node.id;
+      refresh();
+    });
+  });
+
+  /* the faint web of every link, drawn once */
+  const buckets = {};
+  Object.entries(adj).forEach(([id, others]) => {
+    const from = byId[id];
+    if (!from || from.derived) return;   // draw each pair once, from the source side
+    others.forEach(otherId => {
+      const to = byId[otherId];
+      if (to) (buckets[from.color] = buckets[from.color] || []).push(linkPath(from, to));
+    });
+  });
+  Object.entries(buckets).forEach(([color, list]) =>
+    el('path', {d:list.join(' '), stroke:color, opacity:'.042'}, layers.ghost));
+
+  svg.addEventListener('click', () => { local.pinned = null; refresh(); });
+
+  function passesFilters(node){
+    if (node.ctx && !state.ctx.has(node.ctx)) return false;
+    if (node.cat && !state.cat.has(node.cat)) return false;
+    if (state.q && !(node.text || '').toLowerCase().includes(state.q)) return false;
+    return true;
   }
-  card.innerHTML = html + tag;
+  function visible(node){
+    if (!passesFilters(node)) return false;
+    // a place on disk is only as visible as the sources that feed it
+    if (node.derived && (adj[node.id] || []).length &&
+        !(adj[node.id] || []).some(id => byId[id] && passesFilters(byId[id]))) return false;
+    if (!local.isolate) return true;
+    return node.cl === local.isolate ||
+      (adj[node.id] || []).some(id => byId[id] && byId[id].cl === local.isolate);
+  }
+
+  function refresh(){
+    const activeId = local.hover || local.pinned;
+    const active = activeId ? byId[activeId] : null;
+    const near = new Set(active ? (adj[activeId] || []).filter(id => byId[id] && visible(byId[id])) : []);
+    layers.edges.textContent = '';
+    if (active){
+      near.forEach(id => {
+        const other = byId[id];
+        const [a, b] = active.derived ? [other, active] : [active, other];
+        el('path', {d:linkPath(a, b), stroke:(active.derived ? other : active).color,
+          class:'edge' + (local.pinned === activeId ? ' flow' : '')}, layers.edges);
+      });
+    }
+    cfg.nodes.forEach(node => {
+      const element = nodeEls[node.id];
+      const shown = visible(node);
+      const isNear = near.has(node.id);
+      element.classList.toggle('on', node.id === activeId);
+      element.classList.toggle('near', isNear);
+      element.classList.toggle('mute', !shown || (!!activeId && node.id !== activeId && !isNear));
+      element.classList.toggle('lab', node.id === activeId || isNear || (shown && (!!state.q ||
+        (!!local.isolate && (node.cl === local.isolate)))));
+    });
+    if (state.view === cfg.key) drawCard(active, cfg, nodeEls, local.pinned === activeId);
+    hint();
+  }
+  function hint(){
+    if (state.view !== cfg.key) return;
+    document.getElementById('hint').textContent = local.pinned
+      ? 'pinned — click the node again (or the background) to release'
+      : local.isolate
+        ? `isolated: ${local.isolate.replace(/_/g, ' ')} — click the cluster label again to release`
+        : cfg.hint;
+  }
+  layers.ghost.style.display = state.ghost ? '' : 'none';
+  return {key:cfg.key, refresh, ghost:layers.ghost, hint};
+}
+
+/* ---------------- the floating detail card ---------------- */
+function drawCard(node, cfg, nodeEls, pinned){
+  if (!node){ card.classList.remove('show', 'pin'); return; }
+  card.innerHTML = cfg.card(node);
   card.classList.add('show');
-  // anchor beside the node itself, flipping to the other side near the edge
-  const nodeEl = nodeEls[(kind === 'e' ? 'e:' : 'h:') + ref.id];
-  const nb = nodeEl.getBoundingClientRect();
+  card.classList.toggle('pin', !!pinned);
+  const box = nodeEls[node.id].getBoundingClientRect();
   const vw = window.innerWidth || document.documentElement.clientWidth || 1600;
   const vh = window.innerHeight || document.documentElement.clientHeight || 900;
   const w = card.offsetWidth, h = card.offsetHeight;
-  let left = nb.right + 22;
-  if (left + w > vw - 16) left = nb.left - w - 22;
+  let left = box.right + 22;
+  if (left + w > vw - 16) left = box.left - w - 22;
   card.style.left = Math.max(14, Math.min(left, vw - w - 14)) + 'px';
-  card.style.top = Math.max(72, Math.min(nb.top + nb.height / 2 - h / 2, vh - h - 16)) + 'px';
+  card.style.top = Math.max(72, Math.min(box.top + box.height / 2 - h / 2, vh - h - 16)) + 'px';
 }
 
-document.getElementById('sky').addEventListener('click', () => { state.pinned = null; refresh(); });
+/* ---------------- page 1: the disk map ----------------
+   Source files on the left, the places on disk they land on the right. Machines
+   are deliberately absent: {host} stays symbolic, so one workspace file is one
+   node instead of one per machine. */
+const DISK_KIND = node => node.data.isDir ? 'folder link' : 'file link';
 
-/* ---------------- chrome: stats, chips, legend ---------------- */
+function buildDiskGraph(){
+  // keyed by the file itself, so one file referenced by two manifests is one node
+  const repoCtx = {};
+  DATA.contexts.forEach(c => c.repos.forEach(repo => repoCtx[repo] = c.key));
+  const sources = {};
+  entries.forEach(e => {
+    const source = sources[e.srcPath] = sources[e.srcPath] ||
+      {key:e.srcPath, repo:e.srcRepo, src:e.srcPath.split('/').slice(1).join('/'),
+       ctx:repoCtx[e.srcRepo] || e.ctx, entries:[], isDir:e.isDir};
+    source.entries.push(e);
+    source.isDir = source.isDir || e.isDir;
+  });
+
+  const nodes = [], adjacency = {};
+  const link = (a, b) => {
+    (adjacency[a] = adjacency[a] || []).push(b);
+    (adjacency[b] = adjacency[b] || []).push(a);
+  };
+
+  Object.values(sources).forEach(source => {
+    const dests = source.entries.flatMap(e => e.diskDests.map(d => d.path));
+    nodes.push({
+      id:'s:' + source.key, cl:source.ctx, color:CTX[source.ctx].color,
+      label:source.src.split('/').slice(-1)[0] + (source.isDir ? '/' : ''),
+      size:2.4 + Math.sqrt(Math.max(dests.length, 1)) * 1.15,
+      ctx:source.ctx, cat:source.entries[0].cat, dim:!dests.length,
+      text:`${source.key} ${source.entries.map(e => e.id).join(' ')} ${dests.join(' ')}`,
+      data:source,
+    });
+  });
+
+  DATA.disk.forEach(place => {
+    const owners = place.entries.map(id => E[id]);
+    const isDir = owners.some(e => e.isDir);
+    // a place fed by exactly one context wears that colour; shared places stay neutral
+    const feeders = [...new Set(owners.map(e => repoCtxOf(e.srcPath)))];
+    nodes.push({
+      id:'d:' + place.path, cl:place.area, shape:isDir ? 'folder' : 'square',
+      color:feeders.length === 1 ? CTX[feeders[0]].color : DISK,
+      label:shortDiskLabel(place.path), size:isDir ? 5 : 4, derived:true,
+      text:`${place.path} ${place.entries.join(' ')}`,
+      data:{...place, owners, isDir},
+    });
+    owners.forEach(e => link('s:' + e.srcPath, 'd:' + place.path));
+  });
+
+  const clusters = DATA.contexts.map(c => ({
+    key:c.key, kind:'src', color:c.color, label:c.label, sub:'source files',
+  })).concat(DATA.areas.map(a => ({
+    key:a.key, kind:'dst', color:DISK, label:a.label, sub:a.sub,
+  })));
+
+  return createGraph({
+    key:'disk', clusters, nodes, adjacency, card:diskCard,
+    hint:'hover a file · click to pin · click a cluster label to isolate',
+  });
+}
+
+function repoCtxOf(srcPath){
+  const found = DATA.contexts.find(c => c.repos.includes(srcPath.split('/')[0]));
+  return found ? found.key : DATA.contexts[0].key;
+}
+
+function shortDiskLabel(path){
+  if (!path.startsWith(meta.repoParent + '/')) return path.replace(/^~\//, '');
+  const rest = path.slice(meta.repoParent.length + 1).split('/');
+  return rest.length <= 2 ? rest.join('/') : `${rest[0]}/${rest[rest.length - 1]}`;
+}
+
+function diskCard(node){
+  if (node.derived){
+    const place = node.data;
+    const owners = place.owners;
+    const sourceLines = [...new Set(owners.map(e => e.srcPath))].map(path =>
+      `<div><span style="color:${CTX[repoCtxOf(path)].color}">${esc(path.split('/')[0])}</span>` +
+      `/${esc(path.split('/').slice(1).join('/'))}</div>`).join('');
+    const siblings = owners.flatMap(e => e.diskDests.map(d => d.path)).filter(p => p !== place.path);
+    let html = `<h3><span class="dot" style="background:${DISK};border-radius:${place.isDir ? '3px' : '50%'}"></span>` +
+      `${esc(place.path.split('/').slice(-1)[0])}${place.isDir ? '/' : ''}</h3>` +
+      `<div class="paths" style="margin-bottom:9px"><div style="color:#cfe0f5">${esc(place.path)}</div></div>` +
+      `<div class="kv">` +
+      row('area', AREA[place.area].label) +
+      row('kind', place.isDir ? 'directory link' : 'file link') +
+      row('platforms', place.platforms.join(' · ')) +
+      row('entry', nameList(owners.map(e => e.id))) +
+      `</div><div class="rule"></div>` +
+      `<div class="paths"><div style="color:#4d5f76;margin-bottom:3px">linked from</div>${sourceLines}</div>`;
+    const contents = owners.filter(e => e.contents && e.contents.length);
+    if (contents.length){
+      const files = contents[0].contents;
+      html += `<div class="rule"></div><div style="color:#4d5f76;margin-bottom:4px">` +
+        `contents right now · ${files.length}${contents[0].contentsTruncated ? '+' : ''} files</div>` +
+        `<div class="contents">${files.map(f => `<div>${esc(f)}</div>`).join('')}</div>`;
+    }
+    if (siblings.length){
+      html += `<div class="rule"></div><div class="paths"><div style="color:#4d5f76;margin-bottom:3px">` +
+        `the same source also lands at · ${siblings.length}</div>` +
+        siblings.slice(0, 4).map(p => `<div>${esc(p)}</div>`).join('') +
+        (siblings.length > 4 ? `<div style="color:#4d5f76">+${siblings.length - 4} more</div>` : '') + `</div>`;
+    }
+    return html + `<span class="tag" style="background:${DISK}1f;color:${DISK}">${AREA[place.area].sub}</span>`;
+  }
+
+  const source = node.data;
+  const dests = source.entries.flatMap(e => e.diskDests.map(d => d.path));
+  const color = CTX[source.ctx].color;
+  let html = `<h3><span class="dot" style="background:${color}"></span>${esc(source.src.split('/').slice(-1)[0])}</h3>` +
+    `<div class="kv">` +
+    row('repo', esc(source.repo)) +
+    row('file', esc(source.src)) +
+    row('kind', source.isDir ? 'directory' : 'file') +
+    row('lands at', `<b style="color:${color}">${dests.length}</b> place${dests.length === 1 ? '' : 's'} on disk`) +
+    row('entries', nameList(source.entries.map(e => e.id))) +
+    `</div>`;
+  if (dests.length){
+    html += `<div class="rule"></div><div class="paths">` +
+      dests.slice(0, 6).map(p => `<div>${esc(p)}</div>`).join('') +
+      (dests.length > 6 ? `<div style="color:#4d5f76">+${dests.length - 6} more</div>` : '') + `</div>`;
+  } else {
+    html += `<div class="rule"></div><div class="note">no link by design — deployed by hand</div>`;
+  }
+  return html + `<span class="tag" style="background:${color}1f;color:${color}">` +
+    `${CATS[source.entries[0].cat] || source.entries[0].cat}</span>`;
+}
+
+/* ---------------- page 2: the fleet map ----------------
+   The original view: which machine gets which manifest entry. */
+function buildFleetGraph(){
+  const nodes = [], adjacency = {};
+  entries.forEach(e => {
+    nodes.push({
+      id:'e:' + e.id, cl:e.ctx, color:CTX[e.ctx].color, label:e.id,
+      size:e.hosts.length ? 2.4 + Math.sqrt(e.hosts.length) * 0.95 : 2.6,
+      ctx:e.ctx, cat:e.cat, dim:!e.hosts.length,
+      text:`${e.id} ${e.src} ${e.dests.join(' ')}`, data:e,
+    });
+  });
+  hosts.forEach(h => {
+    nodes.push({
+      id:'h:' + h.id, cl:h.os, color:MACHINE, shape:'square', size:4, derived:true,
+      text:`${h.id} ${h.name}`, data:h,
+    });
+  });
+  entries.forEach(e => e.hosts.forEach(id => {
+    (adjacency['e:' + e.id] = adjacency['e:' + e.id] || []).push('h:' + id);
+    (adjacency['h:' + id] = adjacency['h:' + id] || []).push('e:' + e.id);
+  }));
+
+  const clusters = DATA.contexts.map(c => ({
+    key:c.key, kind:'src', color:c.color, label:c.label, sub:c.sub,
+  })).concat(meta.platforms.map(p => ({
+    key:p, kind:'dst', color:MACHINE, label:osMeta(p).label, sub:osMeta(p).sub,
+  })));
+
+  return createGraph({
+    key:'fleet', clusters, nodes, adjacency, card:fleetCard,
+    hint:'hover a node · click to pin · click a cluster label to isolate',
+  });
+}
+
+function fleetCard(node){
+  if (!node.derived){
+    const e = node.data, color = CTX[e.ctx].color;
+    let html = `<h3><span class="dot" style="background:${color}"></span>${esc(e.id)}</h3><div class="kv">` +
+      row('source', esc(e.repo)) +
+      row('file', esc(e.src.split('/').slice(-2).join('/'))) +
+      row('manifest', esc(e.manifest.split('/').pop())) +
+      row('method', e.method === 'none' ? 'none (by design)' : 'symlink') +
+      row('platforms', e.platforms.length ? e.platforms.join(' · ') : '—') +
+      row('host filter', e.hostsFilter.length ? e.hostsFilter.length + ' machines' : 'any host') +
+      row('reaches', `<b style="color:${color}">${e.hosts.length}</b> / ${hosts.length} machines`) +
+      `</div>`;
+    if (e.dests.length){
+      html += `<div class="rule"></div><div class="paths">` +
+        e.dests.slice(0, 4).map(d => `<div>${esc(d)}</div>`).join('') +
+        (e.dests.length > 4 ? `<div style="color:#4d5f76">+${e.dests.length - 4} more path variants</div>` : '') +
+        `</div>`;
+    }
+    if (e.note) html += `<div class="rule"></div><div class="note">${esc(trunc(e.note, 210))}</div>`;
+    return html + `<span class="tag" style="background:${color}1f;color:${color}">${CATS[e.cat] || e.cat}</span>`;
+  }
+  const h = node.data;
+  const zones = Object.entries(h.zones).sort((a, b) => b[1].length - a[1].length).slice(0, 5);
+  const perCtx = {};
+  h.entries.forEach(id => perCtx[E[id].ctx] = (perCtx[E[id].ctx] || 0) + 1);
+  return `<h3><span class="dot" style="background:${MACHINE}"></span>${esc(h.name)}</h3><div class="kv">` +
+    row('platform', osMeta(h.os).label + ' · ' + h.os) +
+    row('inventory', esc(h.inventory)) +
+    row('receives', `<b>${h.entries.length}</b> of ${entries.length} configs`) +
+    row('by context', Object.entries(perCtx).map(([k, v]) =>
+      `<span style="color:${CTX[k].color}">${v}</span>`).join(' · ')) +
+    row('skipped', `${h.counts.skip_platform || 0} platform · ${h.counts.skip_host || 0} host-filter` +
+      (h.counts.skip_variant ? ` · ${h.counts.skip_variant} variant` : '')) +
+    row('prunes', `${h.prune.length} removals-listed paths`) +
+    `</div><div class="rule"></div><div class="paths">` +
+    zones.map(([z, list]) => `<div>${esc(z)} <span style="color:#4d5f76">· ${list.length} file` +
+      `${list.length > 1 ? 's' : ''}</span></div>`).join('') +
+    `</div><span class="tag" style="background:#cfe0f51a;color:#cfe0f5">${osMeta(h.os).sub}</span>`;
+}
+
+const GRAPHS = [buildDiskGraph(), buildFleetGraph()];
+const graphFor = key => GRAPHS.find(g => g.key === key);
+
+/* ---------------- chrome: stats, chips, tabs, legend ---------------- */
 document.getElementById('stamp').textContent =
   meta.manifests.length > 1 ? `${meta.manifests.length} manifests` : '1 manifest';
-document.getElementById('planline').textContent =
-  `plan across ${meta.hostCount} machines`;
+document.getElementById('planline').textContent = `plan across ${meta.hostCount} machines`;
 document.getElementById('stats').innerHTML = [
   [meta.entryCount, 'manifest entries'],
+  [DATA.disk.length, 'places on disk'],
   [meta.hostCount, 'machines'],
   [meta.linkCount.toLocaleString(), 'symlinks'],
-  [meta.destCount, 'distinct paths'],
   [meta.manifests.length, 'manifests'],
 ].map(([n, l]) => `<span><b>${n}</b> ${l}</span>`).join('');
 
+const redraw = () => { GRAPHS.forEach(g => g.refresh()); buildMatrix(); buildPaths(); };
+
 (function chips(){
   const ctxBox = document.getElementById('ctxchips');
-  DATA.contexts.forEach(({key: k, color}) => {
+  DATA.contexts.forEach(({key, color}) => {
     const b = document.createElement('button');
     b.className = 'chip';
     b.style.color = color;
-    b.innerHTML = `<span class="dot"></span>${k.replace(/_/g,' ')} <span class="n">${(byCtx[k] || []).length}</span>`;
+    b.innerHTML = `<span class="dot"></span>${key.replace(/_/g, ' ')} <span class="n">${(byCtx[key] || []).length}</span>`;
     b.onclick = () => {
-      state.ctx.has(k) ? state.ctx.delete(k) : state.ctx.add(k);
-      b.classList.toggle('off', !state.ctx.has(k));
-      refresh(); buildMatrix(); buildPaths();
+      state.ctx.has(key) ? state.ctx.delete(key) : state.ctx.add(key);
+      b.classList.toggle('off', !state.ctx.has(key));
+      redraw();
     };
     ctxBox.appendChild(b);
   });
   const catBox = document.getElementById('catchips');
   const counts = {};
   entries.forEach(e => counts[e.cat] = (counts[e.cat] || 0) + 1);
-  Object.entries(CATS).forEach(([k, label]) => {
-    if (!counts[k]) return;
+  Object.entries(CATS).forEach(([key, label]) => {
+    if (!counts[key]) return;
     const b = document.createElement('button');
     b.className = 'chip';
-    b.innerHTML = `${label} <span class="n">${counts[k]}</span>`;
+    b.innerHTML = `${label} <span class="n">${counts[key]}</span>`;
     b.onclick = () => {
-      state.cat.has(k) ? state.cat.delete(k) : state.cat.add(k);
-      b.classList.toggle('off', !state.cat.has(k));
-      refresh(); buildMatrix(); buildPaths();
+      state.cat.has(key) ? state.cat.delete(key) : state.cat.add(key);
+      b.classList.toggle('off', !state.cat.has(key));
+      redraw();
     };
     catBox.appendChild(b);
   });
@@ -617,18 +798,21 @@ document.getElementById('stats').innerHTML = [
 
 document.getElementById('search').addEventListener('input', ev => {
   state.q = ev.target.value.trim().toLowerCase();
-  refresh(); buildMatrix(); buildPaths();
+  redraw();
 });
 document.getElementById('ghosttoggle').addEventListener('click', function(){
   state.ghost = !state.ghost;
-  document.getElementById('ghost').style.display = state.ghost ? '' : 'none';
+  GRAPHS.forEach(g => { g.ghost.style.display = state.ghost ? '' : 'none'; });
   this.classList.toggle('off', !state.ghost);
 });
 
-
-document.getElementById('legend').innerHTML =
-  DATA.contexts.map(c =>
-    `<span><i style="background:${c.color}"></i>${c.key.replace(/_/g,' ')} configs</span>`).join('') +
+document.querySelector('#view-disk .legend').innerHTML =
+  DATA.contexts.map(c => `<span><i style="background:${c.color}"></i>${c.key.replace(/_/g, ' ')} source</span>`).join('') +
+  `<span><i class="sq" style="background:${DISK}"></i>place on disk — squares take the colour of the context feeding them</span>` +
+  `<span><i class="sq dash"></i>folder link — card lists what is inside</span>` +
+  `<span style="color:#3d4d61">{host} stays symbolic · dot size = places a source feeds</span>`;
+document.querySelector('#view-fleet .legend').innerHTML =
+  DATA.contexts.map(c => `<span><i style="background:${c.color}"></i>${c.key.replace(/_/g, ' ')} configs</span>`).join('') +
   `<span><i class="sq" style="background:${MACHINE}"></i>machine</span>` +
   `<span style="color:#3d4d61">dot size = machines reached · curve = one symlink from deploy_configs.py</span>`;
 
@@ -636,11 +820,15 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
     state.view = tab.dataset.view;
-    document.querySelectorAll('.view').forEach(v =>
-      v.classList.toggle('on', v.id === 'view-' + state.view));
+    card.classList.remove('show', 'pin');
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + state.view));
+    const graph = graphFor(state.view);
+    if (graph) graph.hint();
+    else document.getElementById('hint').textContent = state.view === 'matrix'
+      ? 'every entry × every machine — hover a cell for the exact path'
+      : 'every destination folder, and what lands in it';
   };
 });
-
 /* ---------------- matrix ---------------- */
 const tip = document.getElementById('tip');
 function showTip(html, ev){
@@ -795,10 +983,14 @@ function buildPaths(){
       <li><b>${meta.nonTargets.length}</b> more inventory devices (phones, TVs, switches, routers) are in the
           host files but receive nothing</li>
     </ul>
-    <b>Reading the constellation:</b> left circles are the repos that own config, right circles are the machines
-    that receive it, and every curve is one symlink. Dot size is how many machines an entry reaches.
-    <b>Matrix</b> shows the full entry × machine grid including why a cell is empty; <b>Destinations</b> inverts it
-    into the filesystem tree the links actually land in.`;
+    <b>Disk</b> is the default view and asks where a file on disk comes from: source files on the left, the
+    places they land on the right, grouped by what kind of place it is rather than by machine. <code>{host}</code>
+    stays symbolic there, so one workspace file is one node instead of one per machine, and a source referenced by
+    two manifests is one node because it is one file. A dashed square is a <b>folder link</b> — its card lists
+    what is inside the directory right now.
+    <b>Fleet</b> is the same constellation wired to machines instead: which machine receives which entry.
+    <b>Matrix</b> is the full entry × machine grid including why a cell is empty; <b>Destinations</b> is the
+    filesystem tree the links actually land in, as deployed.`;
   const toggle = () => box.classList.toggle('show');
   document.getElementById('aboutbtn').onclick = toggle;
   box.addEventListener('click', ev => { if (ev.target.id === 'aboutclose') box.classList.remove('show'); });
@@ -806,7 +998,8 @@ function buildPaths(){
 
 buildMatrix();
 buildPaths();
-refresh();
+GRAPHS.forEach(graph => graph.refresh());
+graphFor('disk').hint();
 </script>
 </body>
 </html>

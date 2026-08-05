@@ -221,11 +221,30 @@ Two files are written, side by side:
 
 | File | What it is |
 | --- | --- |
-| `deploy_map.html` | One self-contained page (no network, no build step) — a constellation view of contexts → machines, the full entry × machine matrix with the reason each empty cell is empty, and a destination-first filesystem view. Open it straight from the repo. |
+| `deploy_map.html` | One self-contained page (no network, no build step), four views: **Disk** (default), **Fleet**, **Matrix** and **Destinations** — see below. Open it straight from the repo. |
 | `deploy_map.json` | The same dataset, indented — the diffable half, so a pull request shows *which* link changed rather than one 350 KB blob. |
 
-Both land in the **personal credentials repo**, and only when that repo is
-cloned on the machine running the deploy:
+The four views answer different questions:
+
+- **Disk** — *where does this file on disk come from?* Source files on the
+  left, the places they land on the right, clustered by the kind of place
+  (`~`, `~/.claude`, and inside a checkout: claude files / secrets / other)
+  rather than by machine. Two things make it a disk view rather than a fleet
+  one: `{host}` stays symbolic, so `~/GitHub/{host}.code-workspace` is one node
+  instead of one per machine; and sources are keyed by the **resolved file**,
+  so an overlay entry pointing at `../dotfiles/...` shares a node with the
+  dotfiles entry that owns it. A dashed square marks a **folder link** — a
+  manifest entry whose source is a directory — and its card lists what is
+  inside that directory right now, which is how you check that, say, a repo's
+  Claude memories really are riding along with the link.
+- **Fleet** — the original constellation: which machine receives which entry.
+- **Matrix** — the entry × machine grid, colour-coded with *why* each empty
+  cell is empty.
+- **Destinations** — the filesystem tree the links land in, as deployed
+  (per-machine paths expanded).
+
+Both files land in the **personal credentials repo**, and only when that repo
+is cloned on the machine running the deploy:
 
 ```
 ~/GitHub/personal_credentials/deploy_map.{html,json}
