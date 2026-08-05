@@ -167,6 +167,12 @@ Concrete LAN IPs and usernames are deliberately not listed here: look the
 machine up in the `*_hosts.json` inventory of the sibling `*_credentials`
 repo it belongs to (`hostname` + `user` fields).
 
+**Slot policy**: the 3 T3 Connect tunnel slots go to the most-used machines,
+because only relay-linked environments send push notifications and Live
+Activities to the phone. Least-used machines (RyzenWhite) ride Tailscale
+Serve instead. Mixing transports is fine — the connection method is
+per-environment plumbing and threads behave identically once connected.
+
 **SSH environments (Linux/macOS remotes only).** Requirements on the remote:
 Node `^22.16 || ^23.11 || >=24.10` resolvable from a *non-interactive* shell,
 plus the agent CLIs (`claude`, ...) installed and authed there. The launcher
@@ -269,6 +275,7 @@ Gaps that matter for replacing the Claude desktop app:
 | Desktop-app harness surfaces missing | Computer use (screenshots/GUI control), the in-app browser pane, claude.ai connectors (Gmail/Calendar MCP), artifacts, and the iOS simulator panel are Claude-desktop-app features and don't exist in T3 threads. CLAUDE.md, skills, auto-memory, and MCP servers configured in `~/.claude` DO apply, since it's the same `claude` binary. |
 | No Anthropic cloud sessions | T3 can't spawn or steer sessions running in Anthropic's GitHub-repo sandbox; those are reachable only from Anthropic's own apps. |
 | One serving machine | Everything a session touches (repo, agent CLI, auth) must exist on the machine whose t3 server owns the thread. |
+| T3 Connect tunnel cap | Accounts get **3 managed tunnels**, counted against *published environments* — the local desktop's own published environment occupies a slot, so the dashboard's remote-environments list understates usage (it looks like 2 when all 3 are taken). The headless CLI surfaces a refusal only as a bare `403` with no message; the desktop dialog shows the real reason. Machines beyond the cap pair over Tailscale Serve instead — full thread functionality, but no push notifications or Live Activities from those environments. |
 
 ## Multi-machine control surface (target setup)
 
