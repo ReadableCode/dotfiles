@@ -202,8 +202,12 @@ end-to-end as
    `--tailscale-serve` (HTTPS on the tailnet, needs tailscale logged in on
    the box) and the script prints the tailnet URL plus a single-use pairing
    token. On each client: Add environment → Remote link →
-   `https://<machine>.<tailnet>.ts.net` + token (`t3 pair` mints more, one
-   per client). Alternative, `-T3ConnectLink`: interactive OAuth
+   `https://<machine>.<tailnet>.ts.net` + token. Mint a token per client —
+   over SSH is fine, no desktop session needed:
+   `t3 auth pairing create` (single-use, short-lived;
+   `t3 auth pairing list`/`revoke` to manage). Note there is no `t3 pair`
+   command despite older docs: bare `t3 <word>` treats the word as a cwd and
+   silently starts a stray server. Alternative, `-T3ConnectLink`: interactive OAuth
    (`t3 connect link --headless` — open the printed URL, paste the code
    back exactly as displayed, then the task restarts to activate it). Uses
    a managed-tunnel slot; see the 3-tunnel cap in Known issues.

@@ -90,5 +90,5 @@ if ($T3ConnectLink) {
     Start-Sleep -Seconds 5
     if ($TailscaleServe) { tailscale serve status }
     Select-String -Path $log -Pattern "Token:" | Select-Object -Last 1 | ForEach-Object Line
-    Write-Output "Pair from the desktop: Add environment -> Remote link -> the https URL above + the token (single-use; mint more with: t3 pair)."
+    Write-Output "Pair from the desktop: Add environment -> Remote link -> the https URL above + the token (single-use, short-lived; mint one per client with: t3 auth pairing create - fine over SSH)."
 }
