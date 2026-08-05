@@ -348,10 +348,17 @@ a doc/automation task in this repo.
   but on startup the server logs `Failed to reconcile T3 Connect desired
   link` — `403 POST https://relay.t3.codes/v1/client/environment-links` —
   and `t3 connect status` stays "Environment link: pending server startup".
-  Clock is fine, CLI 0.0.31 matches the desktop, credential is valid.
-  Suspected account-side cause (environment limit or approval) — check
-  app.t3.codes → settings → connections; nothing about this error is in the
-  upstream docs/issues.
+  Ruled out: clock skew; version skew (CLI 0.0.31 = desktop); stale or
+  case-mangled credential (a fresh code reproduces it — and note the auth
+  codes are genuinely issued uppercase: a re-cased variant gets 400 at the
+  token exchange, so enter them exactly as displayed); account environment
+  limit (none). The 0.0.32 nightly (2026-08-05) never attempts the reconcile
+  at all — rolled back. Leading theory: the headless "T3 Connect connect"
+  OAuth client gets 5 scopes vs the desktop client's 8, every working linked
+  environment on the account was linked by a desktop app, and the relay
+  refuses environment-link creation to the smaller-scoped headless token —
+  i.e. an upstream bug/limitation in the new headless flow (PR #3749).
+  Upstream issue creation is restricted; report via their Discord.
 
 ## More docs
 
