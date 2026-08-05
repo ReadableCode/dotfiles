@@ -65,20 +65,16 @@ the sections below; this is the order that matters.
    should list Claude; **Source Control** should show GitHub "Authenticated
    as" the personal account (click rescan if it doesn't). If the Claude row
    complains, the fix is CLI-side (`claude auth login`), not in the GUI.
-5. **Add the remote environments** from the fleet table in the Environments
-   section: Settings → **Connections** → Remote environments →
-   **Add environment**. Pairings are per-machine — Envy's connections do not
-   sync here, re-create them. **[agent]** dialog quirks: the dialog remembers
-   the last-used card (Remote link vs SSH), so select the right card before
-   typing; the suggested-hosts list under the SSH form shows tailnet
-   `100.x` IPs from known_hosts — ignore them and type the LAN IP; Remote
-   link hosts need an explicit `http://` prefix or the probe fails with
-   "Transport error".
-6. **(Optional) pair with Envy's own environment**: on Envy,
-   Settings → Connections → **Create link**; on this Mac, Add environment →
-   Remote link → paste the full pairing URL (it fills host + code). Codes
-   are single-use — mint a fresh link per device. Envy must have the app
-   open for its environment to be reachable.
+5. **Sign into T3 Connect**: environments linked to the account (see the
+   fleet table — e.g. RyzenWhite) appear on their own once the app is signed
+   in; nothing to re-create per machine.
+6. **Add any SSH-card environments** from the fleet table (e.g. the Linux
+   dev box): Settings → **Connections** → Remote environments →
+   **Add environment**. These pairings ARE per-machine — Envy's do not sync,
+   re-create them. **[agent]** dialog quirks: the dialog remembers the
+   last-used card, so select the SSH card before typing; the suggested-hosts
+   list shows tailnet `100.x` IPs from known_hosts — ignore them and type
+   the LAN IP.
 7. **Verify**: each remote environment shows a green dot under
    Settings → Connections → Remote environments, and its projects/threads
    appear in the sidebar. **[agent]** a "Transport error" on a correct
@@ -141,7 +137,7 @@ each use their own machine's auth, so agents on work machines keep doing
 GitHub through that context's normal token conventions — don't try to force a
 second account through the GUI.
 
-## Environments (multi-machine, LAN, no Tailscale)
+## Environments (multi-machine)
 
 One desktop UI drives several backends ("environments"); threads live on
 whichever backend created them. Environments are added under
@@ -149,13 +145,20 @@ whichever backend created them. Environments are added under
 plain LAN IPs — Tailscale is not required (T3 will suggest tailnet IPs it
 finds in `~/.ssh/known_hosts`; ignore them).
 
+**T3 Connect is the recommended way to attach a remote**: sign the remote's
+server into the T3 account (`t3 connect link --headless` on the remote) and
+it reaches the desktop through T3's relay — no pairing codes, no open ports
+or firewall rules, and it works off-LAN. The SSH card remains as a LAN
+alternative for Linux/macOS remotes; Remote-link pairing codes are only for
+one-off, account-less pairing.
+
 Current fleet (2026-08-05):
 
 | Environment | How | Notes |
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
-| RyzenWhite | deferred | Windows: see below. |
+| RyzenWhite | T3 Connect | Windows: native server linked via relay; see below. |
 
 Concrete LAN IPs and usernames are deliberately not listed here: look the
 machine up in the `*_hosts.json` inventory of the sibling `*_credentials`
@@ -175,35 +178,32 @@ clone. The remote server listens on loopback only; the desktop reaches it
 through the SSH tunnel.
 
 **Windows remotes: the SSH card does not work** — T3's remote launch scripts
-are POSIX `sh` only. The intended workaround is a native server on the Windows
-box paired as a **Remote link** — **but as of 2026-08-05 this is not working
-yet on RyzenWhite** (see Known issues above); the steps below are the recipe
-being attempted, not a verified setup. The whole recipe is scripted as
+are POSIX `sh` only. Set the machine up as a native server linked via
+**T3 Connect** instead, scripted end-to-end as
 [`scripts/setup_t3_server_windows.ps1`](../scripts/setup_t3_server_windows.ps1)
-— run it on the Windows box (fine over SSH: the serve runs as a logon
-scheduled task, so it survives the session), and it finishes by minting a
-single-use pairing code and printing it to the console it ran in; paste that
-into the desktop's Remote-link dialog. Manual equivalent:
+(run on the Windows box, fine over SSH). What it does:
 
-```powershell
-npm install -g t3@<desktop version>   # done on RyzenWhite (matches 0.0.31)
-t3 serve --host 0.0.0.0 --port 3773   # prints connection string + pairing token
-```
+1. Verifies Node, installs `t3@<desktop version>` globally.
+2. Registers and starts a `t3code-server` **logon scheduled task** running
+   `t3 serve` (a serve started in an SSH session dies with it — Windows
+   OpenSSH kills the process tree). Loopback only: the relay handles
+   reachability, so no `0.0.0.0` bind and no firewall rule.
+3. Runs `t3 connect link --headless` in the operator's console: first run
+   downloads T3's cloudflared relay client, then it prints an OAuth URL —
+   open it in a browser, sign in, and paste the authorization code back at
+   the prompt (stdin passes through SSH).
+4. Restarts the serve task, because the link activates on next server start.
 
-Then on the desktop: Add environment → Remote link → Host
-`http://<lan-ip>:3773` (the `http://` prefix matters — the dialog defaults to
-https and fails with a transport error), pairing code from the serve output.
-Caveat: a server started over SSH dies with the SSH session (Windows OpenSSH
-kills the process tree), so for a persistent server register a logon task
-once, from the Windows box itself:
+The environment then shows up under the same T3 account in the desktop app;
+check state on the box anytime with `t3 connect status`.
 
-```powershell
-schtasks /Create /TN t3code-server /TR "C:\Users\jason\AppData\Roaming\npm\t3.cmd serve --host 0.0.0.0 --port 3773" /SC ONLOGON /F
-schtasks /Run /TN t3code-server
-```
-
-Pairing codes are single-use; mint another with `t3 pair` for each new client
-device.
+RyzenWhite specifics (2026-08-05): no one is interactively logged on, so the
+task principal is **S4U** (runs without a stored password or logon session —
+plain `Register-ScheduledTask` tasks silently never start in that state,
+`LastTaskResult` 267011), with both AtLogOn and AtStartup triggers; the serve
+line lives in `~\.t3\t3serve.cmd` because a redirect inside the task's
+argument string gets eaten by quoting. Auth completed but relay link
+provisioning currently 403s — see Known issues.
 
 ## Settings (manifest-managed as of 2026-08-05)
 
@@ -230,16 +230,17 @@ the machine file up to `data/config_backups/` first).
 
 ## Remote access from other devices
 
-**Network access** is toggled on under Settings → Connections (stored as
-`serverExposureMode` in the unmanaged `desktop-settings.json`), so other
-devices on the LAN can pair with **Create link**. Environment pairings do NOT
-sync between desktops — each client (laptop, phone) pairs itself:
-SSH environments are re-added per machine, Remote-link environments need a
-fresh single-use pairing code, and Envy's own environment is reachable only
-while the desktop app is running (the backend is a child process; the
-`t3 service install` background service is Linux-only). Once two clients are
-connected to the same backend, threads and steering sync live in both
-directions — the backend is event-sourced and clients are just subscribers.
+Preferred path: sign every client (laptop, phone) into the same **T3
+account** — T3 Connect-linked environments appear on each of them with no
+per-device pairing. Only SSH-card environments are re-added per machine.
+LAN **Create link** pairing still exists for account-less one-offs (requires
+Network access toggled on under Settings → Connections, stored as
+`serverExposureMode` in the unmanaged `desktop-settings.json`). Envy's own
+environment is reachable only while the desktop app is running (the backend
+is a child process; the `t3 service install` background service is
+Linux-only). Once two clients are connected to the same backend, threads and
+steering sync live in both directions — the backend is event-sourced and
+clients are just subscribers.
 Avoid composing into the *same running thread* from two machines at once
 (composer drafts don't sync and pending turn-starts can stomp each other).
 Tailscale HTTPS remains available for off-LAN use — see
@@ -329,8 +330,8 @@ a doc/automation task in this repo.
   in the new-Mac checklist above.
 - **New SSH connections should offer a T3 connect method (upstream)**: when
   adding a new SSH connection, the wizard should prompt for a T3 connect
-  method instead of silently assuming the SSH-tunnel launcher — e.g. offer
-  SSH-managed launch vs Remote link pairing at that point.
+  method instead of silently assuming the SSH-tunnel launcher — i.e. offer
+  T3 Connect linking at that point.
 - **Remote server install is undocumented / manual (upstream + this repo)**:
   what the SSH launcher actually installs and runs on the remote (the
   headless t3 server) isn't documented anywhere, and the prerequisites were
@@ -338,12 +339,19 @@ a doc/automation task in this repo.
   box). Upstream fix: document the server install, or better, have the
   launcher verify/install Node and the server itself. This repo's side is now
   handled: `scripts/setup_t3_server_prereqs_linux.sh` automates the Linux
-  prereqs and `scripts/setup_t3_server_windows.ps1` automates the (still
-  unverified) Windows server recipe.
-- **Windows remote host setup not working yet**: the Remote-link approach in
-  the Windows section below has not succeeded on RyzenWhite yet — more
-  attempts planned. Treat that section as the intended recipe, not a verified
-  one, and keep the fleet table entry at "deferred" until it works.
+  prereqs and `scripts/setup_t3_server_windows.ps1` automates the Windows
+  server + T3 Connect link setup.
+- **Windows remote host setup (method settled, relay 403 open)**: LAN
+  Remote-link pairing is dead — the method is a native server linked via
+  **T3 Connect** (see the Windows remotes section). On RyzenWhite
+  (2026-08-05) the headless OAuth completed ("Authorized as" the account),
+  but on startup the server logs `Failed to reconcile T3 Connect desired
+  link` — `403 POST https://relay.t3.codes/v1/client/environment-links` —
+  and `t3 connect status` stays "Environment link: pending server startup".
+  Clock is fine, CLI 0.0.31 matches the desktop, credential is valid.
+  Suspected account-side cause (environment limit or approval) — check
+  app.t3.codes → settings → connections; nothing about this error is in the
+  upstream docs/issues.
 
 ## More docs
 
