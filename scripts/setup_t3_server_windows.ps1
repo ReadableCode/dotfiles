@@ -31,6 +31,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# 0. Tailscale must be up before enabling --tailscale-serve
+if ($TailscaleServe) {
+    if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) {
+        Write-Error "tailscale not found on PATH but -TailscaleServe is on. Install/login tailscale first, or pass -TailscaleServe:`$false."
+    }
+    $tsStatus = tailscale status 2>&1 | Select-Object -First 1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "tailscale is installed but not up ($tsStatus). Log it in first."
+    }
+}
+
 # 1. Node check - install via the app lists (choco/winget), not ad-hoc here
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCmd) {
@@ -51,6 +62,11 @@ Write-Output "node $($v -join '.') OK"
 npm install -g "t3@$Version"
 $t3 = Join-Path $env:APPDATA "npm\t3.cmd"
 if (-not (Test-Path $t3)) { Write-Error "t3 CLI not found at $t3 after install." }
+
+# Legacy cleanup: the first version of this script opened an inbound firewall
+# rule; loopback + Tailscale Serve/relay needs none, so drop it if present.
+Get-NetFirewallRule -DisplayName "t3code-server" -ErrorAction SilentlyContinue |
+    Remove-NetFirewallRule
 
 # 3. Logon task (survives SSH disconnect, unlike a shell-started serve).
 #    The serve line lives in a wrapper .cmd so the log redirect survives
@@ -86,9 +102,17 @@ if ($T3ConnectLink) {
     Write-Output "Serve task restarted - environment should now appear under your T3 account."
     & $t3 connect status
 } else {
-    # Surface what the desktop needs for Remote link pairing over the tailnet
-    Start-Sleep -Seconds 5
+    # Surface what the desktop needs for Remote link pairing over the tailnet.
+    # Wait for the server to actually print its startup pairing token.
+    $tokenLine = $null
+    foreach ($i in 1..30) {
+        $tokenLine = Select-String -Path $log -Pattern "Token:" -ErrorAction SilentlyContinue |
+            Select-Object -Last 1
+        if ($tokenLine) { break }
+        Start-Sleep -Seconds 2
+    }
+    if (-not $tokenLine) { Write-Error "Server never printed a pairing token after 60s - check $log" }
     if ($TailscaleServe) { tailscale serve status }
-    Select-String -Path $log -Pattern "Token:" | Select-Object -Last 1 | ForEach-Object Line
+    Write-Output $tokenLine.Line
     Write-Output "Pair from the desktop: Add environment -> Remote link -> the https URL above + the token (single-use, short-lived; mint one per client with: t3 auth pairing create - fine over SSH)."
 }
