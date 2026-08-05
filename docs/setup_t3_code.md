@@ -148,9 +148,12 @@ finds in `~/.ssh/known_hosts`; ignore them).
 **T3 Connect is the recommended way to attach a remote**: sign the remote's
 server into the T3 account (`t3 connect link --headless` on the remote) and
 it reaches the desktop through T3's relay — no pairing codes, no open ports
-or firewall rules, and it works off-LAN. The SSH card remains as a LAN
-alternative for Linux/macOS remotes; Remote-link pairing codes are only for
-one-off, account-less pairing.
+or firewall rules, and it works off-LAN. **Caveat: accounts get 3 managed
+tunnels** (see Known issues); beyond that, expose the server with
+`t3 serve --tailscale-serve` and pair it as a Remote link over the tailnet
+(per-client pairing codes, no push notifications from that environment, but
+no slot used). The SSH card remains as a LAN alternative for Linux/macOS
+remotes.
 
 Current fleet (2026-08-05):
 
@@ -158,7 +161,7 @@ Current fleet (2026-08-05):
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
-| RyzenWhite | T3 Connect | Windows: native server linked via relay; see below. |
+| RyzenWhite | Remote link over Tailscale Serve | Windows: native server; T3 Connect blocked by the 3-tunnel cap. See below. |
 
 Concrete LAN IPs and usernames are deliberately not listed here: look the
 machine up in the `*_hosts.json` inventory of the sibling `*_credentials`
@@ -178,32 +181,35 @@ clone. The remote server listens on loopback only; the desktop reaches it
 through the SSH tunnel.
 
 **Windows remotes: the SSH card does not work** — T3's remote launch scripts
-are POSIX `sh` only. Set the machine up as a native server linked via
-**T3 Connect** instead, scripted end-to-end as
+are POSIX `sh` only. Set the machine up as a native server instead, scripted
+end-to-end as
 [`scripts/setup_t3_server_windows.ps1`](../scripts/setup_t3_server_windows.ps1)
 (run on the Windows box, fine over SSH). What it does:
 
 1. Verifies Node, installs `t3@<desktop version>` globally.
-2. Registers and starts a `t3code-server` **logon scheduled task** running
-   `t3 serve` (a serve started in an SSH session dies with it — Windows
-   OpenSSH kills the process tree). Loopback only: the relay handles
-   reachability, so no `0.0.0.0` bind and no firewall rule.
-3. Runs `t3 connect link --headless` in the operator's console: first run
-   downloads T3's cloudflared relay client, then it prints an OAuth URL —
-   open it in a browser, sign in, and paste the authorization code back at
-   the prompt (stdin passes through SSH).
-4. Restarts the serve task, because the link activates on next server start.
+2. Registers and starts a `t3code-server` **scheduled task** (boot + logon
+   triggers) running `t3 serve` — a serve started in an SSH session dies
+   with it, Windows OpenSSH kills the process tree. Loopback only: both
+   reachability paths dial loopback, so no `0.0.0.0` bind and no firewall
+   rule.
+3. Reachability, default **Tailscale Serve**: the serve runs with
+   `--tailscale-serve` (HTTPS on the tailnet, needs tailscale logged in on
+   the box) and the script prints the tailnet URL plus a single-use pairing
+   token. On each client: Add environment → Remote link →
+   `https://<machine>.<tailnet>.ts.net` + token (`t3 pair` mints more, one
+   per client). Alternative, `-T3ConnectLink`: interactive OAuth
+   (`t3 connect link --headless` — open the printed URL, paste the code
+   back exactly as displayed, then the task restarts to activate it). Uses
+   a managed-tunnel slot; see the 3-tunnel cap in Known issues.
 
-The environment then shows up under the same T3 account in the desktop app;
-check state on the box anytime with `t3 connect status`.
-
-RyzenWhite specifics (2026-08-05): no one is interactively logged on, so the
-task principal is **S4U** (runs without a stored password or logon session —
-plain `Register-ScheduledTask` tasks silently never start in that state,
-`LastTaskResult` 267011), with both AtLogOn and AtStartup triggers; the serve
-line lives in `~\.t3\t3serve.cmd` because a redirect inside the task's
-argument string gets eaten by quoting. Auth completed but relay link
-provisioning currently 403s — see Known issues.
+RyzenWhite runs the Tailscale path (2026-08-05, working: desktop pairs over
+the tailnet URL). Windows task specifics baked into the script: the
+principal is **S4U** (a default-principal task silently never starts when no
+one is logged on, `LastTaskResult` 267011), and the serve line lives in
+`~\.t3\t3serve.cmd` because a redirect inside the task's argument string
+gets eaten by quoting. A T3 Connect credential is also stored there
+("Authorized as" the account), so if a tunnel slot ever frees up,
+`t3 connect link` + a task restart flips it to the relay with no new OAuth.
 
 ## Settings (manifest-managed as of 2026-08-05)
 
@@ -341,24 +347,22 @@ a doc/automation task in this repo.
   handled: `scripts/setup_t3_server_prereqs_linux.sh` automates the Linux
   prereqs and `scripts/setup_t3_server_windows.ps1` automates the Windows
   server + T3 Connect link setup.
-- **Windows remote host setup (method settled, relay 403 open)**: LAN
-  Remote-link pairing is dead — the method is a native server linked via
-  **T3 Connect** (see the Windows remotes section). On RyzenWhite
-  (2026-08-05) the headless OAuth completed ("Authorized as" the account),
-  but on startup the server logs `Failed to reconcile T3 Connect desired
-  link` — `403 POST https://relay.t3.codes/v1/client/environment-links` —
-  and `t3 connect status` stays "Environment link: pending server startup".
-  Ruled out: clock skew; version skew (CLI 0.0.31 = desktop); stale or
-  case-mangled credential (a fresh code reproduces it — and note the auth
-  codes are genuinely issued uppercase: a re-cased variant gets 400 at the
-  token exchange, so enter them exactly as displayed); account environment
-  limit (none). The 0.0.32 nightly (2026-08-05) never attempts the reconcile
-  at all — rolled back. Leading theory: the headless "T3 Connect connect"
-  OAuth client gets 5 scopes vs the desktop client's 8, every working linked
-  environment on the account was linked by a desktop app, and the relay
-  refuses environment-link creation to the smaller-scoped headless token —
-  i.e. an upstream bug/limitation in the new headless flow (PR #3749).
-  Upstream issue creation is restricted; report via their Discord.
+- **T3 Connect: 3 managed tunnels per account, and the CLI hides the error
+  (root cause found 2026-08-05)**: the mystery relay `403 POST
+  /v1/client/environment-links` on RyzenWhite was the account's tunnel cap —
+  the desktop's Set up T3 Connect dialog shows the real message ("this
+  account already has its maximum of 3 managed tunnels. Unlink an
+  environment to free one up"), while the headless CLI logs only a bare 403
+  (upstream ask: surface the relay's error body). The three slots here:
+  Envy's published environment plus the two laptop environments. The cap
+  counts *published environments*, not the remote-environments list in the
+  dashboard — which is why it looks like only two. Workaround in use for
+  RyzenWhite: `t3 serve --tailscale-serve` + Remote link over the tailnet
+  (no slot consumed; see Windows remotes section). Debugging breadcrumbs
+  kept: auth codes are genuinely issued uppercase (a re-cased code 400s at
+  token exchange — enter exactly as displayed); the 0.0.32 nightly never
+  attempts the reconcile at all; upstream issue creation is restricted, so
+  report via their Discord.
 
 ## More docs
 
