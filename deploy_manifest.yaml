@@ -177,18 +177,17 @@
 # only; promote a setting to the bare file only once the npm server build on
 # the Windows/Linux boxes accepts it.
 
-- name: t3code_settings
-  repo: application_configs/t3code/settings.json
-  dest:
-    darwin: ~/.t3/userdata/settings.json
-    linux: ~/.t3/userdata/settings.json
-    windows: ~/.t3/userdata/settings.json
-  requires: ~/.t3/userdata
-  note: >-
-    T3 server settings (provider instances, default model/effort). Macs get
-    settings.mac.json; Windows/Linux get the bare server-safe file. The
-    opencode.serverPassword field must stay empty in this public repo;
-    sensitive provider env values live in ~/.t3/userdata/secrets/, never here.
+# t3code_settings (application_configs/t3code/settings.json ->
+# ~/.t3/userdata/settings.json) deploys via personal_manifest.yaml as of
+# 2026-08-06: the file stays here and is still public, but the ENTRY needs a
+# hosts whitelist so client contexts can point that dest at their own copy,
+# and hosts filters are overlay-manifest-only. Same split as claude_settings
+# above, and for the same reason: a work machine on Bedrock needs a
+# claudeAgent providerInstance whose customModels names an inference profile,
+# which must not leak into the file every personal machine gets. Adding a new
+# personal T3 machine means adding it to that entry's hosts list, not here.
+# client-settings.json and keybindings.json are unaffected - they have no
+# per-context content, so they stay below.
 
 - name: t3code_client_settings
   repo: application_configs/t3code/client-settings.json

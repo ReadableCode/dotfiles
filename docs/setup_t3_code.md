@@ -275,9 +275,16 @@ gets eaten by quoting. A T3 Connect credential is also stored there
 
 `settings.json`, `client-settings.json`, and `keybindings.json` in
 `~/.t3/userdata/` are deployed as symlinks from
-`application_configs/t3code/` via the `t3code_*` entries in
-`deploy_manifest.yaml` (gated on `~/.t3/userdata` existing, so machines
-without T3 are skipped). The split:
+`application_configs/t3code/` (gated on `~/.t3/userdata` existing, so machines
+without T3 are skipped). `client-settings.json` and `keybindings.json` deploy
+from the `t3code_*` entries in `deploy_manifest.yaml`; **`settings.json`
+deploys from `user_t3code_settings` in `personal_manifest.yaml`** as of
+2026-08-06 — the file is still the public one in this repo, but the entry
+needs a hosts whitelist so a client context can point the same dest at its own
+copy (hosts filters are overlay-manifest-only). Work machines get their
+`settings.json` from their own context manifest instead; see the Bedrock model
+entry under Known issues. Adding a personal T3 machine means adding it to that
+entry's hosts list. The split:
 
 | File | Manifest-worthy? | Why |
 |------|------------------|-----|
@@ -426,6 +433,47 @@ a doc/automation task in this repo.
   copying it by hand (extra painful on the phone apps). Fix: linkify URLs
   (and markdown links) in the transcript renderer and open them in the
   system browser.
+- **Bedrock-authed machines: T3 overrides the two things `settings.json`
+  can't win (upstream + this repo, handled 2026-08-06)**: on a machine where
+  Claude Code authenticates through Bedrock
+  (`CLAUDE_CODE_USE_BEDROCK=1` in `~/.claude/settings.json`), the interactive
+  CLI works but every T3 turn fails. T3 does spawn that CLI and the CLI does
+  read its own settings — the problem is the two per-thread values T3 layers
+  on top, both of which are first-party-only concepts.
+  1. **Permission mode.** T3 maps its Auto runtime mode to SDK
+     `permissionMode: "auto"`; Claude Code disables auto mode for
+     non-first-party providers ("auto mode disabled: provider bedrock
+     requires the `CLAUDE_CODE_ENABLE_AUTO_MODE` opt-in"), so the CLI rejects
+     the `setPermissionMode` control request T3 sends at *every turn start*
+     and the thread dies with `Provider turn start failed ·
+     turn/setPermissionMode failed` before any model call. Interactive use
+     never hits it because the TUI doesn't offer Auto. Upstream:
+     [#4495](https://github.com/pingdotgg/t3code/issues/4495) (open; PR #4510
+     remapping auto→default was closed unmerged, still present in 0.0.31).
+     Fix: set the thread's permission dropdown to anything but Auto. Adding
+     `"CLAUDE_CODE_ENABLE_AUTO_MODE": "1"` to the settings `env` block is the
+     durable version, but a second per-model gate ("auto mode unavailable for
+     this model") may still block it for inference-profile model IDs.
+  2. **Model.** T3's picker sends first-party slugs (`claude-opus-5`) as
+     `--model`, overriding `ANTHROPIC_MODEL` from settings, and Bedrock
+     answers `400 The provided model identifier is invalid`. The Claude
+     provider config has a `customModels` array for exactly this, but its
+     schema marks it `providerSettingsForm: { hidden: true }` and leaves it
+     out of the form `order` — **there is no UI for it**, which is what makes
+     this look unfixable from inside the app. Set it in `settings.json` and
+     the inference profile shows up in the picker. `normalizeCustomModelSlug`
+     only trims, so the dots and colons in
+     `<region>.anthropic.<model>-v1:0` survive; custom models resolve to
+     empty capabilities, so T3 also stops appending the `[1m]` suffix and
+     `--effort` for them (and their effort/context-window dropdowns
+     disappear — that's the trade).
+  Handled here by giving Bedrock machines their own `settings.json` from
+  their context manifest rather than the shared one (see Settings above).
+  Watch on first deploy: this writes an explicit `claudeAgent`
+  providerInstance where the instance was previously implicit. Don't forget
+  `textGenerationModelSelection` — it drives the `claude -p` calls behind
+  commit messages and thread titles, so it needs the profile ID too or those
+  keep 400ing after threads work.
 - **npm server rejects newer config than its pinned version (this repo,
   handled)**: the headless `t3` server schema-validates managed configs and
   warns on anything a newer build wrote — RyzenWhite's `server.log` spammed
