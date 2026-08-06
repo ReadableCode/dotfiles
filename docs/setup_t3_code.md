@@ -160,6 +160,111 @@ If auth fails at session start, the UI shows the login command to run.
 Other providers (Codex, Cursor, Grok Build, OpenCode) follow the same pattern
 with their own CLIs.
 
+### Claude Code on Bedrock (2026-08-06)
+
+On a machine where Claude Code authenticates through Bedrock rather than a
+Claude subscription — `CLAUDE_CODE_USE_BEDROCK=1` plus `AWS_PROFILE` /
+`AWS_REGION` / `ANTHROPIC_MODEL` in the `env` block of
+`~/.claude/settings.json` — the interactive CLI works but **every T3 turn
+fails**. Nothing is wrong with the auth: T3 spawns that same CLI and the CLI
+reads that same settings file. The breakage is the two per-thread values T3
+asserts *on top of* the config, both first-party-only concepts that
+`settings.json` cannot override. See Known issues for the upstream detail;
+this is the procedure.
+
+**Symptoms, in the order you hit them**
+
+| Symptom | Cause |
+|---------|-------|
+| `Provider turn start failed · turn/setPermissionMode failed`, turn dies before any model call | thread permission mode is **Auto** |
+| `API Error (claude-opus-5): 400 The provided model identifier is invalid` | picker sent a first-party slug as `--model` |
+| the Bedrock model isn't in the picker to select | `customModels` has no UI — see below |
+
+**1. Permission mode — per thread, no config.** Set the thread's permission
+dropdown to anything except Auto. T3 maps Auto to SDK
+`permissionMode: "auto"`, which Claude Code refuses for non-first-party
+providers, so the control request T3 sends at every turn start is rejected.
+`"CLAUDE_CODE_ENABLE_AUTO_MODE": "1"` in the settings `env` block is the
+durable version, but a second per-model gate may still block it for
+inference-profile IDs — the dropdown is the reliable fix.
+
+**2. Model — needs a `settings.json` edit.** The picker sends slugs like
+`claude-opus-5` as `--model`, which beats `ANTHROPIC_MODEL`. Register the
+inference profile as a custom model in the *T3 server* settings
+(`~/.t3/userdata/settings.json`, not `~/.claude/settings.json`):
+
+```json
+{
+  "textGenerationModelSelection": {
+    "instanceId": "claudeAgent",
+    "model": "<region>.anthropic.<model>-v1:0",
+    "options": []
+  },
+  "providerInstances": {
+    "claudeAgent": {
+      "driver": "claudeAgent",
+      "enabled": true,
+      "config": {
+        "enabled": true,
+        "binaryPath": "claude",
+        "homePath": "",
+        "launchArgs": "",
+        "customModels": ["<region>.anthropic.<model>-v1:0"]
+      }
+    }
+  }
+}
+```
+
+`customModels` is real and the server reads it, but its schema marks it
+`providerSettingsForm: { hidden: true }` and leaves it out of the form
+`order` — **no UI can set it**, which is what makes this look unfixable from
+inside the app. Notes on that block:
+
+- `textGenerationModelSelection` is separate and easy to miss: it drives the
+  `claude -p --model ...` calls behind commit messages and thread titles, so
+  it needs the profile ID too or those keep 400ing after threads work.
+- `options: []` is right for a custom model. Custom models resolve to empty
+  capabilities, so T3 stops appending the `[1m]` suffix and `--effort` for
+  them — and their effort / context-window dropdowns disappear in the UI.
+  That's the trade for using Bedrock here.
+- This writes an explicit `claudeAgent` providerInstance where the instance
+  was previously implicit. Watch the provider list on first deploy.
+- Model IDs pass through `normalizeCustomModelSlug`, which only trims, so
+  the dots and colons survive intact. It's an array — list several profiles
+  if more than one is enabled.
+
+**Where the file comes from.** Bedrock config must not reach the personal
+machines, so such a host gets its own `settings.json` from its context
+manifest instead of the shared one (Settings section below). A host variant
+`t3code/settings.<host>.json` in that context's credentials repo auto-resolves
+for that machine; other hosts on the same entry fall through to the bare
+`t3code/settings.json` beside it.
+
+**Applying it**, on the machine running the server:
+
+```bash
+git -C <dotfiles> pull && git -C <context credentials repo> pull
+uv run python src/deploy_configs.py            # from the dotfiles checkout
+ls -l ~/.t3/userdata/settings.json             # confirm it points at the variant
+systemctl --user restart t3code.service        # if installed as a boot service
+```
+
+Then per thread: permission dropdown off Auto, model picker → the inference
+profile. If the model isn't listed after the restart, that pinned server
+build predates `customModels` on the Claude driver (check `~/.t3/server.log`
+for a config-issue warning); fall back to putting
+`--model <region>.anthropic.<model>-v1:0` in the provider's **Launch
+arguments** field, which *is* in the UI. Those parse into the SDK's
+`extraArgs` and are appended after T3's own `--model`, so the last one wins.
+Only safe once that host owns its own settings file — otherwise the write
+lands in the shared one.
+
+**Also check `~/.claude/settings.json`** on that machine: a top-level
+`"model"` key (e.g. `"opus[1m]"`) beats `env.ANTHROPIC_MODEL`, so any CLI
+invocation without an explicit `--model` still resolves to a first-party
+alias Bedrock rejects. Drop it or set it to the inference profile.
+
 ## First launch (macOS quirks seen on Envy, 2026-08-05)
 
 Two things blocked the very first launch:
@@ -282,9 +387,10 @@ deploys from `user_t3code_settings` in `personal_manifest.yaml`** as of
 2026-08-06 — the file is still the public one in this repo, but the entry
 needs a hosts whitelist so a client context can point the same dest at its own
 copy (hosts filters are overlay-manifest-only). Work machines get their
-`settings.json` from their own context manifest instead; see the Bedrock model
-entry under Known issues. Adding a personal T3 machine means adding it to that
-entry's hosts list. The split:
+`settings.json` from their own context manifest instead — see
+[Claude Code on Bedrock](#claude-code-on-bedrock-2026-08-06) for the case that
+forced the split. Adding a personal T3 machine means adding it to that entry's
+hosts list. The split:
 
 | File | Manifest-worthy? | Why |
 |------|------------------|-----|
@@ -321,7 +427,10 @@ Network access toggled on under Settings → Connections, stored as
 `serverExposureMode` in the unmanaged `desktop-settings.json`). Envy's own
 environment is reachable only while the desktop app is running (the backend
 is a child process; the `t3 service install` background service is
-Linux-only). Once two clients are connected to the same backend, threads and
+Linux-only — it installs a systemd **user** unit `t3code.service` plus
+`loginctl enable-linger`, so managing it is `systemctl --user
+{status,restart} t3code.service`, never `sudo systemctl`). Once two clients
+are connected to the same backend, threads and
 steering sync live in both directions — the backend is event-sourced and
 clients are just subscribers.
 Avoid composing into the *same running thread* from two machines at once
@@ -468,12 +577,9 @@ a doc/automation task in this repo.
      `--effort` for them (and their effort/context-window dropdowns
      disappear — that's the trade).
   Handled here by giving Bedrock machines their own `settings.json` from
-  their context manifest rather than the shared one (see Settings above).
-  Watch on first deploy: this writes an explicit `claudeAgent`
-  providerInstance where the instance was previously implicit. Don't forget
-  `textGenerationModelSelection` — it drives the `claude -p` calls behind
-  commit messages and thread titles, so it needs the profile ID too or those
-  keep 400ing after threads work.
+  their context manifest rather than the shared one — full procedure in
+  [Claude Code on Bedrock](#claude-code-on-bedrock-2026-08-06) under Connect
+  providers.
 - **npm server rejects newer config than its pinned version (this repo,
   handled)**: the headless `t3` server schema-validates managed configs and
   warns on anything a newer build wrote — RyzenWhite's `server.log` spammed
