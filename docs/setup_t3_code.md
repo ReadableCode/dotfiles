@@ -367,7 +367,7 @@ How T3 maps onto that:
   with Remote Control (phone/web via claude.ai; one connected session at a
   time) or a self-hosted web UI, at the cost of T3's side-by-side thread UI.
 
-## Known issues & recommended fixes (as of 2026-08-05)
+## Known issues & recommended fixes (as of 2026-08-06)
 
 Running notes from daily use — each is either an upstream candidate
 ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
@@ -389,6 +389,38 @@ a doc/automation task in this repo.
   retroactively to existing threads. Interim: click individual tool cards
   to expand them, or run `claude` in T3's terminal panel (`mod+j`) where
   `~/.claude/settings.json` `verbose: true` applies.
+- **Background commands can't be watched live, from inside or outside T3
+  (upstream, 2026-08-06)**: when a thread launches a long-running command in
+  the background, the thread shows only a collapsed Work Log card
+  ("Background command ... ") — there is no live output pane, so the only way
+  to see progress is to ask the thread to poll it and wait for the reply. It
+  can't be watched from outside either: the background shell belongs to the
+  `claude` process T3 spawned for that thread, and `BashOutput` / `/bashes`
+  only work inside the owning session, so another Claude Code session (CLI,
+  desktop, or a second T3 thread) can't attach. Resuming the session id in a
+  new process does not restore background shells — the old process owns them
+  until it exits. Fix: stream background-command output into an expandable
+  live pane (the data is already in the stream-json). Workarounds, best
+  first: (1) have the script write its own log (`./run.sh > /tmp/run.log
+  2>&1 &`) so any session, terminal, or machine can `tail -f` it;
+  (2) ask the owning thread to check; (3) read the raw transcript — map
+  thread → Claude session with
+  `sqlite3 -readonly ~/.t3/userdata/state.sqlite "select thread_id, status,
+  json_extract(resume_cursor_json,'$.resume') as session_id,
+  json_extract(runtime_payload_json,'$.cwd') as cwd from
+  provider_session_runtime order by last_seen_at desc limit 5;"`, then
+  `tail -f ~/.claude/projects/<cwd-slug>/<session_id>.jsonl` to see the tool
+  calls and every polled output the thread has captured.
+- **File preview stops at the first 1 MB, with no tail (upstream,
+  2026-08-06)**: opening a large file in the side pane shows
+  "Preview limited to the first 1 MB of a *N* byte file" (seen on a ~120 MB
+  run log) and there is no way to seek to the end, follow the tail, or load
+  the next chunk — so for a growing log, the one part that matters (the last
+  lines) is the one part the viewer can't reach. This makes the file pane
+  useless as a substitute for the missing live output above. Fix: a tail/
+  follow mode, or at minimum a "jump to end" that loads the final 1 MB.
+  Workaround: `tail -f` the file in the terminal panel (`mod+j`) or from any
+  shell on that machine.
 - **Links in responses aren't clickable (upstream)**: URLs in assistant
   responses render as plain text — no way to open one without selecting and
   copying it by hand (extra painful on the phone apps). Fix: linkify URLs
