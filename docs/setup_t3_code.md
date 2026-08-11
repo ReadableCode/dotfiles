@@ -376,6 +376,48 @@ gets eaten by quoting. A T3 Connect credential is also stored there
 ("Authorized as" the account), so if a tunnel slot ever frees up,
 `t3 connect link` + a task restart flips it to the relay with no new OAuth.
 
+## Updating a service-managed Linux server (2026-08-11)
+
+When a T3 Connect Linux environment runs as the background service
+(`t3 service install` → systemd user unit `t3code.service`), the desktop
+panel eventually shows **"Server update available"** with a
+**Copy update command** button. The command it gives is just
+`npx t3@<version>` — **do not run it as-is**. That is the *run* command for
+the new version, not an updater:
+
+- It starts a second t3 server in the foreground of whatever shell runs it,
+  which re-points the managed relay tunnel's ingress at its own ephemeral
+  port (the tunnel follows the newest server).
+- Ctrl+C'ing it then strands the relay proxying into a dead port: the panel
+  shows "Failed to connect … Relay environment endpoint is unavailable"
+  while `systemctl --user status t3code` still says active/running. The
+  smoking gun in `~/.t3/userdata/logs/boot-service.log` is cloudflared
+  spamming `ERR … dial tcp 127.0.0.1:<port>: connect: connection refused` —
+  the same dead-origin class as Envy's exposure-port mismatch, but with no
+  exposure toggle here to re-kick it.
+
+**Recovery** from that state: `systemctl --user restart t3code.service`.
+The restart re-spawns cloudflared against the service's own port. Expect
+1–2 minutes of `CRYPTO_ERROR 0x178 … tls: no application protocol` QUIC
+retries in the log before it falls back to http2 and registers **4 tunnel
+connections** — that's the ready signal (same readiness behavior as Envy).
+
+**The correct update command** (the CLI has a real updater, the panel just
+doesn't surface it):
+
+```bash
+npx -y t3@<version> service update
+```
+
+It installs the runtime under `~/.t3/runtime/versions/<version>`, rewrites
+the unit, and restarts the service — sessions on the box restart with it.
+As of 0.0.33 the rewrite also switches `ExecStart` from a version-pinned
+runtime path to the version-agnostic `~/.t3/runtime/service-launcher.mjs`,
+so future updates shouldn't need to touch the unit at all. Verify with
+`systemctl --user status t3code` (the serve process's path shows the
+running version) and wait for the 4 registered connections in
+`boot-service.log`; the panel then goes green and the update banner clears.
+
 ## Settings (manifest-managed as of 2026-08-05)
 
 `settings.json`, `client-settings.json`, and `keybindings.json` in
@@ -588,6 +630,15 @@ a doc/automation task in this repo.
   keybindings after the downgrade to 0.0.31. Handled by the platform
   variant split in the Settings section (bare files stay server-safe);
   deploying to RyzenWhite replaces the stale file and clears the warnings.
+- **"Copy update command" starts a second server instead of updating the
+  service (upstream, 2026-08-11)**: for a service-managed Linux environment,
+  the remote-environments panel's update command is bare `npx t3@<version>`
+  — running it spawns a foreground server that steals the relay tunnel;
+  killing it strands the environment on "Relay environment endpoint is
+  unavailable" until `systemctl --user restart t3code.service`. The CLI has
+  a real updater (`t3 service update`) that the panel should surface when
+  the endpoint is service-managed. Full procedure and recovery in
+  [Updating a service-managed Linux server](#updating-a-service-managed-linux-server-2026-08-11).
 - **Settle button hit area (upstream)**: only part of the Settle button
   registers clicks, not the whole visible button. Fix: extend the click target
   to the full button bounds.
