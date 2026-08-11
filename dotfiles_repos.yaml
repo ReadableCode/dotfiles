@@ -1,0 +1,30 @@
+# Repos every machine with dotfiles should be offered, regardless of context.
+#
+# Read in place by src/clone_repos.py (run by gitpullall between the pull and
+# the config deploy) - dotfiles opts in as an overlay by declaring this file
+# named after its own directory, the same discovery the deploy manifests use.
+#
+# Entries belong here (not in a *_credentials repos config) only when the repo
+# is needed everywhere dotfiles is cloned - including machines where no
+# credentials repo carrying the entry would ever be cloned. Each repo name may
+# be declared by exactly one config across all overlays; clone_repos.py fails
+# loudly on duplicates.
+#
+# Same fields per repo as the credentials-repo configs; see
+# personal_credentials/personal_repos.yaml for the full field reference.
+
+defaults:
+  provider: github
+  org: ReadableCode
+  # No ssh_key: these repos use the machine's default GitHub key.
+
+repos:
+  # Self-referential (clone_repos.py can only run once dotfiles is already
+  # cloned), declared for completeness: this config is the full record of the
+  # every-machine repos.
+  - name: dotfiles
+
+  # Status board TUI: its panels are discovered from <context>_statusboard.yaml
+  # in whichever credentials repos are cloned, so the code itself is wanted on
+  # every machine, work laptops included.
+  - name: status_board
