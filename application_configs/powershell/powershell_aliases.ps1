@@ -187,6 +187,15 @@ function run-python-script {
     Write-Host "Changing to script directory: $scriptDir"
     Push-Location -Path $scriptDir
     try {
+        # Prefer uv when the project declares one (pyproject.toml one level up,
+        # standard project layout): uv run creates and syncs .venv on first
+        # use, so a fresh clone works without a manual uv sync.
+        if ((Test-Path "..\pyproject.toml") -and (Get-Command uv -ErrorAction SilentlyContinue)) {
+            Write-Host "Project pyproject.toml detected: running with uv."
+            uv run python $scriptPath @scriptArgs
+            return 0
+        }
+
         # Look for a .venv one level up from the script (standard project layout)
         if (Test-Path "..\.venv") {
             Write-Host "Project .venv detected at: ..\.venv"
