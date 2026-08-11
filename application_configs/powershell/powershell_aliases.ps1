@@ -227,6 +227,12 @@ function todo {
     run-python-script $scriptPath
 }
 
+function statusboard {
+    if (-not (Test-GitDir)) { return }
+    $scriptPath = (Join-Path $gitDir 'status_board\src\status_board.py')
+    run-python-script $scriptPath @args
+}
+
 
 ### Command Shortcuts ###
 

@@ -110,6 +110,11 @@ function todo() {
     run_python_script "$gitDir/Terminal_To_Do/src/main.py"
 }
 
+function statusboard() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    run_python_script "$gitDir/status_board/src/status_board.py" "$@"
+}
+
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
