@@ -7,6 +7,7 @@ import os
 import sys
 
 from config import grandparent_dir, parent_dir, templates_dir
+from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
     find_credentials_dirs,
@@ -24,6 +25,10 @@ REPO_ROOT = parent_dir
 # it is written to the personal credentials repo (and only when that repo is
 # cloned here), where Jason commits it by hand.
 OUTPUT_REPO = f"personal{CREDENTIALS_SUFFIX}"
+# Only one machine may regenerate the map: every other clone of the personal
+# credentials repo writing these files leaves that checkout dirty, and the next
+# gitpullall aborts on the uncommitted deploy_map.{html,json}.
+MAP_HOST = "envy"
 OUTPUT_BASENAME = "deploy_map"
 TEMPLATE_PATH = os.path.join(templates_dir, "deploy_map.html")
 DATA_PLACEHOLDER = "__DATA__"
@@ -504,15 +509,20 @@ def find_output_dir(credentials_root=None):
     return None
 
 
-def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, template_path=None):
+def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, template_path=None, hostname=None):
     """
     Write ``deploy_map.html`` (self-contained page) and ``deploy_map.json`` (the
     same data, diffable) into the personal credentials repo.
 
-    Returns the paths written, or an empty list when that repo is not cloned
-    here - a work machine holding only a client's credentials repo must never
-    grow a file describing every other machine.
+    Returns the paths written; ``None`` when this machine is not ``MAP_HOST``
+    (only that machine may dirty the personal credentials checkout), or an
+    empty list when that repo is not cloned here - a work machine holding only
+    a client's credentials repo must never grow a file describing every other
+    machine.
     """
+    hostname = hostname or get_uppercase_hostname()
+    if (hostname or "").split(".")[0].lower() != MAP_HOST:
+        return None
     credentials_root = credentials_root or grandparent_dir
     output_dir = output_dir or find_output_dir(credentials_root)
     if not output_dir:
@@ -530,6 +540,9 @@ def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, t
 def report_map(paths, quiet=False):
     """Print where the map went (or why it did not), matching the deploy report's voice."""
     if quiet:
+        return
+    if paths is None:
+        print(f"map: only {MAP_HOST} regenerates the map - skipped")
         return
     if not paths:
         print(f"map: {OUTPUT_REPO} is not cloned here - skipped")

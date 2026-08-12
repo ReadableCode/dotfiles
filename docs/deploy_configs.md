@@ -117,7 +117,7 @@ A `repo` path is resolved against variant files named `<base>.<token>.<ext>`
 order:
 
 1. **Exact hostname** — `settings.envy.json`. The short (pre-dot) hostname is
-   matched case-insensitively, so host `ENVY.ASUSROUTER` matches token `envy`
+   matched case-insensitively, so host `ENVY.LOCAL` matches token `envy`
    and `MacbookProM5` matches `macbookprom5`.
 2. **Platform** — `settings.darwin.json` or `settings.mac.json` on macOS,
    `settings.linux.json`, `settings.windows.json`.
@@ -243,18 +243,22 @@ The four views answer different questions:
 - **Destinations** — the filesystem tree the links land in, as deployed
   (per-machine paths expanded).
 
-Both files land in the **personal credentials repo**, and only when that repo
-is cloned on the machine running the deploy:
+Both files land in the **personal credentials repo**, and only when the deploy
+runs on **envy** (`MAP_HOST` in `src/deploy_map.py`) with that repo cloned:
 
 ```
 ~/GitHub/personal_credentials/deploy_map.{html,json}
 ```
 
-That gate is the point. The map names every machine and every context at once,
-so it must never appear in a client's repo — and it must never appear in this
-public one. A work machine holding only a client's credentials repo silently
-skips the step (`map: personal_credentials is not cloned here - skipped`).
-Nothing is committed automatically; the files just change in that repo, and
+Both gates are the point. The map names every machine and every context at
+once, so it must never appear in a client's repo — and it must never appear in
+this public one. A work machine holding only a client's credentials repo
+silently skips the step (`map: personal_credentials is not cloned here -
+skipped`). And every machine except envy skips it too (`map: only envy
+regenerates the map - skipped`): the files are tracked in the personal
+credentials repo, so any other clone regenerating them leaves that checkout
+dirty and its next `gitpullall` aborts on the uncommitted changes. Nothing is
+committed automatically; the files just change in that repo on envy, and
 `git diff` there is the review.
 
 The map is written to be a **pure function of the manifests**, so a diff always

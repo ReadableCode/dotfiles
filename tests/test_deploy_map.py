@@ -263,6 +263,7 @@ def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
         repo_root=os.path.join(str(fleet), "dotfiles"),
         credentials_root=str(fleet),
         template_path=template,
+        hostname="ENVY.LOCAL",
     )
     assert [os.path.basename(path) for path in paths] == ["deploy_map.html", "deploy_map.json"]
     assert all(os.path.dirname(path).endswith("personal_credentials") for path in paths)
@@ -278,7 +279,18 @@ def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
 def test_write_map_skips_machines_without_the_personal_repo(fleet):
     os.rmdir(str(fleet / "personal_credentials"))
     entries, _ = deploy_configs.load_manifests()
-    assert deploy_map.write_map(entries, credentials_root=str(fleet)) == []
+    assert deploy_map.write_map(entries, credentials_root=str(fleet), hostname="envy") == []
+
+
+def test_write_map_only_runs_on_the_map_host(fleet):
+    """
+    Any other machine writing the map dirties the personal credentials checkout
+    and blocks its next pull, so everywhere but MAP_HOST skips before touching
+    the output repo - even when that repo is cloned.
+    """
+    entries, _ = deploy_configs.load_manifests()
+    assert deploy_map.write_map(entries, credentials_root=str(fleet), hostname="ULTRAPOCKET") is None
+    assert not os.listdir(str(fleet / "personal_credentials"))
 
 
 def test_shipped_template_names_no_context():

@@ -77,7 +77,6 @@ alias gpustatus='watch -n 0.5 nvidia-smi'
 
 alias vpnhello='openvpn3 session-start --config ~/hellofresh.ovpn'
 alias vpnhellov2='sudo openvpn --config ~/hellofresh.ovpn --daemon hellofresh-openvpn'
-alias vpnhome='openvpn3 session-start --config ~/asusrouter.ovpn'
 alias killvpn='sudo kill $(pgrep openvpn)'
 
 ### Google Shortcuts ###

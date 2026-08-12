@@ -116,7 +116,7 @@ def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
 def test_load_inventory_hostnames_uppercases_short_names(tmp_path):
     inventory_path = write_file(
         str(tmp_path / "hosts.json"),
-        '{"hosts": [{"name": "Envy"}, {"name": "envy.asusrouter"}, {"name": "FFLAP-2229"}]}\n',
+        '{"hosts": [{"name": "Envy"}, {"name": "envy.local"}, {"name": "FFLAP-2229"}]}\n',
     )
     hostnames = load_inventory_hostnames(inventory_path)
     assert hostnames == {"ENVY", "FFLAP-2229"}
@@ -378,7 +378,7 @@ def test_resolve_dest_picks_platform_and_expands_home(fake_home):
 
 def test_host_allowed_matches_short_and_full_hostname():
     entry = {"hosts": ["ENVY", "elitedesk"]}
-    assert deploy_configs.host_allowed(entry, "ENVY.ASUSROUTER")
+    assert deploy_configs.host_allowed(entry, "ENVY.LOCAL")
     assert deploy_configs.host_allowed(entry, "ELITEDESK")
     assert not deploy_configs.host_allowed(entry, "YOGA")
     assert deploy_configs.host_allowed({}, "ANY_HOST")
@@ -496,7 +496,7 @@ def test_deploy_never_creates_folder_for_uncloned_repo(tmp_path, fake_home, monk
 
 
 def test_short_host_token_lowercases_and_strips_domain():
-    assert deploy_configs.short_host_token("ENVY.ASUSROUTER") == "envy"
+    assert deploy_configs.short_host_token("ENVY.LOCAL") == "envy"
     assert deploy_configs.short_host_token("MACBOOKPROM5") == "macbookprom5"
     assert deploy_configs.short_host_token(None) == ""
 
@@ -505,7 +505,7 @@ def test_resolve_repo_variant_prefers_host_then_platform_then_bare(tmp_path):
     bare = write_file(str(tmp_path / "settings.json"), "bare")
     mac = write_file(str(tmp_path / "settings.mac.json"), "mac")
     host = write_file(str(tmp_path / "settings.envy.json"), "host")
-    assert deploy_configs.resolve_repo_variant(bare, "ENVY.ASUSROUTER", "darwin") == (host, True)
+    assert deploy_configs.resolve_repo_variant(bare, "ENVY.LOCAL", "darwin") == (host, True)
     assert deploy_configs.resolve_repo_variant(bare, "YOGA", "darwin") == (mac, True)
     assert deploy_configs.resolve_repo_variant(bare, "YOGA", "linux") == (bare, True)
 
@@ -529,7 +529,7 @@ def test_resolve_repo_variant_missing_everything_stays_bare(tmp_path):
 
 def test_resolve_dest_expands_host_and_repo_parent_placeholders():
     entry = {"dest": {"darwin": "{repo_parent}/{host}.code-workspace"}}
-    dest = deploy_configs.resolve_dest(entry, "darwin", "ENVY.ASUSROUTER", repo_root="/parent/dotfiles")
+    dest = deploy_configs.resolve_dest(entry, "darwin", "ENVY.LOCAL", repo_root="/parent/dotfiles")
     # normpath: expand_path returns native separators, so this is
     # \parent\envy.code-workspace on Windows and /parent/... on POSIX
     assert dest == os.path.normpath("/parent/envy.code-workspace")
@@ -550,7 +550,7 @@ def test_build_plan_resolves_variant_and_placeholders(tmp_path):
             },
         }
     ]
-    plan = deploy_configs.build_plan(entries, "darwin", "ENVY.ASUSROUTER", repo_root=repo_root)
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY.LOCAL", repo_root=repo_root)
     assert plan[0]["action"] == "apply"
     assert plan[0]["repo"] == variant
     assert plan[0]["dest"] == os.path.join(str(tmp_path), "GitHub", "envy.code-workspace")
@@ -564,7 +564,7 @@ def test_deploy_fixes_dangling_old_name_workspace_link(tmp_path, fake_home, monk
     repo_root = tmp_path / "GitHub" / "dotfiles"
     monkeypatch.setattr(deploy_configs, "REPO_ROOT", str(repo_root))
     monkeypatch.setattr(deploy_configs, "BACKUP_ROOT", str(repo_root / "data" / "config_backups"))
-    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "ENVY.ASUSROUTER")
+    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "ENVY.LOCAL")
     variant = write_file(
         str(repo_root / "application_configs" / "vscode" / "workspace.envy.code-workspace"), "ws"
     )
