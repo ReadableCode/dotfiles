@@ -18,7 +18,7 @@ fi
 
 alias editaliases='nvim ~/.bash_aliases'
 
-alias cataliases='cat ~/.bash_aliases'
+alias cataliases='cat ~/.bash_aliases ~/.shared_aliases'
 
 alias srcaliases='source ~/.bashrc'
 

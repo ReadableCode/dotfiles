@@ -137,7 +137,7 @@ fi
 
 alias editaliases='nvim ~/.zshrc'
 
-alias cataliases='cat ~/.zshrc'
+alias cataliases='cat ~/.zshrc ~/.shared_aliases'
 
 alias srcaliases='source ~/.zshrc'
 
