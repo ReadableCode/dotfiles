@@ -225,14 +225,40 @@ sudo dnf install -y curl fzf gh git htop iperf3 mailx ncdu neovim net-tools npm 
 
 ### Ubuntu/Debian (x64)
 
-* Download from web or find in mounted folder
-* cd to folder containing .deb file
+Install via the apt repo so `myupdater` keeps it current automatically. The
+installer `.deb` approach works once but leaves Chrome orphaned from the package
+manager.
 
-  ```bash
-  sudo dpkg -i google-chrome-stable_current_amd64.deb  # change filename if needed
-  ```
+```bash
+# 1. Add Google's signing key
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/google-chrome.gpg
+
+# 2. Add the apt source (DEB822 format — works on Ubuntu 24.04 Noble+)
+#    Pinning Architectures: amd64 is required — without it apt also tries i386,
+#    which Google doesn't ship, causing the entire source to be silently skipped.
+sudo tee /etc/apt/sources.list.d/google-chrome.sources > /dev/null << 'EOF'
+Enabled: yes
+Types: deb
+URIs: https://dl.google.com/linux/chrome/deb/
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/trusted.gpg.d/google-chrome.gpg
+EOF
+
+# 3. Install
+sudo apt update
+sudo apt install -y google-chrome-stable
+```
 
 * Sign in to sync data
+
+> **After a distro upgrade (e.g. to Noble):** the upgrade process sets
+> `Enabled: no` in `google-chrome.sources` and invalidates the signing key.
+> Re-run steps 1–3 above to restore updates. See
+> [Troubleshooting: Chrome won't update](#chrome-wont-update-after-a-distro-upgrade)
+> below.
 
 ### Fedora
 
@@ -370,6 +396,60 @@ sudo nano /etc/ssmtp/ssmtp.conf
   ```bash
   openvpn3 session-start --config ~/your_filename.ovpn
   ```
+
+## Zscaler Setup (HelloFresh)
+
+The installer `.run` file lives in `HelloFresh/GDrive/Projects/`. Get the latest
+version from IT/the HelloFresh portal if you need a fresh copy.
+
+### Install
+
+```bash
+# Make executable and run as root
+chmod +x Zscaler-linux-*.run
+sudo ./Zscaler-linux-*.run
+```
+
+The installer drops binaries into `/opt/zscaler/bin/` and registers two systemd
+services: `zsaservice` (the monitor/watchdog) and `zstunnel` (the actual tunnel).
+
+### Fix: zstunnel not enabled at boot (do this immediately after install)
+
+The installer starts `zstunnel` for the current session but **does not enable
+it**, so after every reboot `zsaservice` starts but the tunnel stays dead and
+Zscaler shows as disconnected.
+
+```bash
+# Enable zstunnel to survive reboots
+sudo systemctl enable zstunnel
+
+# Add restart-on-crash so it recovers without a full reinstall
+sudo mkdir -p /etc/systemd/system/zstunnel.service.d
+sudo tee /etc/systemd/system/zstunnel.service.d/restart.conf > /dev/null << 'EOF'
+[Service]
+Restart=always
+RestartSec=5s
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart zstunnel
+```
+
+Verify both services are running and enabled:
+
+```bash
+systemctl is-enabled zsaservice zstunnel   # both should print "enabled"
+systemctl status zsaservice zstunnel       # both should show "active (running)"
+```
+
+### Verify connectivity
+
+After login the `ZSTray` tray icon should appear. If it doesn't launch
+automatically, start it manually:
+
+```bash
+/opt/zscaler/scripts/zstray_desktop.sh
+```
 
 ## Syncthing Setup
 
@@ -516,3 +596,84 @@ vcgencmd measure_temp
   ```bash
   sudo dnf remove package-name
   ```
+
+---
+
+## Troubleshooting
+
+### Chrome won't update after a distro upgrade
+
+**Symptom:** Chrome shows "Can't update Chrome" / `myupdater` runs without
+error but Chrome stays on an old version. `apt-cache policy google-chrome-stable`
+shows only the locally installed version with no remote candidate.
+
+**Cause:** Upgrading Ubuntu (e.g. focal → noble) automatically sets
+`Enabled: no` in `/etc/apt/sources.list.d/google-chrome.sources` and the old
+signing key may no longer match. Additionally, if `Architectures: amd64` is
+missing, apt silently skips the source because it can't find an i386 build.
+
+**Fix:**
+
+```bash
+# Refresh the signing key
+curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
+  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/google-chrome.gpg
+
+# Rewrite the source file with the correct flags
+sudo tee /etc/apt/sources.list.d/google-chrome.sources > /dev/null << 'EOF'
+Enabled: yes
+Types: deb
+URIs: https://dl.google.com/linux/chrome/deb/
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /etc/apt/trusted.gpg.d/google-chrome.gpg
+EOF
+
+sudo apt update
+sudo apt install -y google-chrome-stable
+```
+
+### Zscaler disconnected after reboot (tunnel not running)
+
+**Symptom:** After a reboot Zscaler shows as disconnected or the tray icon
+indicates no tunnel. `systemctl status zstunnel` shows the service as inactive.
+Reinstalling Zscaler fixes it temporarily but the problem returns on the next
+reboot.
+
+**Cause:** The Zscaler installer starts `zstunnel` for the current session but
+never enables it in systemd. On the next boot `zsaservice` starts (it is
+enabled) but `zstunnel` does not, leaving the VPN dead. The two services also
+have no dependency wiring between them and `zstunnel` has no restart policy, so
+a crash also leaves it dead until manual intervention.
+
+**Fix (run once after install, survives future reboots):**
+
+```bash
+# Enable the tunnel service at boot
+sudo systemctl enable zstunnel
+
+# Drop in a restart policy so crashes self-heal
+sudo mkdir -p /etc/systemd/system/zstunnel.service.d
+sudo tee /etc/systemd/system/zstunnel.service.d/restart.conf > /dev/null << 'EOF'
+[Service]
+Restart=always
+RestartSec=5s
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl restart zstunnel
+```
+
+Verify:
+
+```bash
+systemctl is-enabled zsaservice zstunnel   # both: enabled
+systemctl status zstunnel                  # active (running)
+```
+
+**If the tunnel is down right now** (without reinstalling):
+
+```bash
+sudo systemctl start zstunnel
+```
