@@ -50,6 +50,7 @@ import urllib.parse
 import urllib.request
 
 GITHUB_API = "https://api.github.com"
+GITHUB_GRAPHQL = "https://api.github.com/graphql"
 BITBUCKET_API = "https://api.bitbucket.org/2.0"
 CHECKS_PER_PAGE = 100
 
@@ -391,7 +392,8 @@ def cmd_create_pr(args):
                              headers, payload=payload, dry_run=args.dry_run)
         number = response["id"] if response else 0
         url = bb_pr_url(response or {}, repo)
-        emit(f"Created PR #{number}: {url}", {"number": number, "url": url})
+        emit(f"Created {'draft ' if args.draft else ''}PR #{number}: {url}",
+             {"number": number, "url": url, "draft": args.draft})
         return
 
     headers = github_headers()
@@ -410,7 +412,8 @@ def cmd_create_pr(args):
         # Labels live on the issues endpoint; add them after the PR exists.
         http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{number}/labels", headers,
                   payload={"labels": args.label}, dry_run=args.dry_run)
-    emit(f"Created PR #{number}: {url}", {"number": number, "url": url, "labels": args.label})
+    emit(f"Created {'draft ' if args.draft else ''}PR #{number}: {url}",
+         {"number": number, "url": url, "labels": args.label, "draft": args.draft})
 
 
 def bucket_check_run(run):
@@ -578,34 +581,58 @@ def cmd_request_review(args):
             entry = {"account_id": user["account_id"]}
             if entry not in reviewers:
                 reviewers.append(entry)
-        payload = {"title": pull["title"] if pull else "<title>", "reviewers": reviewers}
+        # Requesting review means the PR is done cooking - clear the draft flag
+        # in the same PUT that sets the reviewers.
+        was_draft = bool(pull and pull.get("draft"))
+        payload = {"title": pull["title"] if pull else "<title>", "reviewers": reviewers,
+                   "draft": False}
         http_json("PUT", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
                   headers, payload=payload, dry_run=args.dry_run)
         if args.dry_run:
             return
         refreshed = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
                               headers)
+        if refreshed.get("draft"):
+            raise SystemExit(f"PR #{number} is still marked draft after the update")
         names = [r.get("display_name") or r.get("nickname") or "?"
                  for r in refreshed.get("reviewers", [])]
-        emit(f"Requested review on PR #{number} from: {', '.join(names)}",
-             {"number": number, "requested_reviewers": names})
+        ready_note = " (marked ready for review)" if was_draft else ""
+        emit(f"Requested review on PR #{number} from: {', '.join(names)}{ready_note}",
+             {"number": number, "requested_reviewers": names, "marked_ready": was_draft})
         return
 
     headers = github_headers()
     pull = None if args.dry_run else resolve_pr(repo, headers, args.pr)
     number = pull["number"] if pull else (args.pr or 0)
+    # Requesting review means the PR is done cooking - clear the draft flag
+    # first. REST cannot un-draft a PR; only the GraphQL mutation can.
+    was_draft = bool(pull and pull.get("draft"))
+    if args.dry_run:
+        print(f"[dry-run] would mark PR #{number} ready for review if still a draft")
+    elif was_draft:
+        mutation = ("mutation($id: ID!) { markPullRequestReadyForReview("
+                    "input: {pullRequestId: $id}) { pullRequest { isDraft } } }")
+        result = http_json("POST", GITHUB_GRAPHQL, headers,
+                           payload={"query": mutation,
+                                    "variables": {"id": pull["node_id"]}})
+        if result.get("errors"):
+            raise SystemExit(f"failed to mark PR #{number} ready for review: "
+                             f"{result['errors']}")
     http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls/{number}/requested_reviewers", headers,
               payload={"reviewers": args.reviewer}, dry_run=args.dry_run)
     if args.dry_run:
         return
     refreshed = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers)
+    if refreshed.get("draft"):
+        raise SystemExit(f"PR #{number} is still marked draft after the ready-for-review mutation")
     logins = [user["login"] for user in refreshed.get("requested_reviewers", [])]
     missing = [login for login in args.reviewer if login not in logins]
     if missing:
         raise SystemExit(f"review request did not stick for: {', '.join(missing)} "
                          f"(currently requested: {logins})")
-    emit(f"Requested review on PR #{number} from: {', '.join(logins)}",
-         {"number": number, "requested_reviewers": logins})
+    ready_note = " (marked ready for review)" if was_draft else ""
+    emit(f"Requested review on PR #{number} from: {', '.join(logins)}{ready_note}",
+         {"number": number, "requested_reviewers": logins, "marked_ready": was_draft})
 
 
 # ---------------------------------------------------------------- cli
@@ -641,7 +668,10 @@ def build_parser():
     create_pr.add_argument("--body-file", help="file containing the PR body")
     create_pr.add_argument("--head", help="head branch (default: current branch)")
     create_pr.add_argument("--base", help="base branch (default: repo default branch)")
-    create_pr.add_argument("--draft", action="store_true")
+    create_pr.add_argument("--draft", action="store_true", default=True,
+                           help="open as a draft PR (the default)")
+    create_pr.add_argument("--no-draft", dest="draft", action="store_false",
+                           help="open ready for review instead of as a draft")
     create_pr.add_argument("--label", action="append", default=[],
                            help="PR label to add after creation; repeatable (GitHub only)")
     create_pr.set_defaults(func=cmd_create_pr)
