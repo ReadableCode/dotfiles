@@ -216,16 +216,30 @@ function wl.snapshot()
 end
 
 -- Apply a saved space's layout to whatever of its apps are running now.
+-- Windows must be matched per space, not via app:mainWindow(): that is the
+-- app's globally last-focused window, which for one-window-per-space apps
+-- (VS Code, Terminal) usually lives on a DIFFERENT space than the one being
+-- applied. orderedWindows() only sees the currently visible spaces, so it
+-- yields exactly the windows this pass may move; hand each out at most once
+-- so duplicate app entries (e.g. two GLKVM windows) get distinct windows.
 function wl.apply(key)
     local layout = wl.loadAll()[key]
     if type(layout) ~= "table" then
         hs.alert.show("No saved layout for space " .. tostring(key))
         return
     end
+    local byApp = {}
+    for _, win in ipairs(hs.window.orderedWindows()) do
+        if win:isStandard() then
+            local name = win:application():name()
+            byApp[name] = byApp[name] or {}
+            table.insert(byApp[name], win)
+        end
+    end
     local placed = 0
     for _, item in ipairs(layout) do
-        local app = hs.application.get(item.app)
-        local win = app and app:mainWindow()
+        local wins = byApp[item.app]
+        local win = wins and table.remove(wins, 1)
         if win then
             placeWindow(win, item.screen, item.unit)
             placed = placed + 1
@@ -236,7 +250,8 @@ end
 
 -- Walk every user space in Mission Control order, applying the layout saved
 -- under its position number (space 1 -> layout "1", etc.), then come home.
-hs.hotkey.bind({"ctrl", "shift"}, "l", function()
+-- Triggered by Ctrl+Shift+L and by hammerspoon://applyLayouts (Stream Deck).
+function wl.applyAll()
     local spaceIDs = {}
     for _, id in ipairs(hs.spaces.spacesForScreen(hs.screen.mainScreen()) or {}) do
         if hs.spaces.spaceType(id) == "user" then table.insert(spaceIDs, id) end
@@ -256,5 +271,8 @@ hs.hotkey.bind({"ctrl", "shift"}, "l", function()
         end)
     end
     step()
-end)
+end
+
+hs.hotkey.bind({"ctrl", "shift"}, "l", wl.applyAll)
 hs.hotkey.bind({"ctrl", "shift"}, "s", wl.snapshot)
+hs.urlevent.bind("applyLayouts", wl.applyAll)
