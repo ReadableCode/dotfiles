@@ -1,6 +1,10 @@
 -- Hammerspoon config — equivalent of sheets.ahk
 -- Mac equivalent of AutoHotkey
 
+-- Command-line access: enables the `hs` CLI (brew's hammerspoon ships it) so
+-- config can be probed/driven from a shell: `hs -c "wl.applyAll()"`.
+require("hs.ipc")
+
 ----------Hotkey Reference----------
 -- Update this table whenever you add or remove a binding
 local hotkeyRef = {
@@ -8,7 +12,7 @@ local hotkeyRef = {
     {"Ctrl+Shift+F",  "Open selected ID as Google Drive folder"},
     {"Cmd+Shift+V",   "Paste as plain text (strips formatting)"},
     {"Ctrl+Shift+T",  "Open front Finder window in Terminal"},
-    {"Ctrl+Shift+L",  "Apply saved layouts to every space in sequence"},
+    {"Ctrl+Shift+L",  "Apply this desktop's saved layout (repeat per desktop)"},
     {"Ctrl+Shift+S",  "Save current space's windows (asks for space #)"},
     {"Ctrl+Shift+H",  "Show this hotkey cheatsheet"},
 }
@@ -99,7 +103,7 @@ end)
 --   Load: press Ctrl+Shift+L once. It walks every space in order (space 1,
 --         2, 3, ...), applies the layout saved under that number on each,
 --         then returns to the space you started on.
-local wl = {}
+wl = {}  -- global so hs -c / the console can reach it
 
 hs.window.animationDuration = 0
 
@@ -131,10 +135,11 @@ end
 
 -- Ask which space this is. Returns a string key (digits) or nil if cancelled.
 function wl.askSpace(action)
+    local detected = wl.spaceIndex()
     local btn, txt = hs.dialog.textPrompt(
         "Window layout — " .. action,
         "Which space number is this? (run once per space)",
-        tostring(wl.lastSpace or "1"), "OK", "Cancel")
+        tostring(detected or wl.lastSpace or "1"), "OK", "Cancel")
     if btn ~= "OK" then return nil end
     local key = tostring(txt):match("%d+")
     if not key then
@@ -236,12 +241,33 @@ function wl.apply(key)
             table.insert(byApp[name], win)
         end
     end
+    -- Two matching phases. Phase 1 gives every entry first pick of windows
+    -- already on its target-orientation screen; only then does phase 2 hand
+    -- leftovers out cross-screen (what recovers from the KVM dumping every
+    -- window onto one monitor). Doing it in two passes over ALL entries stops
+    -- a stale entry (a saved portrait Chrome when no Chrome is on the portrait
+    -- screen anymore) from stealing a window that a later same-app entry
+    -- would have matched in place.
+    local assigned = {}
+    for idx, item in ipairs(layout) do
+        local wins = byApp[item.app] or {}
+        for i, w in ipairs(wins) do
+            local f = w:screen():frame()
+            if (item.screen == "portrait") == (f.h > f.w) then
+                assigned[idx] = table.remove(wins, i)
+                break
+            end
+        end
+    end
+    for idx, item in ipairs(layout) do
+        if not assigned[idx] then
+            assigned[idx] = table.remove(byApp[item.app] or {}, 1)
+        end
+    end
     local placed = 0
-    for _, item in ipairs(layout) do
-        local wins = byApp[item.app]
-        local win = wins and table.remove(wins, 1)
-        if win then
-            placeWindow(win, item.screen, item.unit)
+    for idx, item in ipairs(layout) do
+        if assigned[idx] then
+            placeWindow(assigned[idx], item.screen, item.unit)
             placed = placed + 1
         end
     end
@@ -251,24 +277,69 @@ end
 -- Walk every user space in Mission Control order, applying the layout saved
 -- under its position number (space 1 -> layout "1", etc.), then come home.
 -- Triggered by Ctrl+Shift+L and by hammerspoon://applyLayouts (Stream Deck).
-function wl.applyAll()
-    local spaceIDs = {}
-    for _, id in ipairs(hs.spaces.spacesForScreen(hs.screen.mainScreen()) or {}) do
-        if hs.spaces.spaceType(id) == "user" then table.insert(spaceIDs, id) end
+-- Which numbered desktop is active right now? Returns index, orderedIDs.
+-- Both monitors share one set of spaces here ("Displays have separate
+-- Spaces" is off), so either screen reports the same list.
+function wl.spaceIndex()
+    local ids = {}
+    for _, id in ipairs(hs.spaces.spacesForScreen(wl.screenFor("landscape")) or {}) do
+        if hs.spaces.spaceType(id) == "user" then table.insert(ids, id) end
     end
-    local startSpace = hs.spaces.focusedSpace()
-    local i = 0
+    local active = hs.spaces.activeSpaceOnScreen(wl.screenFor("landscape"))
+    for i, id in ipairs(ids) do
+        if id == active then return i, ids end
+    end
+    return nil, ids
+end
+
+-- Apply the current desktop's layout, then try to walk the remaining
+-- desktops. On this macOS, with shared spaces, every programmatic
+-- space-switch is blocked (gotoSpace can't map the "Main" display; Mission
+-- Control ignores synthetic keystrokes; the Dock no longer exposes MC
+-- desktop buttons to AX) — so the walk usually stops after the current
+-- desktop with an alert to swipe + press again. If switching ever starts
+-- working, the full walk resumes automatically.
+function wl.applyAll()
+    local startIdx, ids = wl.spaceIndex()
+    if not startIdx then
+        hs.alert.show("Can't tell which desktop this is")
+        return
+    end
+    wl.apply(tostring(startIdx))
+    local remaining = {}
+    for i = 1, #ids do
+        if i ~= startIdx then table.insert(remaining, i) end
+    end
+    local pos = 0
     local function step()
-        i = i + 1
-        if not spaceIDs[i] then
-            hs.spaces.gotoSpace(startSpace)
+        pos = pos + 1
+        local i = remaining[pos]
+        if not i then
+            hs.spaces.gotoSpace(ids[startIdx])
             return
         end
-        hs.spaces.gotoSpace(spaceIDs[i])
-        hs.timer.doAfter(0.8, function()
-            wl.apply(tostring(i))
-            step()
-        end)
+        local ok = hs.spaces.gotoSpace(ids[i])
+        if not ok then
+            hs.alert.show(string.format(
+                "Applied desktop %d — swipe to the others and press again", startIdx))
+            return
+        end
+        -- Applying before the switch lands would lay out the WRONG desktop's
+        -- windows; verify arrival and never misapply.
+        local tries = 0
+        local function waitApply()
+            if wl.spaceIndex() == i then
+                wl.apply(tostring(i))
+                step()
+            elseif tries < 12 then
+                tries = tries + 1
+                hs.timer.doAfter(0.25, waitApply)
+            else
+                hs.alert.show("Switch to desktop " .. i .. " didn't land — skipped")
+                step()
+            end
+        end
+        hs.timer.doAfter(0.3, waitApply)
     end
     step()
 end
@@ -276,3 +347,21 @@ end
 hs.hotkey.bind({"ctrl", "shift"}, "l", wl.applyAll)
 hs.hotkey.bind({"ctrl", "shift"}, "s", wl.snapshot)
 hs.urlevent.bind("applyLayouts", wl.applyAll)
+
+-- Stream Deck trigger. The Elgato Website action silently drops custom URL
+-- schemes (hammerspoon://... never arrives, tested with both "Open with"
+-- options), but its "GET request in background" mode does a real HTTP GET —
+-- so listen on localhost and trigger off that. Stream Deck key config:
+-- Website action, URL http://localhost:21212/applyLayouts,
+-- Open with: "GET request in background".
+wl.server = hs.httpserver.new(false, false)
+pcall(function() wl.server:setInterface("localhost") end)
+wl.server:setPort(21212)
+wl.server:setCallback(function(method, path)
+    if path:find("applyLayouts") then
+        hs.timer.doAfter(0, wl.applyAll)  -- reply first, then move windows
+        return "ok", 200, {}
+    end
+    return "unknown trigger", 404, {}
+end)
+wl.server:start()
