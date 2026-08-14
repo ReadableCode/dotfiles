@@ -44,14 +44,21 @@ can hold a live `~/.vscode-server` set of its own (it is reachable via
 Remote-SSH), so the remote-server procedure applies on Windows too — with
 `code-server.cmd` in place of `code-server`.
 
-A fifth pass (August 2026, envy) **moved `mhutchie.git-graph` off the keep
-list**. An A/B bisect (same multiroot workspace opened via `code -n
+A fifth pass (August 2026, envy) moved `mhutchie.git-graph` off the keep
+list. An A/B bisect (same multiroot workspace opened via `code -n
 --disable-extension ...`) traced severe Source Control pane scroll lag to it:
 with only Git Graph disabled the pane was smooth, with everything else disabled
 but Git Graph enabled it was not. Its cost scales with repository count, so the
 ~30-repo multiroot workspaces are the worst case. It is also unmaintained
 (no release since ~2021), and current VS Code ships a built-in commit graph
 (the "Graph" section of the Source Control view) that covers the same need.
+
+**Reversed (August 2026): `mhutchie.git-graph` is back on the keep list.**
+Jason decided the built-in Graph view doesn't replace it for him and he wants
+Git Graph installed despite the multiroot scroll-lag cost documented above. Do
+not re-remove it on any machine; reinstall where a previous pass removed it
+(`code --install-extension mhutchie.git-graph`, or `code-server
+--install-extension` on Remote-SSH hosts).
 
 ## Extensions to remove
 
@@ -100,8 +107,7 @@ for e in \
     github.vscode-pull-request-github \
     ms-dotnettools.csdevkit \
     ms-dotnettools.csharp \
-    ms-dotnettools.vscode-dotnet-runtime \
-    mhutchie.git-graph; do
+    ms-dotnettools.vscode-dotnet-runtime; do
     code --uninstall-extension "$e"
 done
 ```
@@ -137,7 +143,6 @@ Why each one goes:
 | vscode-pull-request-github | In-editor GitHub PR/issue review; PRs are handled via `gh` CLI and browser |
 | csdevkit / csharp | C# Dev Kit + language support. **Conditional** — remove only where no C# project exists (kept on Windows, see Platform exceptions). Uninstall the csdevkit **pack first** — it takes csharp with it |
 | vscode-dotnet-runtime | Only existed as a dependency of openxml-explorer / csdevkit — remove it **after** those or the uninstall is refused, and keep it wherever csdevkit is kept |
-| git-graph | **Reversal of an earlier keep.** Bisect-confirmed cause of Source Control pane scroll lag on envy — it does per-repository watching/decoration work, so multiroot workspaces with ~30 repos multiply its cost. Unmaintained since ~2021; the built-in Source Control Graph view replaces it |
 
 ## Platform exceptions
 
@@ -212,7 +217,9 @@ pack, Docker official extensions (`docker.docker`, `ms-azuretools.vscode-docker`
 (`ms-vscode.live-server`) or Live Server (`ritwickdey.liveserver`) — keep
 whichever is present, markdownlint, prettier, prettier-sql, sqltools (+ pg
 driver), rainbow-csv, gc-excelviewer, sqlite-viewer (`qwtel.sqlite-viewer`),
-gitignore, yaml
+gitignore, git-graph
+(`mhutchie.git-graph` — reinstated after the fifth pass; Jason wants it despite
+the multiroot scroll-lag cost, do not re-remove), yaml
 (`redhat.vscode-yaml`, schema validation used everywhere), makefile-tools
 (`ms-vscode.makefile-tools`), open-in-github, dracula theme, great-icons,
 markdown-mermaid, graphviz-interactive-preview, pdf, stl-viewer, tailscale.
