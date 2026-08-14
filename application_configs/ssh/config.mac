@@ -7,5 +7,9 @@
 Include ~/.colima/ssh_config
 Include config.d/*.conf
 
+Host 192.168.86.170
+  HostName 192.168.86.170
+  User jason
+
 Host 192.168.86.94
   HostName 192.168.86.94
