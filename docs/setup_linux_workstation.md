@@ -202,9 +202,14 @@ Many packages have different names on Fedora. Install equivalents manually:
 
 ```bash
 sudo dnf install -y curl fzf gh git htop iperf3 mailx ncdu neovim net-tools npm \
-  pandoc ripgrep syncthing tmux tree unzip rsync golang cargo
+  pandoc ripgrep syncthing tmux tree unzip rsync golang cargo gcc-c++ make
 ```
 
+* `gcc-c++` is not optional on a machine that runs npm tools with native
+  addons — Fedora ships `gcc` but not the C++ compiler, and a package like
+  node-pty (pulled in by the T3 Code server) has no linux-x64 prebuild, so
+  npm compiles it from source and fails with a bare `Error 127`. See
+  [setup_t3_code.md](./setup_t3_code.md).
 * See [linux_apps_non_apt.md](../app_lists/linux_apps_non_apt.md) for tools not in the package manager
 
 ## Python Setup

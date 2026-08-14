@@ -50,7 +50,240 @@ Phones: the
 [Android](https://play.google.com/store/apps/details?id=com.t3tools.t3code)
 apps for remote control. Linux desktop: installers on the
 [GitHub releases page](https://github.com/pingdotgg/t3code/releases) (no
-machine uses this yet).
+machine uses this yet — the Linux boxes run the headless server below).
+
+## Install (Linux) — always-on server via systemd
+
+Linux is the **only** platform with a real background service: `t3 service
+install` writes a systemd **user** unit and turns lingering on, so the server
+starts at boot and keeps running with nobody logged in. No desktop app, no
+scheduled-task workaround like Windows needs, and unlike a `serve` started
+over SSH it doesn't die with the session.
+
+Done on JasonZephyrus (Fedora 43) 2026-08-14.
+
+```bash
+# 1. prereqs (node in range + a C++ toolchain — see the node-pty trap below)
+./scripts/setup_t3_server_prereqs_linux.sh
+
+# 2. install the service, pinned to the version the fleet runs
+npx -y t3@0.0.33 service install
+
+# 3. verify all three properties that make it "always on"
+systemctl --user is-active t3code.service     # active
+systemctl --user is-enabled t3code.service    # enabled  -> starts at boot
+loginctl show-user "$USER" -p Linger          # Linger=yes -> without a login
+```
+
+`service install` sets up all three itself (including `loginctl
+enable-linger`); there is nothing to enable by hand. Management is
+`systemctl --user {status,restart} t3code.service` — **never** `sudo
+systemctl`, it's a user unit. Logs go to
+`~/.t3/userdata/logs/boot-service.log`, and updates use
+`npx -y t3@<version> service update` (**not** the panel's copy-update
+command — see [Updating a service-managed Linux
+server](#updating-a-service-managed-linux-server-2026-08-11)).
+
+What it writes, as of 0.0.33 — worth knowing before hand-editing anything:
+
+```ini
+# ~/.config/systemd/user/t3code.service
+Environment=T3CODE_HOME=/home/<user>/.t3
+ExecStart=/usr/bin/node-22 /home/<user>/.t3/runtime/service-launcher.mjs
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/<user>/.t3/userdata/logs/boot-service.log
+WantedBy=default.target
+```
+
+`ExecStart` points at the version-agnostic `service-launcher.mjs` (the runtime
+itself lives in `~/.t3/runtime/versions/<version>/`), so `service update`
+swaps versions without rewriting the unit. The server binds **loopback only**
+(`127.0.0.1:3773`) — no `0.0.0.0` bind, no firewall rule; every reachability
+path below dials loopback. The connection string and a pairing token are
+printed into the boot log once it's ready.
+
+### Trap 1: `~/.local/bin` is not on a systemd user service's PATH
+
+The user manager's PATH is just `/usr/local/bin:/usr/bin`. Services source no
+shell rc, so **`claude` installed at `~/.local/bin/claude` is invisible to the
+service** even though it works fine in your terminal — threads then fail at
+session start, having looked healthy up to that point. Fix with a drop-in
+(not an edit to the unit, so `t3 service update` can't clobber it):
+
+```bash
+mkdir -p ~/.config/systemd/user/t3code.service.d
+cat > ~/.config/systemd/user/t3code.service.d/10-path.conf <<'EOF'
+[Service]
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin
+EOF
+systemctl --user daemon-reload && systemctl --user restart t3code.service
+```
+
+Verify it took — check the *process*, not your shell:
+
+```bash
+tr '\0' '\n' < /proc/$(systemctl --user show t3code.service -p MainPID --value)/environ | grep ^PATH=
+```
+
+`~/.config/environment.d/*.conf` is the machine-wide alternative, but note it
+is read only when the user manager *starts*: neither `daemon-reload` nor
+`daemon-reexec` re-imports it (re-exec deliberately preserves the existing
+environment), so it appears to do nothing until the next login. The drop-in
+applies immediately, which is why it's the documented fix here.
+
+### Trap 2: node-pty has no linux-x64 prebuild
+
+The npm `t3` package depends on node-pty, which npm compiles from source. On
+Fedora that fails — `gcc` ships, the C++ compiler does not — and the failure
+mode is nasty: `make ... Error 127`, after which **`npx t3 ...` exits 1
+printing absolutely nothing**, which reads like a broken network rather than a
+missing package. `sudo dnf install -y gcc-c++ make` (Debian:
+`build-essential`). `setup_t3_server_prereqs_linux.sh` now checks for this;
+it's also in the Fedora package line in
+[setup_linux_workstation.md](./setup_linux_workstation.md).
+
+### Managed settings
+
+`~/.t3/userdata/` only exists after the service has started once, and the
+`t3code_*` manifest entries are gated on it — so deploy **after** the install,
+then restart to pick the files up:
+
+```bash
+uv run python src/deploy_configs.py
+systemctl --user restart t3code.service
+```
+
+The host must be in the `user_t3code_settings` hosts list in
+`personal_manifest.yaml` or `settings.json` is skipped (the other two files
+deploy for everyone). Confirm all three landed as symlinks with
+`ls -l ~/.t3/userdata/*.json`, and check the boot log for "ignoring invalid
+keybinding entry" — the bare (non-`.mac`) files must stay within the pinned
+server's schema.
+
+**The headless server breaks the keybindings symlink too** (JasonZephyrus,
+2026-08-14). The `NOT_A_LINK` drift documented under Settings is not
+desktop-only: on first start the **0.0.33 headless server** merged its own
+defaults into `keybindings.json` and saved, replacing the deployed symlink
+with a regular file. It writes once — a file that already contains the
+defaults survives later restarts — so this is a one-shot on a fresh install,
+not a loop, but `deploy_configs.py status` reports `NOT_A_LINK` until it's
+resolved.
+
+The three commands it added were the catch:
+`filePicker.toggle`, `projectSearch.toggle`, `themeEditor.toggle` — the first
+two are exactly what **0.0.31 rejected** with "ignoring invalid keybinding
+entry" (see Known issues; that's why they were stripped from the bare file in
+the first place). Simply re-deploying would have handed 0.0.33 a file it
+rewrites again, so the bare file had to move up with the servers.
+
+**Resolved 2026-08-14**: the three bindings are now in the bare
+`keybindings.json` and the fleet's servers moved to 0.0.33 together. Restart
+after re-deploying and the server leaves the file alone — verified here: the
+symlink survives restarts and the boot log is free of keybinding warnings.
+The lesson generalizes — **the bare file tracks the lowest server version
+deployed anywhere**, so bump the servers first and promote new default
+bindings second. `keybindings.mac.json` is a separate track (the desktop
+app's version) and was deliberately left alone.
+
+### Reachability: Tailscale Serve on the boot service
+
+A service-managed box is loopback-only and linked to nothing by default. Only
+**T3 Connect** (`t3 connect link`) consumes one of the account's 3 managed
+tunnels — **Remote link pairing is token-based, unlimited, and never touches
+the T3 account**, so a full tunnel cap does not block anything here. Same
+choice RyzenWhite made, for the same reason.
+
+**Serve flags reach the service only through the environment.** The Linux
+service launcher spawns `serve` with **no arguments** and there is no wrapper
+script to edit (the Windows setup's `~\.t3\t3serve.cmd` trick has no
+equivalent). It does pass its own environment through, and every `serve` flag
+has a `T3CODE_*` twin — `T3CODE_TAILSCALE_SERVE`,
+`T3CODE_TAILSCALE_SERVE_PORT`, `T3CODE_HOST`, `T3CODE_PORT`,
+`T3CODE_MODE`. So configuration is a drop-in:
+
+```bash
+cat > ~/.config/systemd/user/t3code.service.d/20-tailscale-serve.conf <<'EOF'
+[Service]
+Environment=T3CODE_TAILSCALE_SERVE=true
+EOF
+systemctl --user daemon-reload && systemctl --user restart t3code.service
+```
+
+Parsed by Effect's `Config.boolean`, so `true`/`1`/`on` all work. Use
+`T3CODE_HOST=0.0.0.0` instead for a plain LAN bind (then open the port in
+firewalld — Tailscale Serve needs no firewall rule, since it proxies from
+loopback).
+
+**`tailscale serve` needs an operator grant.** It is a state-changing command,
+so as a normal user it fails and the server logs a `WARN ... Failed to
+configure Tailscale Serve` with `stderrDiagnostic: 'permission-denied'` —
+while otherwise starting up fine, so it's easy to miss. Run once:
+
+```bash
+sudo tailscale set --operator=$USER
+```
+
+Don't "fix" it by running the service as root: `~/.local/bin/claude`, `~/.t3`,
+and the deployed dotfiles symlinks are all user-owned. Windows never hits this
+because its scheduled task runs with different privileges. On success the log
+line becomes `INFO ... Tailscale Serve configured`, and
+`tailscale serve status` shows the proxy:
+
+```
+https://<machine>.<tailnet>.ts.net (tailnet only)
+|-- / proxy http://127.0.0.1:3773
+```
+
+**The first HTTPS request fails**, because Tailscale provisions the
+Let's Encrypt cert on demand — curl reports exit 35 / `HTTP 000`. Retry a few
+seconds later and it's a normal `HTTP 200`; nothing is wrong.
+
+**`serve` is tailnet-only; `funnel` is the public one.** They are sibling
+commands with near-identical syntax, and only `tailscale funnel` puts a
+machine on the public internet. Nothing here uses Funnel. Confirm exposure by
+looking at what is actually bound rather than trusting the config — the `443`
+listener should carry the **tailnet IP**, never `0.0.0.0`, and the t3 server
+itself should stay on loopback:
+
+```console
+$ ss -tlnp | grep -E '3773|443'
+LISTEN 0 4096      100.64.189.27:443     0.0.0.0:*      # tailnet IP only
+LISTEN 0  511          127.0.0.1:3773    0.0.0.0:*      # t3, loopback only
+$ tailscale serve status                                 # says "(tailnet only)"
+```
+
+Note that "tailnet only" means *the whole tailnet*, which includes any nodes
+**shared in from another account** — this tailnet has several. If a machine
+shouldn't reach these servers, that's an ACL question in the Tailscale admin
+console, not something the serve config controls. The Let's Encrypt cert also
+means the machine name appears in public Certificate Transparency logs; the
+service behind it stays unreachable.
+
+Then pair each client — **mint one token per client**, and note the TTL is
+about **five minutes**, so mint it when you're actually sitting at the client:
+
+```bash
+t3 auth pairing create      # single-use; also `pairing list` / `pairing revoke`
+```
+
+Desktop: Add environment → **Remote link** → the `https://` tailnet URL + the
+token. There is no `t3 pair` command despite older docs — bare `t3 <word>`
+treats the word as a cwd and silently starts a stray server.
+
+Reboot persistence is three independent things; check all three, since any one
+of them silently breaks "always on":
+
+```bash
+systemctl is-enabled tailscaled                # tailnet comes back
+systemctl --user is-enabled t3code.service     # unit comes back
+loginctl show-user "$USER" -p Linger           # ...without a login
+```
+
+**Don't also use the SSH card on a service-managed box.** They are two
+different servers: the launcher in `~/.t3/ssh-launch/*/run-t3.sh` prefers a
+`t3` on PATH and otherwise runs `npx t3@<version>`, starting a server of its
+own — the same "second server" hazard as the copy-update-command bug above.
 
 ## New-Mac setup checklist
 
@@ -310,13 +543,14 @@ tunnels** (see Known issues); beyond that, expose the server with
 no slot used). The SSH card remains as a LAN alternative for Linux/macOS
 remotes.
 
-Current fleet (2026-08-05):
+Current fleet (2026-08-14):
 
 | Environment | How | Notes |
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
 | RyzenWhite | Remote link over Tailscale Serve | Windows: native server; T3 Connect blocked by the 3-tunnel cap. See below. |
+| JasonZephyrus | Remote link over Tailscale Serve | Fedora 43: systemd boot service (`t3 service install`), not the SSH card. See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 
 Concrete LAN IPs and usernames are deliberately not listed here: look the
 machine up in the `*_hosts.json` inventory of the sibling `*_credentials`
@@ -337,7 +571,8 @@ so Node 24 LTS was installed via the existing nvm and
 non-interactive PATH). That prep is now scripted —
 [`scripts/setup_t3_server_prereqs_linux.sh`](../scripts/setup_t3_server_prereqs_linux.sh)
 (idempotent: checks the bare-PATH node version, installs Node 24 via nvm if
-needed, links into `~/.local/bin`); run it on the remote from its dotfiles
+needed, links into `~/.local/bin`, and installs a C++ toolchain if none is
+present — node-pty builds from source); run it on the remote from its dotfiles
 clone. The remote server listens on loopback only; the desktop reaches it
 through the SSH tunnel.
 
