@@ -192,5 +192,19 @@
     "key": "mod+9",
     "command": "modelPicker.jump.9",
     "when": "modelPickerOpen"
+  },
+  {
+    "key": "mod+p",
+    "command": "filePicker.toggle",
+    "when": "!terminalFocus"
+  },
+  {
+    "key": "mod+shift+f",
+    "command": "projectSearch.toggle",
+    "when": "!terminalFocus"
+  },
+  {
+    "key": "mod+alt+shift+t",
+    "command": "themeEditor.toggle"
   }
 ]
