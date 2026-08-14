@@ -56,32 +56,42 @@ if (Get-Command fastfetch -ErrorAction SilentlyContinue) {
 # $myDocumentsPath = [Environment]::GetFolderPath('MyDocuments')
 # Write-Host "myDocumentsPath is: $myDocumentsPath"
 
-# Find the git projects directory across different machine setups
-$basePath = $HOME
-if (Test-Path "$basePath\GitHub\") {
-    $gitDir = "$basePath\GitHub\"
-}
-elseif (Test-Path "$basePath\GitHubWSL\") {
-    $gitDir = "$basePath\GitHubWSL\"
-}
-else {
-    $gitDir = ''
-}
+# Ordered candidates for the git projects directory. First one that EXISTS wins —
+# a candidate whose directory is absent is skipped, so a machine without ~\GitHub
+# falls through to a later one.
+$global:gitDirCandidates = @("$HOME\GitHub\", "$HOME\GitHubWSL\")
 
-# Write-Host "gitDir is: $gitDir"
+# Context shards call this to add their own root; they must never assign $gitDir
+# directly. Appended candidates are tried last, so a client root can never win on
+# a machine that also has a personal one.
+function Add-GitDirFallback {
+    param([Parameter(Mandatory)][string]$Path)
+    $global:gitDirCandidates += $Path
+}
 
 ### Context shards ###
 
 # Context-specific aliases live in per-context shard files deployed by each
 # *_credentials overlay manifest into ~\.powershell_local.d\ (one shard per
 # context, so a machine with several contexts cloned sources them all).
-# Dot-sourced right after the gitDir probe so a shard can extend $gitDir
-# before anything below uses it (the ssh alias loader at the end of this file).
+# Dot-sourced BEFORE $gitDir is resolved so a shard can register a root candidate
+# via Add-GitDirFallback; $gitDir is resolved once afterwards, then used by
+# everything below (down to the ssh alias loader at the end of this file).
 if (Test-Path "$HOME\.powershell_local.d") {
     foreach ($shard in Get-ChildItem "$HOME\.powershell_local.d\*.ps1" | Sort-Object Name) {
         . $shard.FullName
     }
 }
+
+$gitDir = ''
+foreach ($candidate in $gitDirCandidates) {
+    if (Test-Path $candidate) {
+        $gitDir = $candidate
+        break
+    }
+}
+
+# Write-Host "gitDir is: $gitDir"
 
 function Test-GitDir {
     if ([string]::IsNullOrEmpty($gitDir)) {

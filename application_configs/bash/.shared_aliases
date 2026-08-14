@@ -24,26 +24,37 @@ detect_terminal_type
 
 ### Paths ###
 
-# Find the git projects directory across different machine setups
-set_git_dir() {
-    if [ -d "$HOME/GitHub/" ]; then
-        gitDir="$HOME/GitHub/"
-    elif [ -d "$HOME/GitHubWSL/" ]; then
-        gitDir="$HOME/GitHubWSL/"
-    else
-        gitDir=""
-    fi
+# Ordered candidates for the git projects directory. First one that EXISTS wins —
+# a candidate whose directory is absent is skipped, so a machine without ~/GitHub
+# falls through to a later one.
+_git_dir_candidates=("$HOME/GitHub/" "$HOME/GitHubWSL/")
+
+# Context shards call this to add their own root; they must never assign gitDir
+# directly. Appended candidates are tried last, so a client root can never win on
+# a machine that also has a personal one.
+git_dir_fallback() {
+    _git_dir_candidates+=("$1")
 }
 
-set_git_dir
+set_git_dir() {
+    local _c
+    gitDir=""
+    for _c in "${_git_dir_candidates[@]}"; do
+        if [ -d "$_c" ]; then
+            gitDir="$_c"
+            return
+        fi
+    done
+}
 
 ### Context shards ###
 
 # Context-specific aliases live in per-context shard files deployed by each
 # *_credentials overlay manifest into ~/.shell_local.d/ (one shard per
 # context, so a machine with several contexts cloned sources them all).
-# Sourced right after set_git_dir so a shard can extend $gitDir before
-# anything below uses it (the ssh alias loader at the end of this file).
+# Sourced BEFORE set_git_dir runs so a shard can register a root candidate via
+# git_dir_fallback; gitDir is resolved once afterwards, then used by everything
+# below (down to the ssh alias loader at the end of this file).
 _load_context_shards() {
     # zsh errors out on a non-matching glob; bash leaves it literal and the
     # [[ -f ]] check below skips it.
@@ -55,6 +66,8 @@ _load_context_shards() {
     return 0
 }
 _load_context_shards
+
+set_git_dir
 
 alias githubdir='cd $gitDir'
 

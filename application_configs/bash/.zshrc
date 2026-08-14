@@ -122,17 +122,8 @@ zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions comm
 
 ### Shared Aliases ###
 
-# Auto-symlink ~/.shared_aliases from the dotfiles repo if not already present,
-# then source it for all shared aliases and functions.
-if [[ ! -f "$HOME/.shared_aliases" ]]; then
-    for _d in "$HOME/GitHub" "$HOME/GitHubWSL"; do
-        if [[ -f "$_d/dotfiles/application_configs/bash/.shared_aliases" ]]; then
-            ln -s "$_d/dotfiles/application_configs/bash/.shared_aliases" "$HOME/.shared_aliases"
-            break
-        fi
-    done
-    unset _d
-fi
+# Both this file and ~/.shared_aliases are deployed by the same deploy_configs.py
+# run, so if this file is here that one is too.
 [[ -f "$HOME/.shared_aliases" ]] && source "$HOME/.shared_aliases"
 
 alias editaliases='nvim ~/.zshrc'

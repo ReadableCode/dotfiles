@@ -79,7 +79,7 @@
     darwin: ~/.shared_aliases
     linux: ~/.shared_aliases
   note: >-
-    .zshrc and .bash_aliases also auto-symlink this on first run if missing.
+    Sourced by .zshrc and .bash_aliases, which this same run deploys.
     Context-specific aliases are NOT in this file: it sources every
     ~/.shell_local.d/*.sh shard, deployed one-per-context by the *_credentials
     overlay manifests (same contract as the PowerShell profile's
