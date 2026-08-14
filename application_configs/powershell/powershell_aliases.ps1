@@ -1,4 +1,10 @@
-Write-Host "Sourced: $PSCommandPath" -ForegroundColor Cyan
+# Only announce in interactive sessions. `ssh host '<command>'` launches
+# powershell.exe with /c, and scp/sftp do the same, so an unconditional banner
+# lands in the output of every remote command. Same reason .shared_aliases
+# guards its echo with [[ $- == *i* ]].
+if (-not ([Environment]::GetCommandLineArgs() -match '(?i)^[-/](c|command|e|ec|encodedcommand|f|file)$')) {
+    Write-Host "Sourced: $PSCommandPath" -ForegroundColor Cyan
+}
 
 ## Path Mods ###
 
