@@ -248,8 +248,8 @@ itself should stay on loopback:
 
 ```console
 $ ss -tlnp | grep -E '3773|443'
-LISTEN 0 4096      100.64.189.27:443     0.0.0.0:*      # tailnet IP only
-LISTEN 0  511          127.0.0.1:3773    0.0.0.0:*      # t3, loopback only
+LISTEN 0 4096   <tailnet-ip>:443     0.0.0.0:*      # tailnet IP only, not 0.0.0.0
+LISTEN 0  511      127.0.0.1:3773    0.0.0.0:*      # t3, loopback only
 $ tailscale serve status                                 # says "(tailnet only)"
 ```
 
