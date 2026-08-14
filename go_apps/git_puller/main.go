@@ -13,6 +13,23 @@ import (
 	"sync"
 )
 
+// Check for uncommitted changes (modified or untracked files) in a repo
+func dirtyFiles(absRepo string) []string {
+	cmd := exec.Command("git", "-C", absRepo, "status", "--porcelain")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		return nil
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(stdout.String()), "\n") {
+		if strings.TrimSpace(line) != "" {
+			files = append(files, line)
+		}
+	}
+	return files
+}
+
 // Run `git pull` on a repo and capture results
 func gitPull(
 	repo string,
@@ -21,6 +38,8 @@ func gitPull(
 	pulled chan<- string,
 	errors chan<- string,
 	noChanges chan<- string,
+	blocked chan<- string,
+	dirty chan<- string,
 	verbose bool,
 ) {
 	// Defer the WaitGroup Done call to ensure it runs after the function completes
@@ -36,6 +55,10 @@ func gitPull(
 		fmt.Println("[STARTING] Pulling repo:", absRepo)
 	}
 
+	if files := dirtyFiles(absRepo); len(files) > 0 {
+		dirty <- fmt.Sprintf("[DIRTY] %s (%d uncommitted):\n\t%s", absRepo, len(files), strings.Join(files, "\n\t"))
+	}
+
 	// run the git command with -C to change to the repo directory
 	cmd := exec.Command("git", "-C", absRepo, "pull")
 	var stdout, stderr bytes.Buffer
@@ -49,6 +72,13 @@ func gitPull(
 	// Detect authentication failure
 	if strings.Contains(errorMsg, "Username for 'https://github.com'") || strings.Contains(errorMsg, "fatal: could not read Username") {
 		errors <- fmt.Sprintf("[AUTH REQUIRED] %s (Skipping)", absRepo)
+		return
+	}
+
+	// Git refused to advance because uncommitted local edits overlap the
+	// incoming changes — the WIP stays in the worktree, so this is not an error
+	if strings.Contains(errorMsg, "would be overwritten by") {
+		blocked <- fmt.Sprintf("[WIP PROTECTED] %s:\n\t%s", absRepo, strings.ReplaceAll(errorMsg, "\n", "\n\t"))
 		return
 	}
 
@@ -239,10 +269,12 @@ func main() {
 	pulled := make(chan string, len(repos))
 	errors := make(chan string, len(repos))
 	noChanges := make(chan string, len(repos))
+	blocked := make(chan string, len(repos))
+	dirty := make(chan string, len(repos))
 
 	for _, repo := range repos {
 		wg.Add(1)
-		go gitPull(repo, &wg, results, pulled, errors, noChanges, *verbose)
+		go gitPull(repo, &wg, results, pulled, errors, noChanges, blocked, dirty, *verbose)
 	}
 
 	wg.Wait()
@@ -250,6 +282,8 @@ func main() {
 	close(pulled)
 	close(errors)
 	close(noChanges)
+	close(blocked)
+	close(dirty)
 
 	fmt.Println("\n=== No Changes ===")
 	for noChange := range noChanges {
@@ -279,5 +313,15 @@ func main() {
 	fmt.Println("\n=== Errors ===")
 	for err := range errors {
 		fmt.Println(err)
+	}
+
+	fmt.Println("\n=== Skipped: local edits overlap incoming changes (WIP protected) ===")
+	for block := range blocked {
+		fmt.Println(block)
+	}
+
+	fmt.Println("\n=== Dirty Worktrees (uncommitted changes) ===")
+	for d := range dirty {
+		fmt.Println(d)
 	}
 }
