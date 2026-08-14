@@ -3,13 +3,10 @@
 # for the Colima include: Colima writes ssh entries for its VMs there on Macs
 # where it is installed, and the pattern matching nothing on other Macs is
 # silently ignored.
+#
+# Like the bare default, this file carries no Host entries: real entries live
+# in a ~/.ssh/config.d/*.conf fragment deployed by whichever overlay owns the
+# machines. Personal hosts are in personal_credentials/ssh/personal.conf.
 
 Include ~/.colima/ssh_config
 Include config.d/*.conf
-
-Host 192.168.86.170
-  HostName 192.168.86.170
-  User jason
-
-Host 192.168.86.94
-  HostName 192.168.86.94
