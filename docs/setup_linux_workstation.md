@@ -402,59 +402,11 @@ sudo nano /etc/ssmtp/ssmtp.conf
   openvpn3 session-start --config ~/your_filename.ovpn
   ```
 
-## Zscaler Setup (HelloFresh)
+## Work VPN / Proxy Clients
 
-The installer `.run` file lives in `HelloFresh/GDrive/Projects/`. Get the latest
-version from IT/the HelloFresh portal if you need a fresh copy.
-
-### Install
-
-```bash
-# Make executable and run as root
-chmod +x Zscaler-linux-*.run
-sudo ./Zscaler-linux-*.run
-```
-
-The installer drops binaries into `/opt/zscaler/bin/` and registers two systemd
-services: `zsaservice` (the monitor/watchdog) and `zstunnel` (the actual tunnel).
-
-### Fix: zstunnel not enabled at boot (do this immediately after install)
-
-The installer starts `zstunnel` for the current session but **does not enable
-it**, so after every reboot `zsaservice` starts but the tunnel stays dead and
-Zscaler shows as disconnected.
-
-```bash
-# Enable zstunnel to survive reboots
-sudo systemctl enable zstunnel
-
-# Add restart-on-crash so it recovers without a full reinstall
-sudo mkdir -p /etc/systemd/system/zstunnel.service.d
-sudo tee /etc/systemd/system/zstunnel.service.d/restart.conf > /dev/null << 'EOF'
-[Service]
-Restart=always
-RestartSec=5s
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl restart zstunnel
-```
-
-Verify both services are running and enabled:
-
-```bash
-systemctl is-enabled zsaservice zstunnel   # both should print "enabled"
-systemctl status zsaservice zstunnel       # both should show "active (running)"
-```
-
-### Verify connectivity
-
-After login the `ZSTray` tray icon should appear. If it doesn't launch
-automatically, start it manually:
-
-```bash
-/opt/zscaler/scripts/zstray_desktop.sh
-```
+Client-specific tunnel/proxy agent setup (installer location, systemd fixes,
+verification) is documented in that context's private credentials repo, next to
+the rest of its machine config.
 
 ## Syncthing Setup
 

@@ -2,40 +2,6 @@ Write-Host "Sourced: $PSCommandPath" -ForegroundColor Cyan
 
 ## Path Mods ###
 
-if ($env:COMPUTERNAME -eq 'FFLAP-2229') {
-    $paths = @(
-        'C:\Windows\System32',
-        'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
-        'C:\Users\jason.christiansen\userapps\node',
-        'C:\Users\jason.christiansen\userapps\ripgrep',
-        'C:\Users\jason.christiansen\userapps\fd',
-        'C:\Users\jason.christiansen\userapps\WPy64-31350\python',
-        'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
-        'C:\Users\jason.christiansen\userapps\PortableGit\bin',
-        'C:\Users\jason.christiansen\userapps\fzf-0.66.1-windows_amd64',
-        'C:\Users\jason.christiansen\userapps\rust\cargo\bin',
-        'C:\msys64\mingw64\bin',
-        'C:\msys64\usr\bin'
-    )
-    $curr = ($env:Path -split ';') | Where-Object { $_ }
-    foreach ($p in $paths) {
-        if ( (Test-Path -LiteralPath $p) -and -not ($curr -contains $p) ) {
-            $env:Path = "$p;$env:Path"
-        }
-    }
-    Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
-
-    # Set CC to gcc for any builds that might need it
-    $env:CC = "gcc"
-
-    # Tell rustup/cargo to keep their state under userapps instead of the home dir
-    $env:RUSTUP_HOME = "$env:USERPROFILE\userapps\rust\rustup"
-    $env:CARGO_HOME = "$env:USERPROFILE\userapps\rust\cargo"
-
-    # print that we ran custom config for 14
-    Write-Host "14 Foods custom config loaded" -ForegroundColor Green
-}
-
 # Point Neovim and gh at the repo config dir on any Windows machine (no symlink or hard link needed)
 if ($env:OS -eq 'Windows_NT') {
     $env:XDG_CONFIG_HOME = "$env:USERPROFILE\GitHub\dotfiles\application_configs"
@@ -98,14 +64,24 @@ if (Test-Path "$basePath\GitHub\") {
 elseif (Test-Path "$basePath\GitHubWSL\") {
     $gitDir = "$basePath\GitHubWSL\"
 }
-elseif (Test-Path "$basePath\HelloFreshProjects\") {
-    $gitDir = "$basePath\HelloFreshProjects\"
-}
 else {
     $gitDir = ''
 }
 
 # Write-Host "gitDir is: $gitDir"
+
+### Context shards ###
+
+# Context-specific aliases live in per-context shard files deployed by each
+# *_credentials overlay manifest into ~\.powershell_local.d\ (one shard per
+# context, so a machine with several contexts cloned sources them all).
+# Dot-sourced right after the gitDir probe so a shard can extend $gitDir
+# before anything below uses it (the ssh alias loader at the end of this file).
+if (Test-Path "$HOME\.powershell_local.d") {
+    foreach ($shard in Get-ChildItem "$HOME\.powershell_local.d\*.ps1" | Sort-Object Name) {
+        . $shard.FullName
+    }
+}
 
 function Test-GitDir {
     if ([string]::IsNullOrEmpty($gitDir)) {
@@ -119,7 +95,6 @@ function githubdir {
     if (-not (Test-GitDir)) { return }
     Set-Location $gitDir
 }
-function fourdir { Set-Location 'C:\Users\jason\OneDrive - Fourteen Foods\code' }
 function myscripts {
     if (-not (Test-GitDir)) { return }
     Set-Location (Join-Path $gitDir 'dotfiles\scripts')
@@ -127,12 +102,6 @@ function myscripts {
 function datatoolpack {
     if (-not (Test-GitDir)) { return }
     Set-Location (Join-Path $gitDir 'Data_Tool_Pack_Py')
-}
-
-# alias finance='cd ~/HelloFresh/GDrive/Projects/na-finops/'
-function finance {
-    if (-not (Test-GitDir)) { return }
-    Set-Location (Join-Path $gitDir 'na-finops')
 }
 
 

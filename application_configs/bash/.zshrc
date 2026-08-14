@@ -125,7 +125,7 @@ zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions comm
 # Auto-symlink ~/.shared_aliases from the dotfiles repo if not already present,
 # then source it for all shared aliases and functions.
 if [[ ! -f "$HOME/.shared_aliases" ]]; then
-    for _d in "$HOME/GitHub" "$HOME/GitHubWSL" "$HOME/HelloFresh/GDrive/Projects"; do
+    for _d in "$HOME/GitHub" "$HOME/GitHubWSL"; do
         if [[ -f "$_d/dotfiles/application_configs/bash/.shared_aliases" ]]; then
             ln -s "$_d/dotfiles/application_configs/bash/.shared_aliases" "$HOME/.shared_aliases"
             break

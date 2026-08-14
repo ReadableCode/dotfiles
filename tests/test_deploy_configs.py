@@ -116,10 +116,10 @@ def test_load_manifest_rejects_hosts_missing_from_inventory(tmp_path):
 def test_load_inventory_hostnames_uppercases_short_names(tmp_path):
     inventory_path = write_file(
         str(tmp_path / "hosts.json"),
-        '{"hosts": [{"name": "Envy"}, {"name": "envy.local"}, {"name": "FFLAP-2229"}]}\n',
+        '{"hosts": [{"name": "Envy"}, {"name": "envy.local"}, {"name": "ACME-LAP-01"}]}\n',
     )
     hostnames = load_inventory_hostnames(inventory_path)
-    assert hostnames == {"ENVY", "FFLAP-2229"}
+    assert hostnames == {"ENVY", "ACME-LAP-01"}
 
 
 # %%

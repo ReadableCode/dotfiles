@@ -3,12 +3,10 @@
 # prefer `uv run python src/deploy_configs.py` (see docs/deploy_configs.md).
 
 # Determine the base directory based on the paths that exist
-if (Test-Path 'C:\Users\jason\GitHub\') {
-    $gitDir = 'C:\Users\jason\GitHub\'
-} elseif (Test-Path 'C:\Users\16937827583938060798\HelloFreshProjects\') {
-    $gitDir = 'C:\Users\16937827583938060798\HelloFreshProjects\'
+if (Test-Path "$HOME\GitHub\") {
+    $gitDir = "$HOME\GitHub\"
 } else {
-    Write-Error "Neither base directory was found."
+    Write-Error "Base directory not found."
     exit 1
 }
 

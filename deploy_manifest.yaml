@@ -78,7 +78,12 @@
   dest:
     darwin: ~/.shared_aliases
     linux: ~/.shared_aliases
-  note: ".zshrc and .bash_aliases also auto-symlink this on first run if missing."
+  note: >-
+    .zshrc and .bash_aliases also auto-symlink this on first run if missing.
+    Context-specific aliases are NOT in this file: it sources every
+    ~/.shell_local.d/*.sh shard, deployed one-per-context by the *_credentials
+    overlay manifests (same contract as the PowerShell profile's
+    ~\.powershell_local.d\ loader).
 
 # --- Terminal / multiplexer ---
 
@@ -110,23 +115,19 @@
     the repo's application_configs folder - no link or copy needed, and nothing
     breaks when git pull runs. See docs/setup_neovim.md.
 
-- name: vscode_settings
-  repo: application_configs/vscode/settings.json
-  dest:
-    darwin: ~/Library/Application Support/Code/User/settings.json
-    linux: ~/.config/Code/User/settings.json
-    windows: ~/AppData/Roaming/Code/User/settings.json
-  note: "On macOS the deployer resolves the settings.mac.json platform variant."
+# VS Code workspace files AND settings.json live in the credentials overlays
+# (entries vscode_workspace + vscode_settings in personal_manifest.yaml,
+# per-host entries in the client manifests): a workspace file lists every
+# sibling repo at once, and settings.json carries the Remote-SSH host map plus
+# repo exclude lists - exactly the cross-client inventory the public repo must
+# not carry. Settings moved out 2026-08-14; the overlay entries re-claim the
+# same dests, so machines relink on their next deploy (a machine that loads no
+# overlay at all keeps a dangling link until one is cloned - removals can't
+# name these dests while live entries still want them).
 
-# VS Code workspace files live in the credentials overlays (entry
-# vscode_workspace in personal_manifest.yaml, per-host entries in the client
-# manifests): a workspace file lists every sibling repo at once, which is
-# exactly the cross-client inventory the public repo must not carry.
-
-- name: zed_settings
-  repo: application_configs/zed/settings.json
-  dest:
-    darwin: ~/.config/zed/settings.json
+# Zed settings.json also lives in personal_credentials (entry zed_settings
+# there, moved 2026-08-14): its ssh_connections block names client checkouts
+# on a client machine - same cross-client inventory as above.
 
 # --- Git ---
 
@@ -166,16 +167,15 @@
 # in-app settings changes and re-deploy to re-link (merge the in-app edit into
 # the repo copy first; the machine file is backed up to data/config_backups).
 #
-# All three files are split into a mac variant + bare default (2026-08-05):
-# macs resolve <base>.mac.json via the standard variant scheme; Windows and
-# Linux fall through to the bare file, which is the npm-server-safe copy.
-# Reason: the headless `t3` server hard-rejects config keys/commands its
-# pinned version doesn't know (RyzenWhite logged "ignoring invalid keybinding
-# entry" for filePicker.toggle / projectSearch.toggle left behind by a 0.0.32
-# nightly), and the mac desktop's drift-merge workflow is where new-version
-# settings sneak in. Merge Envy's in-app edits into the *.mac.json variant
-# only; promote a setting to the bare file only once the npm server build on
-# the Windows/Linux boxes accepts it.
+# Only keybindings.json has a mac variant: macs resolve keybindings.mac.json,
+# Windows and Linux fall through to the bare file, which is the npm-server-safe
+# copy - the headless `t3` server hard-rejects commands its pinned version
+# doesn't know (RyzenWhite logged "ignoring invalid keybinding entry" for
+# filePicker.toggle / projectSearch.toggle left behind by a 0.0.32 nightly).
+# settings.json and client-settings.json have no variant; if a mac drift-merge
+# ever introduces a key the npm server rejects, split off a .mac.json variant
+# again at that point (the 2026-08-05 split of all three left the other two
+# byte-identical, so they were deleted 2026-08-14).
 
 # t3code_settings (application_configs/t3code/settings.json ->
 # ~/.t3/userdata/settings.json) deploys via personal_manifest.yaml as of
@@ -197,8 +197,8 @@
     windows: ~/.t3/userdata/client-settings.json
   requires: ~/.t3/userdata
   note: >-
-    Desktop-client UI prefs; headless servers ignore it. Macs get
-    client-settings.mac.json, other platforms the bare file.
+    Desktop-client UI prefs; headless servers ignore it. All platforms get the
+    bare file.
 
 - name: t3code_keybindings
   repo: application_configs/t3code/keybindings.json
@@ -215,13 +215,13 @@
 
 # --- Barrier (KVM sharing) ---
 
-- name: barrier_configs
-  repo: application_configs/barrier
-  method: none
-  note: >-
-    Per-host barrier_config.<host>.sgc files, loaded by path from the Barrier
-    GUI / autostart arguments - no links. Renamed to the dotted variant scheme
-    in Task 5; re-point Barrier at the new filename on each host that uses one.
+# Per-host barrier_config.<host>.sgc files moved to the credentials overlays
+# 2026-08-14 (entry barrier_configs in personal_manifest.yaml; the client
+# machine's own config was already in its context repo): a screen layout names
+# every machine it spans, including work machines - cross-client inventory the
+# public repo must not carry. method was none (loaded by path from the Barrier
+# GUI), so there are no links to remove, but Barrier on each host must be
+# re-pointed at the overlay repo's path.
 
 # --- macOS automation ---
 
@@ -253,5 +253,8 @@
   note: >-
     Not linked: $PROFILE dot-sources this file (". <path>"), so the profile is
     config-path indirection rather than a link. See
-    docs/setup_windows_workstation_personal.md.
+    docs/setup_windows_workstation_personal.md. Context-specific aliases are
+    NOT in this file: it dot-sources every ~\.powershell_local.d\*.ps1 shard,
+    deployed one-per-context by the *_credentials overlay manifests (same
+    contract as the ~/.shell_local.d/ loader in .shared_aliases).
 

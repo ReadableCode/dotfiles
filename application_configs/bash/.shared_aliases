@@ -30,14 +30,31 @@ set_git_dir() {
         gitDir="$HOME/GitHub/"
     elif [ -d "$HOME/GitHubWSL/" ]; then
         gitDir="$HOME/GitHubWSL/"
-    elif [ -d "$HOME/HelloFresh/GDrive/Projects/" ]; then
-        gitDir="$HOME/HelloFresh/GDrive/Projects/"
     else
         gitDir=""
     fi
 }
 
 set_git_dir
+
+### Context shards ###
+
+# Context-specific aliases live in per-context shard files deployed by each
+# *_credentials overlay manifest into ~/.shell_local.d/ (one shard per
+# context, so a machine with several contexts cloned sources them all).
+# Sourced right after set_git_dir so a shard can extend $gitDir before
+# anything below uses it (the ssh alias loader at the end of this file).
+_load_context_shards() {
+    # zsh errors out on a non-matching glob; bash leaves it literal and the
+    # [[ -f ]] check below skips it.
+    [[ -n "$ZSH_VERSION" ]] && setopt localoptions nullglob
+    local _shard
+    for _shard in "$HOME/.shell_local.d"/*.sh; do
+        [[ -f "$_shard" ]] && source "$_shard"
+    done
+    return 0
+}
+_load_context_shards
 
 alias githubdir='cd $gitDir'
 

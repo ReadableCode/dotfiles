@@ -6,7 +6,7 @@
 # Auto-symlink ~/.shared_aliases from the dotfiles repo if not already present,
 # then source it for all shared aliases and functions.
 if [[ ! -f "$HOME/.shared_aliases" ]]; then
-    for _d in "$HOME/GitHub" "$HOME/GitHubWSL" "$HOME/HelloFresh/GDrive/Projects"; do
+    for _d in "$HOME/GitHub" "$HOME/GitHubWSL"; do
         if [[ -f "$_d/dotfiles/application_configs/bash/.shared_aliases" ]]; then
             ln -s "$_d/dotfiles/application_configs/bash/.shared_aliases" "$HOME/.shared_aliases"
             break
@@ -27,12 +27,6 @@ alias srcaliases='source ~/.bashrc'
 alias myscripts='cd $gitDir/dotfiles/scripts/'
 alias linux='cd ~/Documents/Technology/Linux/'
 alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
-
-# HelloFresh #
-alias finance='cd $gitDir/na-finops/'
-alias kubelogs='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_follow_logs.sh'
-alias kubebash='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_bash.sh'
-alias kubedelete='~/HelloFresh/GDrive/Projects/na-finops/scripts/kube_container_delete.sh'
 
 ### Program Shortcuts ###
 
@@ -75,8 +69,6 @@ alias gpustatus='watch -n 0.5 nvidia-smi'
 
 ### VPN Shortcuts ###
 
-alias vpnhello='openvpn3 session-start --config ~/hellofresh.ovpn'
-alias vpnhellov2='sudo openvpn --config ~/hellofresh.ovpn --daemon hellofresh-openvpn'
 alias killvpn='sudo kill $(pgrep openvpn)'
 
 ### Google Shortcuts ###
