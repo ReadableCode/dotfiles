@@ -151,7 +151,7 @@ Use this when you can't install software system-wide on a Windows machine
 
 1. Go to [Neovim Releases](https://github.com/neovim/neovim/releases).
 2. Download `nvim-win64.zip` from the latest stable release.
-3. Extract to `C:\Users\jason.christiansen\userapps\nvim-win64\`
+3. Extract to `%USERPROFILE%\userapps\nvim-win64\`
 
 #### 2. Download Node.js (portable, no installer)
 
@@ -159,7 +159,7 @@ Mason and Copilot need Node.js. Use the zip build, not the installer:
 
 1. Go to [Node.js Downloads](https://nodejs.org/en/download) and download
    the **Windows Binary (.zip)** for the LTS release.
-2. Extract to `C:\Users\jason.christiansen\userapps\node\`
+2. Extract to `%USERPROFILE%\userapps\node\`
 
 #### 3. Download ripgrep and fd (portable)
 
@@ -169,13 +169,14 @@ Both ship as standalone zip downloads — no installer required.
 
 1. Go to [ripgrep Releases](https://github.com/BurntSushi/ripgrep/releases).
 2. Download `ripgrep-*-x86_64-pc-windows-msvc.zip`.
-3. Extract to `C:\Users\jason.christiansen\userapps\ripgrep\`
+3. Extract to `%USERPROFILE%\userapps\rg\` (the PATH block expects the folder
+   to be named `rg`)
 
 **fd:**
 
 1. Go to [fd Releases](https://github.com/sharkdp/fd/releases).
 2. Download `fd-*-x86_64-pc-windows-msvc.zip`.
-3. Extract to `C:\Users\jason.christiansen\userapps\fd\`
+3. Extract to `%USERPROFILE%\userapps\fd\`
 
 #### 4. Install vim-plug
 

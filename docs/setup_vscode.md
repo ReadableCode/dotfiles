@@ -144,19 +144,23 @@ uv run python src/deploy_configs.py
 
 - Set up Visual Studio Code settings to map to non-system level Git
 
-Edit the file at `C:\Users\jason.christiansen\.vscode-server\data\Machine\settings.json`
+Edit the file at `%USERPROFILE%\.vscode-server\data\Machine\settings.json`
 
 - Add the following lines to the json file:
 
 ```json
 {
-  "git.path": "C:/Users/jason.christiansen/userapps/PortableGit/bin/git.exe",
+  "git.path": "C:/Users/<you>/userapps/PortableGit/bin/git.exe",
   "terminal.integrated.env.windows": {
-    "PATH": "C:/Users/jason.christiansen/userapps/PortableGit/bin;C:/Users/jason.christiansen/userapps/PortableGit/usr/bin;${env:PATH}",
-    "GIT_SSH": "C:/Users/jason.christiansen/userapps/OpenSSH-Win64/ssh.exe"
+    "PATH": "${env:USERPROFILE}/userapps/PortableGit/bin;${env:USERPROFILE}/userapps/PortableGit/usr/bin;${env:PATH}",
+    "GIT_SSH": "${env:USERPROFILE}/userapps/OpenSSH-Win64/ssh.exe"
   }
 }
 ```
+
+`git.path` must be a literal absolute path — VS Code does not expand
+`${env:...}` in that setting, only in the `terminal.integrated.env.*` blocks
+above it. Substitute your own user name there.
 
 ## Handling Remote SSH Connection Issues
 

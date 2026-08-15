@@ -98,8 +98,8 @@ the repo at all. The one-off manual equivalent:
 
 ```powershell
 New-Item -ItemType HardLink `
-  -Path "C:\Users\jason.christiansen\GitHub\workhost.code-workspace" `
-  -Target "C:\Users\jason.christiansen\GitHub\dotfiles\application_configs\vscode\workspace.workhost.code-workspace"
+  -Path "$env:USERPROFILE\GitHub\workhost.code-workspace" `
+  -Target "$env:USERPROFILE\GitHub\dotfiles\application_configs\vscode\workspace.workhost.code-workspace"
 ```
 
 The trade-off (see the inode section above): `git pull` orphans hard links

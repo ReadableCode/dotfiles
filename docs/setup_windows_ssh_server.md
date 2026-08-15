@@ -139,20 +139,25 @@
   https://github.com/PowerShell/Win32-OpenSSH/releases
   ```
 
-* Extract to folder like: C:\Users\jason.christiansen\userapps\OpenSSH-Win64
+* Extract to folder like: %USERPROFILE%\userapps\OpenSSH-Win64
 
 * Generate keys and config in a user folder:
 
 ```bash
+$portableSshd = "$env:USERPROFILE\GitHub\dotfiles\application_configs\portable_sshd"
 cd $env:USERPROFILE\userapps\OpenSSH-Win64
-mkdir "$env:USERPROFILE\GitHub\dotfiles\application_configs\portable_sshd" -ea SilentlyContinue
-.\ssh-keygen.exe --% -t rsa -b 2048 -f "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key" -N ""
-New-Item -ItemType File -Path "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys" -Force | Out-Null
-icacls "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys" /inheritance:r /grant "jason.christiansen:(OI)(CI)F"
-icacls "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys" /inheritance:r /grant "jason.christiansen:F"
+mkdir $portableSshd -ea SilentlyContinue
+# -N '""' is how you pass an empty passphrase and still let PowerShell expand
+# the paths; the older `--%` form stops expansion for the rest of the line.
+.\ssh-keygen.exe -t rsa -b 2048 -f "$portableSshd\ssh_host_rsa_key" -N '""'
+New-Item -ItemType File -Path "$portableSshd\authorized_keys" -Force | Out-Null
+icacls "$portableSshd\authorized_keys" /inheritance:r /grant "$($env:USERNAME):(OI)(CI)F"
+icacls "$portableSshd\authorized_keys" /inheritance:r /grant "$($env:USERNAME):F"
 ```
 
-* Create config file in same folder (portable_sshd): (will have to use direct paths, no ~ or $env)
+* Create config file in same folder (portable_sshd). Paths here are literal —
+  no `~` and no `$env:` expansion. The one exception is `AuthorizedKeysFile`,
+  which expands `%h` to the user's home directory.
 
 * file name will be:
 
@@ -160,12 +165,12 @@ icacls "C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable
 
 ```bash
 Port 2222
-HostKey C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key
+HostKey C:/Users/<you>/GitHub/dotfiles/application_configs/portable_sshd/ssh_host_rsa_key
 PubkeyAuthentication yes
 PasswordAuthentication yes
-AuthorizedKeysFile C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
-Subsystem sftp C:/Users/jason.christiansen/userapps/OpenSSH-Win64/sftp-server.exe
-ForceCommand C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/shell_wrapper.cmd
+AuthorizedKeysFile %h/GitHub/dotfiles/application_configs/portable_sshd/authorized_keys
+Subsystem sftp C:/Users/<you>/userapps/OpenSSH-Win64/sftp-server.exe
+ForceCommand cmd.exe /c C:\Users\<you>\GitHub\dotfiles\application_configs\portable_sshd\shell_wrapper.cmd
 ```
 
 * Default shell: without admin the HKLM `DefaultShell` registry value can't
@@ -174,7 +179,10 @@ ForceCommand C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/por
   `portable_sshd` folder), which starts PowerShell for interactive logins and
   passes exec requests (`ssh host <cmd>`, scp, rsync, sftp, VS Code
   Remote-SSH) through `cmd /c` unchanged — the same way the default shell ran
-  them. Restart sshd after changing the config or wrapper.
+  them. The command must start with `cmd.exe /c`: pty sessions CreateProcess
+  the forced command directly, with no shell, and cannot execute a bare `.cmd`
+  file. Restart sshd after changing the config or wrapper, and validate first
+  with `.\sshd.exe -t -f <config>`.
 
 * Generate keys on other machine, deploy to authorized_keys file
 
@@ -182,7 +190,7 @@ ForceCommand C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/por
 
 ```bash
 cd $env:USERPROFILE\userapps\OpenSSH-Win64
-.\sshd.exe -f C:/Users/jason.christiansen/GitHub/dotfiles/application_configs/portable_sshd/sshd_config -D -E C:/Users/jason.christiansen/.portable-sshd.log
+.\sshd.exe -f "$env:USERPROFILE/GitHub/dotfiles/application_configs/portable_sshd/sshd_config" -D -E "$env:USERPROFILE/.portable-sshd.log"
 # to check running
 netstat -ano | findstr :2222
 ```
@@ -190,5 +198,5 @@ netstat -ano | findstr :2222
 * Connect to it from the host machine
 
 ```bash
-ssh -p 2222 jason.christiansen@192.168.86.126
+ssh -p 2222 <you>@<laptop-ip>
 ```

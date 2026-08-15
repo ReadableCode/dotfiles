@@ -7,14 +7,14 @@
 ## Setup uv with portable python
 
 ```bash
-C:/Users/jason.christiansen/userapps/WPy64-31350/python/python.exe -m pip install uv
+%USERPROFILE%/userapps/WPy64-<version>/python/python.exe -m pip install uv
 ```
 
 ### Running uv
 
 ```bash
 # cd to dir with pyproject.toml
-C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts\uv.exe sync
+%USERPROFILE%\userapps\WPy64-<version>\python\Scripts\uv.exe sync
 ```
 
 - Activate or select new python path:

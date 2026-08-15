@@ -30,7 +30,7 @@ install root if it differs.
 From PowerShell, regenerate app_lists/msys2_packages.txt with whatever is currently explicitly installed:
 
 ```powershell
-C:\msys64\usr\bin\bash.exe -lc "pacman -Qqe | grep -v '^msys2-\|^base\|^filesystem\|^bash\|^pacman\|^ca-certificates\|^coreutils\|^gcc\|^glibc' > /c/Users/jason.christiansen/GitHub/dotfiles/app_lists/msys2_packages.txt"
+C:\msys64\usr\bin\bash.exe -lc 'pacman -Qqe | grep -v "^msys2-\|^base\|^filesystem\|^bash\|^pacman\|^ca-certificates\|^coreutils\|^gcc\|^glibc" > "$(cygpath -u "$USERPROFILE")/GitHub/dotfiles/app_lists/msys2_packages.txt"'
 ```
 
 The grep filter excludes base MSYS2 system packages so the list only contains tools intentionally added.

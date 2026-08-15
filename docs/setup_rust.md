@@ -119,23 +119,54 @@ the existing `## Path Mods ###` block so the `cargo\bin` directory is on
 
 ```powershell
 if ($env:COMPUTERNAME -eq 'WORK-LAPTOP') {
-    $paths = @(
-        'C:\Windows\System32',
-        'C:\Users\jason.christiansen\userapps\nvim-win64\bin',
-        'C:\Users\jason.christiansen\userapps\node',
-        'C:\Users\jason.christiansen\userapps\ripgrep',
-        'C:\Users\jason.christiansen\userapps\fd',
-        'C:\Users\jason.christiansen\userapps\WPy64-31350\python',
-        'C:\Users\jason.christiansen\userapps\WPy64-31350\python\Scripts',
-        'C:\Users\jason.christiansen\userapps\PortableGit\bin',
-        'C:\Users\jason.christiansen\userapps\fzf-0.66.1-windows_amd64',
-        'C:\Users\jason.christiansen\userapps\rust\cargo\bin',
-        'C:\msys64\mingw64\bin',
-        'C:\msys64\usr\bin'
+    $userapps = "$env:USERPROFILE\userapps"
+
+    # WinPython and fzf carry their version in the folder name, so that name changes
+    # every time they are updated. Look them up by pattern rather than pinning a version.
+    # Newest by write time, not by name: name order is alphabetical, so a leftover
+    # WPy64-3900 would beat the newer WPy64-31350.
+    function Get-NewestUserApp {
+        param([string]$Pattern)
+        Get-ChildItem "$userapps\$Pattern" -Directory -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty Name
+    }
+
+    $wpy = Get-NewestUserApp 'WPy64-*'
+    $fzf = Get-NewestUserApp 'fzf-*'
+    if (-not $wpy) { Write-Host 'portable config: no WPy64-* folder in userapps, python is off PATH' -ForegroundColor Yellow }
+    if (-not $fzf) { Write-Host 'portable config: no fzf-* folder in userapps, fzf is off PATH' -ForegroundColor Yellow }
+
+    # blank when the lookup above found nothing, which drops them from the list
+    $wpyPython = if ($wpy) { "$wpy\python" }
+    $wpyScripts = if ($wpy) { "$wpy\python\Scripts" }
+
+    # all relative to userapps
+    $userappPaths = @(
+        'nvim-win64\bin',
+        'node',
+        'rg',
+        'fd',
+        $wpyPython,
+        $wpyScripts,
+        'PortableGit\bin',
+        $fzf,
+        'rust\cargo\bin'
     )
+
+    # Windows and msys64 are not under userapps, so they are spelled out in full. Entries
+    # are prepended in order, so the last ones here end up first in PATH: msys64 wins,
+    # then the userapps tools, then System32.
+    $paths = @('C:\Windows\System32')
+    $paths += $userappPaths | Where-Object { $_ } | ForEach-Object { "$userapps\$_" }
+    $paths += 'C:\msys64\mingw64\bin', 'C:\msys64\usr\bin'
+
     $curr = ($env:Path -split ';') | Where-Object { $_ }
     foreach ($p in $paths) {
-        if ( (Test-Path -LiteralPath $p) -and -not ($curr -contains $p) ) {
+        if (-not (Test-Path -LiteralPath $p)) {
+            Write-Host "portable config: not on disk, leaving off PATH: $p" -ForegroundColor Yellow
+            continue
+        }
+        if (-not ($curr -contains $p)) {
             $env:Path = "$p;$env:Path"
         }
     }
@@ -148,8 +179,7 @@ if ($env:COMPUTERNAME -eq 'WORK-LAPTOP') {
     $env:RUSTUP_HOME = "$env:USERPROFILE\userapps\rust\rustup"
     $env:CARGO_HOME  = "$env:USERPROFILE\userapps\rust\cargo"
 
-    # print that we ran custom config for 14
-    Write-Host "14 Foods custom config loaded" -ForegroundColor Green
+    Write-Host 'portable toolchain config loaded' -ForegroundColor Green
 }
 ```
 
