@@ -419,12 +419,20 @@ function startstablediffusion {
     $scriptPath = "~\GitHub\stable-diffusion-webui\webui.bat"
     $scriptDir = Split-Path $scriptPath
 
-    # Define the path to the .env file
+    # Define the path to the .env file (deployed from the credentials repo, absent on machines without it)
     $envFilePath = "$gitDir\dotfiles\.env"
+    if (-not (Test-Path $envFilePath)) {
+        Write-Host "No .env at $envFilePath" -ForegroundColor Red
+        return
+    }
 
     # Read the .env file and extract the password
     $envContent = Get-Content $envFilePath | Where-Object { $_ -match "^GRADIO_AUTH_PASSWORD=" }
     $password = $envContent -replace "GRADIO_AUTH_PASSWORD=", ""
+    if ([string]::IsNullOrEmpty($password)) {
+        Write-Host "GRADIO_AUTH_PASSWORD is not set in $envFilePath" -ForegroundColor Red
+        return
+    }
 
     # Change location to the script directory
     Set-Location $scriptDir
@@ -437,12 +445,20 @@ function startstablediffusionamd {
     $scriptPath = "~\GitHub\stable-diffusion-webui-amdgpu\webui.bat"
     $scriptDir = Split-Path $scriptPath
 
-    # Define the path to the .env file
+    # Define the path to the .env file (deployed from the credentials repo, absent on machines without it)
     $envFilePath = "$gitDir\dotfiles\.env"
+    if (-not (Test-Path $envFilePath)) {
+        Write-Host "No .env at $envFilePath" -ForegroundColor Red
+        return
+    }
 
     # Read the .env file and extract the password
     $envContent = Get-Content $envFilePath | Where-Object { $_ -match "^GRADIO_AUTH_PASSWORD=" }
     $password = $envContent -replace "GRADIO_AUTH_PASSWORD=", ""
+    if ([string]::IsNullOrEmpty($password)) {
+        Write-Host "GRADIO_AUTH_PASSWORD is not set in $envFilePath" -ForegroundColor Red
+        return
+    }
 
     # Change location to the script directory
     Set-Location $scriptDir
