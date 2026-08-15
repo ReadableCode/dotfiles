@@ -24,9 +24,11 @@ from utils.inventory_tools import (
 # %%
 # Variables #
 
-dotenv_path = os.path.join(grandparent_dir, ".env")
-if os.path.exists(dotenv_path):
-    load_dotenv(dotenv_path)
+# Repo-root .env, the same path the other src/ scripts read. Loaded under
+# __main__ rather than at import or in main(): the suite imports this module and
+# calls main() directly, so anywhere earlier puts the real deployed credentials
+# in the pytest process (it caught a token out of personal.env when it did).
+dotenv_path = os.path.join(parent_dir, ".env")
 
 system = platform.system()
 
@@ -948,6 +950,8 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
+    if os.path.exists(dotenv_path):
+        load_dotenv(dotenv_path)
     sys.exit(main())
 
 
