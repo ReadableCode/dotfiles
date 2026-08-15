@@ -859,45 +859,6 @@ def test_deploy_then_second_run_reports_no_changes(tmp_path, fake_home, monkeypa
 
 
 # %%
-# Where the .env load may live #
-
-
-def test_dotenv_path_is_the_repo_root_env():
-    """Same repo-relative path the other src/ scripts read, not the GitHub dir above it."""
-    assert deploy_configs.dotenv_path == os.path.join(deploy_configs.parent_dir, ".env")
-
-
-def test_env_file_is_loaded_only_under_the_main_guard():
-    """The load belongs under __main__, the one code path this suite never runs.
-
-    This suite imports the module and calls main() directly, so a load at module
-    level or inside main() pulls the deployed personal.env into the pytest
-    process -- when it briefly did, a real GITHUB_TOKEN_ENV indirection beat the
-    monkeypatched token in test_ticket_pr and that suite went red.
-    """
-    with open(deploy_configs.__file__, "r", encoding="utf-8") as file_handle:
-        source = file_handle.read()
-    guard = source.index('if __name__ == "__main__":')
-    assert "load_dotenv(" in source[guard:], "the CLI should still load the repo .env"
-    assert "load_dotenv(" not in source[:guard], "an importable load_dotenv() leaks credentials into tests"
-
-
-def test_main_does_not_load_the_env_file(tmp_path, fake_home, monkeypatch, capsys):
-    """Behavioral half of the rule above: a full main() run sets nothing from the .env."""
-    monkeypatch.setattr(
-        deploy_configs,
-        "dotenv_path",
-        write_file(str(tmp_path / "creds" / ".env"), "DEPLOY_CONFIGS_CANARY=leaked\n"),
-    )
-    monkeypatch.delenv("DEPLOY_CONFIGS_CANARY", raising=False)
-    manifest_path = _temp_manifest(tmp_path, monkeypatch)
-
-    assert deploy_configs.main(["--manifest", manifest_path]) == 0
-    capsys.readouterr()
-    assert "DEPLOY_CONFIGS_CANARY" not in os.environ
-
-
-# %%
 # Removals and prune #
 
 

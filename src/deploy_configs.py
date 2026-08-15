@@ -12,7 +12,6 @@ import time
 
 import yaml
 from config import grandparent_dir, parent_dir
-from dotenv import load_dotenv
 from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
     find_overlay_dirs,
@@ -24,11 +23,10 @@ from utils.inventory_tools import (
 # %%
 # Variables #
 
-# Repo-root .env, the same path the other src/ scripts read. Loaded under
-# __main__ rather than at import or in main(): the suite imports this module and
-# calls main() directly, so anywhere earlier puts the real deployed credentials
-# in the pytest process (it caught a token out of personal.env when it did).
-dotenv_path = os.path.join(parent_dir, ".env")
+# No .env is read here on purpose. This script consumes no secrets (NO_COLOR is
+# the only variable it looks at, straight from the real environment), and the
+# suite imports this module and calls main() directly, so any load_dotenv() of
+# the deployed personal.env would put real credentials in the pytest process.
 
 system = platform.system()
 
@@ -950,8 +948,6 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    if os.path.exists(dotenv_path):
-        load_dotenv(dotenv_path)
     sys.exit(main())
 
 
