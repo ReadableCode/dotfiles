@@ -169,9 +169,13 @@
 #
 # Only keybindings.json has a mac variant: macs resolve keybindings.mac.json,
 # Windows and Linux fall through to the bare file, which is the npm-server-safe
-# copy - the headless `t3` server hard-rejects commands its pinned version
+# copy - the headless `t3` server hard-rejects commands its own version
 # doesn't know (RyzenWhite logged "ignoring invalid keybinding entry" for
 # filePicker.toggle / projectSearch.toggle left behind by a 0.0.32 nightly).
+# Servers install unpinned (t3@latest), so the bare file has to track the
+# OLDEST server running anywhere: roll every server up BEFORE promoting new
+# default bindings here, and remember the quiet machines are the ones that
+# fall behind. See the "Server version" section of docs/setup_t3_code.md.
 # settings.json and client-settings.json have no variant; if a mac drift-merge
 # ever introduces a key the npm server rejects, split off a .mac.json variant
 # again at that point (the 2026-08-05 split of all three left the other two

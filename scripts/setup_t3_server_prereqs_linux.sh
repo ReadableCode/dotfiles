@@ -26,6 +26,20 @@ version_ok() {
     return 1
 }
 
+# Servers install unpinned (`t3@latest`, npm's stable tag - nightlies ship
+# under a separate tag), matching setup_t3_server_windows.ps1 and the desktop
+# app. This script only preps node + the toolchain; the install itself is
+# `t3 service install`, so print the command rather than running it here
+# (installing a service is not a prereq step).
+done_message() {
+    echo "Done. Verify from another machine: ssh <this-host> 'node -v'"
+    echo "Then install/update the boot service:"
+    echo "    npx -y t3@latest service install   # first time"
+    echo "    npx -y t3@latest service update    # existing service"
+    echo "Moving one server up can outdate the deployed keybindings.json on the"
+    echo "others - see 'Server version' in docs/setup_t3_code.md."
+}
+
 ensure_cxx_toolchain() {
     if command -v c++ >/dev/null 2>&1 || command -v g++ >/dev/null 2>&1; then
         echo "C++ toolchain present — node-pty can build."
@@ -63,7 +77,7 @@ fi
 
 if [ "$node_ok" = true ]; then
     ensure_cxx_toolchain
-    echo "Done. Verify from another machine: ssh <this-host> 'node -v'"
+    done_message
     exit 0
 fi
 
@@ -94,4 +108,4 @@ esac
 
 ensure_cxx_toolchain
 
-echo "Done. Verify from another machine: ssh <this-host> 'node -v'"
+done_message

@@ -4,7 +4,7 @@
 #   powershell -ExecutionPolicy Bypass -File setup_t3_server_windows.ps1
 # What it does (idempotent, safe to re-run):
 #   1. verifies Node meets T3's requirement (^22.16 || ^23.11 || >=24.10)
-#   2. installs t3@<Version> globally (match the desktop app version)
+#   2. installs t3@latest globally (-Version to hold a machine back)
 #   3. registers a boot/logon scheduled task running `t3 serve` (loopback
 #      only - Tailscale Serve / the relay dial loopback, so no 0.0.0.0 bind
 #      and no firewall rule), output captured to ~\.t3\server.log
@@ -18,7 +18,11 @@
 # See docs/setup_t3_code.md.
 
 param(
-    [string]$Version = "0.0.31",
+    # npm's stable tag. Nightlies ship under a separate `nightly` tag, so this
+    # never picks one up. Pass an explicit version only to hold a machine at a
+    # known-good release - see "Server version" in docs/setup_t3_code.md for
+    # the one thing that couples servers to the repo (keybindings.json).
+    [string]$Version = "latest",
     [int]$Port = 3773,
     # Expose over Tailscale Serve (HTTPS on the tailnet). This is the default
     # reachability path: T3 Connect accounts are capped at 3 managed tunnels,
@@ -58,10 +62,21 @@ if (-not $ok) {
 }
 Write-Output "node $($v -join '.') OK"
 
-# 2. Install the server CLI, pinned to the desktop app's version
+# 2. Install the server CLI. Unpinned by default, same as the desktop app
+#    (brew/winget track their own latest). The one thing that couples the
+#    server to this repo is the deployed application_configs/t3code/
+#    keybindings.json: a server OLDER than the version those bindings came from
+#    logs "ignoring invalid keybinding entry", a NEWER one merges its own
+#    defaults in and replaces the deployed symlink with a plain file. So the
+#    bare file tracks the OLDEST server running anywhere - after moving a
+#    machine up, check the others before promoting new defaults into it.
 npm install -g "t3@$Version"
 $t3 = Join-Path $env:APPDATA "npm\t3.cmd"
 if (-not (Test-Path $t3)) { Write-Error "t3 CLI not found at $t3 after install." }
+# Report what npm actually resolved - with no pin, that is the only record of
+# which version this box is now on.
+$installed = (npm ls -g --depth 0 t3 2>$null | Select-String -Pattern "t3@\S+").Matches.Value
+Write-Output "Installed $installed (check the other servers before promoting new default keybindings)."
 
 # Legacy cleanup: the first version of this script opened an inbound firewall
 # rule; loopback + Tailscale Serve/relay needs none, so drop it if present.

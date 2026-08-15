@@ -14,6 +14,40 @@ apps. Source: [github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code)
 - At least one coding agent CLI installed and authenticated (see below) —
   only on machines that *run* agents; a client-only viewer needs neither
 
+## Server version
+
+**Headless servers install unpinned**, same as the desktop app: `t3@latest`
+on both paths (`setup_t3_server_windows.ps1` defaults `-Version` to it, the
+Linux prereq script prints `npx -y t3@latest service install`). No file in
+this repo names a server version, so nothing here can go stale — the Windows
+installer's old hardcoded `0.0.31` (2026-07-29) was two releases behind the
+0.0.33 the fleet moved to on 2026-08-14 and would have *downgraded*
+RyzenWhite on the next run, back into the keybinding rejections below.
+
+`latest` is npm's **stable** tag. Nightlies ship under a separate `nightly`
+tag and are never resolved by `@latest` — the 0.0.32 nightly that filled
+RyzenWhite's configs with entries the server then rejected (see Known issues)
+came from a desktop install that grabbed a nightly build, not from a floating
+npm server install.
+
+**The one coupling to watch.** The deployed bare `keybindings.json` in
+`application_configs/t3code/` carries some server version's default bindings.
+A server **older** than that logs `ignoring invalid keybinding entry`; a
+**newer** one merges its own defaults in and replaces the deployed symlink
+with a plain file (`NOT_A_LINK` in `deploy_configs.py status`). So the bare
+file tracks the **oldest server running anywhere**:
+
+1. roll every server up (Windows: re-run the installer; Linux:
+   `npx -y t3@latest service update`),
+2. only then promote new default bindings into the bare file,
+3. after any server install, check that box's boot log for
+   `ignoring invalid keybinding entry`.
+
+Because installs float, a machine that hasn't been touched in months is the
+one that falls behind — re-run the installer on the quiet boxes before step 2,
+or hold a machine deliberately with an explicit `-Version` / `t3@<version>`.
+`keybindings.mac.json` is a separate track (the desktop app's version).
+
 ## Install (macOS)
 
 Included in `app_lists/Brewfile`, so `brew bundle` installs it. To install
@@ -42,8 +76,8 @@ winget install T3Tools.T3Code
 
 Headless server instead (the RyzenWhite pattern): don't install the desktop
 app at all — run `scripts/setup_t3_server_windows.ps1`, which installs the
-npm `t3` package pinned to the desktop version and registers the scheduled
-task. See the Windows remotes section.
+npm `t3` package (unpinned — see [Server version](#server-version)) and
+registers the scheduled task. See the Windows remotes section.
 
 Phones: the
 [iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) /
@@ -66,8 +100,8 @@ Done on JasonZephyrus (Fedora 43) 2026-08-14.
 # 1. prereqs (node in range + a C++ toolchain — see the node-pty trap below)
 ./scripts/setup_t3_server_prereqs_linux.sh
 
-# 2. install the service, pinned to the version the fleet runs
-npx -y t3@0.0.33 service install
+# 2. install the service (the prereq script prints this line too)
+npx -y t3@latest service install
 
 # 3. verify all three properties that make it "always on"
 systemctl --user is-active t3code.service     # active
@@ -348,8 +382,8 @@ For a Windows box that just runs the desktop app as a viewer/steering client
 Connect-linked environments). Much shorter than the Mac list:
 
 1. **Install**: `winget install T3Tools.T3Code` (see Install (Windows) —
-   never the website installer). Verify it grabbed the fleet's stable
-   version, not a nightly — a 0.0.32 nightly is what left RyzenWhite's
+   never the website installer). Verify it grabbed the stable release,
+   not a nightly — a 0.0.32 nightly is what left RyzenWhite's
    configs full of entries the 0.0.31 schema rejects. Expect a SmartScreen
    warning on first run of an unsigned alpha: More info → Run anyway.
 2. **Launch once and sign into the T3 account** (Settings, bottom-left).
@@ -582,7 +616,8 @@ end-to-end as
 [`scripts/setup_t3_server_windows.ps1`](../scripts/setup_t3_server_windows.ps1)
 (run on the Windows box, fine over SSH). What it does:
 
-1. Verifies Node, installs `t3@<desktop version>` globally.
+1. Verifies Node, installs `t3@latest` globally and prints the version it
+   resolved (see [Server version](#server-version)).
 2. Registers and starts a `t3code-server` **scheduled task** (boot + logon
    triggers) running `t3 serve` — a serve started in an SSH session dies
    with it, Windows OpenSSH kills the process tree. Loopback only: both
@@ -641,10 +676,12 @@ connections** — that's the ready signal (same readiness behavior as Envy).
 doesn't surface it):
 
 ```bash
-npx -y t3@<version> service update
+npx -y t3@latest service update
 ```
 
-It installs the runtime under `~/.t3/runtime/versions/<version>`, rewrites
+The version the panel names works here too; what matters is the
+`service update` verb, not the tag. It installs the
+runtime under `~/.t3/runtime/versions/<version>`, rewrites
 the unit, and restarts the service — sessions on the box restart with it.
 As of 0.0.33 the rewrite also switches `ExecStart` from a version-pinned
 runtime path to the version-agnostic `~/.t3/runtime/service-launcher.mjs`,
