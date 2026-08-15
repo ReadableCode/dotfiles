@@ -27,8 +27,8 @@ layout must exist on the Mac and on the servers.
 |------|------|
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
 | `personal_credentials` | `personal.env` (KEY="value" secrets) and `hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is local, so automation must never pull it (listed in `~/GitHub/.skiprepos`). |
-| `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. |
-| `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`), `triggers/` crontab snapshots per host. |
+| `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. Also owns elitedesk's crontabs — see [Cron](#cron-how-scheduled-jobs-are-declared). |
+| `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`). |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
 | app repos | `load-log`, `Assistant`, `CrownCentral`, `duck_db_api`, `postgrest-auth`, `website`, `charlie-personal-website` — each built into containers by the Docker repo. |
 
@@ -64,6 +64,43 @@ Key behaviors:
   root cron entry (2026-07).
 - A client's server runs the same pattern separately (its backend
   repo's `scripts/git_pull.sh`, user `svc_linux`).
+
+## Cron: how scheduled jobs are declared
+
+**The rule: a host's crontab is a file in the repo that owns that host's
+deploy, and that host's deploy script installs it verbatim.** Never
+`crontab -e` on a managed host — the next deploy clobbers it. Cron is not
+declared in dotfiles, and there is no fleet-wide cron tool.
+
+elitedesk is the reference implementation:
+
+| Piece | Where |
+|---|---|
+| Declaration | `server_configs/system_configs/elitedesk/cron/{root,jason}.cron` |
+| Apply | `server_configs/scripts/deploy_elitedesk.sh` — installs both verbatim (`crontab`, `crontab -u jason`) whenever a change lands on master |
+| Trigger | root's `*/5` `Docker/scripts/git_pull.sh` line, which is itself declared in `root.cron` |
+
+The loop is self-carrying: the cron entry that runs the deploy is inside the
+file the deploy installs. That one `*/5` line is load-bearing — breaking it
+stops all auto-deploys until it is reinstalled by hand.
+
+Adding a host: give it a `<host>/cron/<user>.cron` file in whichever repo
+already deploys to it, and have that repo's deploy script `crontab` the file
+on change. Do not add it here.
+
+### Hosts that are deliberately out of scope (verified 2026-08-14)
+
+- **behemoth (Unraid)** — root's crontab is the stock Slackware default;
+  every real schedule (mover, parity-check, ssd-trim, monitor, plugin and
+  docker update checks) is a GUI-generated `.cron` file under
+  `/boot/config/plugins/dynamix/`, merged by `update_cron`. `/etc` is tmpfs,
+  so anything installed with `crontab` is lost at reboot and fights the GUI.
+  Schedule Unraid jobs through the Unraid UI, not a repo.
+- **JasonZephyrus** — Fedora without cronie; `crontab` is not installed. Two
+  stock systemd timers, nothing of ours. Would need a systemd timer unit.
+- **Envy, macmini14, nukbuntu, the five pis** — no user or root crontab at
+  all. Macs would use launchd if they ever need one.
+- **Windows machines** — Task Scheduler, no cron.
 
 ## Compose conventions (`Docker/docker_compose_projects.yaml`)
 

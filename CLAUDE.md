@@ -32,7 +32,13 @@ recurring homelab jobs live in `personal-automation`. See
 | `docs/` | Setup/how-to docs (one per topic). Surfaced via mkdocs. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
 | `pythonista/` | iOS Pythonista scripts. |
-| `triggers/` | Crontab snapshots per host. |
+
+Cron is **not** managed here. A host with scheduled jobs declares them in the
+repo that owns that host's deploy, and that repo's deploy script installs the
+file verbatim — see `docs/homelab_deployments.md`. The old `triggers/`
+crontab snapshots and `scripts/crontab_extractor.sh` were removed (2026-08-14):
+they were extract-only, and every personal-fleet snapshot held either nothing
+or the stock OS default.
 
 ## Python environment & tooling
 

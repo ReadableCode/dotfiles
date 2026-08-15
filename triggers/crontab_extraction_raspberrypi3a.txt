@@ -1,1 +1,0 @@
-# no user crontab on raspberrypi3a (crontab -l exit code 1)
