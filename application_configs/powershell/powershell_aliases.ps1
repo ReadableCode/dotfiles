@@ -322,6 +322,27 @@ function gitpullall {
     } else {
         Write-Host "uv not found, skipping repo clone check, config deploy and prune." -ForegroundColor Yellow
     }
+    # Every .ahk the deploy links into Startup requires AutoHotkey v2, so a
+    # machine still carrying v1 fails at login rather than here. -Check is
+    # read-only and prints NOTHING when the machine is already right; when it
+    # is not, it prints the state and the elevated command to fix it. Never
+    # prompts, so gitpullall cannot hang waiting on a UAC decision.
+    $ensureAhk = Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1'
+    if (Test-Path $ensureAhk) {
+        & $ensureAhk -Check
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "Run 'ensureahk' to fix the AutoHotkey install (it will walk you through the elevation)." -ForegroundColor Yellow
+        }
+    }
+}
+
+# Bring this machine's AutoHotkey install in line with the repo's v2 scripts:
+# installs/upgrades v2, removes v1, repoints the .ahk association. Idempotent -
+# does nothing on a machine that is already correct. Pass -Check for a
+# read-only report.
+function ensureahk {
+    if (-not (Test-GitDir)) { return }
+    & (Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1') @args
 }
 
 ### Script Shortcuts ###

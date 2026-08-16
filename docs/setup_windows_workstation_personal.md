@@ -80,6 +80,30 @@ Notes:
 * Neovim and the PowerShell profile intentionally use no links (config-path
   indirection) — see their `method: none` entries in `deploy_manifest.yaml`.
 
+## AutoHotkey (v2 only)
+
+All three startup scripts are AutoHotkey **v2** (`#Requires AutoHotkey v2.0`),
+so a machine still holding v1 gets a version prompt at login instead of working
+hotkeys. `gitpullall` checks this on every run and stays silent when the machine
+is already right; to fix or inspect it:
+
+```powershell
+ensureahk           # report, then offer to fix (walks you through elevation)
+ensureahk -Check    # read-only report; exit 1 means there is work to do
+```
+
+It installs/upgrades v2 (`choco upgrade autohotkey`, or winget as a fallback),
+removes v1 — including the orphaned exes the v2 installer leaves behind in
+`C:\Program Files\AutoHotkey\`, which carry no uninstall entry of their own —
+and repoints the `.ahk` association at the v2 launcher. That last step matters
+on old machines: v1 owning `.ahk` there means deleting v1 without repointing
+would stop **every** startup script from launching.
+
+Installing needs admin. Rather than self-elevating invisibly, an unelevated run
+prints the exact one-line command (using `gsudo` when installed) and waits for
+you to run it, then re-checks. Already-running v1 scripts keep running from
+memory — log out and back in to restart them under v2.
+
 ## Activate Windows with Script if unliscensed
 
 * Open powershell and run command:
