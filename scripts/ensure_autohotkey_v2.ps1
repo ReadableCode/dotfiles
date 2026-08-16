@@ -141,12 +141,18 @@ function Test-Compliant {
 }
 
 function Get-Plan {
+    # Order matters: install v2 before repointing .ahk at it, and repoint before
+    # deleting v1, because the delete step relaunches the scripts it stopped and
+    # they must land on the v2 launcher.
     param($State)
     $plan = @()
     if (-not $State.V2Present) {
         $plan += [pscustomobject]@{ Kind = 'install'; What = 'install AutoHotkey v2' }
     } else {
         $plan += [pscustomobject]@{ Kind = 'upgrade'; What = "upgrade AutoHotkey v2 to latest (have $($State.V2Version))" }
+    }
+    if (-not $State.AssocOk) {
+        $plan += [pscustomobject]@{ Kind = 'assoc'; What = 'point the .ahk file association at the v2 launcher' }
     }
     if ($State.V1Package) {
         $plan += [pscustomobject]@{ Kind = 'chocov1'; What = "uninstall chocolatey package $($State.V1Package) (v1)" }
@@ -155,12 +161,58 @@ function Get-Plan {
         $plan += [pscustomobject]@{ Kind = 'uninstallv1'; What = "run the v1 uninstaller for $($State.V1Entry.DisplayName) $($State.V1Entry.DisplayVersion)" }
     }
     if ($State.V1Files.Count -gt 0) {
-        $plan += [pscustomobject]@{ Kind = 'deletev1'; What = "delete $($State.V1Files.Count) orphaned v1 file(s)" }
-    }
-    if (-not $State.AssocOk) {
-        $plan += [pscustomobject]@{ Kind = 'assoc'; What = 'point the .ahk file association at the v2 launcher' }
+        $plan += [pscustomobject]@{ Kind = 'deletev1'; What = "stop any running v1 scripts, delete $($State.V1Files.Count) orphaned v1 file(s), restart the scripts under v2" }
     }
     return $plan
+}
+
+function Get-ScriptFromCommandLine {
+    # The .ahk a running interpreter was started with. Deliberately not named
+    # $matches - that is an automatic variable the -match operator owns.
+    param([string]$CommandLine)
+    if (-not $CommandLine) { return $null }
+    $found = [regex]::Matches($CommandLine, '"([^"]+\.ahk)"|(\S+\.ahk)')
+    if ($found.Count -eq 0) { return $null }
+    $last = $found[$found.Count - 1]
+    if ($last.Groups[1].Success) { return $last.Groups[1].Value }
+    return $last.Groups[2].Value
+}
+
+function Get-RunningAhkScripts {
+    # Script paths of every running AutoHotkey interpreter, whatever version.
+    $paths = @()
+    foreach ($proc in (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
+        if ($proc.Name -like 'AutoHotkey*') {
+            $script = Get-ScriptFromCommandLine $proc.CommandLine
+            if ($script) { $paths += $script.ToLower() }
+        }
+    }
+    return $paths
+}
+
+function Restart-StartupAhkScripts {
+    # Bring the Startup folder's scripts back up after v1 was removed, without
+    # waiting for a logout. Deliberately runs in the ORIGINAL session rather
+    # than inside the elevated child: a script started from the elevated run
+    # would keep running as admin, which is not what a login launch does.
+    $startup = [Environment]::GetFolderPath('Startup')
+    if (-not $startup -or -not (Test-Path $startup)) { return }
+    $running = Get-RunningAhkScripts
+    foreach ($file in (Get-ChildItem -LiteralPath $startup -Filter '*.ahk' -File -ErrorAction SilentlyContinue)) {
+        if ($running -contains $file.FullName.ToLower()) { continue }
+        # A symlinked Startup entry reports the resolved repo path on the
+        # interpreter's command line, so compare that form too. .Target is a
+        # string ARRAY on Windows PowerShell 5.1, hence the explicit [0].
+        $target = @((Get-Item -LiteralPath $file.FullName).Target) | Select-Object -First 1
+        if ($target -and ($running -contains ([string]$target).ToLower())) { continue }
+        $head = (Get-Content -LiteralPath $file.FullName -TotalCount 5 -ErrorAction SilentlyContinue) -join "`n"
+        if ($head -match '(?i)#Requires\s+AutoHotkey\s+v2') {
+            Start-Process -FilePath $file.FullName
+            Write-Host ("  started under v2: {0}" -f $file.Name) -ForegroundColor Green
+        } else {
+            Write-Host ("  not started, still v1 syntax: {0}" -f $file.Name) -ForegroundColor Yellow
+        }
+    }
 }
 
 function Show-State {
@@ -258,12 +310,42 @@ function Invoke-Plan {
                 cmd /c $cmd
             }
             'deletev1' {
+                # A running v1 interpreter holds its own exe open, so deleting
+                # it while the Startup hotkey scripts are running fails with
+                # "file in use" - which is the normal state of any machine that
+                # has been logged in for a while. Stop those processes first,
+                # remember what they were running, and start them again through
+                # the (now v2) association afterwards, so the hotkeys come back
+                # without needing a logout.
+                $v1Paths = @($State.V1Files | ForEach-Object { $_.FullName.ToLower() })
+                $running = @()
+                foreach ($proc in (Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
+                    if ($proc.ExecutablePath -and $v1Paths -contains $proc.ExecutablePath.ToLower()) {
+                        $running += [pscustomobject]@{
+                            ProcessId = $proc.ProcessId
+                            Script    = Get-ScriptFromCommandLine $proc.CommandLine
+                        }
+                    }
+                }
+                foreach ($r in $running) {
+                    Write-Host ("   stopping v1 process {0} ({1})" -f $r.ProcessId, $r.Script)
+                    Stop-Process -Id $r.ProcessId -Force -ErrorAction SilentlyContinue
+                }
+                if ($running.Count -gt 0) { Start-Sleep -Milliseconds 500 }  # let the handles close
+
                 # Only files this run identified as major version 1 - never a
                 # whole directory, so a v2 file sharing the root is untouched.
                 foreach ($f in $State.V1Files) {
                     Write-Host ("   removing {0}" -f $f.FullName)
                     Remove-Item -LiteralPath $f.FullName -Force -ErrorAction Continue
+                    if (Test-Path -LiteralPath $f.FullName) {
+                        Write-Host ("   COULD NOT remove {0} - something still holds it open" -f $f.FullName) -ForegroundColor Red
+                    }
                 }
+
+                # Restarting happens back in the caller's session (see
+                # Restart-StartupAhkScripts) so the scripts do not inherit this
+                # run's elevation.
                 # Tidy up any directory the deletions emptied (v1's Compiler\).
                 foreach ($root in $script:InstallRoots) {
                     foreach ($dir in (Get-ChildItem -LiteralPath $root -Directory -Recurse -ErrorAction SilentlyContinue | Sort-Object { $_.FullName.Length } -Descending)) {
@@ -295,6 +377,10 @@ function Invoke-Plan {
 }
 
 # --- main ---------------------------------------------------------------
+
+# Dot-source (". .\ensure_autohotkey_v2.ps1") to load the functions without
+# doing anything - used to exercise the probes in isolation.
+if ($MyInvocation.InvocationName -eq '.') { return }
 
 # Fast probe first. Only a machine that already looks wrong pays for the slow
 # one, so the common case (correct machine, every shell) costs ~100 ms.
@@ -356,7 +442,9 @@ $after = Get-AhkState -Deep
 Write-Host ""
 if (Test-Compliant $after) {
     Write-Host ("AutoHotkey is now v2-only ({0})." -f $after.V2Version) -ForegroundColor Green
-    Write-Host "Scripts already running under v1 keep running until they are restarted or you log back in." -ForegroundColor DarkGray
+    # -Yes means this IS the elevated child; leave the restart to the session
+    # that spawned it, so the scripts do not end up running as administrator.
+    if (-not $Yes) { Restart-StartupAhkScripts }
     exit 0
 }
 Write-Host "Still not right:" -ForegroundColor Red

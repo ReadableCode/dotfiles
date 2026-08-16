@@ -118,8 +118,10 @@ ensureahk           # report, then offer to fix
 ensureahk -Check    # read-only report; exit 1 means there is work to do
 ```
 
-Already-running v1 scripts keep running from memory until they are restarted or
-you log back in.
+No logout is needed. A running v1 interpreter holds its own `.exe` open, so the
+fix stops the running scripts before deleting v1, then starts every v2 script in
+the Startup folder again from your own (unelevated) session — including any that
+were linked since the last login and were never launched.
 
 ## Activate Windows with Script if unliscensed
 
