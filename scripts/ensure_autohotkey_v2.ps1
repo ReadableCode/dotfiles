@@ -119,9 +119,18 @@ function Get-AhkState {
     $bestVersion = $null
     if ($best) { $bestVersion = (Get-Item $best.FullName).VersionInfo.ProductVersion }
 
+    # The actual interpreter to run scripts with - NOT $best, which can land on
+    # UX\AutoHotkeyUX.exe (the launcher shim carries the same version number).
+    $v2Interpreter = $null
+    foreach ($name in @('AutoHotkey64.exe', 'AutoHotkey32.exe', 'AutoHotkey.exe')) {
+        $hit = $v2Exes | Where-Object { $_.Name -eq $name -and $_.FullName -notlike '*\UX\*' } | Select-Object -First 1
+        if ($hit) { $v2Interpreter = $hit.FullName; break }
+    }
+
     return [pscustomobject]@{
         V2Present = [bool]$best
         V2Version = $bestVersion
+        V2Exe     = $v2Interpreter
         V1Files   = @($v1Files)
         V1Entry   = $v1Entry
         V1Package = $v1Package
@@ -195,6 +204,7 @@ function Restart-StartupAhkScripts {
     # waiting for a logout. Deliberately runs in the ORIGINAL session rather
     # than inside the elevated child: a script started from the elevated run
     # would keep running as admin, which is not what a login launch does.
+    param($State)
     $startup = [Environment]::GetFolderPath('Startup')
     if (-not $startup -or -not (Test-Path $startup)) { return }
     $running = Get-RunningAhkScripts
@@ -206,12 +216,25 @@ function Restart-StartupAhkScripts {
         $target = @((Get-Item -LiteralPath $file.FullName).Target) | Select-Object -First 1
         if ($target -and ($running -contains ([string]$target).ToLower())) { continue }
         $head = (Get-Content -LiteralPath $file.FullName -TotalCount 5 -ErrorAction SilentlyContinue) -join "`n"
-        if ($head -match '(?i)#Requires\s+AutoHotkey\s+v2') {
-            Start-Process -FilePath $file.FullName
-            Write-Host ("  started under v2: {0}" -f $file.Name) -ForegroundColor Green
-        } else {
+        if ($head -notmatch '(?i)#Requires\s+AutoHotkey\s+v2') {
             Write-Host ("  not started, still v1 syntax: {0}" -f $file.Name) -ForegroundColor Yellow
+            continue
         }
+        # Hand the interpreter the RESOLVED path: a login launch reports the
+        # repo path on the command line, so A_ScriptDir is scripts/ - which is
+        # how desktop_numbers.ahk finds VirtualDesktopAccessor.dll instead of
+        # re-downloading it into the Startup folder.
+        $scriptPath = $file.FullName
+        if ($target) { $scriptPath = [string]$target }
+        if ($State -and $State.V2Exe) {
+            # Directly, not through the .ahk association: the UX launcher shim
+            # stays resident as a parent process when started that way, leaving
+            # two processes per script instead of one.
+            Start-Process -FilePath $State.V2Exe -ArgumentList "`"$scriptPath`""
+        } else {
+            Start-Process -FilePath $scriptPath
+        }
+        Write-Host ("  started under v2: {0}" -f $file.Name) -ForegroundColor Green
     }
 }
 
@@ -444,7 +467,7 @@ if (Test-Compliant $after) {
     Write-Host ("AutoHotkey is now v2-only ({0})." -f $after.V2Version) -ForegroundColor Green
     # -Yes means this IS the elevated child; leave the restart to the session
     # that spawned it, so the scripts do not end up running as administrator.
-    if (-not $Yes) { Restart-StartupAhkScripts }
+    if (-not $Yes) { Restart-StartupAhkScripts $after }
     exit 0
 }
 Write-Host "Still not right:" -ForegroundColor Red
