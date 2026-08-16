@@ -7,26 +7,40 @@
 # into the Startup folder, so a machine still on v1 silently gets a "this script
 # requires v2" prompt at every login instead of working hotkeys.
 #
-# Idempotent by design: on a correct machine it changes nothing and, with
-# -Check, prints nothing at all. It is safe to run on every login or from
-# gitpullall.
+# This runs from powershell_aliases.ps1 on every interactive shell - it is NOT
+# something to remember to run. Which is why the default probe is the cheap one:
+#
+#   file scan of the AutoHotkey roots   ~90 ms
+#   .ahk association (registry read)    ~5 ms
+#   registry uninstall scan             ~470 ms   -Full only
+#   choco list                          ~1840 ms  -Full only
+#
+# The fast probe catches every real-world case (a v1 install puts files in one of
+# the standard roots); -Full additionally catches a v1 installed to a custom
+# directory or still owned by a chocolatey package, and runs from gitpullall
+# where two seconds does not matter.
 #
 # Usage:
-#   .\ensure_autohotkey_v2.ps1            # report, then offer to fix
-#   .\ensure_autohotkey_v2.ps1 -Check     # report only, never prompt (exit 1 = work to do)
-#   .\ensure_autohotkey_v2.ps1 -Yes       # fix without confirming (the elevated re-run)
-#
-# Installing and uninstalling need admin. Rather than silently failing (or
-# self-elevating behind your back and losing the output), an unelevated run
-# prints the exact command to paste into an admin window and waits for you.
+#   .\ensure_autohotkey_v2.ps1                # report, then offer to fix
+#   .\ensure_autohotkey_v2.ps1 -Check         # report only (exit 1 = work to do)
+#   .\ensure_autohotkey_v2.ps1 -AutoFix       # fix, elevating as needed; silent when correct
+#   .\ensure_autohotkey_v2.ps1 -Full          # add the slow probes
+#   .\ensure_autohotkey_v2.ps1 -Yes           # apply now, no prompts (the elevated re-run)
 
 [CmdletBinding()]
 param(
     [switch]$Check,
+    [switch]$AutoFix,
+    [switch]$Full,
     [switch]$Yes
 )
 
 $ErrorActionPreference = 'Stop'
+
+# How long to wait before trying to raise UAC again, so a declined prompt does
+# not turn into a prompt on every new shell for the rest of the day.
+$script:RetryAfterMinutes = 120
+$script:StampFile = Join-Path $env:LOCALAPPDATA 'dotfiles\ahk_autofix_last_attempt.txt'
 
 # Roots an AutoHotkey install can occupy. ProgramFiles(x86) matters on the old
 # machines - a 32-bit v1 install landed there.
@@ -47,6 +61,8 @@ function Get-FileMajorVersion {
 }
 
 function Get-AhkState {
+    param([switch]$Deep)
+
     $v2Exes = @()
     $v1Files = @()
     foreach ($root in $script:InstallRoots) {
@@ -58,40 +74,45 @@ function Get-AhkState {
         }
     }
 
-    # Registry uninstall entries, so a v1 installed the normal way is removed by
-    # its own uninstaller rather than by deleting files out from under it.
-    $uninstallKeys = @(
-        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
-        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
-    )
-    $entries = Get-ItemProperty $uninstallKeys -ErrorAction SilentlyContinue |
-        Where-Object { $_.DisplayName -like '*AutoHotkey*' }
-    $v1Entry = $entries | Where-Object { $_.DisplayVersion -like '1.*' } | Select-Object -First 1
-
-    # Chocolatey packages still pinned to a v1 line.
+    $v1Entry = $null
     $v1Package = $null
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        foreach ($line in (choco list --limit-output 2>$null)) {
-            $parts = $line -split '\|'
-            if ($parts.Count -ge 2 -and $parts[0] -like 'autohotkey*' -and $parts[1] -like '1.*') {
-                $v1Package = $parts[0]
+    if ($Deep) {
+        # A v1 installed the normal way should be removed by its own uninstaller
+        # rather than by deleting files out from under it.
+        $uninstallKeys = @(
+            'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*',
+            'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*'
+        )
+        $v1Entry = Get-ItemProperty $uninstallKeys -ErrorAction SilentlyContinue |
+            Where-Object { $_.DisplayName -like '*AutoHotkey*' -and $_.DisplayVersion -like '1.*' } |
+            Select-Object -First 1
+
+        if (Get-Command choco -ErrorAction SilentlyContinue) {
+            foreach ($line in (choco list --limit-output 2>$null)) {
+                $parts = $line -split '\|'
+                if ($parts.Count -ge 2 -and $parts[0] -like 'autohotkey*' -and $parts[1] -like '1.*') {
+                    $v1Package = $parts[0]
+                }
             }
         }
     }
 
     # Who currently owns .ahk. An old machine can have v1 wired in here, and
     # deleting v1 without repointing it would stop EVERY .ahk from launching -
-    # including the three the deploy just linked into Startup.
-    $ftype = ''
-    try { $ftype = (cmd /c ftype AutoHotkeyScript 2>$null) -join '' } catch { }
+    # including the three the deploy just linked into Startup. Read the registry
+    # rather than shelling out to `ftype`: same answer, no process spawn, and
+    # this runs on every shell.
+    $openCommand = ''
+    try {
+        $openCommand = (Get-ItemProperty -LiteralPath 'Registry::HKEY_CLASSES_ROOT\AutoHotkeyScript\shell\open\command' -ErrorAction SilentlyContinue).'(default)'
+    } catch { }
     $launcher = $null
     foreach ($root in $script:InstallRoots) {
         $candidate = Join-Path $root 'UX\AutoHotkeyUX.exe'
         if (Test-Path $candidate) { $launcher = $candidate; break }
     }
-    $assocOk = $false
-    if ($launcher -and $ftype -like "*$launcher*") { $assocOk = $true }
+    $assocOk = ($launcher -and $openCommand -and $openCommand.ToLower().Contains($launcher.ToLower()))
 
     $best = $v2Exes | Sort-Object { [version]((Get-Item $_.FullName).VersionInfo.ProductVersion -replace '[^\d.].*$', '') } -Descending |
         Select-Object -First 1
@@ -99,15 +120,24 @@ function Get-AhkState {
     if ($best) { $bestVersion = (Get-Item $best.FullName).VersionInfo.ProductVersion }
 
     return [pscustomobject]@{
-        V2Present   = [bool]$best
-        V2Version   = $bestVersion
-        V1Files     = $v1Files
-        V1Entry     = $v1Entry
-        V1Package   = $v1Package
-        Launcher    = $launcher
-        AssocOk     = $assocOk
-        Elevated    = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        V2Present = [bool]$best
+        V2Version = $bestVersion
+        V1Files   = @($v1Files)
+        V1Entry   = $v1Entry
+        V1Package = $v1Package
+        Launcher  = $launcher
+        AssocOk   = [bool]$assocOk
+        Deep      = [bool]$Deep
+        Elevated  = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
     }
+}
+
+function Test-Compliant {
+    # "Nothing to do" deliberately ignores the always-available upgrade step: a
+    # machine with v2, no v1 and a correct association is already right, and must
+    # not nag on every shell just because a newer build exists upstream.
+    param($State)
+    return ($State.V2Present -and $State.V1Files.Count -eq 0 -and -not $State.V1Entry -and -not $State.V1Package -and $State.AssocOk)
 }
 
 function Get-Plan {
@@ -116,9 +146,6 @@ function Get-Plan {
     if (-not $State.V2Present) {
         $plan += [pscustomobject]@{ Kind = 'install'; What = 'install AutoHotkey v2' }
     } else {
-        # Cheap and idempotent: choco upgrade is a no-op when already current,
-        # and it is the only way to actually reach "newest" without a version
-        # query on every check.
         $plan += [pscustomobject]@{ Kind = 'upgrade'; What = "upgrade AutoHotkey v2 to latest (have $($State.V2Version))" }
     }
     if ($State.V1Package) {
@@ -136,31 +163,23 @@ function Get-Plan {
     return $plan
 }
 
-function Test-Compliant {
-    # "Nothing to do" deliberately ignores the always-present upgrade step: a
-    # machine with v2, no v1 and a correct association is already right, and
-    # should not nag on every gitpullall just because a newer build exists.
-    param($State)
-    return ($State.V2Present -and -not $State.V1Files -and -not $State.V1Entry -and -not $State.V1Package -and $State.AssocOk)
-}
-
 function Show-State {
     param($State)
     if ($State.V2Present) {
-        Write-Host ("  v2 installed:  {0}" -f $State.V2Version) -ForegroundColor Green
+        Write-Host ("  v2 installed:    {0}" -f $State.V2Version) -ForegroundColor Green
     } else {
-        Write-Host "  v2 installed:  NO" -ForegroundColor Red
+        Write-Host "  v2 installed:    NO" -ForegroundColor Red
     }
     if ($State.V1Files.Count -gt 0) {
-        Write-Host ("  v1 leftovers:  {0} file(s)" -f $State.V1Files.Count) -ForegroundColor Yellow
+        Write-Host ("  v1 leftovers:    {0} file(s)" -f $State.V1Files.Count) -ForegroundColor Yellow
         foreach ($f in $State.V1Files) {
             Write-Host ("      {0}  ({1})" -f $f.FullName, (Get-Item -LiteralPath $f.FullName).VersionInfo.ProductVersion) -ForegroundColor DarkYellow
         }
     } else {
-        Write-Host "  v1 leftovers:  none" -ForegroundColor Green
+        Write-Host "  v1 leftovers:    none" -ForegroundColor Green
     }
-    if ($State.V1Package) { Write-Host ("  v1 choco pkg:  {0}" -f $State.V1Package) -ForegroundColor Yellow }
-    if ($State.V1Entry) { Write-Host ("  v1 installer:  {0} {1}" -f $State.V1Entry.DisplayName, $State.V1Entry.DisplayVersion) -ForegroundColor Yellow }
+    if ($State.V1Package) { Write-Host ("  v1 choco pkg:    {0}" -f $State.V1Package) -ForegroundColor Yellow }
+    if ($State.V1Entry) { Write-Host ("  v1 installer:    {0} {1}" -f $State.V1Entry.DisplayName, $State.V1Entry.DisplayVersion) -ForegroundColor Yellow }
     if ($State.AssocOk) {
         Write-Host "  .ahk opens with: v2 launcher" -ForegroundColor Green
     } else {
@@ -169,15 +188,51 @@ function Show-State {
 }
 
 function Get-ElevatedCommand {
-    # One line to paste. gsudo is in windows_apps_personal_choco.txt, so prefer
-    # it when present; otherwise self-elevate a new PowerShell via UAC.
-    # $PSCommandPath, not a name joined to $PSScriptRoot: the printed command has
-    # to re-run THIS file, wherever it was invoked from.
-    $self = $PSCommandPath
+    # $PSCommandPath, not a name joined to $PSScriptRoot: the command has to
+    # re-run THIS file, wherever it was invoked from.
     if (Get-Command gsudo -ErrorAction SilentlyContinue) {
-        return "gsudo powershell -NoProfile -ExecutionPolicy Bypass -File `"$self`" -Yes"
+        return "gsudo powershell -NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`" -Yes"
     }
-    return "Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$self','-Yes'"
+    return "Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-File','$PSCommandPath','-Yes'"
+}
+
+function Test-RetryAllowed {
+    # True when we have not tried to raise UAC recently. Declining a prompt must
+    # not produce a new prompt in every shell for the rest of the day.
+    if (-not (Test-Path $script:StampFile)) { return $true }
+    try {
+        $last = [datetime]::Parse((Get-Content -LiteralPath $script:StampFile -Raw).Trim())
+        return ((Get-Date) - $last).TotalMinutes -ge $script:RetryAfterMinutes
+    } catch {
+        return $true
+    }
+}
+
+function Set-RetryStamp {
+    try {
+        $dir = Split-Path $script:StampFile
+        if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Set-Content -LiteralPath $script:StampFile -Value (Get-Date).ToString('o') -Encoding Ascii
+    } catch { }
+}
+
+function Invoke-Elevated {
+    # Re-run this script elevated and WAIT, so the caller can re-probe after.
+    # Returns $false when elevation was declined or unavailable.
+    Set-RetryStamp
+    try {
+        if (Get-Command gsudo -ErrorAction SilentlyContinue) {
+            & gsudo powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath" -Yes
+            return ($LASTEXITCODE -eq 0)
+        }
+        $proc = Start-Process powershell -Verb RunAs -PassThru -Wait -ArgumentList @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Yes'
+        )
+        return ($proc.ExitCode -eq 0)
+    } catch {
+        # Cancelled UAC throws; that is a decision, not a failure to report loudly.
+        return $false
+    }
 }
 
 function Invoke-Plan {
@@ -241,59 +296,69 @@ function Invoke-Plan {
 
 # --- main ---------------------------------------------------------------
 
-$state = Get-AhkState
-$compliant = Test-Compliant $state
+# Fast probe first. Only a machine that already looks wrong pays for the slow
+# one, so the common case (correct machine, every shell) costs ~100 ms.
+$state = Get-AhkState -Deep:($Full -or $Yes)
 
-if ($compliant -and $Check) { exit 0 }   # silent: the point of -Check in gitpullall
-
-Write-Host "AutoHotkey state on $env:COMPUTERNAME" -ForegroundColor Cyan
-Show-State $state
-
-if ($compliant) {
+if (Test-Compliant $state) {
+    if ($Check -or $AutoFix) { exit 0 }     # silent: this runs on every shell
+    Write-Host "AutoHotkey state on $env:COMPUTERNAME" -ForegroundColor Cyan
+    Show-State $state
     Write-Host "Nothing to do." -ForegroundColor Green
-    if (-not $Check -and -not $Yes) {
-        Write-Host "(pass -Yes to force a 'choco upgrade autohotkey' anyway)" -ForegroundColor DarkGray
-    }
     exit 0
 }
 
+# Something is off - now it is worth the registry and choco probes, so the plan
+# below is the complete one.
+if (-not $state.Deep) { $state = Get-AhkState -Deep }
+
 $plan = Get-Plan $state
+Write-Host "AutoHotkey needs attention on $env:COMPUTERNAME" -ForegroundColor Yellow
+Show-State $state
 Write-Host ""
 Write-Host "Planned:" -ForegroundColor Cyan
 foreach ($step in $plan) { Write-Host ("  - {0}" -f $step.What) }
 
 if ($Check) {
     Write-Host ""
-    Write-Host "Run this to fix it:" -ForegroundColor Yellow
-    Write-Host ("  {0}" -f (Get-ElevatedCommand))
+    Write-Host "Fix it with:  ensureahk" -ForegroundColor Yellow
+    Write-Host ("Or directly:  {0}" -f (Get-ElevatedCommand)) -ForegroundColor DarkGray
     exit 1
 }
 
-if ($state.Elevated) {
-    if (-not $Yes) {
+if ($state.Elevated -or $Yes) {
+    if (-not ($Yes -or $AutoFix)) {
         $answer = Read-Host "Apply these changes now? (y/N)"
         if ($answer -ne 'y') { Write-Host "Skipped."; exit 1 }
     }
     Invoke-Plan $state $plan
 } else {
+    # Not elevated. Installing and deleting from Program Files needs admin, so
+    # raise it here rather than printing homework - but never block a shell on
+    # input, and never re-prompt in a tight loop if the prompt was declined.
+    if ($AutoFix -and -not (Test-RetryAllowed)) {
+        Write-Host ""
+        Write-Host ("Elevation was declined recently; run 'ensureahk' when ready (retrying automatically after {0} min)." -f $script:RetryAfterMinutes) -ForegroundColor DarkGray
+        exit 1
+    }
     Write-Host ""
-    Write-Host "This needs administrator rights. Copy and run this in any window:" -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host ("    {0}" -f (Get-ElevatedCommand)) -ForegroundColor White
-    Write-Host ""
-    Read-Host "Press Enter once that has finished (or Ctrl+C to leave it for later)" | Out-Null
+    Write-Host "This needs administrator rights - accept the prompt." -ForegroundColor Yellow
+    if (-not (Invoke-Elevated)) {
+        Write-Host "Elevation was declined or unavailable. To do it by hand:" -ForegroundColor Yellow
+        Write-Host ("    {0}" -f (Get-ElevatedCommand))
+        exit 1
+    }
 }
 
 # Re-probe rather than trusting the steps above: an uninstaller can succeed and
-# still leave files, and choco can fail without a throw.
+# still leave files, and choco can fail without throwing.
+$after = Get-AhkState -Deep
 Write-Host ""
-Write-Host "Re-checking..." -ForegroundColor Cyan
-$after = Get-AhkState
-Show-State $after
 if (Test-Compliant $after) {
-    Write-Host "AutoHotkey is now v2-only." -ForegroundColor Green
-    Write-Host "Log out and back in (or double-click the scripts) to restart the Startup .ahk scripts under v2." -ForegroundColor DarkGray
+    Write-Host ("AutoHotkey is now v2-only ({0})." -f $after.V2Version) -ForegroundColor Green
+    Write-Host "Scripts already running under v1 keep running until they are restarted or you log back in." -ForegroundColor DarkGray
     exit 0
 }
-Write-Host "Still not right - see the state above." -ForegroundColor Red
+Write-Host "Still not right:" -ForegroundColor Red
+Show-State $after
 exit 1

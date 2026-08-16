@@ -84,25 +84,42 @@ Notes:
 
 All three startup scripts are AutoHotkey **v2** (`#Requires AutoHotkey v2.0`),
 so a machine still holding v1 gets a version prompt at login instead of working
-hotkeys. `gitpullall` checks this on every run and stays silent when the machine
-is already right; to fix or inspect it:
+hotkeys. Nothing here is a command to remember: `powershell_aliases.ps1` runs
+`scripts/ensure_autohotkey_v2.ps1 -AutoFix` on **every interactive shell**, and
+`gitpullall` runs it with `-Full`. A machine that is already v2-only prints
+nothing at all; one that is not gets fixed on the spot.
+
+The script installs/upgrades v2 (`choco upgrade autohotkey`, winget as a
+fallback), removes v1 — including the orphaned exes the v2 installer leaves
+behind in `C:\Program Files\AutoHotkey\`, which carry no uninstall entry of
+their own — and repoints the `.ahk` association at the v2 launcher. That last
+step matters on old machines: v1 owning `.ahk` there means deleting v1 without
+repointing would stop **every** startup script from launching.
+
+Admin is required, so an unelevated shell raises UAC (via `gsudo` when
+installed) and waits. Decline it and the script backs off for two hours rather
+than prompting again in every new shell. Non-interactive sessions — `ssh host
+'<command>'`, scp, any `-Command`/`-File` run — skip the check entirely, so
+remote commands never pay the probe or raise a prompt nobody can answer.
+
+Probe costs, which is why the startup pass is the cheap one:
+
+| Probe | Cost | When |
+| --- | --- | --- |
+| AutoHotkey install dirs, file versions | ~90 ms | every shell |
+| `.ahk` association (registry read) | ~5 ms | every shell |
+| Uninstall-entry registry scan | ~470 ms | `-Full`, or once something looks wrong |
+| `choco list` | ~1840 ms | `-Full`, or once something looks wrong |
+
+Manual use, when you want to look rather than wait for a shell:
 
 ```powershell
-ensureahk           # report, then offer to fix (walks you through elevation)
+ensureahk           # report, then offer to fix
 ensureahk -Check    # read-only report; exit 1 means there is work to do
 ```
 
-It installs/upgrades v2 (`choco upgrade autohotkey`, or winget as a fallback),
-removes v1 — including the orphaned exes the v2 installer leaves behind in
-`C:\Program Files\AutoHotkey\`, which carry no uninstall entry of their own —
-and repoints the `.ahk` association at the v2 launcher. That last step matters
-on old machines: v1 owning `.ahk` there means deleting v1 without repointing
-would stop **every** startup script from launching.
-
-Installing needs admin. Rather than self-elevating invisibly, an unelevated run
-prints the exact one-line command (using `gsudo` when installed) and waits for
-you to run it, then re-checks. Already-running v1 scripts keep running from
-memory — log out and back in to restart them under v2.
+Already-running v1 scripts keep running from memory until they are restarted or
+you log back in.
 
 ## Activate Windows with Script if unliscensed
 

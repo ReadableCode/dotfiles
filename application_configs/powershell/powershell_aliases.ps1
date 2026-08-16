@@ -2,7 +2,8 @@
 # powershell.exe with /c, and scp/sftp do the same, so an unconditional banner
 # lands in the output of every remote command. Same reason .shared_aliases
 # guards its echo with [[ $- == *i* ]].
-if (-not ([Environment]::GetCommandLineArgs() -match '(?i)^[-/](c|command|e|ec|encodedcommand|f|file)$')) {
+$global:IsInteractiveShell = -not ([Environment]::GetCommandLineArgs() -match '(?i)^[-/](c|command|e|ec|encodedcommand|f|file)$')
+if ($global:IsInteractiveShell) {
     Write-Host "Sourced: $PSCommandPath" -ForegroundColor Cyan
 }
 
@@ -322,18 +323,11 @@ function gitpullall {
     } else {
         Write-Host "uv not found, skipping repo clone check, config deploy and prune." -ForegroundColor Yellow
     }
-    # Every .ahk the deploy links into Startup requires AutoHotkey v2, so a
-    # machine still carrying v1 fails at login rather than here. -Check is
-    # read-only and prints NOTHING when the machine is already right; when it
-    # is not, it prints the state and the elevated command to fix it. Never
-    # prompts, so gitpullall cannot hang waiting on a UAC decision.
+    # The slow AutoHotkey probes (registry scan, choco list) are too expensive
+    # for shell startup, so the thorough pass rides along here where seconds do
+    # not matter. Silent on a correct machine.
     $ensureAhk = Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1'
-    if (Test-Path $ensureAhk) {
-        & $ensureAhk -Check
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "Run 'ensureahk' to fix the AutoHotkey install (it will walk you through the elevation)." -ForegroundColor Yellow
-        }
-    }
+    if (Test-Path $ensureAhk) { & $ensureAhk -AutoFix -Full }
 }
 
 # Bring this machine's AutoHotkey install in line with the repo's v2 scripts:
@@ -343,6 +337,26 @@ function gitpullall {
 function ensureahk {
     if (-not (Test-GitDir)) { return }
     & (Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1') @args
+}
+
+# Keep AutoHotkey correct without anyone having to remember a command: every
+# interactive shell runs the CHEAP probe (~100 ms) and stays completely silent
+# when the machine is already v2-only. When it is not, the script elevates
+# itself (UAC, or gsudo when installed), fixes it, and re-checks - and if the
+# prompt is declined it backs off for two hours instead of asking again in
+# every new shell.
+#
+# Interactive only: `ssh host '<command>'`, scp and every -File/-Command run
+# skip it, so remote commands neither pay the probe nor raise a UAC prompt
+# nobody is sitting in front of.
+if ($global:IsInteractiveShell -and $gitDir) {
+    $ensureAhkOnStart = Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1'
+    if (Test-Path $ensureAhkOnStart) {
+        # A broken probe must never take the profile (and the shell) with it.
+        try { & $ensureAhkOnStart -AutoFix } catch {
+            Write-Host "ensure_autohotkey_v2.ps1 failed: $_" -ForegroundColor DarkYellow
+        }
+    }
 }
 
 ### Script Shortcuts ###
