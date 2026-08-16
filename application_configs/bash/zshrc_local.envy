@@ -1,4 +1,23 @@
-export HOMEBREW_CACHE=/Volumes/EnvyExtSSD/HomebrewCache
-export OLLAMA_MODELS="/Volumes/EnvyExtSSD/ollama/models"
-export UV_CACHE_DIR=/Volumes/EnvyExtSSD/cache/uv
-export GOCACHE=/Volumes/EnvyExtSSD/cache/go-build
+# Envy only. The internal disk is small, so the big rebuildable caches live on
+# the external SSD. This is a hardware fact about this one machine, not a fleet
+# policy: other hosts have no zshrc_local variant and there is no bare default,
+# so `.zshrc` simply skips sourcing ~/.zshrc.local there and the manifest entry
+# reports SKIP_VARIANT. That is intentional.
+#
+# These exports are deliberately unconditional. With the SSD unmounted the
+# paths are invalid and brew/uv/go fail loudly, which is the point - falling
+# back to the defaults under ~ would quietly refill the internal disk this
+# redirect exists to protect. The warning below only says why they failed.
+
+ENVY_EXT_SSD=/Volumes/EnvyExtSSD
+
+export HOMEBREW_CACHE="$ENVY_EXT_SSD/HomebrewCache"
+export OLLAMA_MODELS="$ENVY_EXT_SSD/ollama/models"
+export UV_CACHE_DIR="$ENVY_EXT_SSD/cache/uv"
+export GOCACHE="$ENVY_EXT_SSD/cache/go-build"
+
+if [[ ! -d $ENVY_EXT_SSD ]]; then
+    print -u2 "warning: $ENVY_EXT_SSD is not mounted - brew/uv/go caches point at it and will fail until it is"
+fi
+
+unset ENVY_EXT_SSD

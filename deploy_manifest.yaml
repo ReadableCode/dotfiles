@@ -60,7 +60,10 @@
     darwin: ~/.zshrc.local
   note: >-
     Machine-local exports sourced by .zshrc. Only per-host zshrc_local.<host>
-    variants exist (no bare default), so hosts without one skip this entry.
+    variants exist (no bare default), so hosts without one skip this entry
+    (SKIP_VARIANT) - intentional: the only variant is Envy redirecting its
+    caches to the external SSD because its internal disk is small, which is a
+    fact about that machine and nothing to mirror onto the rest of the fleet.
 
 - name: bashrc
   repo: application_configs/bash/.bashrc

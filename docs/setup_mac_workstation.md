@@ -221,14 +221,30 @@ rm -rf ~/Library/Caches/Homebrew
 
 ### Moving Homebrew Cache
 
+Only Envy does this — its internal disk is small. Other Macs keep the defaults.
+
 ```bash
 # create new cache directory
 mkdir -p /Volumes/EnvyExtSSD/HomebrewCache
 # set permissions for current user
 sudo chown -R $(whoami) /Volumes/EnvyExtSSD/HomebrewCache
-# persist in machine-local zsh config (not synced to other machines)
-echo 'export HOMEBREW_CACHE=/Volumes/EnvyExtSSD/HomebrewCache' >> ~/.zshrc.local
 ```
+
+Persist it in the machine-local zsh config. `~/.zshrc.local` is a symlink
+deployed by `deploy_configs.py`, so edit the repo file, not the link:
+
+```bash
+$EDITOR ~/GitHub/dotfiles/application_configs/bash/zshrc_local.envy
+```
+
+The exports there are unconditional on purpose. If the SSD is not mounted,
+brew/uv/go fail instead of rebuilding the caches on the internal disk the
+redirect exists to protect — the shell prints a warning at startup saying the
+volume is missing, so a failing `brew install` is easy to explain.
+
+A machine with no `zshrc_local.<host>` variant has no `~/.zshrc.local` at all
+(there is no bare default); `.zshrc` skips it and the manifest entry reports
+`SKIP_VARIANT`.
 
 ## Claude Setup
 
