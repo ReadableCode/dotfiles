@@ -262,3 +262,27 @@
     deployed one-per-context by the *_credentials overlay manifests (same
     contract as the ~/.shell_local.d/ loader in .shared_aliases).
 
+
+# --- Portable sshd (no-admin Windows) ---
+
+- name: portable_sshd_config
+  repo: application_configs/portable_sshd/sshd_config
+  method: none
+  note: >-
+    Not linked, and NOT hand-copied either: the running sshd is started with
+    `-f <this repo path>`, so it reads the working-tree copy in place (verified
+    2026-08-15 against the live process). Editing this file changes the live
+    config on the next sshd restart. Validate with `sshd.exe -t -f <path>`
+    before restarting, and restart at the machine, not over ssh - port 2222 is
+    the only way in. Only AuthorizedKeysFile expands tokens (%h); HostKey,
+    Subsystem and ForceCommand are literal paths. See
+    docs/setup_windows_ssh_server.md.
+
+- name: portable_sshd_shell_wrapper
+  repo: application_configs/portable_sshd/shell_wrapper.cmd
+  method: none
+  note: >-
+    Same story as portable_sshd_config: referenced by absolute path from that
+    file's ForceCommand line, so it is read in place from the clone rather than
+    deployed. Starts PowerShell for interactive logins and passes exec requests
+    through cmd /c unchanged.
