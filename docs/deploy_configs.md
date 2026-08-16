@@ -332,3 +332,9 @@ Pruning is deliberately a separate command: deleting files should never be a
 side effect of a routine deploy. `status` still *reports* anything the removals
 list still finds on disk (and exits non-zero for it) so a cron drift check
 notices.
+
+It is a separate *command*, not a separate *chore*: `gitpullall` runs
+`prune --apply` as its own step after the deploy, so pulling is all any machine
+needs to act on a removals line — which is what makes step 4 above (dropping a
+line once every machine has pruned) actually reachable. Nothing else invokes
+prune implicitly; `deploy_configs.py` with no subcommand still never deletes.

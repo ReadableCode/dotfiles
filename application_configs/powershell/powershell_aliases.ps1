@@ -308,8 +308,19 @@ function gitpullall {
         Push-Location (Join-Path $gitDir 'dotfiles')
         uv run python src/deploy_configs.py
         Pop-Location
+        Write-Host ""
+        # Prune last, with --apply: the removals files are a committed list of
+        # paths that must not exist, so every machine has to act on them for
+        # the list to ever be finished. A dry run here would reprint the same
+        # dead links forever and still need a second command by hand. Safe
+        # after the deploy because prune only removes a path a removals entry
+        # names AND no live manifest entry wants (see docs/deploy_configs.md).
+        Write-Host "==============  Pruning removed configs  ==============" -ForegroundColor Cyan
+        Push-Location (Join-Path $gitDir 'dotfiles')
+        uv run python src/deploy_configs.py prune --apply
+        Pop-Location
     } else {
-        Write-Host "uv not found, skipping repo clone check and config deploy." -ForegroundColor Yellow
+        Write-Host "uv not found, skipping repo clone check, config deploy and prune." -ForegroundColor Yellow
     }
 }
 
