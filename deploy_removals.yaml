@@ -1,0 +1,47 @@
+# Removals — the committed list of files that must NOT exist any more.
+# Consumed by `src/deploy_configs.py prune` (see docs/deploy_configs.md).
+#
+# Same dest/requires/hosts schema as deploy_manifest.yaml but with NO `repo:`
+# key: a removal names a destination whose source file is gone. Sibling overlay
+# repos carry their own `<context>_removals.yaml` for their own dead paths;
+# this file is for paths this repo's manifest used to create.
+#
+# Why a committed list and not per-machine state: the machine that deletes a
+# manifest entry is almost never the only machine holding the link that entry
+# created. This list travels with the repo, so every machine deletes the same
+# known-dead paths on its next `prune --apply`. `prune` ignores any dest a live
+# manifest entry still wants, so re-adding an entry beats a stale line here.
+#
+# Workflow: delete a manifest entry -> add its dest here -> prune. Once every
+# machine has pruned, the line can be dropped.
+
+- name: removed_ahk_key_remaps_startup
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/key_remaps.ahk
+  note: >-
+    Seeded 2026-08-15. scripts/key_remaps.ahk was deleted in 2024 ("turn off
+    remaps for kinesis") but the Startup link it got from the pre-manifest
+    scripts/create_sym_links_startup.ps1 outlived it - found dangling on
+    ryzenwhite while consolidating the AHK startup mechanisms.
+
+# The .lnk shortcuts scripts/deploy_ahk_startup_shortcuts.ps1 created before it
+# was deleted (2026-08-15). ryzenwhite has none, but the other Windows machines
+# could not be checked, and a leftover .lnk would launch the same script a
+# second time next to the manifest's symlink. Nothing creates these any more,
+# so drop these four lines once every Windows machine has pruned.
+
+- name: removed_ahk_app_jumping_lnk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/app_jumping.lnk
+
+- name: removed_ahk_sheets_lnk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sheets.lnk
+
+- name: removed_ahk_desktop_numbers_lnk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/desktop_numbers.lnk
+
+- name: removed_ahk_key_remaps_lnk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/key_remaps.lnk

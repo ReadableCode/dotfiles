@@ -83,7 +83,9 @@
     Context-specific aliases are NOT in this file: it sources every
     ~/.shell_local.d/*.sh shard, deployed one-per-context by the *_credentials
     overlay manifests (same contract as the PowerShell profile's
-    ~\.powershell_local.d\ loader).
+    ~\.powershell_local.d\ loader). The ssh aliases are not in this file
+    either: it evals src/ssh_aliases.py --format bash, the one generator both
+    shells share, straight out of the repo checkout (nothing to deploy).
 
 # --- Terminal / multiplexer ---
 
@@ -236,18 +238,34 @@
   note: "Hammerspoon follows the link and writes window_layouts.json back into the repo."
 
 # --- Windows automation (AutoHotkey startup scripts) ---
+#
+# These entries are the only mechanism: the pre-manifest symlink script
+# (scripts/create_sym_links_startup.ps1) and the interactive .lnk creator
+# (scripts/deploy_ahk_startup_shortcuts.ps1) were deleted 2026-08-15. A .lnk is
+# not needed - verified on ryzenwhite (Windows 11 26200): the Startup folder
+# launches a symlinked .ahk at login like any other file, and the AutoHotkey
+# process gets the resolved repo path on its command line, so A_ScriptDir is
+# scripts/ (which is why desktop_numbers.ahk finds VirtualDesktopAccessor.dll
+# next to it instead of re-downloading it into the Startup folder).
 
 - name: ahk_app_jumping
   repo: scripts/app_jumping.ahk
   dest:
     windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/app_jumping.ahk
-  note: "Previously created by scripts/create_sym_links_startup.ps1."
 
 - name: ahk_sheets
   repo: scripts/sheets.ahk
   dest:
     windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/sheets.ahk
-  note: "Previously created by scripts/create_sym_links_startup.ps1."
+
+- name: ahk_desktop_numbers
+  repo: scripts/desktop_numbers.ahk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/desktop_numbers.ahk
+  note: >-
+    AutoHotkey v2 (the other two are v1) - Win+Alt+1..9 desktop switching.
+    Needs scripts/VirtualDesktopAccessor.dll, which is committed; the script
+    re-downloads it into A_ScriptDir only if it is missing.
 
 # --- PowerShell ---
 
@@ -260,7 +278,10 @@
     docs/setup_windows_workstation_personal.md. Context-specific aliases are
     NOT in this file: it dot-sources every ~\.powershell_local.d\*.ps1 shard,
     deployed one-per-context by the *_credentials overlay manifests (same
-    contract as the ~/.shell_local.d/ loader in .shared_aliases).
+    contract as the ~/.shell_local.d/ loader in .shared_aliases). The ssh
+    aliases are not in this file either: it invokes src/ssh_aliases.py
+    --format powershell, the one generator both shells share, straight out of
+    the repo checkout (nothing to deploy).
 
 
 # --- Portable sshd (no-admin Windows) ---
