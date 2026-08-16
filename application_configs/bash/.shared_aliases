@@ -95,44 +95,76 @@ venvactivate() {
 
 alias venvdeactivate='deactivate'
 
+# Run a python script with the right interpreter for ITS project, from any cwd.
+#
+# Walks up from the script's own directory for the nearest ancestor that looks
+# like a project root (declares a pyproject.toml or carries a .venv), then:
+#   uv run   — root has a pyproject.toml and uv is installed. uv creates and
+#              syncs .venv on first use, so a fresh clone just works.
+#   .venv    — root has one but is not a uv project.
+#   system python — neither.
+#
+# The whole body runs in a ( ... ) subshell, so the cd and the venv activation
+# cannot leak into the calling shell however the script exits.
+#
+# The PowerShell twin (run-python-script in powershell_aliases.ps1) resolves
+# the same three ways. The two had drifted: bash had the walk-up search and the
+# subshell, PowerShell had the uv branch (be3bfd4, 2026-08-11). Merged
+# 2026-08-15 — change both or neither.
 function run_python_script() {
     if [ -z "$1" ]; then
         echo "Usage: run_python_script <python_script_path> [args...]" >&2
         return 1
     fi
     (
-        script_path=$(realpath "$1")
+        script_path=$(realpath "$1" 2>/dev/null)
+        [ -f "$script_path" ] || { echo "Script not found: $1" >&2; exit 1; }
         shift
         script_dir=$(dirname "$script_path")
 
-        find_venv() {
+        # Nearest ancestor holding either project marker, starting at the
+        # script's own directory. Empty when there is no project above it.
+        find_project_root() {
             local dir="$1"
             while [ "$dir" != "/" ]; do
-                [ -d "$dir/.venv" ] && echo "$dir/.venv" && return
+                if [ -f "$dir/pyproject.toml" ] || [ -d "$dir/.venv" ]; then
+                    echo "$dir"
+                    return
+                fi
                 dir=$(dirname "$dir")
             done
         }
 
         echo "Running Python script: $script_path"
         echo "Changing to script directory: $script_dir"
+        # Stay in the script's directory, not the project root: scripts that
+        # open files by relative path expect it, and uv finds the project by
+        # walking up from here anyway.
         cd "$script_dir" || exit 1
 
-        venv_dir=$(find_venv "$script_dir")
+        project_root=$(find_project_root "$script_dir")
 
-        if [ -n "$venv_dir" ]; then
-            echo "Project .venv detected at: $venv_dir"
-            source "$venv_dir/bin/activate"
-        else
-            echo "No project .venv found. Running with system Python."
+        if [ -n "$project_root" ] && [ -f "$project_root/pyproject.toml" ] && command -v uv >/dev/null 2>&1; then
+            echo "uv project detected at: $project_root"
+            uv run python "$script_path" "$@"
+            exit $?
         fi
 
+        if [ -n "$project_root" ] && [ -d "$project_root/.venv" ]; then
+            echo "Project .venv detected at: $project_root/.venv"
+            # bin on POSIX, Scripts under git-bash/MSYS on Windows.
+            if [ -f "$project_root/.venv/bin/activate" ]; then
+                source "$project_root/.venv/bin/activate"
+            elif [ -f "$project_root/.venv/Scripts/activate" ]; then
+                source "$project_root/.venv/Scripts/activate"
+            fi
+            python3 "$script_path" "$@"
+            exit $?
+        fi
+
+        echo "No uv project or .venv found. Running with system Python."
         python3 "$script_path" "$@"
     )
-}
-
-function deploytools() {
-    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    run_python_script "$gitDir/Data_Tool_Pack_Py/src/deploy_tools.py"
 }
 
 function todo() {
@@ -277,10 +309,11 @@ alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'
 
 alias speed='speedtest-cli'
 
-### SSH Shortcuts (loaded from <gitDir>/*_credentials host inventories) ###
+### SSH Shortcuts (generated from <gitDir>/*_credentials host inventories) ###
 
 # Short, lowercase local hostname — zsh sets HOST, bash sets HOSTNAME, and
 # neither is guaranteed, so fall back to the command and strip any domain.
+# Used by ta() above; the alias generator works its own out in Python.
 _ssh_local_hostname() {
     local name="${HOSTNAME:-}"
     [[ -z "$name" ]] && name="${HOST:-}"
@@ -289,134 +322,28 @@ _ssh_local_hostname() {
     printf '%s' "$(echo "$name" | tr '[:upper:]' '[:lower:]')"
 }
 
-# Loads ssh aliases from a hosts.json-style inventory file. A host may also
-# declare "vnc_aliases" (plus optional "vnc_hostname" when the screen-sharing
-# target differs from the ssh one, e.g. a Tailscale address); those become
-# `open vnc://user@host` aliases on macOS and are skipped elsewhere.
+# The ssh (and macOS vnc) aliases are built by ONE cross-shell generator,
+# <gitDir>/dotfiles/src/ssh_aliases.py: it reads every <gitDir>/*_credentials
+# host inventory and prints ready-to-eval `alias` lines. The PowerShell profile
+# evals that same script's --format powershell output, so jump-host resolution,
+# port handling, user selection and vnc aliases have a single implementation
+# instead of two twins kept in step by hand. See its module docstring and
+# docs/client_credentials_repos.md for the inventory schema.
 #
-# A host record may carry "jump": "<name-or-alias>" naming another host in the
-# same inventory that can reach it — the pattern for a machine only routable
-# from inside a VPN a different box holds. The hop is baked into the alias as
-# `ssh -J user@jump:port`, so the chain lives in the inventory and NOT in any
-# machine's ~/.ssh/config: nothing outside this repo constellation needs
-# editing, and every machine that clones the credentials repo gets it. This
-# mirrors what build_ssh_argv in the sibling status_board repo does for its
-# ssh_command panels (see that repo's README). Raw-IP tools that never
-# see aliases (rsync shelling out to ssh) get the same hop from the deployed
-# ~/.ssh/config.d fragments instead - see docs/client_credentials_repos.md.
-#
-# The hop is dropped when the alias is loaded ON the jump machine itself —
-# there it is already inside the VPN and the target is direct. Needs
-# non-interactive key auth to both hops and AllowTcpForwarding on the jump's
-# sshd (the default, and true of Windows OpenSSH Server).
-_load_ssh_hosts() {
-    local hosts_file="$1"
-    [[ -f "$hosts_file" ]] || return 0
-    command -v python3 >/dev/null 2>&1 || return 0
-    local _kind _alias _user _host _port _jump _ssh_cmd _local
-    _local="$(_ssh_local_hostname)"
-    # US (0x1f), not tab: IFS-whitespace collapses runs of delimiters, so a
-    # host with no port but a jump would shift the jump spec into _port.
-    while IFS=$'\x1f' read -r _kind _alias _user _host _port _jump; do
-        [[ -z "$_alias" ]] && continue
-        if [[ "$_kind" == "vnc" ]]; then
-            # macOS built-in Screen Sharing; no vnc:// handler elsewhere.
-            [[ "$OSTYPE" == "darwin"* ]] || continue
-            alias "$_alias"="open vnc://${_user:+${_user}@}${_host}"
-            continue
-        fi
-        [[ -z "$_user" ]] && continue
-        _ssh_cmd="ssh"
-        [[ -n "$_jump" ]] && _ssh_cmd="$_ssh_cmd -J $_jump"
-        [[ -n "$_port" ]] && _ssh_cmd="$_ssh_cmd -p $_port"
-        _ssh_cmd="$_ssh_cmd ${_user}@${_host}"
-        alias "$_alias"="$_ssh_cmd"
-    done < <(_ssh_hosts_reader | python3 - "$hosts_file" "$_local")
-}
-
-# The reader script above, kept in its OWN function rather than as a heredoc
-# inside the <(...) process substitution. Bash scans a process substitution
-# for its closing paren by counting quotes, and it does not exempt heredoc
-# bodies: a lone apostrophe in a Python comment opens a quote that swallows
-# the paren, and the whole file then fails to source with "bad substitution".
-# Emitting it through a plain pipe keeps the Python text away from that
-# scanner, so comments here can be written normally.
-_ssh_hosts_reader() {
-    cat <<'PYEOF'
-import json
-import sys
-
-with open(sys.argv[1]) as f:
-    inventory = json.load(f)
-hosts = inventory.get("hosts", [])
-local_short = (sys.argv[2] if len(sys.argv) > 2 else "").split(".")[0].lower()
-
-
-def host_names(host):
-    return [name for name in [host.get("name", "")] + list(host.get("aliases") or []) if name]
-
-
-def find_host(token):
-    wanted = token.strip().lower()
-    for host in hosts:
-        if any(name.lower() == wanted for name in host_names(host)):
-            return host
-    return None
-
-
-def jump_spec(host):
-    """-J destination for a host's "jump" hop, or "" when there is none to make."""
-    token = host.get("jump")
-    if not token:
-        return ""
-    # Resolved within THIS inventory only: a context's hosts live together in
-    # one file, and each file is loaded by its own _load_ssh_hosts call.
-    jump = find_host(token)
-    if jump is None:
-        return ""
-    # Already on the jump machine: it holds the VPN, so the target is direct.
-    if local_short and local_short in [name.split(".")[0].lower() for name in host_names(jump)]:
-        return ""
-    user = jump.get("ssh_user") or jump.get("user") or ""
-    target = jump.get("hostname") or jump.get("name", "")
-    spec = f"{user}@{target}" if user else target
-    return f"{spec}:{jump['port']}" if jump.get("port") else spec
-
-
-for host in hosts:
-    user = host.get("ssh_user") or host.get("user") or ""
-    target = host.get("hostname") or host.get("name", "")
-    port = host.get("port") or ""
-    spec = jump_spec(host)
-    for alias in host.get("aliases") or []:
-        print("\x1f".join(["ssh", alias, user, str(target), str(port), spec]))
-    # Screen-sharing aliases (macOS-only on the client side; the loader skips
-    # them elsewhere). vnc_hostname lets the VNC target differ from the ssh
-    # one — e.g. a Tailscale address reachable off-LAN.
-    vnc_target = host.get("vnc_hostname") or host.get("hostname") or host.get("name", "")
-    for alias in host.get("vnc_aliases") or []:
-        print("\x1f".join(["vnc", alias, user, str(vnc_target), "", ""]))
-PYEOF
-}
-
-# Each sibling repo matching <gitDir>/*_credentials may carry a host
-# inventory: <prefix>_hosts.json inside it, falling back to hosts.json.
-_load_all_ssh_hosts() {
+# Stdlib-only, so bare python3 runs it before any venv exists — and it is ONE
+# process for all inventories, where the old loader spawned one per file. No
+# python3 (or no generator on disk) just means no ssh aliases; nothing else in
+# this file depends on them.
+_load_ssh_aliases() {
     [[ -n "$gitDir" ]] || return 0
-    # zsh errors out on a non-matching glob; bash leaves it literal and the
-    # [[ -d ]] check below skips it.
-    [[ -n "$ZSH_VERSION" ]] && setopt localoptions nullglob
-    local dir prefix
-    for dir in "${gitDir%/}"/*_credentials; do
-        [[ -d "$dir" ]] || continue
-        prefix="${dir##*/}"
-        prefix="${prefix%_credentials}"
-        if [[ -f "$dir/${prefix}_hosts.json" ]]; then
-            _load_ssh_hosts "$dir/${prefix}_hosts.json"
-        elif [[ -f "$dir/hosts.json" ]]; then
-            _load_ssh_hosts "$dir/hosts.json"
-        fi
-    done
+    command -v python3 >/dev/null 2>&1 || return 0
+    local generator="${gitDir%/}/dotfiles/src/ssh_aliases.py"
+    [[ -f "$generator" ]] || return 0
+    local generated
+    # Assigned first and eval'd only on success, so a generator that dies
+    # mid-output can never leave the shell evaluating a half-written alias.
+    generated="$(python3 "$generator" --format bash --root "${gitDir%/}")" || return 0
+    eval "$generated"
 }
 
-_load_all_ssh_hosts
+_load_ssh_aliases

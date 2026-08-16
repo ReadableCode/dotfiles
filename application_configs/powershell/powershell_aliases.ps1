@@ -141,6 +141,19 @@ function venvactivate {
 
 function venvdeactivate { deactivate }
 
+# Run a python script with the right interpreter for ITS project, from any cwd.
+#
+# Walks up from the script's own directory for the nearest ancestor that looks
+# like a project root (declares a pyproject.toml or carries a .venv), then:
+#   uv run   - root has a pyproject.toml and uv is installed. uv creates and
+#              syncs .venv on first use, so a fresh clone just works.
+#   .venv    - root has one but is not a uv project.
+#   system python - neither.
+#
+# The bash twin (run_python_script in application_configs/bash/.shared_aliases)
+# resolves the same three ways. The two had drifted: bash had the walk-up
+# search and its subshell isolation, this side had the uv branch (be3bfd4,
+# 2026-08-11). Merged 2026-08-15 - change both or neither.
 function run-python-script {
     param (
         [string]$scriptPath,
@@ -154,65 +167,65 @@ function run-python-script {
         return 1
     }
 
-    Write-Host "Running Python script: $scriptPath"
-
     # Resolve to an absolute path so it still points at the right file after we
     # change directories below.
     $resolvedScript = Resolve-Path -Path $scriptPath -ErrorAction SilentlyContinue
     if (-not $resolvedScript) {
-        Write-Host "Script not found: $scriptPath"
+        Write-Host "Script not found: $scriptPath" -ForegroundColor Red
         return 1
     }
     $scriptPath = $resolvedScript.Path
-
-    # Extract the directory from the resolved file path
     $scriptDir = Split-Path -Parent $scriptPath
 
-    # Change to the script directory with Push-Location so the change is undone
-    # in the finally block and does not leak into the caller's session.
+    Write-Host "Running Python script: $scriptPath"
+
+    # Nearest ancestor holding either project marker, starting at the script's
+    # own directory. Empty when there is no project above it. Replaces the old
+    # hardcoded "..", which only ever found a project exactly one level up.
+    $projectRoot = ''
+    $dir = Get-Item -LiteralPath $scriptDir
+    while ($null -ne $dir) {
+        if ((Test-Path (Join-Path $dir.FullName 'pyproject.toml')) -or (Test-Path (Join-Path $dir.FullName '.venv'))) {
+            $projectRoot = $dir.FullName
+            break
+        }
+        $dir = $dir.Parent
+    }
+
+    # Stay in the script's directory, not the project root: scripts that open
+    # files by relative path expect it, and uv finds the project by walking up
+    # from here anyway. Push-Location so the change is undone in the finally
+    # block and does not leak into the caller's session.
     Write-Host "Changing to script directory: $scriptDir"
     Push-Location -Path $scriptDir
+    $activated = $false
     try {
-        # Prefer uv when the project declares one (pyproject.toml one level up,
-        # standard project layout): uv run creates and syncs .venv on first
-        # use, so a fresh clone works without a manual uv sync.
-        if ((Test-Path "..\pyproject.toml") -and (Get-Command uv -ErrorAction SilentlyContinue)) {
-            Write-Host "Project pyproject.toml detected: running with uv."
+        if ($projectRoot -and (Test-Path (Join-Path $projectRoot 'pyproject.toml')) -and
+            (Get-Command uv -ErrorAction SilentlyContinue)) {
+            Write-Host "uv project detected at: $projectRoot"
             uv run python $scriptPath @scriptArgs
-            return 0
+            return
         }
 
-        # Look for a .venv one level up from the script (standard project layout)
-        if (Test-Path "..\.venv") {
-            Write-Host "Project .venv detected at: ..\.venv"
-
-            # Activate the venv environment
-            ..\.venv\Scripts\Activate.ps1
-
-            # Run the script using the venv environment, passing through any extra args
+        $venvActivate = if ($projectRoot) { Join-Path $projectRoot '.venv\Scripts\Activate.ps1' } else { '' }
+        if ($venvActivate -and (Test-Path $venvActivate)) {
+            Write-Host "Project .venv detected at: $(Join-Path $projectRoot '.venv')"
+            & $venvActivate
+            $activated = $true
             python $scriptPath @scriptArgs
-
-            # Deactivate the environment afterward
-            deactivate
-            return 0
-        }
-        else {
-            Write-Host "No project .venv found in parent directory. Running the script with system Python."
+            return
         }
 
-        # Run the script using the system Python as a fallback
+        Write-Host "No uv project or .venv found. Running the script with system Python."
         python $scriptPath @scriptArgs
     }
     finally {
+        # Deactivate HERE, not after the run: PowerShell activates in-process,
+        # so a script that threw used to leave the venv live in the caller's
+        # session. The bash twin gets this free from its subshell.
+        if ($activated -and (Get-Command deactivate -ErrorAction SilentlyContinue)) { deactivate }
         Pop-Location
     }
-}
-
-function deploytools {
-    if (-not (Test-GitDir)) { return }
-    # Run the deploy_tools.py script using run-python-script
-    $scriptPath = (Join-Path $gitDir 'Data_Tool_Pack_Py\src\deploy_tools.py')
-    run-python-script $scriptPath
 }
 
 function todo {
@@ -572,67 +585,62 @@ function showwifi {
 }
 
 
-### SSH Shortcuts (loaded from <gitDir>\*_credentials host inventories) ###
+### SSH Shortcuts (generated from <gitDir>\*_credentials host inventories) ###
 
-# Every name a host answers to in the inventory: its name plus its aliases.
-function Get-InventoryHostNames($invHost) {
-    @(@($invHost.name) + @($invHost.aliases)) | Where-Object { $_ }
-}
-
-# -J destination for a host's "jump" hop, or '' when there is no hop to make.
-# See the _load_ssh_hosts comment in application_configs/bash/.shared_aliases —
-# this is the PowerShell twin and must stay behaviourally identical.
-function Get-SshJumpSpec($invHost, $allHosts, [string]$localShort) {
-    if (-not $invHost.PSObject.Properties['jump'] -or -not $invHost.jump) { return '' }
-    $wanted = "$($invHost.jump)".Trim().ToLower()
-    # Resolved within THIS inventory only, matching the bash loader.
-    $jump = $allHosts | Where-Object {
-        (Get-InventoryHostNames $_ | ForEach-Object { $_.ToLower() }) -contains $wanted
-    } | Select-Object -First 1
-    if (-not $jump) { return '' }
-    # Already on the jump machine: it holds the VPN, so the target is direct.
-    $jumpShort = Get-InventoryHostNames $jump | ForEach-Object { ($_ -split '\.')[0].ToLower() }
-    if ($localShort -and $jumpShort -contains $localShort) { return '' }
-
-    $jumpUser = if ($jump.PSObject.Properties['ssh_user']) { $jump.ssh_user } elseif ($jump.PSObject.Properties['user']) { $jump.user } else { '' }
-    $jumpTarget = if ($jump.PSObject.Properties['hostname']) { $jump.hostname } else { $jump.name }
-    $spec = if ($jumpUser) { "$jumpUser@$jumpTarget" } else { "$jumpTarget" }
-    $jumpPort = if ($jump.PSObject.Properties['port']) { $jump.port } else { '' }
-    if ($jumpPort) { return "${spec}:${jumpPort}" }
-    return $spec
-}
-
-# Loads ssh aliases from a hosts.json-style inventory file.
-function Import-SshHostAliases([string]$hostsFile) {
-    if (-not $hostsFile -or -not (Test-Path $hostsFile)) { return }
-    $hostInventory = Get-Content $hostsFile -Raw | ConvertFrom-Json
-    $localShort = ($env:COMPUTERNAME -split '\.')[0].ToLower()
-    foreach ($invHost in $hostInventory.hosts) {
-        $user = if ($invHost.PSObject.Properties['ssh_user']) { $invHost.ssh_user } elseif ($invHost.PSObject.Properties['user']) { $invHost.user } else { '' }
-        $hostTarget = if ($invHost.PSObject.Properties['hostname']) { $invHost.hostname } else { $invHost.name }
-        $port = if ($invHost.PSObject.Properties['port']) { $invHost.port } else { '' }
-        $jumpSpec = Get-SshJumpSpec $invHost $hostInventory.hosts $localShort
-
-        $sshArgs = "$user@$hostTarget"
-        if ($port) { $sshArgs = "-p $port $sshArgs" }
-        if ($jumpSpec) { $sshArgs = "-J $jumpSpec $sshArgs" }
-
-        foreach ($alias in @($invHost.aliases)) {
-            if ($alias -and $user) {
-                Set-Item -Path "function:global:$alias" -Value ([scriptblock]::Create("ssh $sshArgs")) -Force
-            }
-        }
+# First interpreter that can run a stdlib-only script, or '' when there is none.
+#
+# Two things make this more than a Get-Command call on Windows:
+#   * "python3.exe"/"python.exe" under WindowsApps are App Execution Alias
+#     STUBS that open the Microsoft Store instead of running anything, so they
+#     are skipped by path.
+#   * a real .exe is preferred over a shim, because `python3` often resolves to
+#     a pyenv-win .bat that re-launches through cmd: measured on RyzenWhite
+#     2026-08-15, the same generator run took ~610 ms through the shim and
+#     ~110 ms through C:\Python314\python.exe. Shims are still used when
+#     nothing else is installed - slow aliases beat no aliases.
+# The dotfiles venv is the last resort, for a machine whose only Python is the
+# one uv created.
+function Get-PythonCommand {
+    if ($global:resolvedPythonCommand) { return $global:resolvedPythonCommand }
+    $candidates = @()
+    foreach ($name in @('python3', 'python')) {
+        $found = Get-Command $name -ErrorAction SilentlyContinue
+        if ($found -and $found.Source -notmatch '\\WindowsApps\\') { $candidates += $found.Source }
     }
+    if ($gitDir) { $candidates += (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') }
+    # Real executables first, everything else (shims, and the extensionless
+    # python3 of a macOS/Linux pwsh) in its original order after them.
+    $ordered = @($candidates | Where-Object { $_ -like '*.exe' }) + @($candidates | Where-Object { $_ -notlike '*.exe' })
+    foreach ($candidate in $ordered) {
+        if (Test-Path $candidate) { $global:resolvedPythonCommand = $candidate; return $candidate }
+    }
+    return ''
 }
 
-# Each sibling repo matching <gitDir>\*_credentials may carry a host
-# inventory: <prefix>_hosts.json inside it, falling back to hosts.json.
-if ($gitDir -and (Test-Path $gitDir)) {
-    foreach ($credDir in Get-ChildItem -Path $gitDir -Directory -Filter '*_credentials' -ErrorAction SilentlyContinue) {
-        $prefix = $credDir.Name -replace '_credentials$', ''
-        $prefixedFile = Join-Path $credDir.FullName "${prefix}_hosts.json"
-        $fallbackFile = Join-Path $credDir.FullName 'hosts.json'
-        if (Test-Path $prefixedFile) { Import-SshHostAliases $prefixedFile }
-        elseif (Test-Path $fallbackFile) { Import-SshHostAliases $fallbackFile }
+# The ssh aliases are built by ONE cross-shell generator,
+# <gitDir>\dotfiles\src\ssh_aliases.py: it reads every <gitDir>\*_credentials
+# host inventory and prints ready-to-invoke definitions. .shared_aliases evals
+# that same script's --format bash output, so jump-host resolution, port
+# handling and user selection have a single implementation instead of two twins
+# kept in step by hand. See its module docstring and
+# docs/client_credentials_repos.md for the inventory schema.
+#
+# The generated definitions are `Set-Item function:global:<alias>` statements —
+# functions, not Set-Alias, because a PowerShell alias is a bare command name
+# and cannot carry the ssh arguments. vnc aliases are emitted on macOS only, so
+# a Windows session gets none (nothing there handles vnc://).
+#
+# No usable Python (or no generator on disk) just means no ssh aliases; nothing
+# else in this profile depends on them.
+$sshAliasGenerator = if ($gitDir) { Join-Path $gitDir 'dotfiles\src\ssh_aliases.py' } else { '' }
+if ($sshAliasGenerator -and (Test-Path $sshAliasGenerator)) {
+    $pythonCommand = Get-PythonCommand
+    if ($pythonCommand) {
+        # Captured first and invoked only on a clean exit, so a generator that
+        # dies mid-output can never leave the session running half a definition.
+        $generatedAliases = & $pythonCommand $sshAliasGenerator --format powershell --root $gitDir
+        if ($LASTEXITCODE -eq 0 -and $generatedAliases) {
+            $generatedAliases | Out-String | Invoke-Expression
+        }
     }
 }

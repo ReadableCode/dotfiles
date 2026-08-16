@@ -47,14 +47,31 @@ matching `requires:`.
 - **Shell ssh aliases** — the shell startup files build ssh aliases from every
   `*_credentials` inventory they find, so cloning a client's credentials repo
   onto a machine is all it takes to get that client's hosts.
-  (`_load_ssh_hosts` in `application_configs/bash/.shared_aliases`, and its
-  twin `Import-SshHostAliases` in
-  `application_configs/powershell/powershell_aliases.ps1` — keep the two
-  behaviourally identical.) A host may also declare `vnc_aliases` (with an
-  optional `vnc_hostname` when the screen-sharing target differs from the ssh
-  one, e.g. a Tailscale address); these become macOS-only
-  `open vnc://user@host` aliases and are intentionally absent from the
-  PowerShell twin.
+
+  There is **one implementation** of that, for every shell: `src/ssh_aliases.py`
+  reads the inventories and prints ready-to-eval alias definitions in the
+  caller's syntax (`--format bash` / `--format powershell`; `--format json` to
+  inspect the set as data). `application_configs/bash/.shared_aliases` evals the
+  bash output and `application_configs/powershell/powershell_aliases.ps1`
+  invokes the PowerShell output, so jump resolution, port handling, user
+  selection and vnc aliases cannot drift between the two the way the old
+  hand-synced `_load_ssh_hosts` / `Import-SshHostAliases` twins could. The
+  script is stdlib-only, so a bare `python3` runs it at shell startup before any
+  venv exists; a machine without a usable Python simply gets no ssh aliases.
+
+  An **alias name must be a bare word** (`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`) —
+  these definitions are `eval`'d, so anything else raises and the generator
+  exits non-zero, leaving the shell with **no ssh aliases at all** rather than
+  quietly dropping the one entry. That means a bad name in a client inventory
+  also costs that machine its personal aliases: deliberate, so a broken
+  inventory gets fixed instead of going unnoticed. An unreadable inventory
+  *file* is the softer case — it warns and only costs that context.
+
+  A host may also declare `vnc_aliases` (with an optional `vnc_hostname` when
+  the screen-sharing target differs from the ssh one, e.g. a Tailscale address).
+  These become `open vnc://user@host` aliases and are emitted **on macOS only**,
+  in whichever shell asked — the gate is the platform, not the shell, because
+  nothing off macOS has a `vnc://` handler.
 
 ### Inventory `jump:` — hosts behind a VPN another machine holds
 
