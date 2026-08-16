@@ -99,6 +99,10 @@ PROMPT='%F{cyan}%n@%m%f:%F{blue}%~%f$(get_uv_env)$(get_dir_status)${vcs_info_msg
 if [ -x "/opt/homebrew/bin/brew" ]; then
     export PATH="/opt/homebrew/bin:$PATH"
     fpath=(/opt/homebrew/share/zsh/site-functions $fpath)
+    # Casks are downloaded by brew itself, not a browser, so the quarantine flag
+    # buys nothing and costs a Gatekeeper "could not verify" dialog on every
+    # upgrade of a binary cask (claude-code being the recurring offender).
+    export HOMEBREW_CASK_OPTS="--no-quarantine"
 fi
 
 # Enable better tab completion
@@ -148,6 +152,36 @@ function syncdrive() {
     else
         uv run --project "$gitDir/Sync_Plex/backends/python" syncplex-drive-sync "$@"
     fi
+}
+
+# Every VS Code extension update drops a fresh, quarantined copy of the Claude
+# Code native binary at
+# ~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude,
+# and Gatekeeper then blocks it with "claude Not Opened / Apple could not
+# verify". HOMEBREW_CASK_OPTS above keeps future brew upgrades clean; nothing
+# can pre-empt the extension copies, so run this when the dialog reappears.
+function claude-dequarantine() {
+    setopt localoptions nullglob
+    local f
+    local -i found=0 stripped=0
+    for f in "$HOME"/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude \
+             /opt/homebrew/Caskroom/claude-code/*/claude; do
+        [[ -f "$f" ]] || continue
+        (( found++ ))
+        if ! xattr -p com.apple.quarantine "$f" >/dev/null 2>&1; then
+            echo "already clean:  $f"
+        elif xattr -d com.apple.quarantine "$f" 2>/dev/null; then
+            echo "dequarantined:  $f"
+            (( stripped++ ))
+        else
+            echo "FAILED:         $f" >&2
+        fi
+    done
+    if (( found == 0 )); then
+        echo "claude-dequarantine: no claude binaries found" >&2
+        return 1
+    fi
+    echo "claude-dequarantine: stripped $stripped of $found binaries"
 }
 
 ### Machine-local overrides (not synced) ###
