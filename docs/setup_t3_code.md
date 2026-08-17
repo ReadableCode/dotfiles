@@ -614,16 +614,25 @@ through the SSH tunnel.
 are POSIX `sh` only. Set the machine up as a native server instead, scripted
 end-to-end as
 [`scripts/setup_t3_server_windows.ps1`](../scripts/setup_t3_server_windows.ps1)
-(run on the Windows box, fine over SSH). What it does:
+(run on the Windows box, fine over SSH). **Deploy configs on that box first**
+— as of 2026-08-17 the script registers what `deploy_configs.py` put in
+`~\.t3` rather than generating it, and errors out pointing at
+`uv run python src/deploy_configs.py` if those files aren't there. What it
+does:
 
-1. Verifies Node, installs `t3@latest` globally and prints the version it
+1. Reads the deployed `~\.t3\t3serve.cmd` for the port and whether Tailscale
+   Serve is on — that file is the single source of truth for the serve
+   command line, so neither is a script parameter any more.
+2. Verifies Node, installs `t3@latest` globally and prints the version it
    resolved (see [Server version](#server-version)).
-2. Registers and starts a `t3code-server` **scheduled task** (boot + logon
-   triggers) running `t3 serve` — a serve started in an SSH session dies
-   with it, Windows OpenSSH kills the process tree. Loopback only: both
+3. Registers and starts the `t3code-server` **scheduled task** from the
+   deployed `~\.t3\t3code-server-task.xml` (boot + logon + a 15-minute
+   watchdog trigger) running that wrapper — a serve started in an SSH session
+   dies with it, Windows OpenSSH kills the process tree. Loopback only: both
    reachability paths dial loopback, so no `0.0.0.0` bind and no firewall
-   rule.
-3. Reachability, default **Tailscale Serve**: the serve runs with
+   rule. It stops a running instance first to put the deployed definition into
+   effect, so it interrupts live threads on that machine.
+4. Reachability, default **Tailscale Serve**: the serve runs with
    `--tailscale-serve` (HTTPS on the tailnet, needs tailscale logged in on
    the box) and the script prints the tailnet URL plus a single-use pairing
    token. On each client: Add environment → Remote link →
@@ -638,13 +647,41 @@ end-to-end as
    a managed-tunnel slot; see the 3-tunnel cap in Known issues.
 
 RyzenWhite runs the Tailscale path (2026-08-05, working: desktop pairs over
-the tailnet URL). Windows task specifics baked into the script: the
-principal is **S4U** (a default-principal task silently never starts when no
-one is logged on, `LastTaskResult` 267011), and the serve line lives in
-`~\.t3\t3serve.cmd` because a redirect inside the task's argument string
-gets eaten by quoting. A T3 Connect credential is also stored there
+the tailnet URL). A T3 Connect credential is also stored on that box
 ("Authorized as" the account), so if a tunnel slot ever frees up,
 `t3 connect link` + a task restart flips it to the relay with no new OAuth.
+
+### What actually keeps it up (2026-08-17)
+
+Windows is the only platform with no real service — `t3 service status` there
+answers "unavailable on this machine · Supported on: Linux with systemd", so
+the scheduled task and the wrapper it runs are the whole supervisor. Both are
+manifest entries now (`t3code_server_launcher`, `t3code_server_task`), not
+things the setup script writes, because the un-owned versions of them are what
+took RyzenWhite offline for a day:
+
+| Property | Where | Why |
+|---|---|---|
+| restart loop around `t3 serve` | `application_configs/t3code/t3serve.cmd` → `~\.t3\t3serve.cmd` | The server leaks and dies (see the heap-OOM entry in Known issues). A bare `t3 serve` action leaves the box serverless until the next reboot; the loop recovers in ~15 s. |
+| `ExecutionTimeLimit` `PT0S` | `application_configs/t3code/t3code-server-task.xml` | Omitting it means **PT72H**, and Task Scheduler then terminates a healthy always-on server every three days (`LastTaskResult` 267014, `SCHED_S_TASK_TERMINATED`). |
+| S4U principal | same | A default-principal task silently never starts when no one is logged on (`LastTaskResult` 267011). |
+| boot + logon + `PT15M` repetition | same | The repetition is a watchdog: `MultipleInstancesPolicy` is `IgnoreNew`, so it is a no-op while the task runs and the restart when it isn't. |
+| `StartWhenAvailable`, battery settings off | same | Run a missed trigger late rather than skipping it; never refuse or stop the serve for a battery. |
+
+The task definition is *imported*, not followed — Task Scheduler reads tasks
+from its own registry copy, so deploying a change to the XML does nothing
+until `setup_t3_server_windows.ps1` runs again. Diff the live one with
+`Export-ScheduledTask -TaskName t3code-server`. The wrapper, by contrast, is
+read from disk on every start, so editing it and re-deploying is enough.
+
+The **desktop client** has its own entry, `t3code_client_startup`
+(`scripts/start_t3code_client.ahk` → the Startup folder, same symlink
+mechanism as the other AHK scripts). The app's own open-at-login toggle writes
+an `HKCU\...\CurrentVersion\Run` value that no repo file owns and
+`deploy_configs.py status` cannot see — on RyzenWhite it had simply never been
+turned on. On a box that also runs the serve task, watch `server.log` after
+the first logon: the desktop app starts a server too, and both want port 3773
+and `~\.t3\userdata`.
 
 ## Updating a service-managed Linux server (2026-08-11)
 
@@ -714,6 +751,13 @@ hosts list. The split:
 | `desktop-settings.json` | no | Per-machine window bounds churn on every resize; also holds `serverExposureMode`. |
 | `connection-catalog.json` | never | Per-machine registry of paired environments (an encrypted blob holding bearer tokens; named `saved-environments.json` in newer source). |
 | `clerk-tokens.json`, `secrets/`, `state.sqlite`, `logs/`, `environment-id`, `server-runtime.json`, `~/.t3/caches/` | never | Auth tokens, signing keys, thread state — machine-private. |
+
+Two more entries were added 2026-08-17, one level up in `~/.t3/` and Windows
+only: `t3serve.cmd` (the serve command line the scheduled task runs) and
+`t3code-server-task.xml` (the task definition itself), plus
+`t3code_client_startup` for the desktop app's Startup-folder launcher. They
+are runtime, not preferences — see
+[What actually keeps it up](#what-actually-keeps-it-up-2026-08-17).
 
 Caveat (still true): Electron saves settings via atomic rename, which
 replaces a deployed symlink with a plain file — expect `NOT_A_LINK` drift
@@ -894,6 +938,31 @@ a doc/automation task in this repo.
   their context manifest rather than the shared one — full procedure in
   [Claude Code on Bedrock](#claude-code-on-bedrock-2026-08-06) under Connect
   providers.
+- **The server leaks until V8 kills it, ~3 days on a quiet box (upstream;
+  worked around here 2026-08-17)**: RyzenWhite's `t3 serve` started at boot on
+  8/14 00:32 and aborted on 8/17 00:36 with `FATAL ERROR: Ineffective
+  mark-compacts near heap limit — JavaScript heap out of memory`, sitting at
+  V8's default ~4 GB cap. The last GCs in `~\.t3\server.log` show the death
+  spiral before it (`4090.7 → 4089.9 MB`, 1.17 s per mark-compact,
+  `current mu = 0.019`), so the box is effectively unresponsive for a while
+  before the process actually dies. Nothing on that machine was driving
+  threads at the time; the only steady traffic in the log is the relay's own
+  reconnects, so it looks like idle-time growth rather than per-thread
+  retention. Fix upstream. Here, the workaround is the restart loop in
+  `t3serve.cmd` plus the watchdog trigger in the task XML — the server comes
+  back in ~15 s instead of staying down until the next reboot. To confirm a
+  suspected leak on a running box:
+  `Get-Process node | Sort-Object WS -Descending | Select-Object -First 3 Id,WS,StartTime`.
+- **A default scheduled task quietly stops an always-on server every 72 hours
+  (this repo, fixed 2026-08-17)**: `Register-ScheduledTask` with no
+  `-Settings` writes `ExecutionTimeLimit PT72H`. RyzenWhite's task therefore
+  terminated its own run 72 h after the trigger (`LastTaskResult` 267014 =
+  `SCHED_S_TASK_TERMINATED`, task back to `Ready`, port 3773 closed) — and
+  since the only triggers were boot and logon, `State: Ready` with no server
+  is a stable state: the machine had last booted three days earlier, so it
+  stayed down. Two symptoms, one lesson — check `LastTaskResult` before
+  believing a task "ran fine", and never let a service-shaped task inherit
+  the default limit. Both are now properties of the deployed XML.
 - **npm server rejects newer config than its pinned version (this repo,
   handled)**: the headless `t3` server schema-validates managed configs and
   warns on anything a newer build wrote — RyzenWhite's `server.log` spammed

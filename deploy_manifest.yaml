@@ -252,6 +252,63 @@
     make it log "ignoring invalid keybinding entry" and surface config-issue
     warnings in connected clients.
 
+# The three entries above are T3's *configs*. The three below are how T3 comes
+# up on its own on Windows, which until 2026-08-17 nothing in this repo owned:
+# scripts/setup_t3_server_windows.ps1 generated the serve wrapper and
+# registered the scheduled task once, imperatively, and the desktop client had
+# no autostart at all. That gap is what took RyzenWhite down - its server died
+# of a heap OOM after 3 days, the task's inherited 72-hour ExecutionTimeLimit
+# closed the run out, and with only boot/logon triggers nothing restarted
+# either half. The runtime is manifest-managed now, on the same terms as the
+# configs: the files below are the source of truth, and the setup script only
+# registers what deploy put there. macOS and Linux are unaffected - Linux has
+# a real boot service (`t3 service install`) and the Mac desktop app is a
+# login item, so neither needs this.
+
+- name: t3code_server_launcher
+  repo: application_configs/t3code/t3serve.cmd
+  dest:
+    windows: ~/.t3/t3serve.cmd
+  requires: ~/.t3
+  note: >-
+    The serve command line, at the exact path the t3code-server scheduled task
+    executes - so it is deployed like a config even though a task registration
+    can never be a link, and drift shows up as NOT_A_LINK. Holds a restart
+    loop, because the Windows server has no supervisor of its own: `t3 service
+    install` refuses on Windows (systemd only) and the process does die. Port
+    and --tailscale-serve live in this file, not in the setup script's
+    parameters; a machine needing different ones gets a t3serve.<host>.cmd
+    variant.
+
+- name: t3code_server_task
+  repo: application_configs/t3code/t3code-server-task.xml
+  dest:
+    windows: ~/.t3/t3code-server-task.xml
+  requires: ~/.t3
+  note: >-
+    Scheduled-task definition (boot + logon + a 15-minute watchdog trigger,
+    S4U principal, no execution time limit). Task Scheduler reads tasks from
+    its own registry copy rather than from a path, so unlike the launcher this
+    file is imported, not followed: scripts/setup_t3_server_windows.ps1
+    substitutes the __T3_TASK_USER__ / __T3_SERVE_CMD__ placeholders and
+    registers it. Deploying a change here does nothing until that script runs
+    again - compare with `Export-ScheduledTask -TaskName t3code-server`.
+
+- name: t3code_client_startup
+  repo: scripts/start_t3code_client.ahk
+  dest:
+    windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/start_t3code_client.ahk
+  note: >-
+    Launches the desktop client at logon, via the same Startup-folder symlink
+    mechanism as the ahk_* entries below (see the note there for why no .lnk
+    is needed). The alternative is the app's own open-at-login toggle, which
+    writes an HKCU Run value this repo cannot see or deploy. The script exits
+    silently where T3 Code is not installed or is already running, so no
+    requires gate is needed - but note it starts the DESKTOP app, which on a
+    machine also running the t3code_server_task serve means two T3 servers
+    could contend for port 3773 and ~/.t3/userdata; check server.log after the
+    first logon on such a box.
+
 # --- Barrier (KVM sharing) ---
 
 # Per-host barrier_config.<host>.sgc files moved to the credentials overlays
