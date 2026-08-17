@@ -130,9 +130,11 @@
 # overlay at all keeps a dangling link until one is cloned - removals can't
 # name these dests while live entries still want them).
 
-# Zed settings.json also lives in personal_credentials (entry zed_settings
-# there, moved 2026-08-14): its ssh_connections block names client checkouts
-# on a client machine - same cross-client inventory as above.
+# Zed settings.json lived in personal_credentials on the same terms (entry
+# zed_settings there, moved 2026-08-14): its ssh_connections block names client
+# checkouts on a client machine. Zed was uninstalled 2026-08-17, so that entry
+# is gone and its dest is retired in personal_removals.yaml; the config source
+# stays in that repo for a future reinstall.
 
 # --- Git ---
 
