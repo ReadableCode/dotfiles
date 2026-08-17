@@ -1,5 +1,6 @@
 cargo
 curl
+fastfetch
 fzf
 gh
 git-all
@@ -7,7 +8,6 @@ golang-go
 htop
 iperf3
 ncdu
-neofetch
 neovim
 net-tools
 python3

@@ -20,8 +20,9 @@ powertoys
 procexp
 putty
 rustdesk
-steam
 speedtest
+steam
+sunshine
 synctrayzor
 tailscale
 tightvnc
@@ -32,4 +33,3 @@ vnc-viewer
 vortex
 wireguard
 wiztree
-sunshine

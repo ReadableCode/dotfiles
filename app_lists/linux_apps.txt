@@ -22,7 +22,9 @@ net-tools
 npm
 openssh-server
 pandoc
+python3
 python3-isort
+python3-pip
 ripgrep
 rsync
 samba

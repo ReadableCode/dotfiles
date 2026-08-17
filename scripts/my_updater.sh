@@ -44,15 +44,15 @@ update_apt() {
     sudo apt -y full-upgrade
 }
 
-# Install fastfetch (preferred) or neofetch as fallback
+# Install fastfetch
 install_sysinfo() {
     echo "Installing fastfetch..."
     case "$OS" in
       "Linux")
-        sudo apt install -y fastfetch || sudo apt install -y neofetch
+        sudo apt install -y fastfetch
         ;;
       "Darwin")
-        brew install fastfetch || brew install neofetch
+        brew install fastfetch
         ;;
       *)
         echo "Unsupported OS for fastfetch installation."
@@ -85,18 +85,13 @@ esac
 
 echo "############ System Info ############"
 
-# Prefer fastfetch, fall back to neofetch
 if command -v fastfetch &> /dev/null; then
     fastfetch
-elif command -v neofetch &> /dev/null; then
-    neofetch
 else
     echo "fastfetch not found. Attempting to install..."
     install_sysinfo
     if command -v fastfetch &> /dev/null; then
         fastfetch
-    elif command -v neofetch &> /dev/null; then
-        neofetch
     else
         echo "Failed to install fastfetch."
     fi
