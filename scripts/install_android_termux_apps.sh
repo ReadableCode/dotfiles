@@ -1,26 +1,22 @@
 #!/bin/bash
+# Install Termux apps from an app list.
+# Usage: install_android_termux_apps.sh [app_list_file]
+# Defaults to app_lists/android_termux_apps.txt relative to the repo root.
 
-# If ../app_lists/android_termux_apps.txt doesnt exist
-if [ ! -f ../app_lists/android_termux_apps.txt ]; then
-    echo "The file ../app_lists/android_termux_apps.txt does not exist. Exiting..."
-    exit 1
-fi
+SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+APP_LIST="${1:-$SCRIPT_DIR/../app_lists/android_termux_apps.txt}"
 
+source "$SCRIPT_DIR/app_install_lib.sh"
 
-# Update and upgrade packages
 pkg update -y && pkg upgrade -y
 
-# Read the list of applications from the android_termux_apps.txt file
-# Adjust the path to the file as needed
-mapfile -t apps < <(tr -d '\r' < ../app_lists/android_termux_apps.txt)
+list_installed() { dpkg-query -W -f='${Package}\n' 2>/dev/null; }
+install_apps() {
+    local app
+    for app in "$@"; do
+        echo "########## Installing $app ##########"
+        pkg install -y "$app"
+    done
+}
 
-# Print the list of applications being installed (for debugging)
-echo "Installing the following applications: ${apps[@]}"
-
-# Install the applications
-for app in "${apps[@]}"; do
-    echo "########## Installing $app ##########"
-    pkg install -y "$app"
-done
-
-echo "Installation complete."
+install_from_list "termux" "$APP_LIST"
