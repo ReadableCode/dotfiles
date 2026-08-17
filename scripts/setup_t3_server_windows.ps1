@@ -124,8 +124,14 @@ Get-NetFirewallRule -DisplayName "t3code-server" -ErrorAction SilentlyContinue |
 #    definition. The wrapper .cmd it points at is deployed too, and exists so
 #    the log redirect survives scheduled-task argument quoting (and now so the
 #    serve restarts itself when it dies).
+# Ask Windows who we are rather than assembling $env:USERDOMAIN\$env:USERNAME:
+# in an OpenSSH session USERDOMAIN is "WORKGROUP", and the scheduler rejects
+# WORKGROUP\jason with "No mapping between account names and security IDs was
+# done" (HRESULT 0x80070534). GetCurrent().Name is RYZENWHITE\jason, which
+# resolves for both the principal and the logon trigger.
+$taskUser = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).Name
 $taskXml = (Get-Content $taskXmlPath -Raw).
-    Replace("__T3_TASK_USER__", "$env:USERDOMAIN\$env:USERNAME").
+    Replace("__T3_TASK_USER__", $taskUser).
     Replace("__T3_SERVE_CMD__", $wrapper)
 # -Xml hands the scheduler a UTF-16 string, so whatever the declaration claims
 # the bytes were is a lie by then: leaving `encoding="UTF-8"` on it fails with
