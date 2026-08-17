@@ -19,22 +19,36 @@ rem reads T3_PORT and the --tailscale-serve flag back out of this file rather
 rem than taking them as parameters, so there is one source of truth. A machine
 rem that needs different ones gets a t3serve.<host>.cmd variant next to this
 rem file (deploy resolves hostname before the bare default).
+rem The loop's own lines go to t3serve.log, NOT to the server.log the serve
+rem writes: only one of these wrappers runs at a time, so its log can never be
+rem locked out, while server.log can be (see the kill below).
 setlocal
 set "T3_CMD=%APPDATA%\npm\t3.cmd"
 set "T3_LOG=%USERPROFILE%\.t3\server.log"
+set "T3_WRAP_LOG=%USERPROFILE%\.t3\t3serve.log"
 set "T3_PORT=3773"
 
 :serve
-rem A serve that died badly can leave something holding the port, which would
-rem turn this loop into a bind-error loop. Clear only the PID that actually
-rem owns the port - on this box that PID is t3's by definition.
+rem Clear a leftover server first, and note there is NO redirect on the kill.
+rem Stopping the task kills this wrapper but leaves the node it called running
+rem (Task Scheduler does not take the grandchild with it), and that orphan
+rem holds the port AND an exclusive append handle on %T3_LOG%. cmd silently
+rem SKIPS any command whose redirect fails, so a kill written as
+rem `taskkill ... >>"%T3_LOG%"` would be skipped by the very condition it
+rem exists to clear, and this loop would spin forever with no server and no
+rem output - which is exactly what it did on 2026-08-17 14:15. Only node.exe
+rem is killed, so a desktop-app server on the same port is left alone.
 for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":%T3_PORT% " ^| findstr LISTENING') do (
-    echo [%DATE% %TIME%] t3serve: port %T3_PORT% still held by pid %%p, killing it>>"%T3_LOG%"
-    taskkill /f /t /pid %%p >>"%T3_LOG%" 2>&1
+    for /f "tokens=1" %%n in ('tasklist /nh /fi "pid eq %%p"') do (
+        if /i "%%n"=="node.exe" (
+            taskkill /f /t /pid %%p
+            echo [%DATE% %TIME%] t3serve: killed leftover node %%p holding port %T3_PORT%>>"%T3_WRAP_LOG%"
+        )
+    )
 )
-echo [%DATE% %TIME%] t3serve: starting t3 serve>>"%T3_LOG%"
+echo [%DATE% %TIME%] t3serve: starting t3 serve>>"%T3_WRAP_LOG%"
 call "%T3_CMD%" serve --port %T3_PORT% --tailscale-serve >>"%T3_LOG%" 2>&1
-echo [%DATE% %TIME%] t3serve: t3 serve exited (code %ERRORLEVEL%), restarting in 15s>>"%T3_LOG%"
+echo [%DATE% %TIME%] t3serve: t3 serve exited (code %ERRORLEVEL%), restarting in 15s>>"%T3_WRAP_LOG%"
 rem `timeout` needs a console handle the scheduled task has not got ("ERROR:
 rem Input redirection is not supported"), so ping is the sleep here.
 ping -n 16 127.0.0.1 >nul

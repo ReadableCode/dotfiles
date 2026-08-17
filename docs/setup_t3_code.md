@@ -663,6 +663,8 @@ took RyzenWhite offline for a day:
 | Property | Where | Why |
 |---|---|---|
 | restart loop around `t3 serve` | `application_configs/t3code/t3serve.cmd` → `~\.t3\t3serve.cmd` | The server leaks and dies (see the heap-OOM entry in Known issues). A bare `t3 serve` action leaves the box serverless until the next reboot; the loop recovers in ~15 s. |
+| kill a leftover `node.exe` on the port, unredirected, before each start | same | Stopping the task kills the wrapper but **not** the node it called, and that orphan holds the port and an exclusive handle on `server.log`. cmd skips any command whose redirect fails, so the kill must not write to that log — otherwise the lock silently disables the code that clears it (observed 2026-08-17: a wrapper spun in `ping` for 13 minutes with no serve and no output). Only `node.exe` is killed, so a desktop-app server is never taken out. |
+| loop bookkeeping in `~\.t3\t3serve.log`, serve output in `server.log` | same | One wrapper runs at a time, so its own log can't be locked out. Start/exit pairs seconds apart there mean the serve isn't launching at all. |
 | `ExecutionTimeLimit` `PT0S` | `application_configs/t3code/t3code-server-task.xml` | Omitting it means **PT72H**, and Task Scheduler then terminates a healthy always-on server every three days (`LastTaskResult` 267014, `SCHED_S_TASK_TERMINATED`). |
 | S4U principal | same | A default-principal task silently never starts when no one is logged on (`LastTaskResult` 267011). |
 | boot + logon + `PT15M` repetition | same | The repetition is a watchdog: `MultipleInstancesPolicy` is `IgnoreNew`, so it is a no-op while the task runs and the restart when it isn't. |
