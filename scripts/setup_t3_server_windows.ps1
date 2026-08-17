@@ -121,6 +121,12 @@ Get-NetFirewallRule -DisplayName "t3code-server" -ErrorAction SilentlyContinue |
 $taskXml = (Get-Content $taskXmlPath -Raw).
     Replace("__T3_TASK_USER__", "$env:USERDOMAIN\$env:USERNAME").
     Replace("__T3_SERVE_CMD__", $wrapper)
+# -Xml hands the scheduler a UTF-16 string, so whatever the declaration claims
+# the bytes were is a lie by then: leaving `encoding="UTF-8"` on it fails with
+# "The task XML is malformed. (1,40)::ERROR: unable to switch the encoding"
+# (HRESULT 0x8004131a). Drop the declaration - the XML is valid without one,
+# and the repo file keeps a declaration that matches its actual bytes.
+$taskXml = [regex]::Replace($taskXml, '^\s*<\?xml[^>]*\?>', '')
 Register-ScheduledTask -TaskName "t3code-server" -Xml $taskXml -Force | Out-Null
 # Re-registering leaves any running instance alone, and MultipleInstances is
 # IgnoreNew, so the old serve would keep the port. Stop then start to put the
