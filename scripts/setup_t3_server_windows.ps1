@@ -69,9 +69,15 @@ if ($TailscaleServe) {
     if (-not (Get-Command tailscale -ErrorAction SilentlyContinue)) {
         Write-Error "tailscale not found on PATH but $wrapper serves with --tailscale-serve. Install/login tailscale first, or drop that flag from the launcher in the repo and re-deploy."
     }
-    $tsStatus = tailscale status 2>&1 | Select-Object -First 1
+    # Capture the whole output BEFORE testing $LASTEXITCODE: piping a native
+    # command into `Select-Object -First 1` stops it as soon as it has the
+    # line, and the killed process leaves a non-zero exit code behind - which
+    # failed this precheck on RyzenWhite (2026-08-17) while tailscale was up
+    # and serving.
+    $tsStatus = tailscale status 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "tailscale is installed but not up ($tsStatus). Log it in first."
+        $tsFirstLine = ($tsStatus -split "`r?`n" | Where-Object { $_ } | Select-Object -First 1)
+        Write-Error "tailscale is installed but not up ($tsFirstLine). Log it in first."
     }
 }
 
