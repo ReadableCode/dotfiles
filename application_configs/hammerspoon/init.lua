@@ -12,7 +12,7 @@ local hotkeyRef = {
     {"Ctrl+Shift+F",  "Open selected ID as Google Drive folder"},
     {"Cmd+Shift+V",   "Paste as plain text (strips formatting)"},
     {"Ctrl+Shift+T",  "Open front Finder window in Terminal"},
-    {"Ctrl+Shift+L",  "Apply this desktop's saved layout (repeat per desktop)"},
+    {"Ctrl+Shift+L",  "Apply saved layouts to every desktop in sequence"},
     {"Ctrl+Shift+S",  "Save current space's windows (asks for space #)"},
     {"Ctrl+Shift+H",  "Show this hotkey cheatsheet"},
 }
@@ -292,13 +292,33 @@ function wl.spaceIndex()
     return nil, ids
 end
 
--- Apply the current desktop's layout, then try to walk the remaining
--- desktops. On this macOS, with shared spaces, every programmatic
--- space-switch is blocked (gotoSpace can't map the "Main" display; Mission
--- Control ignores synthetic keystrokes; the Dock no longer exposes MC
--- desktop buttons to AX) — so the walk usually stops after the current
--- desktop with an alert to swipe + press again. If switching ever starts
--- working, the full walk resumes automatically.
+-- Switch to the desktop at position i (ids[i] is its space ID).
+--
+-- Do NOT reach for hs.spaces.gotoSpace as the primary route: it works by
+-- opening Mission Control and pressing a desktop button in the Dock's
+-- accessibility tree, and on this macOS the Dock's "mc" group is an empty 0x0
+-- element with no children (verified via hs.spaces.data_missionControlAXUIElementData),
+-- so every call fails with "no display with specified id found". That failure
+-- is what stopped the walk after one desktop.
+--
+-- macOS's own "Switch to Desktop N" shortcut (ctrl+N, System Settings >
+-- Keyboard > Shortcuts > Mission Control) DOES fire from a synthesized event,
+-- so drive that instead, and keep gotoSpace as the fallback in case the AX
+-- route ever comes back. Caveat: a desktop is only reachable this way while its
+-- ctrl+N shortcut exists and is enabled — macOS adds one per desktop, but if a
+-- switch reports "didn't land", check that list first.
+function wl.gotoIndex(i, id)
+    if i <= 9 then
+        hs.eventtap.keyStroke({"ctrl"}, tostring(i), 0)
+        return true
+    end
+    return hs.spaces.gotoSpace(id) and true or false
+end
+
+-- Apply the current desktop's layout, then walk the remaining desktops in
+-- Mission Control order, applying each one's saved layout, and finish back on
+-- the desktop you started from. AX can't see windows on inactive spaces, so
+-- each desktop has to actually be visible when its layout is applied.
 function wl.applyAll()
     local startIdx, ids = wl.spaceIndex()
     if not startIdx then
@@ -315,22 +335,21 @@ function wl.applyAll()
         pos = pos + 1
         local i = remaining[pos]
         if not i then
-            hs.spaces.gotoSpace(ids[startIdx])
+            wl.gotoIndex(startIdx, ids[startIdx])
             return
         end
-        local ok = hs.spaces.gotoSpace(ids[i])
-        if not ok then
-            hs.alert.show(string.format(
-                "Applied desktop %d — swipe to the others and press again", startIdx))
-            return
-        end
+        wl.gotoIndex(i, ids[i])
         -- Applying before the switch lands would lay out the WRONG desktop's
-        -- windows; verify arrival and never misapply.
+        -- windows; verify arrival and never misapply. The extra settle after
+        -- arrival is for the switch animation — the space ID flips as it
+        -- starts, before that desktop's windows are all enumerable.
         local tries = 0
         local function waitApply()
             if wl.spaceIndex() == i then
-                wl.apply(tostring(i))
-                step()
+                hs.timer.doAfter(0.4, function()
+                    wl.apply(tostring(i))
+                    step()
+                end)
             elseif tries < 12 then
                 tries = tries + 1
                 hs.timer.doAfter(0.25, waitApply)
