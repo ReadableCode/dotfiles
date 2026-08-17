@@ -1,5 +1,24 @@
 # Android Termux
 
+## Start here: run bootstrap
+
+Set up storage first (next section), then:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ReadableCode/dotfiles/master/scripts/bootstrap.sh | bash
+```
+
+Add `--dry-run` first to see what it would do without changing anything. Bootstrap
+detects Termux, installs git if missing, clones dotfiles to `~/GitHub`, and installs
+`app_lists/android_termux_apps.txt` via `scripts/install_android_termux_apps.sh`, which
+reports what is already installed and prompts once for the rest.
+
+**Termux has no uv build**, so bootstrap skips the python steps there — `uv sync`,
+`clone_repos.py` and `deploy_configs.py` do not run, and it says so. Configs are not
+deployed on Termux; treat it as a shell-and-tools machine.
+
+The rest of this page is the reference detail.
+
 ## Set up storage
 
 If runnning android 14 or later might need to run this for storage to work:
@@ -49,7 +68,7 @@ source .bashrc
 ```bash
 pkg update
 pkg upgrade
-bash ~/dotfiles/scripts/install_android_termux_apps.sh
+bash ~/GitHub/dotfiles/scripts/install_android_termux_apps.sh
 pip install --upgrade pipenv
 pip3 install setuptools wheel packaging pyproject_metadata cython meson-python versioneer
 MATHLIB=m LDFLAGS="-lpython3.11" pip3 install --no-build-isolation --no-cache-dir numpy

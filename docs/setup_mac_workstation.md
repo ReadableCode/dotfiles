@@ -1,5 +1,34 @@
 # Setup macOS Workstation
 
+## Start here: run bootstrap
+
+One command takes a bare Mac to cloned, synced, deployed and packaged. It is
+idempotent, so it doubles as a repair tool on a machine that already works:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ReadableCode/dotfiles/master/scripts/bootstrap.sh | bash
+```
+
+Add `--dry-run` first to see what it would do without changing anything, and
+`--credentials <ssh-url>` (repeatable) to clone the credentials repos — their URLs are
+not in this public repo, see `cloning_credentials_repos.md` in the personal credentials
+repo.
+
+Bootstrap installs Homebrew, git and uv if missing, clones dotfiles to `~/GitHub`, runs
+`uv sync`, `clone_repos.py` and `deploy_configs.py`, then installs everything in
+`app_lists/Brewfile` via `scripts/install_mac_apps.sh` (which reports what is already
+installed and prompts once for the rest). `brew bundle --file=app_lists/Brewfile` still
+works if you just want a straight install of everything.
+
+**What bootstrap does not do**, and you still need from the rest of this document:
+
+- macOS system settings: hostname, scaling, Finder behaviour, keyboard, Dock, power
+- signing in to iCloud / App Store, and anything installed from the App Store
+- licensed apps and their keys
+- Xcode and the beta toolchain (see `xcode-beta-setup-guide.md`)
+
+The rest of this page is the reference detail behind those steps.
+
 ## Set hostname
 
 System Settings → General → About
@@ -187,9 +216,17 @@ brew cleanup
 
 - Use Brewfile in ../app_lists/Brewfile to install apps:
 
+Either install everything straight from the Brewfile:
+
 ```bash
-cd ../app_lists
-brew bundle
+brew bundle --file=~/GitHub/dotfiles/app_lists/Brewfile
+```
+
+or use the installer, which lists what is already present and prompts once for the
+rest (this is what bootstrap runs):
+
+```bash
+bash ~/GitHub/dotfiles/scripts/install_mac_apps.sh
 ```
 
 ### SQL Server ODBC driver (msodbcsql17)

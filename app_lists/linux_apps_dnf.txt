@@ -1,0 +1,10 @@
+# Fedora / dnf packages.
+#
+# Installed by scripts/install_linux_apps_dnf.sh. Blank lines and # comments are
+# skipped, so an app can be commented out for one run and the file reverted.
+#
+# Packages needing a third-party repo first (VS Code, NVIDIA drivers) stay in
+# linux_apps_non_apt.md - they cannot be installed from a plain list.
+flatpak
+gnome-shell-extension-gsconnect
+libxcrypt-compat

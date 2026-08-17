@@ -52,6 +52,16 @@ pacman -S --needed - < ~/GitHub/dotfiles/app_lists/msys2_packages.txt
 ```
 
 --needed skips anything already installed. The - tells pacman to read package names from stdin.
+Note that this form does not understand `#` comments, so comment a package out only when
+using the installer below.
+
+Or use the installer, which reports what is already installed and prompts once for the
+rest (and skips blank lines and `#` comments, so a package can be commented out for one
+run and the file reverted):
+
+```bash
+bash ~/GitHub/dotfiles/scripts/install_msys2_packages.sh
+```
 
 ## Add a new package
 

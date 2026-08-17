@@ -152,7 +152,13 @@ case "$PLATFORM" in
         fi
         ;;
     linux|wsl)
-        if have apt; then skip "apt present"; else warn "apt not found - this bootstrap assumes a debian-family distro"; fi
+        if have apt; then
+            skip "apt present"
+        elif have dnf; then
+            skip "dnf present (fedora family)"
+        else
+            warn "neither apt nor dnf found - packages will be skipped"
+        fi
         ;;
     termux)
         if have pkg; then skip "pkg present"; else fail "pkg not found in termux"; fi
@@ -282,14 +288,27 @@ step "Packages"
 if [ -n "$SKIP_APPS" ]; then
     skip "--skip-apps given"
 else
+    installers=""
     case "$PLATFORM" in
-        mac)    installer="install_mac_apps.sh" ;;
-        linux)  installer="install_linux_apps.sh" ;;
-        wsl)    installer="install_linux_apps_wsl.sh" ;;
-        termux) installer="install_android_termux_apps.sh" ;;
+        mac)    installers="install_mac_apps.sh" ;;
+        wsl)    installers="install_linux_apps_wsl.sh" ;;
+        termux) installers="install_android_termux_apps.sh" ;;
+        linux)
+            # Debian and Fedora families take different lists; flatpak is separate
+            # again and only runs where it is actually installed.
+            if have apt; then installers="install_linux_apps.sh"; fi
+            if have dnf; then installers="$installers install_linux_apps_dnf.sh"; fi
+            if have flatpak; then installers="$installers install_linux_apps_flatpak.sh"; fi
+            [ -z "$installers" ] && warn "no supported package manager found"
+            ;;
     esac
-    installer_path="$DOTFILES_DIR/scripts/$installer"
-    if [ -f "$installer_path" ]; then
+
+    for installer in $installers; do
+        installer_path="$DOTFILES_DIR/scripts/$installer"
+        if [ ! -f "$installer_path" ]; then
+            fail "installer not found: $installer_path (is this clone up to date?)"
+            continue
+        fi
         # ASSUME_YES only when the caller asked for it; otherwise the installer's
         # own single prompt still gives a chance to deselect.
         if [ -n "$DRY_RUN" ]; then
@@ -297,9 +316,7 @@ else
         else
             ASSUME_YES="$ASSUME_YES" bash "$installer_path"
         fi
-    else
-        fail "installer not found: $installer_path"
-    fi
+    done
 fi
 
 # %%

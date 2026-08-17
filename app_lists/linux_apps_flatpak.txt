@@ -1,0 +1,7 @@
+# Flatpak application ids, installed from flathub.
+#
+# Installed by scripts/install_linux_apps_flatpak.sh, which adds the flathub
+# remote first. Blank lines and # comments are skipped.
+com.discordapp.Discord
+com.parsecgaming.parsec
+com.sindresorhus.Caprine

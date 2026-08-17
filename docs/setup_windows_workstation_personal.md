@@ -1,5 +1,43 @@
 # Setup Windows Workstation
 
+## Start here: run bootstrap
+
+Do the three things Windows needs first — update and rename the machine, allow scripts
+(`Set-ExecutionPolicy RemoteSigned`), and turn on Developer Mode so configs deploy as
+symlinks rather than hard links — then run this from an **elevated** PowerShell:
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/ReadableCode/dotfiles/master/scripts/bootstrap.ps1 | iex
+```
+
+Add `-DryRun` first to see what it would do without changing anything, and
+`-Credentials <ssh-url>` to clone the credentials repos — their URLs are not in this
+public repo, see `cloning_credentials_repos.md` in the personal credentials repo.
+
+Bootstrap checks elevation and Developer Mode up front and tells you what will be
+skipped rather than failing halfway through. It installs chocolatey, git and uv if
+missing, clones dotfiles to `%USERPROFILE%\GitHub`, runs `uv sync`, `clone_repos.py` and
+`deploy_configs.py`, then installs packages:
+
+| List | Installer |
+|------|-----------|
+| `app_lists\windows_apps_personal_choco.txt` (default) | `scripts\install_windows_apps_with_chocolatey.ps1` |
+| `app_lists\windows_apps_base_choco.txt` | same, via `-ChocoList` |
+| `app_lists\windows_apps_aws_choco.txt` | same, via `-ChocoList` |
+| `app_lists\windows_apps_personal_winget.txt` | `scripts\install_windows_apps_with_winget.ps1` |
+
+Each reports what is already installed and prompts once for the rest. Pass
+`-ChocoList <path>` to bootstrap to pick a different choco profile.
+
+**What bootstrap does not do**, and you still need from the rest of this document:
+
+- Windows settings: display, keyboard, power, taskbar, startup apps
+- signing in to accounts, and anything from the Microsoft Store
+- licensed apps and their keys
+- ssh keys for pushing (bootstrap clones dotfiles over https)
+
+The rest of this page is the reference detail behind those steps.
+
 ## Update and Rename System
 
 * Update Windows (don't restart)

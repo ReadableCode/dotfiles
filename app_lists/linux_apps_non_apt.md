@@ -1,128 +1,81 @@
-# Tools not in apt
+# Linux installs that are not a plain package name
+
+Everything that *is* a plain package name now lives in a list with an installer:
+
+| List | Installer |
+|------|-----------|
+| `linux_apps.txt` | `scripts/install_linux_apps.sh` (apt) |
+| `linux_apps_wsl.txt` | `scripts/install_linux_apps_wsl.sh` (apt, CLI subset) |
+| `linux_apps_dnf.txt` | `scripts/install_linux_apps_dnf.sh` (Fedora) |
+| `linux_apps_flatpak.txt` | `scripts/install_linux_apps_flatpak.sh` (flathub) |
+
+What is left here needs a third-party repo, a vendor script, hardware-specific
+packages, or a step after the install — none of which a package list can express.
+`scripts/bootstrap.sh` prints a pointer to this file at the end of a run.
 
 ## uv
 
-### Install uv on Linux
-
-- Install with script:
+Not packaged for apt. Fedora has it in dnf, but the install script works everywhere:
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-- This is availble with dnf on Fedora so dont need install script but ther are other steps
+`scripts/bootstrap.sh` runs this for you if `uv` is missing.
+
+On Fedora, uv needs `libxcrypt-compat` (in `linux_apps_dnf.txt`) or it fails to start.
+Then, in a repo:
 
 ```bash
-# 1) fix missing libcrypt.so.1
-sudo dnf install -y libxcrypt-compat
-
-# 2) (already installed 3.10.12) tell uv to use it in THIS repo
-uv python pin 3.10.12
-
-# 3) create/refresh venv + deps
+uv python pin 3.10.12   # only if the pinned version differs from the system one
 uv sync
-
 ```
 
-## VSCode on Fedora
+## VS Code on Fedora
 
-RHEL, Fedora, and CentOS based distributions
-
-We currently ship the stable 64-bit VS Code for RHEL, Fedora, or CentOS based distributions in a yum repository.
-
-Install the key and yum repository by running the following script:
+Needs the Microsoft repo added before `dnf install code` will resolve, so it cannot go
+in `linux_apps_dnf.txt`:
 
 ```bash
 sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
 echo -e "[code]\nname=Visual Studio Code\nbaseurl=https://packages.microsoft.com/yumrepos/vscode\nenabled=1\nautorefresh=1\ntype=rpm-md\ngpgcheck=1\ngpgkey=https://packages.microsoft.com/keys/microsoft.asc" | sudo tee /etc/yum.repos.d/vscode.repo > /dev/null
-```
-
-Then update the package cache and install the package using dnf (Fedora 22 and above):
-
-```bash
 dnf check-update
-sudo dnf install code # or code-insiders
+sudo dnf install code
 ```
 
-Or on older versions using yum:
+The yum repo can lag the current release by up to three hours.
+
+## KDE Connect (gsconnect)
+
+The package is in `linux_apps_dnf.txt` and `linux_apps.txt`, but the extension has to be
+enabled afterwards, and you must log out and back in first:
 
 ```bash
-yum check-update
-sudo yum install code # or code-insiders
+gnome-extensions enable gsconnect@andyholmes.github.io
 ```
 
-Note
+The phone icon then appears in the system tray.
 
-Due to the manual signing process and the publishing system we use, the yum repo could lag behind by up to three hours and not immediately get the latest version of VS Code
+## Parsec on Fedora: GPU drivers
 
-## Parsec on Fedora
+Parsec itself is in `linux_apps_flatpak.txt`. Hardware acceleration is not — the driver
+packages depend on the GPU in the machine.
 
-- Install Flatpak support if needed
-
-```bash
-sudo dnf install flatpak
-```
-
-- Add Flathub (if not already added)
+NVIDIA:
 
 ```bash
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
-```
-
-- Install Parsec
-
-```bash
-flatpak install flathub com.parsecgaming.parsec
-```
-
-- Install NVidia Drivers
-
-```bash
-sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda nvidia-settings
 sudo dnf install \
   https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm \
   https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+sudo dnf install akmod-nvidia xorg-x11-drv-nvidia-cuda nvidia-settings
+flatpak install flathub org.freedesktop.Platform.GL.nvidia-$(nvidia-smi --query-gpu=driver_version --format=csv,noheader)//23.08
 ```
 
-- For Intel/AMD
+Intel / AMD:
 
 ```bash
 flatpak install flathub org.freedesktop.Platform.VAAPI.Intel//23.08
 flatpak install flathub org.freedesktop.Platform.VAAPI.AMD//23.08
 ```
 
-- For NVIDIA
-
-```bash
-flatpak install flathub org.freedesktop.Platform.GL.nvidia-$(nvidia-smi --query-gpu=driver_version --format=csv,noheader)//23.08
-```
-
-- Restart your computer before it will take effect.
-
-## KDE Connect
-
-- is in dnf but needs to be enabled after installation
-
-```bash
-sudo dnf install gnome-shell-extension-gsconnect
-```
-
-- Need to log out and log back in for the changes to take effect.
-
-```bash
-gnome-extensions enable gsconnect@andyholmes.github.io
-```
-
-- Phone icon will appear in the system tray.
-
-## Discord
-
-```bash
-flatpak install -y flathub com.discordapp.Discord
-```
-
-## FB Messenger
-
-```bash
-flatpak install -y flathub com.sindresorhus.Caprine
-```
+Reboot before any of this takes effect.

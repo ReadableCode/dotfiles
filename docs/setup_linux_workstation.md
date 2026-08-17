@@ -1,5 +1,43 @@
 # Setup Linux Workstation
 
+## Start here: run bootstrap
+
+Install the OS first (below), then one command takes it to cloned, synced, deployed and
+packaged. It is idempotent, so it doubles as a repair tool on a machine that already
+works:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ReadableCode/dotfiles/master/scripts/bootstrap.sh | bash
+```
+
+Add `--dry-run` first to see what it would do without changing anything, and
+`--credentials <ssh-url>` (repeatable) to clone the credentials repos — their URLs are
+not in this public repo, see `cloning_credentials_repos.md` in the personal credentials
+repo.
+
+Bootstrap installs git and uv if missing, clones dotfiles to `~/GitHub`, runs `uv sync`,
+`clone_repos.py` and `deploy_configs.py`, then installs packages with whichever manager
+the machine has:
+
+| Machine | List | Installer |
+|---------|------|-----------|
+| Debian/Ubuntu | `app_lists/linux_apps.txt` | `scripts/install_linux_apps.sh` |
+| WSL | `app_lists/linux_apps_wsl.txt` | `scripts/install_linux_apps_wsl.sh` |
+| Fedora | `app_lists/linux_apps_dnf.txt` | `scripts/install_linux_apps_dnf.sh` |
+| any, if flatpak present | `app_lists/linux_apps_flatpak.txt` | `scripts/install_linux_apps_flatpak.sh` |
+
+Each reports what is already installed and prompts once for the rest.
+
+**What bootstrap does not do**, and you still need:
+
+- install the OS itself (next section)
+- `app_lists/linux_apps_non_apt.md` — the VS Code repo on Fedora, GPU drivers for Parsec,
+  and enabling the gsconnect extension after install
+- desktop environment settings: display, keyboard, power, autostart
+- ssh keys for pushing (bootstrap clones dotfiles over https)
+
+The rest of this page is the reference detail behind those steps.
+
 ## Install OS
 
 ### Ubuntu/Xubuntu

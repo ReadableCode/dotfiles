@@ -1,3 +1,11 @@
+# The WSL subset of linux_apps.txt: CLI tools only, no desktop, media, gaming
+# or homelab packages. Every entry here also appears in linux_apps.txt by
+# design - this is a smaller curated list, not a second source of truth.
+#
+# Adding a CLI tool to linux_apps.txt does not add it here; add it to both.
+#
+# Installed by scripts/install_linux_apps_wsl.sh. Blank lines and # comments
+# are skipped.
 cargo
 curl
 fastfetch
