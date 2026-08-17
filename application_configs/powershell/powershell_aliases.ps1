@@ -352,21 +352,25 @@ function ensureahk {
     & (Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1') @args
 }
 
-# Keep AutoHotkey correct without anyone having to remember a command: every
-# interactive shell runs the CHEAP probe (~100 ms) and stays completely silent
-# when the machine is already v2-only. When it is not, the script elevates
-# itself (UAC, or gsudo when installed), fixes it, and re-checks - and if the
-# prompt is declined it backs off for two hours instead of asking again in
-# every new shell.
+# Keep AutoHotkey on the radar without anyone having to remember a command:
+# every interactive shell runs the CHEAP probe (~100 ms) and stays completely
+# silent when the machine is already v2-only. When it is not, it REPORTS and
+# points at `ensureahk` - it deliberately does not fix from here.
+#
+# -Check, not -AutoFix: fixing needs admin, and raising UAC from a profile
+# means every new shell hangs on a modal prompt until it is answered (a
+# declined-looking prompt cost 60 s of profile load on a work laptop,
+# 2026-08-17). The fixing pass belongs where a wait is expected - `ensureahk`,
+# or `gitpullall`, which runs -AutoFix -Full further down.
 #
 # Interactive only: `ssh host '<command>'`, scp and every -File/-Command run
-# skip it, so remote commands neither pay the probe nor raise a UAC prompt
-# nobody is sitting in front of.
+# skip it, so remote commands neither pay the probe nor print a nag nobody is
+# sitting in front of.
 if ($global:IsInteractiveShell -and $gitDir) {
     $ensureAhkOnStart = Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1'
     if (Test-Path $ensureAhkOnStart) {
         # A broken probe must never take the profile (and the shell) with it.
-        try { & $ensureAhkOnStart -AutoFix } catch {
+        try { & $ensureAhkOnStart -Check } catch {
             Write-Host "ensure_autohotkey_v2.ps1 failed: $_" -ForegroundColor DarkYellow
         }
     }

@@ -266,7 +266,8 @@
   dest:
     windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/desktop_numbers.ahk
   note: >-
-    AutoHotkey v2 (the other two are v1) - Win+Alt+1..9 desktop switching.
+    Win+Alt+1..9 desktop switching. All three are AutoHotkey v2 now; the
+    machine is kept there by scripts/ensure_autohotkey_v2.ps1.
     Needs scripts/VirtualDesktopAccessor.dll, which is committed; the script
     re-downloads it into A_ScriptDir only if it is missing.
 

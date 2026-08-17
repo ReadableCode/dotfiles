@@ -293,7 +293,9 @@ function Set-RetryStamp {
 
 function Invoke-Elevated {
     # Re-run this script elevated and WAIT, so the caller can re-probe after.
-    # Returns $false when elevation was declined or unavailable.
+    # Returns $false only when elevation was actually declined or unavailable -
+    # never on a merely unreadable result, because the caller's re-probe is the
+    # authority on whether the work happened.
     Set-RetryStamp
     try {
         if (Get-Command gsudo -ErrorAction SilentlyContinue) {
@@ -303,7 +305,15 @@ function Invoke-Elevated {
         $proc = Start-Process powershell -Verb RunAs -PassThru -Wait -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$PSCommandPath`"", '-Yes'
         )
-        return ($proc.ExitCode -eq 0)
+        # An unelevated parent cannot always read the exit code of the elevated
+        # child it started - on a machine where UAC prompts for a DIFFERENT
+        # account's credentials the child runs as that user and .ExitCode comes
+        # back $null. Treating $null as a failure reported "elevation declined"
+        # over a run that had just installed v2 correctly (seen 2026-08-17), so
+        # unknown means unknown: say it ran and let the re-probe judge.
+        $code = $null
+        try { $code = $proc.ExitCode } catch { }
+        return ($null -eq $code -or $code -eq 0)
     } catch {
         # Cancelled UAC throws; that is a decision, not a failure to report loudly.
         return $false
@@ -435,6 +445,7 @@ if ($Check) {
     exit 1
 }
 
+$elevationOk = $true
 if ($state.Elevated -or $Yes) {
     if (-not ($Yes -or $AutoFix)) {
         $answer = Read-Host "Apply these changes now? (y/N)"
@@ -452,11 +463,10 @@ if ($state.Elevated -or $Yes) {
     }
     Write-Host ""
     Write-Host "This needs administrator rights - accept the prompt." -ForegroundColor Yellow
-    if (-not (Invoke-Elevated)) {
-        Write-Host "Elevation was declined or unavailable. To do it by hand:" -ForegroundColor Yellow
-        Write-Host ("    {0}" -f (Get-ElevatedCommand))
-        exit 1
-    }
+    # Deliberately no early exit on a failed-looking elevation: the machine is
+    # what it is regardless of what the child reported, so fall through to the
+    # re-probe below and let the state decide what to print.
+    $elevationOk = Invoke-Elevated
 }
 
 # Re-probe rather than trusting the steps above: an uninstaller can succeed and
@@ -469,6 +479,11 @@ if (Test-Compliant $after) {
     # that spawned it, so the scripts do not end up running as administrator.
     if (-not $Yes) { Restart-StartupAhkScripts $after }
     exit 0
+}
+if (-not $elevationOk) {
+    Write-Host "Elevation was declined or unavailable. To do it by hand:" -ForegroundColor Yellow
+    Write-Host ("    {0}" -f (Get-ElevatedCommand))
+    exit 1
 }
 Write-Host "Still not right:" -ForegroundColor Red
 Show-State $after

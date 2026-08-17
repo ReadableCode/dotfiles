@@ -85,9 +85,10 @@ Notes:
 All three startup scripts are AutoHotkey **v2** (`#Requires AutoHotkey v2.0`),
 so a machine still holding v1 gets a version prompt at login instead of working
 hotkeys. Nothing here is a command to remember: `powershell_aliases.ps1` runs
-`scripts/ensure_autohotkey_v2.ps1 -AutoFix` on **every interactive shell**, and
-`gitpullall` runs it with `-Full`. A machine that is already v2-only prints
-nothing at all; one that is not gets fixed on the spot.
+`scripts/ensure_autohotkey_v2.ps1 -Check` on **every interactive shell**, and
+`gitpullall` runs it with `-AutoFix -Full`. A machine that is already v2-only
+prints nothing at all; one that is not gets a report naming `ensureahk`, and is
+fixed by the next `gitpullall` (or by running `ensureahk` there and then).
 
 The script installs/upgrades v2 (`choco upgrade autohotkey`, winget as a
 fallback), removes v1 — including the orphaned exes the v2 installer leaves
@@ -96,9 +97,13 @@ their own — and repoints the `.ahk` association at the v2 launcher. That last
 step matters on old machines: v1 owning `.ahk` there means deleting v1 without
 repointing would stop **every** startup script from launching.
 
-Admin is required, so an unelevated shell raises UAC (via `gsudo` when
-installed) and waits. Decline it and the script backs off for two hours rather
-than prompting again in every new shell. Non-interactive sessions — `ssh host
+Admin is required, so a fixing run from an unelevated shell raises UAC (via
+`gsudo` when installed) and waits. Decline it and the script backs off for two
+hours rather than prompting again. That wait is why the shell-startup pass is
+read-only: a UAC prompt raised from a profile blocks the shell until it is
+answered, and an unelevated parent cannot even read the elevated child's exit
+code afterwards — so the fixing runs judge success by re-probing the machine,
+never by what the child reported. Non-interactive sessions — `ssh host
 '<command>'`, scp, any `-Command`/`-File` run — skip the check entirely, so
 remote commands never pay the probe or raise a prompt nobody can answer.
 
