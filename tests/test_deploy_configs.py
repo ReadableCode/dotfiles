@@ -1,8 +1,10 @@
 # %%
 # Imports #
 
+import glob
 import json
 import os
+import subprocess
 
 import config_test_utils  # noqa F401
 import pytest
@@ -956,3 +958,131 @@ def test_real_removals_files_parse_and_name_no_still_wanted_dest():
             deploy_configs.resolve_dest(entry, platform_key, "ENVY") for entry in removals
         }
         assert not (wanted & targeted), f"removals would delete a live dest on {platform_key}"
+
+
+# %%
+# application_configs/ coverage - keeping the "complete inventory" claim true #
+
+# deploy_manifest.yaml claims to be "a complete inventory of deployed configs,
+# not just a link list" - that is what method: none entries are for. The two
+# lists below plus the tests under them are what make the claim enforced
+# rather than aspirational: a payload added to application_configs/ without a
+# manifest entry fails the suite instead of quietly becoming a config no
+# machine is ever checked for.
+
+# Payloads no manifest entry deploys, with the reason each is legitimately
+# manifest-free. Keep this list short and specific - "nothing deploys it" is
+# the drift this whole system exists to catch, so a new line here needs a
+# reason that is about the FILE, not about not having gotten to it yet.
+MANIFEST_FREE_PAYLOADS = {
+    "hammerspoon/window_layouts.json": (
+        "generated data, not a config: the hammerspoon_init entry deploys init.lua, and "
+        "init.lua readlinks that deployed symlink to find this folder and writes layouts "
+        "back into it (see its _file resolution) - it is an output of a managed config"
+    ),
+}
+
+# Payloads whose entry lives in an overlay manifest, by the overlay repo that
+# owns it. They need a hosts filter, and those are overlay-only - so a machine
+# that has not cloned that repo genuinely cannot see the entry and the payload
+# is exempt there. When the overlay IS cloned the second test below insists the
+# entry really covers the file, so a stale line here fails on Jason's machines.
+OVERLAY_OWNED_PAYLOADS = {
+    "autostart/start_x0vncserver.desktop": "personal_credentials",
+    "claude/settings.json": "personal_credentials",
+    "claude/statusline.sh": "personal_credentials",
+    "claude/themes/dark-high-contrast.json": "personal_credentials",
+    "ssh/config": "personal_credentials",
+    "ssh/config.mac": "personal_credentials",
+    "t3code/service.d/10-path.jasonzephyrus.conf": "personal_credentials",
+    "t3code/service.d/20-tailscale-serve.jasonzephyrus.conf": "personal_credentials",
+    "t3code/settings.json": "personal_credentials",
+}
+
+APPLICATION_CONFIGS_DIR = os.path.join(deploy_configs.REPO_ROOT, "application_configs")
+
+
+def _application_config_payloads():
+    """Every TRACKED file under application_configs/, as paths relative to that folder."""
+    tracked = subprocess.check_output(
+        ["git", "ls-files", "--", "application_configs"],
+        cwd=deploy_configs.REPO_ROOT,
+        text=True,
+    ).split("\n")
+    return {path[len("application_configs/"):] for path in tracked if path.strip()}
+
+
+def _allowed_variant_tokens():
+    """
+    Tokens a repo path may auto-resolve to: the platform tokens plus every
+    hostname in the union inventory. Returns (tokens, inventory_present) -
+    without an inventory the caller can only accept any token, since this
+    machine cannot tell a hostname from a context tag (settings.acme.json,
+    which the resolver never picks up, so it is NOT coverage).
+    """
+    tokens = {token for tokens in deploy_configs.PLATFORM_FILE_TOKENS.values() for token in tokens}
+    hostnames, inventory_paths = load_union_inventory_hostnames(deploy_configs.grandparent_dir)
+    return tokens | {name.lower() for name in hostnames}, bool(inventory_paths)
+
+
+def _covered_payloads(entries):
+    """Files under application_configs/ reachable from these entries, same folder-relative form."""
+    allowed_tokens, has_inventory = _allowed_variant_tokens()
+    covered = set()
+    for entry in entries:
+        repo_path = os.path.normpath(os.path.join(entry["_base_dir"], entry["repo"]))
+        directory, filename = os.path.split(repo_path)
+        base, ext = os.path.splitext(filename)
+        candidates = [repo_path]
+        for variant in glob.glob(os.path.join(glob.escape(directory), f"{glob.escape(base)}.*{ext}")):
+            name = os.path.basename(variant)
+            token = name[len(base) + 1:len(name) - len(ext) or None]
+            if has_inventory and token.lower() not in allowed_tokens:
+                continue  # a context tag, which the resolver never picks up
+            candidates.append(variant)
+        for candidate in candidates:
+            if os.path.isdir(candidate):  # folder link: everything inside rides along
+                found = [os.path.join(where, name) for where, _, names in os.walk(candidate) for name in names]
+            else:
+                found = [candidate] if os.path.exists(candidate) else []
+            for path in found:
+                relative = os.path.relpath(path, APPLICATION_CONFIGS_DIR)
+                if not relative.startswith(".."):
+                    covered.add(relative.replace(os.sep, "/"))
+    return covered
+
+
+def test_every_application_config_is_reachable_from_a_manifest_entry():
+    entries, _ = deploy_configs.load_manifests()
+    exempt = set(MANIFEST_FREE_PAYLOADS) | set(OVERLAY_OWNED_PAYLOADS)
+    uncovered = _application_config_payloads() - _covered_payloads(entries) - exempt
+    assert not uncovered, (
+        "application_configs payloads no manifest entry deploys: "
+        + ", ".join(sorted(uncovered))
+        + " - add an entry (method: none counts, with a note saying how it really gets there), "
+        "delete the file, or list it in MANIFEST_FREE_PAYLOADS / OVERLAY_OWNED_PAYLOADS with a reason"
+    )
+
+
+def test_overlay_owned_payloads_are_covered_wherever_their_overlay_is_cloned():
+    entries, _ = deploy_configs.load_manifests()
+    covered = _covered_payloads(entries)
+    for payload, overlay_repo in sorted(OVERLAY_OWNED_PAYLOADS.items()):
+        if not os.path.isdir(os.path.join(deploy_configs.grandparent_dir, overlay_repo)):
+            continue  # that overlay is not on this machine, so its entries cannot be checked
+        assert payload in covered, (
+            f"{payload} is listed as owned by {overlay_repo}, which IS cloned here, but no loaded "
+            "manifest entry resolves to it - the entry was renamed, retargeted or dropped"
+        )
+
+
+def test_payload_exemption_lists_stay_in_step_with_the_files():
+    payloads = _application_config_payloads()
+    stale = (set(MANIFEST_FREE_PAYLOADS) | set(OVERLAY_OWNED_PAYLOADS)) - payloads
+    assert not stale, f"exemption lists name files that no longer exist: {', '.join(sorted(stale))}"
+    entries, _ = deploy_configs.load_manifests()
+    now_managed = set(MANIFEST_FREE_PAYLOADS) & _covered_payloads(entries)
+    assert not now_managed, (
+        "a manifest entry now deploys these, so drop them from MANIFEST_FREE_PAYLOADS: "
+        + ", ".join(sorted(now_managed))
+    )

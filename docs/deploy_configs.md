@@ -74,6 +74,10 @@ intentionally do **not** use links (e.g. nvim on Windows via
 `XDG_CONFIG_HOME`, the PowerShell profile via dot-sourcing), so the manifest
 is a complete inventory of deployed configs, not just a link list.
 
+That completeness is **enforced**, not aspirational: `tests/` asserts that
+every tracked file under `application_configs/` is reachable from some loaded
+manifest entry — see [Payload coverage](#payload-coverage) below.
+
 ## Overlay manifests from sibling repos
 
 Private configs never live in this public repo — they live in sibling
@@ -207,6 +211,33 @@ If the destination already has a live config file, deploy backs it up and
 replaces it with a link to the repo version (see behavior above) — so make
 sure any local edits worth keeping are in the repo file *before* deploying,
 or fish them out of `data/config_backups/` afterwards.
+
+## Payload coverage
+
+A file stored under `application_configs/` that no entry names is the exact
+drift this system exists to prevent: it is invisible to `deploy`, `status`,
+the drift cron and the map, so a machine missing it still looks healthy. The
+suite therefore fails when a tracked payload is reachable from no loaded
+entry. Three lists in `tests/test_deploy_configs.py` define the escape
+hatches, and each is checked back the other way so it cannot go stale:
+
+| List | For | Also asserted |
+| --- | --- | --- |
+| `MANIFEST_FREE_PAYLOADS` | Files that are legitimately not configs — today just `hammerspoon/window_layouts.json`, which `init.lua` *writes* | Fails if an entry later starts deploying one |
+| `OVERLAY_OWNED_PAYLOADS` | Public payloads whose entry has to live in an overlay because it needs a `hosts:` filter | On a machine where that overlay **is** cloned, the entry must really resolve to the file |
+| — | Both lists | Every path named must still exist |
+
+So the options for a new payload are: give it an entry, give it a
+`method: none` entry with a `note:` saying how it really reaches machines, or
+delete it. "Store it and copy it by hand" is not one of them — that is what
+the `.desktop` autostart file was until 2026-08-17, existing on exactly one
+machine, reproduced by copy-pasting a heredoc out of a doc.
+
+Coverage understands the same resolution the deployer does: a variant file
+(`keybindings.mac.json`, `zshrc_local.envy`) counts for the entry that names
+its bare path, and a directory entry covers everything inside it. Context tags
+(`settings.acme.json`) deliberately do **not** count, because the resolver
+never picks them up.
 
 
 ## The deployment map

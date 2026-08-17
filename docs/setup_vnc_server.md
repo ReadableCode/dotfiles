@@ -48,67 +48,33 @@ sudo pkill X0tigervnc
 
 ### To Start Automatically
 
-- Create the startup script:
+Nothing here is hand-written any more — all three pieces are in the repo and
+the autostart entry is deployed by the manifest:
+
+| Piece | Where it lives |
+| --- | --- |
+| Start script | [`scripts/start_x0vncserver.sh`](../scripts/start_x0vncserver.sh) — backgrounds `x0vncserver` on display `:0`, appends to `~/x0vncserver.log`, writes `~/x0vncserver.pid` |
+| Stop script | [`scripts/stop_x0vncserver.sh`](../scripts/stop_x0vncserver.sh) |
+| Autostart entry | `application_configs/autostart/start_x0vncserver.desktop`, linked to `~/.config/autostart/start_x0vncserver.desktop` by manifest entry `vnc_autostart_desktop` |
+
+The script bodies are deliberately **not** reproduced in this doc. They used to
+be, and the copy here had already drifted from the real script (it was missing
+the `&`, so following the doc gave you a start script that never returned).
+
+So on a rebuilt machine, after the install and `tigervncpasswd` steps above:
 
 ```bash
-nano /home/jason/GitHub/dotfiles/scripts/start_x0vncserver.sh
+cd ~/GitHub/dotfiles
+uv run python src/deploy_configs.py
 ```
 
-- Add the following:
-
-```bash
-#!/bin/bash
-printf '%.0s#' {1..100} >> /home/jason/x0vncserver.log
-echo $(date) >> /home/jason/x0vncserver.log
-/usr/bin/x0vncserver -passwordfile /home/jason/.vnc/passwd -display :0 >> /home/jason/x0vncserver.log 2>&1
-echo $! > /home/jason/x0vncserver.pid
-exit 0
-```
-
-- Create the stop script:
-
-```bash
-nano /home/jason/GitHub/dotfiles/scripts/stop_x0vncserver.sh
-```
-
-- Add the following:
-
-```bash
-#!/bin/bash
-sudo pkill X0tigervnc
-```
-
-- Make executable:
-
-```bash
-chmod +x /home/jason/GitHub/dotfiles/scripts/start_x0vncserver.sh
-chmod +x /home/jason/GitHub/dotfiles/scripts/stop_x0vncserver.sh
-```
-
-- Make a desktop script to run on startup:
-
-```bash
-nano ~/.config/autostart/start_x0vncserver.desktop
-```
-
-- Add the following:
-
-```bash
-[Desktop Entry]
-Type=Application
-Exec=/home/jason/GitHub/dotfiles/scripts/start_x0vncserver.sh
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-Name=Start x0vncserver
-Comment=Start x0vncserver on startup
-```
-
-- Make executable:
-
-```bash
-chmod +x ~/.config/autostart/start_x0vncserver.desktop
-```
+then log out and back in — autostart entries only run at session start. The
+entry is host-filtered (EliteDesk today) in the personal overlay manifest,
+because not every Linux box should answer on 5900; JasonZephyrus deliberately
+does not. To add a machine, add its name to that entry's `hosts:` list. If its
+checkout path or username is not `/home/jason/GitHub`, add a
+`start_x0vncserver.<host>.desktop` variant next to the payload — `.desktop`
+files take no placeholders, so `Exec=` is a literal path.
 
 - To check status:
 

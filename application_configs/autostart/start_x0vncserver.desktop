@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Exec=/home/jason/GitHub/dotfiles/scripts/start_x0vncserver.sh
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Start x0vncserver
+Comment=Start x0vncserver on startup

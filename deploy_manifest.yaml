@@ -160,6 +160,36 @@
 # inventory that validates them. Work-context variants are entries in their
 # client overlay manifests, so nothing here can collide with them.
 
+- name: claude_cloud_session_env_vars
+  repo: application_configs/claude/cloud_session_env_vars.txt
+  method: none
+  note: >-
+    Not a machine config: pasted into the environment-variables box of a
+    claude.ai cloud session, whose container is ephemeral and starts from a
+    fresh clone. Nothing on this fleet reads the file, so there is no link to
+    make - it is here so the values are version-controlled instead of retyped.
+    Sets the git author/committer identity the container's commits carry.
+
+- name: claude_cloud_session_setup_script
+  repo: application_configs/claude/cloud_session_setup_script.sh
+  method: none
+  note: >-
+    Same story as claude_cloud_session_env_vars: pasted into the cloud
+    session's setup-script box, run inside the container, never deployed here.
+    It writes ~/.claude/settings.json in the container with the SAME
+    attribution block that application_configs/claude/settings.json carries -
+    the container has no clone to link against when the script runs, so the
+    duplication is unavoidable. Change one and change the other.
+
+- name: claude_cloud_session_test
+  repo: application_configs/claude/cloud_session_test.txt
+  method: none
+  note: >-
+    The prompt to paste into a fresh cloud session to prove the two entries
+    above took effect (it prints the settings file, makes a throwaway empty
+    commit, and shows git log -1 --pretty=full so the attribution trailers -
+    or their absence - are visible). Text, not config; no dest exists.
+
 # --- T3 Code (agent control plane) ---
 
 # Manifest-worthy: settings.json / client-settings.json / keybindings.json.
