@@ -116,9 +116,10 @@ def validate_entry(entry, path):
         )
     if not entry.get("org"):
         raise ValueError(f"Repos entry '{name}' in {path} is missing 'org' (the {provider} org/user)")
-    hosts = entry.get("hosts")
-    if hosts is not None and (not isinstance(hosts, list) or not all(isinstance(h, str) for h in hosts)):
-        raise ValueError(f"Repos entry '{name}' in {path} has an invalid hosts filter (must be a list of names)")
+    for field in ("hosts", "exclude_hosts"):
+        value = entry.get(field)
+        if value is not None and (not isinstance(value, list) or not all(isinstance(h, str) for h in value)):
+            raise ValueError(f"Repos entry '{name}' in {path} has an invalid {field} filter (must be a list of names)")
 
 
 def validate_entry_hosts(entries):
@@ -127,6 +128,14 @@ def validate_entry_hosts(entries):
     filter must name machines that exist in the union of the sibling
     ``*_credentials`` host inventories, so typos fail loudly. Machines with no
     inventories at all skip the check.
+
+    ``exclude_hosts`` is deliberately NOT validated this way. An allow list
+    names machines of the context that owns the config, so its own inventory
+    knows them; a block list names the machines that must NOT get these repos,
+    and those belong to a DIFFERENT context whose inventory that machine never
+    clones. Validating one would make a client-only machine (which knows only
+    its own inventory) fail to load the config at all - the opposite of the
+    "this config is none of that machine's business" the block list expresses.
     """
     known_hosts, inventory_paths = load_union_inventory_hostnames(GIT_DIR)
     if not inventory_paths:
@@ -149,10 +158,24 @@ def validate_entry_hosts(entries):
 
 
 def entry_matches_host(entry, hostname):
+    """
+    Whether this repo should be offered on this machine.
+
+    ``hosts`` is an allow list (omit = everywhere this config is cloned) and
+    ``exclude_hosts`` a block list, which WINS: use it for a machine that holds
+    a context's credentials repo for a reason other than working in it - the
+    git origins live under ~/GitHub on elitedesk, and a hub clone looks exactly
+    like a working checkout from here. The allow list can only name machines
+    the config's own context knows (see validate_entry_hosts), so "everyone but
+    that box" is the only way to express it without listing another context's
+    machines in a client's config.
+    """
+    short = hostname.split(".")[0].upper()
+    if any(str(host).split(".")[0].upper() == short for host in entry.get("exclude_hosts") or []):
+        return False
     hosts = entry.get("hosts")
     if not hosts:
         return True
-    short = hostname.split(".")[0].upper()
     return any(str(host).split(".")[0].upper() == short for host in hosts)
 
 

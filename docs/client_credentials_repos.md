@@ -44,6 +44,16 @@ matching `requires:`.
   **union** of every `*_credentials` inventory, so personal manifests can
   target client boxes and vice versa without any cross-references in code. A
   machine with no credentials repos skips the check.
+- **Blocking a host instead of listing them** — the union is only as wide as
+  what *that* machine cloned, so a client-only machine can validate names from
+  its own inventory and nothing else. When the machines that should get a repo
+  span two inventories, an allow list can't express it: name the exception
+  instead. `<context>_repos.yaml` entries take `exclude_hosts:`, checked before
+  `hosts:` and winning over it, and deliberately **not** inventory-validated
+  for exactly that reason. The case it exists for: `elitedesk` holds the git
+  **origin** for several credentials repos under `~/GitHub`, which looks like a
+  working checkout to `clone_repos.py`, so without it that box gets offered
+  every client repo the context declares.
 - **Shell ssh aliases** — the shell startup files build ssh aliases from every
   `*_credentials` inventory they find, so cloning a client's credentials repo
   onto a machine is all it takes to get that client's hosts.
