@@ -79,38 +79,45 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - App Store
 - Settings
 - Terminal
-- Redminders
+- Reminders
 - Notes
 - Bitwarden
 - Chrome
 - Edge
-- Atlas
 - Messages
 - Phone
 - FaceTime
 - Contacts
 - Mail
 - Calendar
+- Personal Calendar
 - Claude
+- T3 Code
 - VSCode
 - Messenger
 - Discord
-- Slack/Meet/Teams
+- Slack
+- Meet
+- Teams
 - Plex
 - YouTube
 - YTMusic
 - Phone Mirroring
-- Parsec
 - VNCViewer
 - GLKVM
 - Moonlight
+- Parsec
 - Tailscale
 - OpenVPN
 - Wireguard
 - Steam
 - Epic Games
 - Activity Monitor
-- Shortcuts
+- Xcode Beta
+- Device Hub
+- Stream Deck
+
+The Downloads stack and Trash sit past the divider at the end of the Dock.
 
 ## Disable clicking desktop moves windows
 
