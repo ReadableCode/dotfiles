@@ -27,8 +27,9 @@ version_ok() {
 }
 
 # Servers install unpinned (`t3@latest`, npm's stable tag - nightlies ship
-# under a separate tag), matching setup_t3_server_windows.ps1 and the desktop
-# app. This script only preps node + the toolchain; the install itself is
+# under a separate tag), matching the desktop app. Linux is the only platform
+# with a headless server now - the Windows method was removed 2026-08-18 as
+# unstable. This script only preps node + the toolchain; the install itself is
 # `t3 service install`, so print the command rather than running it here
 # (installing a service is not a prereq step).
 done_message() {

@@ -20,7 +20,7 @@ missing, clones dotfiles to `%USERPROFILE%\GitHub`, runs `uv sync`, `clone_repos
 `deploy_configs.py`, then installs packages:
 
 | List | Installer |
-|------|-----------|
+| ------ | ----------- |
 | `app_lists\windows_apps_personal_choco.txt` (default) | `scripts\install_windows_apps_with_chocolatey.ps1` |
 | `app_lists\windows_apps_base_choco.txt` | same, via `-ChocoList` |
 | `app_lists\windows_apps_aws_choco.txt` | same, via `-ChocoList` |
@@ -40,18 +40,18 @@ The rest of this page is the reference detail behind those steps.
 
 ## Update and Rename System
 
-* Update Windows (don't restart)
-* Change name of system to something useful and update and restart
+- Update Windows (don't restart)
+- Change name of system to something useful and update and restart
 
 ## Enable Powershell Scripts
 
-* Open powershell as admin and run command:
+- Open powershell as admin and run command:
 
 ```bash
 Set-ExecutionPolicy RemoteSigned
 ```
 
-* Or if don't have admin rights, open powershell and run command:
+- Or if don't have admin rights, open powershell and run command:
 
 ```bash
 Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
@@ -59,33 +59,33 @@ Set-ExecutionPolicy RemoteSigned -Scope CurrentUser
 
 ## Source Powershell Profile
 
-* Find the location of your powershell profile by running (do not run in vscode terminal, run in powershell directly):
+- Find the location of your powershell profile by running (do not run in vscode terminal, run in powershell directly):
 
 ```bash
 $PROFILE
 ```
 
-* Find the location of the config you want to apply, for example:
+- Find the location of the config you want to apply, for example:
 
 ```bash
 # cd to this directory
 Resolve-Path ..\\application_configs\\powershell\\powershell_aliases.ps1
 ```
 
-* Open the powershell profile file in a text editor:
+- Open the powershell profile file in a text editor:
 
 ```bash
 notepad $PROFILE
 ```
 
-* If error that it cannot be opened:
+- If error that it cannot be opened:
 
 ```powershell
 New-Item -ItemType Directory -Path (Split-Path -Parent $PROFILE) -Force
 Add-Content -Path $PROFILE -Value 'path you found earlier'
 ```
 
-* Add the following line to the end of the file or change the existing line to this:
+- Add the following line to the end of the file or change the existing line to this:
 
 ```bash
 . <resolved-path>
@@ -104,18 +104,18 @@ uv run python src/deploy_configs.py             # deploy
 
 Notes:
 
-* Enable Developer Mode first (see "Set some windows settings" below) so real
+- Enable Developer Mode first (see "Set some windows settings" below) so real
   symlinks are created without admin. Without it the deploy falls back to
   **hard links** (never a copy). Hard links get orphaned when `git pull`
   rewrites a file — run `deploy_configs.py status` (or re-deploy) after
   pulling; it inode-checks them and re-links anything orphaned.
-* The AutoHotkey startup entries (`app_jumping.ahk`, `sheets.ahk`,
+- The AutoHotkey startup entries (`app_jumping.ahk`, `sheets.ahk`,
   `desktop_numbers.ahk` → the Startup folder) are manifest entries — the deploy
   above is the only way to create them. The two older scripts that also did it
   (`create_sym_links_startup.ps1`, `deploy_ahk_startup_shortcuts.ps1`) were
   deleted 2026-08-15; the Startup folder runs a symlinked `.ahk` at login, so
   the `.lnk` shortcuts the second one made were never needed.
-* Neovim and the PowerShell profile intentionally use no links (config-path
+- Neovim and the PowerShell profile intentionally use no links (config-path
   indirection) — see their `method: none` entries in `deploy_manifest.yaml`.
 
 ## AutoHotkey (v2 only)
@@ -168,7 +168,7 @@ were linked since the last login and were never launched.
 
 ## Activate Windows with Script if unliscensed
 
-* Open powershell and run command:
+- Open powershell and run command:
 
   ```bash
   irm https://get.activated.win | iex
@@ -176,21 +176,21 @@ were linked since the last login and were never launched.
 
 ## Set some windows settings
 
-* Uninstall unneeded apps
-* Make sure windows defender is on
-* Enable Developer Mode (required for creating symlinks without admin)
-  * Settings → System → For developers → Developer Mode ON
-* Set up clipboard history by pressing win+v
-  * Turn on clipboard history by searching for clipboard in the windows button and turning it on
-  * Turn on sync across devices if desired
-* Show file extensions
-  * Open file explorer and click on view and check file name extensions
-* Show hidden files
-  * Open file explorer and click on view and check hidden items
-* Sign into OneDrive
-  * Turn on selective sync and download wanted files (do this before moving targets to onedrive)
-* Move docs and pictures locations to OneDrive
-  * Right click on each one and select a new folder in OneDrive to move them to and click yes to move and confirm
+- Uninstall unneeded apps
+- Make sure windows defender is on
+- Enable Developer Mode (required for creating symlinks without admin)
+  - Settings → System → For developers → Developer Mode ON
+- Set up clipboard history by pressing win+v
+  - Turn on clipboard history by searching for clipboard in the windows button and turning it on
+  - Turn on sync across devices if desired
+- Show file extensions
+  - Open file explorer and click on view and check file name extensions
+- Show hidden files
+  - Open file explorer and click on view and check hidden items
+- Sign into OneDrive
+  - Turn on selective sync and download wanted files (do this before moving targets to onedrive)
+- Move docs and pictures locations to OneDrive
+  - Right click on each one and select a new folder in OneDrive to move them to and click yes to move and confirm
 
 ## Set app order on Taskbar
 
@@ -201,7 +201,7 @@ are fixed taskbar elements on Windows and are not pins, so they are not in the
 list.
 
 | # | macOS dock | Windows pin | Pin identity |
-|---|------------|-------------|--------------|
+| --- | ------------ | ------------- | -------------- |
 | 1 | Finder | File Explorer | `Microsoft.Windows.Explorer` |
 | - | Apps (Launchpad) | *(none — Start menu "All apps", not pinnable)* | — |
 | 2 | App Store | Microsoft Store | `Microsoft.WindowsStore_8wekyb3d8bbwe!App` |
@@ -250,11 +250,11 @@ apps, Claude). Pins whose identity is an AUMID are packaged apps and have no
 
 ## Git Setup
 
-* Follow instructions in [setup_git.md](./setup_git.md)
+- Follow instructions in [setup_git.md](./setup_git.md)
 
 ## GitHub CLI Setup
 
-* Follow instructions in [github-cli.md](./github-cli.md)
+- Follow instructions in [github-cli.md](./github-cli.md)
 
 ## Install Apps
 
@@ -264,11 +264,11 @@ apps, Claude). Pins whose identity is an AUMID are packaged apps and have no
 
 ##### Install Chocolatey Manually
 
-* Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
+- Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
 
 ##### Or Use Bootstrap Script to Automatically Install Chocolatey and Install Apps From: [windows_apps_personal_choco.txt](../app_lists/windows_apps_personal_choco.txt)
 
-* Open powershell as admin in the directory where you have the script saved and run command to use bootstrap script to install apps:
+- Open powershell as admin in the directory where you have the script saved and run command to use bootstrap script to install apps:
 
   ```bash
   .\install_windows_apps_with_chocolatey.ps1
@@ -276,48 +276,48 @@ apps, Claude). Pins whose identity is an AUMID are packaged apps and have no
 
 #### Install WinGet
 
-* Enter command in powershell to check if winget is installed:
+- Enter command in powershell to check if winget is installed:
 
 ```bash
 winget
 ```
 
-* If instructions for winget do not pop up:
-  * update windows
-  * open windows app store and update "app installer"
+- If instructions for winget do not pop up:
+  - update windows
+  - open windows app store and update "app installer"
 
-* You should see "winget.exe" in following location:
+- You should see "winget.exe" in following location:
 
   ```bash
   %LOCALAPPDATA%\Microsoft\WindowsApps
   ```
 
-* If the command does not work after restarting powershell and the file is where epxected, check PATH variable and add the above location to it expanded
+- If the command does not work after restarting powershell and the file is where epxected, check PATH variable and add the above location to it expanded
 
 #### Install MSYS2
 
-* Follow instructions in [msys2.md](./msys2.md) to install MSYS2 with winget and install the POSIX tools (tmux, rsync, etc.) from the package list
+- Follow instructions in [msys2.md](./msys2.md) to install MSYS2 with winget and install the POSIX tools (tmux, rsync, etc.) from the package list
 
 ## Google Chrome
 
-* If not using bootstrap script, install google chrome with winget:
+- If not using bootstrap script, install google chrome with winget:
 
   ```bash
   winget install -e --id Google.Chrome
   ```
   
-* Open chrome and sign in and sync
-* Allow chrome to set itself as default browser
-* If want to add another chrome account:
-  * Click on profile and add another account to chrome and sign in
-  * Pin the second instance of chrome with the small symbol on it to the task bar, and pin chrome to the taskbar
-  * Then change the target of the default shortcut to:
+- Open chrome and sign in and sync
+- Allow chrome to set itself as default browser
+- If want to add another chrome account:
+  - Click on profile and add another account to chrome and sign in
+  - Pin the second instance of chrome with the small symbol on it to the task bar, and pin chrome to the taskbar
+  - Then change the target of the default shortcut to:
 
     ```bash
     "C:\Program Files\Google\Chrome\Application\chrome.exe" --profile-directory="Default"
     ```
 
-  * The second account shortcut should automatically be something like this:
+  - The second account shortcut should automatically be something like this:
 
     ```bash
     "C:\Program Files\Google\Chrome\Application\chrome.exe" --profile-directory="Profile 1"
@@ -325,32 +325,32 @@ winget
 
 ## Syncthing Setup
 
-* Follow instructions in [setup_syncthing.md](./setup_syncthing.md)
+- Follow instructions in [setup_syncthing.md](./setup_syncthing.md)
 
 ## Setting Up SSH Server
 
-* Follow instructions in [setup_windows_ssh_server.md](./setup_windows_ssh_server.md)
+- Follow instructions in [setup_windows_ssh_server.md](./setup_windows_ssh_server.md)
 
 ## Terminal Configuration and Settings
 
 ### Use gsudo to elevate commands in a normal powershell session
 
-* Install gsudo with Chocolatey
+- Install gsudo with Chocolatey
 
 ```bash
 # elevated powershell
 choco install gsudo
 ```
 
-* Restart VSCode to bring in new system path
+- Restart VSCode to bring in new system path
 
-* To elevate a command:
+- To elevate a command:
 
 ```bash
 gsudo <command>
 ```
 
-* To check if you are elevated
+- To check if you are elevated
 
 ```bash
 [bool]([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator") # returns true if elevated
@@ -360,35 +360,35 @@ gsudo <command>
 
 ### VSCode Setup
 
-* Follow instructions in [setup_vscode.md](./setup_vscode.md)
+- Follow instructions in [setup_vscode.md](./setup_vscode.md)
 
 ### Docker Setup
 
-* Follow instructions in [setup_docker.md](./setup_docker.md)
+- Follow instructions in [setup_docker.md](./setup_docker.md)
 
 ### Python Setup
 
-* Follow instructions in [setup_python.md](./setup_python.md)
+- Follow instructions in [setup_python.md](./setup_python.md)
 
 ### Rust Setup
 
-* Follow instructions in [setup_rust.md](./setup_rust.md)
+- Follow instructions in [setup_rust.md](./setup_rust.md)
 
 ### Go Setup
 
-* Follow instructions in [setup_go.md](./setup_go.md)
+- Follow instructions in [setup_go.md](./setup_go.md)
 
 ## Install Node and Clasp
 
-* If not using bootstrap script, install nodejs with chocolatey:
+- If not using bootstrap script, install nodejs with chocolatey:
 
   ```bash
   choco install nodejs-lts
   ```
   
-* restart powershell to be able to access npm
+- restart powershell to be able to access npm
   
-* Install clasp with npm:
+- Install clasp with npm:
 
   ```bash
   npm install -g @google/clasp
@@ -396,26 +396,26 @@ gsudo <command>
 
 ## WSL
 
-* Open Microsoft App Store and install Ubuntu
-* Turn on feature by running this in an admin powershell window:
+- Open Microsoft App Store and install Ubuntu
+- Turn on feature by running this in an admin powershell window:
 
   ```bash
   Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Windows-Subsystem-Linux
   ```
   
-  * Hit Y or manually restart
+  - Hit Y or manually restart
 
-* Check version of WSL
+- Check version of WSL
   
     ```bash
     wsl --list --verbose
     ```
 
-  * Open Ubuntu and set up user and password
+  - Open Ubuntu and set up user and password
 
-* If issues, may need to enable Windows features for "Virtual Machine Platform" and "Windows Hypervisor Platform"
+- If issues, may need to enable Windows features for "Virtual Machine Platform" and "Windows Hypervisor Platform"
 
-  * To do this with powershell might be possible (untested):
+  - To do this with powershell might be possible (untested):
 
   ```bash
   Enable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform
@@ -423,38 +423,38 @@ gsudo <command>
   Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All
   ```
 
-* If need to mount windows network drives in WSL
+- If need to mount windows network drives in WSL
 
-  * Open WSL and run the following command to mount the drives:
+  - Open WSL and run the following command to mount the drives:
 
   ```bash
   sudo mkdir -p /mnt/d
   sudo mount -t drvfs D: /mnt/d
   ```
 
-  * You can add this to your `.bashrc` or `.zshrc` file to automatically mount on startup.
+  - You can add this to your `.bashrc` or `.zshrc` file to automatically mount on startup.
 
 ## VNC
 
 ### VNC Connect (Viewer)
 
-* If not using bootstrap script, install vnc-connect with winget:
-  * winget install -e --id RealVNC.VNC-Connect
-* Open vnc-connect and sign in if need to connect through their service, local may not need sign in (using tiger vnc or tight vnc servers)
+- If not using bootstrap script, install vnc-connect with winget:
+  - winget install -e --id RealVNC.VNC-Connect
+- Open vnc-connect and sign in if need to connect through their service, local may not need sign in (using tiger vnc or tight vnc servers)
 
 ### VNC Server (Server)
 
-* Follow instructions in [setup_vnc_server.md](./setup_vnc_server.md)
+- Follow instructions in [setup_vnc_server.md](./setup_vnc_server.md)
 
 ## Sleep Fixes
 
-* Check what devices can wake from sleep with command:
+- Check what devices can wake from sleep with command:
 
 ```bash
 powercfg /devicequery wake_armed
 ```
 
-* Response should be something like:
+- Response should be something like:
 
 ```plaintext
 Intel(R) Wi-Fi 6E AX211 160MHz
@@ -462,7 +462,7 @@ USB4 Root Router (1.0)
 USB4 Root Router (1.0) (001)
 ```
 
-* Disable devices from waking the computer with commands like:
+- Disable devices from waking the computer with commands like:
 
 ```bash
 powercfg /devicedisablewake "Intel(R) Wi-Fi 6E AX211 160MHz"

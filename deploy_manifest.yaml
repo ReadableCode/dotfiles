@@ -254,47 +254,36 @@
     make it log "ignoring invalid keybinding entry" and surface config-issue
     warnings in connected clients.
 
-# The three entries above are T3's *configs*. The three below are how T3 comes
-# up on its own on Windows, which until 2026-08-17 nothing in this repo owned:
-# scripts/setup_t3_server_windows.ps1 generated the serve wrapper and
-# registered the scheduled task once, imperatively, and the desktop client had
-# no autostart at all. That gap is what took RyzenWhite down - its server died
-# of a heap OOM after 3 days, the task's inherited 72-hour ExecutionTimeLimit
-# closed the run out, and with only boot/logon triggers nothing restarted
-# either half. The runtime is manifest-managed now, on the same terms as the
-# configs: the files below are the source of truth, and the setup script only
-# registers what deploy put there. macOS and Linux are unaffected - Linux has
-# a real boot service (`t3 service install`) and the Mac desktop app is a
-# login item, so neither needs this.
+# Removed 2026-08-18, with the files themselves: the whole Windows headless
+# server method. On Windows, T3 is now the DESKTOP APP ONLY - one backend, the
+# app's own, on ~/.t3. Deleted in that pass:
+#
+#   t3code_server_launcher       application_configs/t3code/t3serve.cmd
+#   t3code_server_task           application_configs/t3code/t3code-server-task.xml
+#   t3code_client_home_client_settings   -> ~/.t3-client/userdata/...
+#   t3code_client_home_keybindings       -> ~/.t3-client/userdata/...
+#   (plus scripts/setup_t3_server_windows.ps1)
+#
+# Do not reintroduce these. Windows has no service manager for T3
+# (`t3 service install` is systemd-only), so the pattern was a restart loop
+# around `t3 serve` driven by a boot/logon/watchdog scheduled task, and it was
+# never stable: a 72-hour ExecutionTimeLimit silently killed the server every
+# three days, the serve leaked to V8's 4 GB cap and aborted after three, and a
+# wedged wrapper left the box serverless in a state the watchdog could not break
+# because the task still counted as Running. Each fix uncovered the next one.
+# Linux keeps its real boot service and is unaffected; macOS is a login item.
+#
+# The ~/.t3-client entries went with it. They existed only to keep a desktop
+# backend away from a headless server on the same box, and that split was
+# itself harmful: clerk-tokens.json (the account session) and
+# connection-catalog.json (the paired environments) live in ~/.t3, so any
+# launch taking the split branch came up signed out with an empty environment
+# list. With no second server there is nothing to split.
+#
+# See "Windows: desktop app only" in docs/setup_t3_code.md.
 
-- name: t3code_server_launcher
-  repo: application_configs/t3code/t3serve.cmd
-  dest:
-    windows: ~/.t3/t3serve.cmd
-  requires: ~/.t3
-  note: >-
-    The serve command line, at the exact path the t3code-server scheduled task
-    executes - so it is deployed like a config even though a task registration
-    can never be a link, and drift shows up as NOT_A_LINK. Holds a restart
-    loop, because the Windows server has no supervisor of its own: `t3 service
-    install` refuses on Windows (systemd only) and the process does die. Port
-    and --tailscale-serve live in this file, not in the setup script's
-    parameters; a machine needing different ones gets a t3serve.<host>.cmd
-    variant.
-
-- name: t3code_server_task
-  repo: application_configs/t3code/t3code-server-task.xml
-  dest:
-    windows: ~/.t3/t3code-server-task.xml
-  requires: ~/.t3
-  note: >-
-    Scheduled-task definition (boot + logon + a 15-minute watchdog trigger,
-    S4U principal, no execution time limit). Task Scheduler reads tasks from
-    its own registry copy rather than from a path, so unlike the launcher this
-    file is imported, not followed: scripts/setup_t3_server_windows.ps1
-    substitutes the __T3_TASK_USER__ / __T3_SERVE_CMD__ placeholders and
-    registers it. Deploying a change here does nothing until that script runs
-    again - compare with `Export-ScheduledTask -TaskName t3code-server`.
+# The entries above are T3's *configs*. The entry below is how the Windows
+# desktop app comes up at logon.
 
 - name: t3code_client_startup
   repo: scripts/start_t3code_client.ahk
@@ -306,10 +295,11 @@
     is needed). The alternative is the app's own open-at-login toggle, which
     writes an HKCU Run value this repo cannot see or deploy. The script exits
     silently where T3 Code is not installed or is already running, so no
-    requires gate is needed - but note it starts the DESKTOP app, which on a
-    machine also running the t3code_server_task serve means two T3 servers
-    could contend for port 3773 and ~/.t3/userdata; check server.log after the
-    first logon on such a box.
+    requires gate is needed. It starts the DESKTOP app, which always brings a
+    backend of its own, and pins it to port 3773 because the tailnet path is a
+    `tailscale serve` proxy hardwired to that port. On a combo machine this is
+    the only thing that starts a backend at all, so without it the box is not
+    an environment until the app is opened by hand.
 
 # --- Barrier (KVM sharing) ---
 
