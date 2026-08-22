@@ -72,8 +72,17 @@
     "type": "command",
     "command": "bash ~/.claude/statusline.sh"
   },
+  "extraKnownMarketplaces": {
+    "unslop-marketplace": {
+      "source": {
+        "source": "github",
+        "repo": "MohamedAbdallah-14/unslop"
+      }
+    }
+  },
   "enabledPlugins": {
-    "swift-lsp@claude-plugins-official": true
+    "swift-lsp@claude-plugins-official": true,
+    "unslop@unslop-marketplace": true
   },
   "feedbackSurveyRate": 0,
   "effortLevel": "high",
