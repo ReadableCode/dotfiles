@@ -91,6 +91,7 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - Mail
 - Calendar
 - Personal Calendar
+- Outlook (PWA)
 - Claude
 - T3 Code
 - VSCode

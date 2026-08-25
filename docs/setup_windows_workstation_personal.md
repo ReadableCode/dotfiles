@@ -217,30 +217,31 @@ list.
 | 10 | Contacts | People | `Microsoft.M365Companions_8wekyb3d8bbwe!People` |
 | 11 | Mail | Gmail web app | `Chrome Apps\Gmail (1).lnk` |
 | 12 | Calendar / Personal Calendar | Google Calendar web app (both in one pin) | `Chrome Apps\Google Calendar (1).lnk` |
-| 13 | Claude | Claude | `Anthropic\Claude.lnk` |
-| 14 | T3 Code | T3 Code (Alpha) | `T3 Code (Alpha).lnk` |
-| 15 | VSCode | Visual Studio Code | `Microsoft.VisualStudioCode` |
-| 16 | Messenger | Messenger web app | Chrome web app `bbdeiblfgdokhlblpgeaokenkfknecgl` (pinned directly, no Start menu shortcut) |
-| 17 | Discord | Discord | `com.squirrel.Discord.Discord` |
-| 18 | Slack | Slack | `com.squirrel.slack.slack` |
-| 19 | Meet | Google Meet web app | `Chrome Apps\Google Meet.lnk` |
-| 20 | Teams | Microsoft Teams | `MSTeams_8wekyb3d8bbwe!MSTeams` |
-| 21 | Plex | Plex | `Plex\Plex.lnk` |
+| 13 | Outlook (PWA) | Outlook web app (Edge) | `Outlook (PWA).lnk` (Edge web app — per-user Programs root, no subfolder) |
+| 14 | Claude | Claude | `Anthropic\Claude.lnk` |
+| 15 | T3 Code | T3 Code (Alpha) | `T3 Code (Alpha).lnk` |
+| 16 | VSCode | Visual Studio Code | `Microsoft.VisualStudioCode` |
+| 17 | Messenger | Messenger web app | Chrome web app `bbdeiblfgdokhlblpgeaokenkfknecgl` (pinned directly, no Start menu shortcut) |
+| 18 | Discord | Discord | `com.squirrel.Discord.Discord` |
+| 19 | Slack | Slack | `com.squirrel.slack.slack` |
+| 20 | Meet | Google Meet web app | `Chrome Apps\Google Meet.lnk` |
+| 21 | Teams | Microsoft Teams | `MSTeams_8wekyb3d8bbwe!MSTeams` |
+| 22 | Plex | Plex | `Plex\Plex.lnk` |
 | - | YouTube | *(no YouTube web app installed on Windows)* | — |
 | - | YTMusic | *(no YouTube Music web app installed on Windows)* | — |
-| 22 | VNCViewer | VNC Viewer | `RealVNC\VNC Viewer.lnk` |
-| 23 | GLKVM | GLKVM | `GLKVM.lnk` |
+| 23 | VNCViewer | VNC Viewer | `RealVNC\VNC Viewer.lnk` |
+| 24 | GLKVM | GLKVM | `GLKVM.lnk` |
 | - | Moonlight | *(not installed — Sunshine is the host half, not the client)* | — |
-| 24 | Parsec | Parsec | `Parsec\Parsec.lnk` |
-| 25 | Tailscale | Tailscale | `Tailscale.lnk` |
-| 26 | OpenVPN | OpenVPN GUI | `OpenVPN\OpenVPN GUI.lnk` |
-| 27 | Wireguard | WireGuard | `WireGuard.lnk` |
-| 28 | Steam | Steam | `Steam\Steam.lnk` |
-| 29 | Epic Games | Epic Games Launcher | `Epic Games Launcher.lnk` |
-| 30 | Activity Monitor | Task Manager | `System Tools\Task Manager.lnk` |
+| 25 | Parsec | Parsec | `Parsec\Parsec.lnk` |
+| 26 | Tailscale | Tailscale | `Tailscale.lnk` |
+| 27 | OpenVPN | OpenVPN GUI | `OpenVPN\OpenVPN GUI.lnk` |
+| 28 | Wireguard | WireGuard | `WireGuard.lnk` |
+| 29 | Steam | Steam | `Steam\Steam.lnk` |
+| 30 | Epic Games | Epic Games Launcher | `Epic Games Launcher.lnk` |
+| 31 | Activity Monitor | Task Manager | `System Tools\Task Manager.lnk` |
 | - | Xcode Beta | *(no Windows equivalent)* | — |
 | - | Device Hub | *(no Windows equivalent — Xcode component)* | — |
-| 31 | Stream Deck | Elgato Stream Deck | `Elgato\Stream Deck\Stream Deck.lnk` |
+| 32 | Stream Deck | Elgato Stream Deck | `Elgato\Stream Deck\Stream Deck.lnk` |
 
 `.lnk` identities are Start menu shortcut paths, under
 `%ProgramData%\Microsoft\Windows\Start Menu\Programs\` for machine-wide apps and
