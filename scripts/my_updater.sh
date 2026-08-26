@@ -44,12 +44,26 @@ update_apt() {
     sudo apt -y full-upgrade
 }
 
+# Function for updating & upgrading a Fedora/RHEL system with dnf
+update_dnf() {
+    echo "Refreshing metadata and upgrading packages..."
+    sudo dnf -y upgrade --refresh
+    echo "Removing unused packages..."
+    sudo dnf -y autoremove
+}
+
 # Install fastfetch
 install_sysinfo() {
     echo "Installing fastfetch..."
     case "$OS" in
       "Linux")
-        sudo apt install -y fastfetch
+        if command -v dnf &> /dev/null; then
+            sudo dnf install -y fastfetch
+        elif command -v apt &> /dev/null; then
+            sudo apt install -y fastfetch
+        else
+            echo "Neither dnf nor apt found, cannot install fastfetch."
+        fi
         ;;
       "Darwin")
         brew install fastfetch
@@ -64,10 +78,13 @@ install_sysinfo() {
 OS="$(uname)"
 case "$OS" in
   "Linux") 
-    if command -v apt &> /dev/null; then
+    # dnf first: Fedora ships both dnf and (sometimes) an apt shim.
+    if command -v dnf &> /dev/null; then
+        update_dnf
+    elif command -v apt &> /dev/null; then
         update_apt
     else
-        echo "apt not found, skipping package updates."
+        echo "Neither dnf nor apt found, skipping package updates."
     fi
     ;;
   "Darwin") 
