@@ -11,6 +11,7 @@ import paramiko
 from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from readable_utils.display_tools import pprint_df, pprint_dict, print_logger  # noqa F401
+from utils.inventory_tools import find_inventory_paths
 
 # %%
 # Variables #
@@ -21,8 +22,24 @@ if os.path.exists(dotenv_path):
 
 ssh_password = os.getenv("SSH_PASSWORD")
 
-with open(os.path.join(grandparent_dir, "Assistant", "hosts.json"), "r") as f:
-    dict_systems = json.load(f)
+
+def load_ssh_hosts(credentials_root):
+    """
+    Every ssh-reachable host across the sibling ``*_credentials`` inventories.
+
+    Targets each host's ``hostname`` rather than its name: a bare name only
+    resolves where the machine is a tailnet member or the LAN suffix happens
+    to be in that resolver's search path, which is not true on every machine
+    this runs from. Hosts without a hostname are skipped rather than guessed.
+    """
+    hosts = []
+    for inventory_path in find_inventory_paths(credentials_root):
+        with open(inventory_path, "r") as handle:
+            for host in json.load(handle).get("hosts", []):
+                if host.get("harness") == "ssh" and host.get("hostname"):
+                    hosts.append(host)
+    return hosts
+
 
 dict_commands = {
     "linux": {
@@ -145,14 +162,16 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
     future_to_meta = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        for system_name, system_config in dict_systems.items():
-            os = system_config.get("os")
-            if os not in dict_commands:
+        for system_config in dict_systems:
+            # Not `os`: that shadowed the imported module for the whole loop.
+            os_name = system_config.get("os")
+            if os_name not in dict_commands:
                 continue
-            for command_name, command_text in dict_commands[os].items():
-                host = system_name
-                user = system_config["username"]
-                port = system_config.get("ssh_port", 22)
+            for command_name, command_text in dict_commands[os_name].items():
+                system_name = system_config["name"]
+                host = system_config["hostname"]
+                user = system_config.get("user", "")
+                port = int(system_config.get("port", 22))
                 meta = {
                     "system_name": system_name,
                     "hostname": host,
@@ -195,12 +214,13 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
 if __name__ == "__main__":
     # override host for testing only one
     # keep_host = "raspberrypi3"
-    # dict_systems = {k: v for k, v in dict_systems.items() if k == keep_host}
+    # ssh_hosts = [h for h in ssh_hosts if h["name"] == keep_host]
 
-    pprint_dict(dict_systems)
+    ssh_hosts = load_ssh_hosts(grandparent_dir)
+    print_logger(f"{len(ssh_hosts)} ssh hosts in the credentials inventories")
     pprint_dict(dict_commands)
 
-    rows = run_commands_on_hosts(dict_systems, dict_commands, ssh_password)
+    rows = run_commands_on_hosts(ssh_hosts, dict_commands, ssh_password)
 
     df = pd.DataFrame(
         rows,
