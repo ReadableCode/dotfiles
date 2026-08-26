@@ -47,6 +47,7 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
                                           # (overlay manifests only, see below)
   method: symlink | none                  # default symlink
+  on_drift: replace | adopt               # default replace; see below
   note: free text caveat
 ```
 
@@ -153,6 +154,29 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   backup — they are never moved into the repo working tree. Once linked,
   editing the file at the system location edits the repo file, so changes
   show up in `git status` immediately.
+
+  **`on_drift: adopt`** flips that one case, for configs an app rewrites via
+  atomic rename (write temp file, rename over the path — Electron's default
+  save, used by T3 Code; VS Code instead resolves the link and writes through
+  it, which is why its settings never drift). Atomic rename silently replaces
+  the deployed link with a plain file holding the in-app edit, and under
+  `replace` the next deploy would revert that edit to the repo copy. With
+  `adopt`, when the system file is the **newer** diverging side its content is
+  first copied over the repo file — dirtying the working tree so the edit
+  shows up in `git status`/`git diff` to be committed or reverted, exactly
+  like an edit made through a live link — and then re-linked. Deploy never
+  commits. The timestamped backup still happens first, and when the **repo**
+  copy is the newer side (an orphaned hard link after `git pull` on a
+  no-symlink machine still holding pre-pull content) it wins as usual, so
+  `adopt` cannot resurrect stale content over a pulled update.
+
+  Adopted `.json` payloads land in a **canonical form** — 2-space indent,
+  sorted keys, trailing newline (array order untouched) — produced by reading
+  and re-serializing the app's file, never by running a formatter over it. So
+  the app's minified one-line saves diff per-key in the worktree, and the app
+  re-minifying *unchanged* settings compares equal after normalization and is
+  treated as format-only drift (normal quiet re-link), not an edit. A `.json`
+  that fails to parse is adopted verbatim.
 - **Destination is a regular file and the repo file does not exist** →
   first-time capture: the system file is the only copy, so it is moved into
   the repo and linked (requires `ingest_system_if_exists=True`; the CLI path
@@ -177,7 +201,7 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
 | `NOT_DEPLOYED` | Destination missing. |
 | `BROKEN_LINK` | Destination is a dangling symlink. |
 | `WRONG_TARGET` | Destination is a link resolving somewhere else. |
-| `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file or an orphaned hard link (git replaced the inode on pull); the detail says whether its content matches the repo copy or diverges. Deploy backs it up, then replaces it with a link to the repo version. |
+| `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file, an orphaned hard link (git replaced the inode on pull), or an app's atomic-rename save; the detail says whether its content matches the repo copy or diverges. Deploy backs it up, then replaces it with a link to the repo version — except under `on_drift: adopt`, where a newer diverging system file is first adopted into the repo working tree. |
 
 Unhealthy rows get a second dimmed line explaining what is wrong and what
 `deploy` would do about it. A one-line summary prints last (e.g.

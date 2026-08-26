@@ -1,196 +1,215 @@
 [
   {
-    "key": "mod+b",
-    "command": "sidebar.toggle"
+    "command": "sidebar.toggle",
+    "key": "mod+b"
   },
   {
-    "key": "mod+j",
-    "command": "terminal.toggle"
+    "command": "terminal.toggle",
+    "key": "mod+j"
   },
   {
-    "key": "mod+alt+b",
-    "command": "rightPanel.toggle"
+    "command": "rightPanel.toggle",
+    "key": "mod+alt+b"
   },
   {
-    "key": "mod+d",
     "command": "terminal.split",
-    "when": "terminalFocus"
-  },
-  {
-    "key": "mod+shift+d",
-    "command": "terminal.splitVertical",
-    "when": "terminalFocus"
-  },
-  {
-    "key": "mod+n",
-    "command": "terminal.new",
-    "when": "terminalFocus"
-  },
-  {
-    "key": "mod+w",
-    "command": "terminal.close",
-    "when": "terminalFocus"
-  },
-  {
     "key": "mod+d",
-    "command": "diff.toggle",
-    "when": "!terminalFocus"
+    "when": "terminalFocus"
   },
   {
-    "key": "mod+shift+j",
-    "command": "preview.toggle"
+    "command": "terminal.splitVertical",
+    "key": "mod+shift+d",
+    "when": "terminalFocus"
   },
   {
-    "key": "mod+r",
-    "command": "preview.refresh",
-    "when": "previewFocus"
-  },
-  {
-    "key": "mod+l",
-    "command": "preview.focusUrl",
-    "when": "previewFocus"
-  },
-  {
-    "key": "mod+=",
-    "command": "preview.zoomIn",
-    "when": "previewFocus"
-  },
-  {
-    "key": "mod++",
-    "command": "preview.zoomIn",
-    "when": "previewFocus"
-  },
-  {
-    "key": "mod+-",
-    "command": "preview.zoomOut",
-    "when": "previewFocus"
-  },
-  {
-    "key": "mod+0",
-    "command": "preview.resetZoom",
-    "when": "previewFocus"
-  },
-  {
-    "key": "mod+k",
-    "command": "commandPalette.toggle",
-    "when": "!terminalFocus"
-  },
-  {
-    "key": "mod+s",
-    "command": "composer.stash",
-    "when": "!terminalFocus"
-  },
-  {
+    "command": "terminal.new",
     "key": "mod+n",
-    "command": "chat.new",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "terminal.close",
+    "key": "mod+w",
+    "when": "terminalFocus"
+  },
+  {
+    "command": "diff.toggle",
+    "key": "mod+d",
     "when": "!terminalFocus"
   },
   {
+    "command": "preview.toggle",
+    "key": "mod+shift+j"
+  },
+  {
+    "command": "preview.refresh",
+    "key": "mod+r",
+    "when": "previewFocus"
+  },
+  {
+    "command": "preview.focusUrl",
+    "key": "mod+l",
+    "when": "previewFocus"
+  },
+  {
+    "command": "preview.zoomIn",
+    "key": "mod+=",
+    "when": "previewFocus"
+  },
+  {
+    "command": "preview.zoomIn",
+    "key": "mod++",
+    "when": "previewFocus"
+  },
+  {
+    "command": "preview.zoomOut",
+    "key": "mod+-",
+    "when": "previewFocus"
+  },
+  {
+    "command": "preview.resetZoom",
+    "key": "mod+0",
+    "when": "previewFocus"
+  },
+  {
+    "command": "commandPalette.toggle",
+    "key": "mod+k",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.stash",
+    "key": "mod+s",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "chat.new",
+    "key": "mod+n",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "chat.new",
     "key": "mod+shift+o",
-    "command": "chat.new",
     "when": "!terminalFocus"
   },
   {
-    "key": "mod+shift+n",
     "command": "chat.newLocal",
+    "key": "mod+shift+n",
     "when": "!terminalFocus"
   },
   {
-    "key": "mod+shift+m",
     "command": "modelPicker.toggle",
+    "key": "mod+shift+m",
     "when": "!terminalFocus"
   },
   {
-    "key": "mod+o",
-    "command": "editor.openFavorite"
+    "command": "editor.openFavorite",
+    "key": "mod+o"
   },
   {
-    "key": "mod+shift+[",
-    "command": "thread.previous"
+    "command": "thread.previous",
+    "key": "mod+shift+["
   },
   {
-    "key": "mod+shift+]",
-    "command": "thread.next"
+    "command": "thread.next",
+    "key": "mod+shift+]"
   },
   {
-    "key": "mod+1",
-    "command": "thread.jump.1"
+    "command": "thread.jump.1",
+    "key": "mod+1"
   },
   {
-    "key": "mod+2",
-    "command": "thread.jump.2"
+    "command": "thread.jump.2",
+    "key": "mod+2"
   },
   {
-    "key": "mod+3",
-    "command": "thread.jump.3"
+    "command": "thread.jump.3",
+    "key": "mod+3"
   },
   {
-    "key": "mod+4",
-    "command": "thread.jump.4"
+    "command": "thread.jump.4",
+    "key": "mod+4"
   },
   {
-    "key": "mod+5",
-    "command": "thread.jump.5"
+    "command": "thread.jump.5",
+    "key": "mod+5"
   },
   {
-    "key": "mod+6",
-    "command": "thread.jump.6"
+    "command": "thread.jump.6",
+    "key": "mod+6"
   },
   {
-    "key": "mod+7",
-    "command": "thread.jump.7"
+    "command": "thread.jump.7",
+    "key": "mod+7"
   },
   {
-    "key": "mod+8",
-    "command": "thread.jump.8"
+    "command": "thread.jump.8",
+    "key": "mod+8"
   },
   {
-    "key": "mod+9",
-    "command": "thread.jump.9"
+    "command": "thread.jump.9",
+    "key": "mod+9"
   },
   {
-    "key": "mod+1",
     "command": "modelPicker.jump.1",
+    "key": "mod+1",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+2",
     "command": "modelPicker.jump.2",
+    "key": "mod+2",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+3",
     "command": "modelPicker.jump.3",
+    "key": "mod+3",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+4",
     "command": "modelPicker.jump.4",
+    "key": "mod+4",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+5",
     "command": "modelPicker.jump.5",
+    "key": "mod+5",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+6",
     "command": "modelPicker.jump.6",
+    "key": "mod+6",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+7",
     "command": "modelPicker.jump.7",
+    "key": "mod+7",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+8",
     "command": "modelPicker.jump.8",
+    "key": "mod+8",
     "when": "modelPickerOpen"
   },
   {
-    "key": "mod+9",
     "command": "modelPicker.jump.9",
+    "key": "mod+9",
     "when": "modelPickerOpen"
+  },
+  {
+    "command": "filePicker.toggle",
+    "key": "mod+p",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "projectSearch.toggle",
+    "key": "mod+shift+f",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "themeEditor.toggle",
+    "key": "mod+alt+shift+t"
+  },
+  {
+    "command": "thread.settle",
+    "key": "mod+shift+s",
+    "when": "!terminalFocus"
   }
 ]

@@ -80,6 +80,12 @@ def test_load_manifest_rejects_bad_method(tmp_path):
         deploy_configs.load_manifest(manifest_path)
 
 
+def test_load_manifest_rejects_bad_on_drift(tmp_path):
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "on_drift": "merge"}])
+    with pytest.raises(ValueError, match="on_drift"):
+        deploy_configs.load_manifest(manifest_path)
+
+
 def test_load_manifest_rejects_copy_method(tmp_path):
     # copies silently drift - there is deliberately no copy method
     manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "method": "copy"}])
@@ -654,8 +660,8 @@ def test_deploy_section_never_copies_a_config_into_place():
     with open(deploy_configs.__file__.replace(".pyc", ".py"), encoding="utf-8") as file_handle:
         source = file_handle.read()
     # copies as a deployment mechanism are banned; shutil.copy2 is allowed only
-    # for backup_system_file (backups are copies by design), which lives outside
-    # the Deploy section
+    # for backup_system_file and adopt_system_file (backups and worktree
+    # adoption are copies by design), which live outside the Deploy section
     deploy_section = source.split("# Deploy #")[1].split("# Manifest #")[0]
     assert "copy2" not in deploy_section
 
@@ -708,6 +714,140 @@ def test_case3_without_backup_makes_no_changes(tmp_path):
     assert not os.path.islink(dest)
     with open(repo_file, encoding="utf-8") as file_handle:
         assert file_handle.read() == "repo version"
+
+
+# %%
+# on_drift: adopt (app atomic-rename saves flow into the repo worktree, not the backup graveyard) #
+
+
+def _drifted_pair(tmp_path, repo_content, system_content, newer):
+    """A diverged repo/system file pair with the given side mtime-newer."""
+    repo_file = write_file(str(tmp_path / "repo" / "application_configs" / "app" / "conf"), repo_content)
+    dest = write_file(str(tmp_path / "sys" / "conf"), system_content)
+    older, newer_path = (repo_file, dest) if newer == "system" else (dest, repo_file)
+    os.utime(older, (1000000, 1000000))
+    os.utime(newer_path, (2000000, 2000000))
+    return repo_file, dest
+
+
+def test_adopt_copies_newer_system_edit_into_repo_worktree_then_links(tmp_path):
+    repo_root = str(tmp_path / "repo")
+    repo_file, dest = _drifted_pair(tmp_path, "repo version", "in-app edit", newer="system")
+    result = deploy_configs.deploy_config(
+        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root, on_drift="adopt",
+    )
+    assert result == "adopted"
+    assert os.path.islink(dest)
+    # the edit landed in the repo file (worktree dirty for the user to commit or revert)...
+    with open(repo_file, encoding="utf-8") as file_handle:
+        assert file_handle.read() == "in-app edit"
+    # ...and a safety-net backup still exists in case the user git-checkouts the file away
+    backups = os.listdir(os.path.join(repo_root, "data", "config_backups", "application_configs", "app"))
+    assert len(backups) == 1
+
+
+def test_adopt_still_replaces_when_repo_side_is_newer(tmp_path):
+    # the orphaned-hard-link-after-pull case: the system file holds PRE-pull
+    # content, so adopting it would resurrect stale config over the pulled update
+    repo_root = str(tmp_path / "repo")
+    repo_file, dest = _drifted_pair(tmp_path, "pulled update", "stale pre-pull", newer="repo")
+    result = deploy_configs.deploy_config(
+        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root, on_drift="adopt",
+    )
+    assert result == "replaced"
+    with open(repo_file, encoding="utf-8") as file_handle:
+        assert file_handle.read() == "pulled update"
+
+
+def test_adopt_with_matching_content_just_relinks(tmp_path):
+    repo_root = str(tmp_path / "repo")
+    repo_file = write_file(os.path.join(repo_root, "application_configs", "app", "conf"), "same")
+    dest = write_file(str(tmp_path / "sys" / "conf"), "same")
+    result = deploy_configs.deploy_config(
+        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root, on_drift="adopt",
+    )
+    assert result == "replaced"
+    assert os.path.islink(dest)
+    with open(repo_file, encoding="utf-8") as file_handle:
+        assert file_handle.read() == "same"
+
+
+def test_adopt_is_stable_after_adoption(tmp_path):
+    # copy2 preserves the edit's mtime, so a second deploy is a plain no-op
+    repo_root = str(tmp_path / "repo")
+    repo_file, dest = _drifted_pair(tmp_path, "repo version", "in-app edit", newer="system")
+    kwargs = {"backup_root": os.path.join(repo_root, "data", "config_backups"),
+              "repo_root": repo_root, "on_drift": "adopt"}
+    assert deploy_configs.deploy_config(repo_file, dest, **kwargs) == "adopted"
+    assert deploy_configs.deploy_config(repo_file, dest, **kwargs) == "noop"
+
+
+def test_adopt_json_lands_in_canonical_form(tmp_path):
+    # the app saves minified with its own key order; the repo copy must come out
+    # pretty, key-sorted, newline-terminated - a per-key reviewable diff
+    repo_root = str(tmp_path / "repo")
+    repo_file = write_file(os.path.join(repo_root, "application_configs", "app", "conf.json"), "{}\n")
+    dest = write_file(str(tmp_path / "sys" / "conf.json"), '{"zeta":1,"alpha":{"b":2,"a":[3,1,2]}}')
+    os.utime(repo_file, (1000000, 1000000))
+    os.utime(dest, (2000000, 2000000))
+    result = deploy_configs.deploy_config(
+        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root, on_drift="adopt",
+    )
+    assert result == "adopted"
+    expected = '{\n  "alpha": {\n    "a": [\n      3,\n      1,\n      2\n    ],\n    "b": 2\n  },\n  "zeta": 1\n}\n'
+    with open(repo_file, encoding="utf-8") as file_handle:
+        assert file_handle.read() == expected
+
+
+def test_adopt_json_format_only_drift_is_not_an_edit(tmp_path):
+    # the app re-minifying UNCHANGED settings over the canonical repo copy must
+    # not dirty the worktree - it is the same content in the app's clothing
+    repo_root = str(tmp_path / "repo")
+    canonical = '{\n  "a": 1,\n  "b": 2\n}\n'
+    repo_file = write_file(os.path.join(repo_root, "application_configs", "app", "conf.json"), canonical)
+    dest = write_file(str(tmp_path / "sys" / "conf.json"), '{"b":2,"a":1}')
+    os.utime(repo_file, (1000000, 1000000))
+    os.utime(dest, (2000000, 2000000))
+    result = deploy_configs.deploy_config(
+        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root, on_drift="adopt",
+    )
+    assert result == "replaced"
+    with open(repo_file, encoding="utf-8") as file_handle:
+        assert file_handle.read() == canonical
+
+
+def test_adopt_invalid_json_falls_back_to_verbatim_copy(tmp_path):
+    repo_root = str(tmp_path / "repo")
+    repo_file, dest = _drifted_pair(tmp_path, "{}", "{not json", newer="system")
+    repo_file_json = repo_file + ".json"
+    os.rename(repo_file, repo_file_json)
+    dest_json = dest  # dest extension is irrelevant; adoption keys off the repo path
+    result = deploy_configs.deploy_config(
+        repo_file_json, dest_json, backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root, on_drift="adopt",
+    )
+    assert result == "adopted"
+    with open(repo_file_json, encoding="utf-8") as file_handle:
+        assert file_handle.read() == "{not json"
+
+
+def test_status_planned_action_mentions_adoption_for_adopt_entries():
+    assert "adopt" in deploy_configs.planned_action("NOT_A_LINK", "adopt")
+    assert "adopt" not in deploy_configs.planned_action("NOT_A_LINK")
+
+
+def test_build_plan_carries_on_drift(fake_home):
+    entries = [
+        {"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "on_drift": "adopt"},
+        {"name": "b", "repo": "f2", "dest": {"darwin": "~/.f2"}},
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root="/repo")
+    assert [row["on_drift"] for row in plan] == ["adopt", "replace"]
 
 
 def test_case2_ingest_moves_system_file_into_repo(tmp_path):

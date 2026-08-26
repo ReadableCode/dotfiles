@@ -200,9 +200,15 @@
 # clerk-tokens.json, secrets/, state.sqlite, logs/, environment-id,
 # server-runtime.json. The requires gate keeps deploy from creating ~/.t3 on
 # machines that don't run T3. Electron saves settings via atomic rename, which
-# replaces the deployed link with a plain file - expect NOT_A_LINK drift after
-# in-app settings changes and re-deploy to re-link (merge the in-app edit into
-# the repo copy first; the machine file is backed up to data/config_backups).
+# replaces the deployed link with a plain file - so all three entries set
+# on_drift: adopt: the next deploy copies the in-app edit INTO the repo
+# working tree (git diff to review, commit or revert - VS Code-style) and
+# re-links, instead of clobbering it with the repo copy. The machine file is
+# still backed up to data/config_backups first, and a repo copy that is the
+# newer side (orphaned hard link after git pull) still wins as usual. Adopted
+# json is re-serialized to the canonical repo form (2-space indent, sorted
+# keys) so the app's minified saves diff per-key - keep the repo copies in
+# that form so a re-minified-but-unchanged save reads as format-only drift.
 #
 # Only keybindings.json has a mac variant: macs resolve keybindings.mac.json,
 # Windows and Linux fall through to the bare file, which is the npm-server-safe
@@ -237,9 +243,11 @@
     linux: ~/.t3/userdata/client-settings.json
     windows: ~/.t3/userdata/client-settings.json
   requires: ~/.t3/userdata
+  on_drift: adopt
   note: >-
     Desktop-client UI prefs; headless servers ignore it. All platforms get the
-    bare file.
+    bare file. The app rewrites this file on every in-app settings change, so
+    drift adopts into the worktree instead of reverting the change.
 
 - name: t3code_keybindings
   repo: application_configs/t3code/keybindings.json
@@ -248,6 +256,7 @@
     linux: ~/.t3/userdata/keybindings.json
     windows: ~/.t3/userdata/keybindings.json
   requires: ~/.t3/userdata
+  on_drift: adopt
   note: >-
     Macs get keybindings.mac.json, other platforms the bare file. Keep every
     command in the bare file within the npm server's schema - unknown commands

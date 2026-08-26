@@ -4,6 +4,7 @@
 import argparse
 import glob
 import hashlib
+import json
 import os
 import platform
 import shutil
@@ -213,6 +214,66 @@ def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None)
     return backup_path
 
 
+def normalized_json(path):
+    """
+    The file's content re-serialized to the canonical repo form - 2-space
+    indent, sorted keys, trailing newline (array order untouched) - or None
+    when the file is not valid JSON. Reads and re-serializes; no formatter
+    ever runs against the app's own file.
+    """
+    try:
+        with open(path, "r", encoding="utf-8") as file_handle:
+            data = json.load(file_handle)
+    except (ValueError, UnicodeDecodeError):
+        return None
+    return json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
+def drift_is_newer_local_edit(repo_path, system_path):
+    """
+    True when the destination is a plain file whose content diverges from the
+    repo copy AND is the newer of the two sides - the signature of an app that
+    saved its settings via atomic rename (write temp file, rename over the
+    path), replacing the deployed link with a real file holding the user's
+    edit. The mtime check keeps the other NOT_A_LINK cause - an orphaned hard
+    link still holding PRE-pull content while the repo side pulled ahead - on
+    the replace path, where the repo copy must win.
+
+    For .json payloads the comparison is on normalized content, so an app
+    re-minifying unchanged settings over the canonical pretty repo copy is
+    format-only drift, not an edit.
+    """
+    if os.path.isdir(system_path) or not os.path.isfile(repo_path):
+        return False
+    if _file_hash(system_path) == _file_hash(repo_path):
+        return False
+    if repo_path.endswith(".json"):
+        system_normalized = normalized_json(system_path)
+        if system_normalized is not None and system_normalized == normalized_json(repo_path):
+            return False
+    return os.path.getmtime(system_path) > os.path.getmtime(repo_path)
+
+
+def adopt_system_file(system_path, repo_path):
+    """
+    Copy the system file's content over the repo copy, dirtying the repo
+    working tree so the edit shows up in git status/diff to be committed or
+    reverted by the user - deploy never commits. A .json payload lands in the
+    canonical form (see normalized_json), so the app's minified one-line saves
+    diff per-key; anything else (including a .json that fails to parse) is
+    copied verbatim. Either way the edit's mtime is preserved on the repo
+    file, so the same edit compares equal instead of re-adopting forever.
+    """
+    if repo_path.endswith(".json"):
+        normalized = normalized_json(system_path)
+        if normalized is not None:
+            with open(repo_path, "w", encoding="utf-8") as file_handle:
+                file_handle.write(normalized)
+            shutil.copystat(system_path, repo_path)
+            return
+    shutil.copy2(system_path, repo_path)
+
+
 # %%
 # Removals #
 
@@ -274,6 +335,7 @@ def deploy_config(
     replace_system_if_exists=True,
     backup_root=None,
     repo_root=None,
+    on_drift="replace",
 ):
     """
     Keep the real file in the repo and place a symlink at system_path.
@@ -282,6 +344,13 @@ def deploy_config(
     is backed up (timestamped copy, mtime preserved) and replaced by the link -
     it is never moved into the repo working tree. Ingestion only happens when
     the repo file does not exist yet (first-time capture of a config).
+
+    on_drift="adopt" (for configs an app rewrites in place via atomic rename,
+    e.g. T3 Code's settings) flips that one case: when the system file is the
+    NEWER diverging side, its content is first copied over the repo file -
+    dirtying the working tree for the user to git diff / commit / revert -
+    before re-linking. The repo copy still wins when IT is the newer side
+    (an orphaned hard link after git pull).
 
     Idempotent: a destination that is already a correct symlink - or an
     existing hard link sharing the repo file's inode - is a no-op.
@@ -308,7 +377,8 @@ def deploy_config(
     if not repo_exists and system_exists:
         return _ingest_system_file(repo_path, system_path, ingest_system_if_exists)
     if repo_exists and system_exists:
-        return _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root)
+        return _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root,
+                                    on_drift)
     print(f"  nothing to deploy: neither {repo_path} nor {system_path} exists")
     return "missing"
 
@@ -325,20 +395,27 @@ def _ingest_system_file(repo_path, system_path, ingest_system_if_exists):
     return "ingested"
 
 
-def _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root):
+def _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root,
+                         on_drift="replace"):
     if not replace_system_if_exists:
         print(f"  both versions exist; skipping replacement of {system_path} - no changes made")
         return "skipped"
     backup_path = backup_system_file(system_path, repo_path, backup_root=backup_root, repo_root=repo_root)
     print(f"  backed up {system_path}\n         -> {backup_path}")
+    adopting = on_drift == "adopt" and drift_is_newer_local_edit(repo_path, system_path)
+    if adopting:
+        adopt_system_file(system_path, repo_path)
+        print("  adopted the newer system edits into the repo file - the worktree is now dirty; "
+              "git diff to review, then commit or revert")
     if os.path.isdir(system_path):
         shutil.rmtree(system_path)
     else:
         os.remove(system_path)
-    print("  replaced system version with the repo version (local edits live only in the backup)")
+    if not adopting:
+        print("  replaced system version with the repo version (local edits live only in the backup)")
     action = create_link(repo_path, system_path)
     print(f"  {action} {system_path}\n         -> {repo_path}")
-    return "replaced"
+    return "adopted" if adopting else "replaced"
 
 
 # %%
@@ -425,6 +502,11 @@ def _parse_manifest_file(manifest_path):
         method = entry.get("method", "symlink")
         if method not in ("symlink", "none"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
+        on_drift = entry.get("on_drift", "replace")
+        if on_drift not in ("replace", "adopt"):
+            raise ValueError(
+                f"Manifest entry {entry['name']} has invalid on_drift: {on_drift} (use 'replace' or 'adopt')"
+            )
         requires = entry.get("requires")
         if requires is not None:
             paths = requires if isinstance(requires, list) else [requires]
@@ -572,6 +654,7 @@ def build_plan(entries, platform_key, hostname, repo_root=None, assume_requires=
             # os.path.join leaves untouched inside the joined segment.
             "repo": os.path.normpath(os.path.join(entry.get("_base_dir") or repo_root, entry["repo"])),
             "method": entry.get("method", "symlink"),
+            "on_drift": entry.get("on_drift", "replace"),
             "note": entry.get("note", ""),
             "requires": None,
             "dest": None,
@@ -644,8 +727,11 @@ def classify_entry(repo_path, system_path):
     return "NOT_A_LINK", "regular file; content diverges from repo (orphaned hard link after git pull?)"
 
 
-def planned_action(status):
+def planned_action(status, on_drift="replace"):
     """Human description of what deploy would do for a given status."""
+    if status == "NOT_A_LINK" and on_drift == "adopt":
+        return ("deploy would back up the system file, adopt its content into the repo working tree if it is "
+                "the newer diverging side (git diff to review), then replace it with a link to the repo version")
     descriptions = {
         "OK": "no action needed",
         "NOT_DEPLOYED": "deploy would create symlink at destination",
@@ -690,7 +776,7 @@ def run_status(plan, platform_key, prune_candidates=None):
         for status, row, detail in unhealthy:
             print("  " + status_line(status, row["name"], row["dest"], name_width))
             print(paint(f"      {detail}", "dim"))
-            print(paint(f"      -> {planned_action(status)}", "dim"))
+            print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'))}", "dim"))
         print()
 
     orphans = [(dest, reason) for dest, reason in (prune_candidates or []) if os.path.lexists(dest)]
@@ -751,7 +837,7 @@ def run_deploy(plan, platform_key):
         print_section("Changes", len(work), "cyan")
         for row in work:
             print("  " + paint(row["name"], "bold"))
-            result = deploy_config(row["repo"], row["dest"])
+            result = deploy_config(row["repo"], row["dest"], on_drift=row.get("on_drift", "replace"))
             if result == "noop":
                 counts["noop"] += 1
             elif result in ("skipped", "missing"):
