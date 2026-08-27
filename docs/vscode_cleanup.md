@@ -210,7 +210,9 @@ most-recently-used first, which is more reliable than mtime. Notes:
 Python stack (python, pylance, debugpy, black-formatter, flake8, isort,
 mypy-type-checker, python-envs), Jupyter stack (jupyter, renderers, keymap,
 cell-tags, slideshow — `# %%` code cells are used everywhere), ruff (herdstone
-only, configured per-repo), claude-code, go, swiftlang.swift-vscode +
+only, configured per-repo), claude-code, go (`golang.go` — wanted on every
+machine, work and personal alike, including each host's `~/.vscode-server`
+set), swiftlang.swift-vscode +
 llvm-vs-code-extensions.lldb-dap (Swift debugging needs lldb-dap), remote-ssh
 pack, Docker official extensions (`docker.docker`, `ms-azuretools.vscode-docker`,
 `ms-azuretools.vscode-containers`), live preview
