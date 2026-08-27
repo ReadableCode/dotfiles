@@ -744,12 +744,14 @@ def planned_action(status, on_drift="replace"):
     return descriptions.get(status, "unknown")
 
 
-def run_status(plan, platform_key, prune_candidates=None):
+def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
     """
     Combined health report + dry run, grouped into sections (least interesting
     first, problems last so they stay on screen): not applicable -> healthy ->
     needs attention. Read-only; exits non-zero when anything needs attention
-    (cron-able drift check).
+    (cron-able drift check). problems_only skips the not-applicable and
+    healthy inventories so TUIs and cron mails carry signal, not a census;
+    the summary line still prints either way.
     """
     name_width = max([len(row["name"]) for row in plan] + [4])
     info, healthy, unhealthy = [], [], []
@@ -760,13 +762,13 @@ def run_status(plan, platform_key, prune_candidates=None):
         status, detail = classify_entry(row["repo"], row["dest"])
         (healthy if status in HEALTHY_STATUSES else unhealthy).append((status, row, detail))
 
-    if info:
+    if info and not problems_only:
         detail_width = _term_width() - 18 - name_width
         print_section("Not applicable on this machine", len(info), "dim")
         for status, row, detail in info:
             print("  " + status_line(status, row["name"], fit_text(detail, detail_width), name_width))
         print()
-    if healthy:
+    if healthy and not problems_only:
         print_section("Healthy", len(healthy), "green")
         for status, row, _ in healthy:
             print("  " + status_line(status, row["name"], row["dest"], name_width))
@@ -803,7 +805,7 @@ def run_status(plan, platform_key, prune_candidates=None):
     return 1 if (unhealthy or orphans) else 0
 
 
-def run_deploy(plan, platform_key):
+def run_deploy(plan, platform_key, problems_only=False):
     """
     Deploy every applicable manifest entry; correct deployments are no-ops.
 
@@ -812,6 +814,7 @@ def run_deploy(plan, platform_key):
     -> changes. Already-correct entries (classify_entry "OK" - the same check
     deploy_config no-ops on) are listed without redundant per-entry chatter;
     everything else deploys last, printing what it does as it goes.
+    problems_only skips the two inventory sections and shows changes only.
     """
     name_width = max([len(row["name"]) for row in plan] + [4])
     info = [row for row in plan if row["action"] != "apply"]
@@ -820,14 +823,14 @@ def run_deploy(plan, platform_key):
     work = [row for row in apply_rows if row not in healthy]
     counts = {"changed": 0, "noop": len(healthy), "skipped": 0}
 
-    if info:
+    if info and not problems_only:
         detail_width = _term_width() - 18 - name_width
         print_section("Not applicable on this machine", len(info), "dim")
         for row in info:
             detail = fit_text(_info_detail(row, platform_key), detail_width)
             print("  " + status_line(row["action"].upper(), row["name"], detail, name_width))
         print()
-    if healthy:
+    if healthy and not problems_only:
         print_section("Already deployed - nothing to do", len(healthy), "green")
         for row in healthy:
             name = paint(f"{row['name']:<{name_width}}", "green")
@@ -971,6 +974,13 @@ def parse_args(argv=None):
         help="prune only: actually remove the orphaned links (default is a dry run)",
     )
     parser.add_argument(
+        "--problems",
+        action="store_true",
+        help="status and deploy: print only the sections that need action "
+        "(skip the not-applicable and healthy inventories; the summary line "
+        "still prints)",
+    )
+    parser.add_argument(
         "--manifest",
         default=None,
         help="load only this manifest file, repo paths relative to the dotfiles repo root; "
@@ -1022,8 +1032,8 @@ def main(argv=None):
     if args.command == "prune":
         return run_prune(candidates, apply_changes=args.apply)
     if args.status or args.dry_run or args.command == "status":
-        return run_status(plan, platform_key, candidates)
-    result = run_deploy(plan, platform_key)
+        return run_status(plan, platform_key, candidates, problems_only=args.problems)
+    result = run_deploy(plan, platform_key, problems_only=args.problems)
     # deploy is the default command and every updater alias runs it bare, so the
     # map refreshes itself without anyone remembering to ask
     # (--manifest is the isolated test path; it must not touch the real repos)

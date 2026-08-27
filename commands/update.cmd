@@ -1,10 +1,9 @@
-# Fleet update - the single source of step order (the thing the two alias
-# files disagreed about). What each step DOES lives in lib.sh / lib.ps1;
-# this file only says what runs, where, and in what order.
-description: pull dotfiles, deploy configs, upgrade packages, show system info
+# OS and package updates ONLY (repos live in pull.cmd, configs in
+# deploy.cmd). What each step DOES lives in lib.sh / lib.ps1; this file only
+# says what runs, where, and in what order.
+description: upgrade OS packages, show system info
+order: 30
 platforms: darwin linux windows
 steps:
-  dotfiles_pull requires=git
-  configs_deploy requires=uv
   packages_upgrade
   sysinfo requires=fastfetch

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -21,6 +22,7 @@ type Step struct {
 type Command struct {
 	Name         string
 	Description  string
+	Order        int // display/sort position; lower first, default 1000
 	Platforms    []string
 	Hosts        []string
 	ExcludeHosts []string
@@ -37,8 +39,9 @@ func parseCmdFile(path string) (Command, error) {
 		return Command{}, err
 	}
 	c := Command{
-		Name: strings.TrimSuffix(filepath.Base(path), ".cmd"),
-		Dir:  filepath.Dir(path),
+		Name:  strings.TrimSuffix(filepath.Base(path), ".cmd"),
+		Dir:   filepath.Dir(path),
+		Order: 1000,
 	}
 	c.Source = filepath.Base(filepath.Dir(c.Dir))
 	inSteps := false
@@ -56,6 +59,12 @@ func parseCmdFile(path string) (Command, error) {
 			switch strings.TrimSpace(key) {
 			case "description":
 				c.Description = val
+			case "order":
+				n, convErr := strconv.Atoi(val)
+				if convErr != nil {
+					return c, fmt.Errorf("%s:%d: order must be an integer, got %q", path, i+1, val)
+				}
+				c.Order = n
 			case "platforms":
 				c.Platforms = splitList(val)
 			case "hosts":

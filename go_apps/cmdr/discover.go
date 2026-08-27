@@ -51,5 +51,12 @@ func discoverCommands(gitdir string) []Command {
 		seen[c.Name] = c.Source
 		cmds = append(cmds, c)
 	}
+	// Explicit order: comes from each .cmd file; alphabetical only breaks ties.
+	sort.Slice(cmds, func(i, j int) bool {
+		if cmds[i].Order != cmds[j].Order {
+			return cmds[i].Order < cmds[j].Order
+		}
+		return cmds[i].Name < cmds[j].Name
+	})
 	return cmds
 }

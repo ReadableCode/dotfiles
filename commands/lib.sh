@@ -5,33 +5,18 @@
 #   CMDR_REPO_DIR  this repo's checkout (the dotfiles dir)
 #   CMDR_GIT_DIR   the parent holding all sibling repos
 
-# --- update ---
-
-dotfiles_pull() {
-    # Pull before anything else so configs_deploy links the latest configs.
-    git -C "$CMDR_REPO_DIR" pull --ff-only \
-        || echo "WARNING: dotfiles pull failed (offline or diverged) - resolve manually in $CMDR_REPO_DIR"
-}
-
-dotfiles_pull_check() {
-    git -C "$CMDR_REPO_DIR" fetch --quiet || { echo "dotfiles: fetch failed (offline?)"; return 0; }
-    local behind
-    behind=$(git -C "$CMDR_REPO_DIR" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
-    if [ "${behind:-0}" -gt 0 ]; then
-        echo "dotfiles: $behind commit(s) behind origin"
-        return 1
-    fi
-    echo "dotfiles: up to date"
-}
+# --- deploy ---
 
 configs_deploy() {
-    (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py)
+    # --problems: changes only, not the healthy/not-applicable census -
+    # the TUI pane (and a human) needs signal, not inventory.
+    (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py --problems)
 }
 
 configs_deploy_check() {
     # status is read-only and already exits nonzero when anything needs
     # attention (see run_status in deploy_configs.py).
-    (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py status)
+    (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py status --problems)
 }
 
 packages_upgrade() {
@@ -107,23 +92,81 @@ sysinfo() {
     fastfetch
 }
 
-# --- demo (safe: echo and sleep only) ---
+# --- pull (the gitpullall flow) ---
 
-demo_hello() {
-    echo "hello from $(hostname) ($(uname))"
+repos_pull() {
+    # Exec the existing git_puller binary: the pulls fan out in goroutines
+    # there, so concurrency is preserved, not reimplemented.
+    local arch os bin
+    arch=$(uname -m)
+    os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    bin="$CMDR_GIT_DIR/dotfiles/go_apps/git_puller/git_puller"
+    if [ "$os" = "darwin" ]; then
+        if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
+            bin="${bin}_mac_arm"
+        else
+            bin="${bin}_mac_x86"
+        fi
+    elif [ "$os" = "linux" ]; then
+        if [ "$arch" = "arm64" ] || [ "$arch" = "aarch64" ]; then
+            bin="${bin}_arm"
+        fi
+    fi
+    chmod +x "$bin"
+    "$bin" -path "$CMDR_GIT_DIR" -r
 }
 
-demo_tick() {
-    for i in 1 2 3; do
-        echo "tick $i"
-        sleep 1
+repos_pull_check() {
+    # Read-only twin of repos_pull: fetch every repo CONCURRENTLY (one
+    # background job each, mirroring git_puller's fan-out) and report which
+    # are behind their upstream. Quiet repos print nothing.
+    local tmp dir name count=0
+    tmp=$(mktemp -d) || return 0
+    for dir in "$CMDR_GIT_DIR"/*/; do
+        [ -d "$dir/.git" ] || continue
+        name=$(basename "$dir")
+        count=$((count + 1))
+        (
+            if ! git -C "$dir" fetch --quiet 2>/dev/null; then
+                echo "  $name: fetch failed (offline or no remote)"
+                exit 0
+            fi
+            behind=$(git -C "$dir" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
+            if [ "${behind:-0}" -gt 0 ]; then
+                echo "  $name: $behind commit(s) behind"
+                echo "$name" >> "$tmp/.drift"
+            fi
+        ) > "$tmp/$name.out" 2>&1 &
     done
+    wait
+    cat "$tmp"/*.out 2>/dev/null
+    local drifted=0
+    [ -f "$tmp/.drift" ] && drifted=$(wc -l < "$tmp/.drift" | tr -d ' ')
+    rm -rf "$tmp"
+    if [ "$drifted" -gt 0 ]; then
+        echo "checked $count repos concurrently: $drifted behind"
+        return 1
+    fi
+    echo "checked $count repos concurrently: all up to date"
 }
 
-demo_tick_check() {
-    echo "demo: nothing would change"
+repos_clone() {
+    (cd "$CMDR_REPO_DIR" && uv run python src/clone_repos.py)
 }
 
-demo_done() {
-    echo "demo complete"
+repos_clone_check() {
+    # cmdr's built-in already knows the yaml and exits 1 on missing repos.
+    "$CMDR_BIN" repos ensure --check
+}
+
+configs_prune() {
+    # --apply on purpose: the removals files are a committed list of paths
+    # that must not exist, so every machine has to act on them (see the
+    # gitpullall comments and docs/deploy_configs.md).
+    (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py prune --apply)
+}
+
+configs_prune_check() {
+    # Bare prune is the dry run.
+    (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py prune)
 }
