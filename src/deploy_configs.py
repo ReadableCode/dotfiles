@@ -991,6 +991,11 @@ def parse_args(argv=None):
         action="store_true",
         help="deploy only: skip regenerating the deployment map",
     )
+    parser.add_argument(
+        "--no-mcp",
+        action="store_true",
+        help="deploy only: skip regenerating .mcp.json from the MCP server declarations",
+    )
     return parser.parse_args(argv)
 
 
@@ -1007,6 +1012,26 @@ def regenerate_map(entries, quiet=False):
         deploy_map.report_map(deploy_map.write_map(entries), quiet=quiet)
     except Exception as error:  # noqa: BLE001 - never let the report break the deploy
         print(paint(f"map: could not regenerate ({type(error).__name__}: {error})", "yellow"))
+
+
+def regenerate_mcp(quiet=False):
+    """
+    Rewrite the machine's .mcp.json from every cloned repo's MCP server
+    declarations. Returns True on success.
+
+    NOT best-effort, unlike the map: this file is what gives every Claude session
+    its calendar, mail and jira tools, so a silent failure looks exactly like the
+    hosted-connector outage it exists to replace. It is reported loudly and sets
+    a non-zero exit, but still cannot abort the deploy that produced it.
+    """
+    import claude_mcp
+
+    try:
+        claude_mcp.write(quiet=quiet)
+        return True
+    except Exception as error:  # noqa: BLE001 - report, don't mask the deploy
+        print(paint(f"mcp: FAILED to regenerate .mcp.json ({type(error).__name__}: {error})", "red"))
+        return False
 
 
 def main(argv=None):
@@ -1037,6 +1062,13 @@ def main(argv=None):
     # deploy is the default command and every updater alias runs it bare, so the
     # map refreshes itself without anyone remembering to ask
     # (--manifest is the isolated test path; it must not touch the real repos)
+    # .mcp.json is generated, not linked, because its content is machine-specific
+    # (absolute clone paths) and repo-specific (whichever *_credentials repos are
+    # cloned) - the two things a committed payload cannot be at once.
+    if not args.manifest and not args.no_mcp:
+        print()
+        if not regenerate_mcp():
+            result = result or 1
     if not args.manifest and not args.no_map:
         print()
         regenerate_map(entries)

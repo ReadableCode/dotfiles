@@ -162,6 +162,30 @@
 # inventory that validates them. Work-context variants are entries in their
 # client overlay manifests, so nothing here can collide with them.
 
+- name: claude_mcp_servers
+  repo: mcp_servers.yaml
+  method: none
+  note: >-
+    GENERATED, not linked. src/claude_mcp.py merges this repo's mcp_servers.yaml
+    with every cloned <context>_credentials/<context>_mcp_servers.yaml and writes
+    ONE {repo_parent}/.mcp.json; src/deploy_configs.py runs it at the end of every
+    deploy (--no-mcp skips). Listed here as method: none so this file stays a
+    complete inventory of deployed config.
+    Why generated rather than a payload: the content is machine-specific (server
+    args need an absolute path to this clone, and deploy has no templating, so a
+    committed default would aim every machine at one machine's path - a relative
+    path cannot work either, the server subprocess inherits the SESSION's cwd,
+    not the .mcp.json's) AND repo-specific (which servers exist depends on which
+    credentials repos are cloned). A committed file cannot be both.
+    It also removes the race: .mcp.json has one fixed name per directory and
+    cannot be namespaced the way ~/.claude/commands/<context>_*.md is, so if each
+    repo deployed its own copy they would overwrite each other. Declaring and
+    merging means N repos contribute to one file that one generator owns.
+    Lands at the repo ROOT because .mcp.json is inherited by child directories
+    and MERGES with any below it, so one file covers sessions in every clone.
+    The root is not itself a git repo, so nothing is dirtied. Generated 0600 -
+    it can carry a live API token. Added 2026-08-27.
+
 - name: claude_cloud_session_env_vars
   repo: application_configs/claude/cloud_session_env_vars.txt
   method: none

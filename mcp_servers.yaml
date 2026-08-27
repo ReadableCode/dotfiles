@@ -1,0 +1,23 @@
+# MCP servers this repo owns, merged into the machine's .mcp.json by
+# src/claude_mcp.py (run automatically by src/deploy_configs.py deploy).
+#
+# Each cloned repo DECLARES its own servers - dotfiles here, a credentials repo
+# in <context>_mcp_servers.yaml - and one generator writes one file. That is why
+# nothing races: .mcp.json has a single fixed name per directory and cannot be
+# namespaced, so N declarations merging into one file is the only arrangement
+# where two repos are not overwriting each other's copy.
+#
+# {repo_root} is this dotfiles clone, {repo_parent} its parent. Use them instead
+# of absolute paths: deploy has no templating, so a literal path here would send
+# every machine at the path of whichever machine wrote it. Never put a secret
+# VALUE in this file - env_secrets names the env var to resolve at generate time
+# (see docs/setup_google_mcp.md).
+
+- name: google
+  command: uv
+  args:
+    - run
+    - --project
+    - "{repo_root}"
+    - python
+    - "{repo_root}/src/google_mcp.py"

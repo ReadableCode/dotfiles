@@ -1221,6 +1221,31 @@ def test_overlay_owned_payloads_are_covered_wherever_their_overlay_is_cloned():
         )
 
 
+def test_regenerate_mcp_reports_a_failure_loudly_instead_of_aborting_the_deploy(monkeypatch, capsys):
+    # imported here, not at module scope: config_test_utils must put src/ on the
+    # path first, and isort would sort `import claude_mcp` above it
+    import claude_mcp
+
+    def explode(**_kwargs):
+        raise ValueError("no declarations parse")
+
+    monkeypatch.setattr(claude_mcp, "write", explode)
+
+    # a deploy that already linked everything must still finish, but say so
+    assert deploy_configs.regenerate_mcp() is False
+    assert "FAILED to regenerate .mcp.json" in capsys.readouterr().out
+
+
+def test_regenerate_mcp_passes_quiet_through_and_reports_success(monkeypatch):
+    import claude_mcp
+
+    seen = {}
+    monkeypatch.setattr(claude_mcp, "write", lambda **kwargs: seen.update(kwargs))
+
+    assert deploy_configs.regenerate_mcp(quiet=True) is True
+    assert seen == {"quiet": True}
+
+
 def test_payload_exemption_lists_stay_in_step_with_the_files():
     payloads = _application_config_payloads()
     stale = (set(MANIFEST_FREE_PAYLOADS) | set(OVERLAY_OWNED_PAYLOADS)) - payloads

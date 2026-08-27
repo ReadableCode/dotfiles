@@ -20,6 +20,7 @@ dependencies = [
     "types-paramiko>=4.0.0.20250822",
     "pyyaml>=6.0.2",
     "readable-utils[postgres]",
+    "mcp>=2.1.1",
 ]
 
 [tool.pytest.ini_options]

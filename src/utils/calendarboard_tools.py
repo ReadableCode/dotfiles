@@ -9,6 +9,7 @@ from urllib.parse import quote, urlencode
 
 import requests
 import yaml
+from utils.google_oauth_tools import cached_access_token
 from utils.inventory_tools import credentials_context, find_credentials_dirs
 from utils.secret_tools import resolve_secret
 
@@ -450,19 +451,17 @@ def mark_conflicts(events):
 
 
 def _google_access_token(source):
-    data = {
-        "client_id": resolve_secret(source, "client_id_env"),
-        "client_secret": resolve_secret(source, "client_secret_env"),
-        "refresh_token": resolve_secret(source, "refresh_token_env"),
-        "grant_type": "refresh_token",
-    }
-    response = requests.post(GOOGLE_TOKEN_URL, data=data, timeout=DEFAULT_HTTP_TIMEOUT)
-    if response.status_code != 200:
-        raise ValueError(
-            f"Google token refresh returned {response.status_code}: {response.text[:200]} "
-            f"(revoked consent? re-run with --auth {source['name']})"
-        )
-    return response.json()["access_token"]
+    """
+    Access token for a google_calendar source. Shared with the Google MCP
+    server via google_oauth_tools, which memoizes the token until it expires -
+    so a refresh cycle no longer costs a token round-trip.
+    """
+    return cached_access_token(
+        resolve_secret(source, "client_id_env"),
+        resolve_secret(source, "client_secret_env"),
+        resolve_secret(source, "refresh_token_env"),
+        context=source["name"],
+    )
 
 
 def _google_paged(url, headers, params, key="items"):
