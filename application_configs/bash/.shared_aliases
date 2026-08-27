@@ -300,6 +300,23 @@ function ta() {
 
 ### Script Shortcuts ###
 
+# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine,
+# never committed, so build on first use when go is available. A release
+# install will replace this shim eventually (docs/unified_cli_tui.md).
+function cmdr() {
+    local bin="$gitDir/dotfiles/go_apps/cmdr/cmdr"
+    if [ ! -x "$bin" ]; then
+        if command -v go >/dev/null 2>&1; then
+            echo "cmdr: building (first run on this machine)..."
+            (cd "$gitDir/dotfiles/go_apps/cmdr" && go build .) || return 1
+        else
+            echo "cmdr: not built and go is not installed (wanted $bin)"
+            return 1
+        fi
+    fi
+    "$bin" "$@"
+}
+
 alias myupdater='bash $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='bash $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='bash $gitDir/dotfiles/scripts/get_my_public_ip.sh'

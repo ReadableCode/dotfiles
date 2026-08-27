@@ -378,6 +378,27 @@ if ($global:IsInteractiveShell -and $gitDir) {
 
 ### Script Shortcuts ###
 
+# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine,
+# never committed, so build on first use when go is available. A release
+# install will replace this shim eventually (docs/unified_cli_tui.md).
+function cmdr {
+    if (-not (Test-GitDir)) { return }
+    $bin = Join-Path $gitDir 'dotfiles\go_apps\cmdr\cmdr.exe'
+    if (-not (Test-Path $bin)) {
+        if (Get-Command go -ErrorAction SilentlyContinue) {
+            Write-Host "cmdr: building (first run on this machine)..."
+            Push-Location (Join-Path $gitDir 'dotfiles\go_apps\cmdr')
+            go build .
+            Pop-Location
+            if (-not (Test-Path $bin)) { return }
+        } else {
+            Write-Host "cmdr: not built and go is not installed (wanted $bin)"
+            return
+        }
+    }
+    & $bin @args
+}
+
 function ntfyme {
     if (-not (Test-GitDir)) { return }
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args

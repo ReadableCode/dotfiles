@@ -157,6 +157,10 @@ func runSteps(c Command, mode Mode, out, errw io.Writer, stdin io.Reader) (drift
 		// So steps can call back into built-ins (e.g. repos ensure --check)
 		// without guessing where the binary lives.
 		"CMDR_BIN="+self,
+		// Streaming is the core's whole promise, and Python block-buffers
+		// stdout when it's a pipe (the TUI viewport): long-running python
+		// steps would look silent until exit. Unbuffer every python child.
+		"PYTHONUNBUFFERED=1",
 	)
 	sty := newStyler(out)
 	for i, s := range c.Steps {

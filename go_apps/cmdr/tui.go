@@ -240,7 +240,10 @@ func (m model) startRun(c *Command, mode Mode) (model, tea.Cmd) {
 		}
 		events <- <-res
 	}()
-	return m, waitEvent(m.events)
+	// Release the mouse while output is on screen: with mouse reporting on,
+	// the terminal sends drags to us and native select/copy is impossible.
+	// Clicking only matters on the list; copying only matters here.
+	return m, tea.Batch(tea.DisableMouse, waitEvent(m.events))
 }
 
 func waitEvent(ch chan tea.Msg) tea.Cmd {
@@ -289,6 +292,7 @@ func (m model) act(action string) (tea.Model, tea.Cmd) {
 		return nm, cmd
 	case "back":
 		m.state = stList
+		return m, tea.EnableMouseCellMotion // clicks work again on the list
 	case "refresh":
 		m.cmds = discoverCommands(gitDir())
 		m.clampCursor()

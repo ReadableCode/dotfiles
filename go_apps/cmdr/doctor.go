@@ -35,8 +35,16 @@ func doctor(name string, w io.Writer) int {
 		for _, libName := range []string{"lib.sh", "lib.ps1"} {
 			lib := filepath.Join(c.Dir, libName)
 			target := "darwin/linux"
+			libPlatforms := []string{"darwin", "linux"}
 			if libName == "lib.ps1" {
 				target = "windows"
+				libPlatforms = []string{"windows"}
+			}
+			// A lib is only owed for platforms the command is gated to: a
+			// linux-only command with no lib.ps1 is correct, not drift.
+			if len(c.Platforms) > 0 && !platformsOverlap(c.Platforms, libPlatforms) {
+				fmt.Fprintf(tw, "  %s\t%s\tn/a (command not gated to %s)\t\n", libName, target, target)
+				continue
 			}
 			if _, err := os.Stat(lib); err != nil {
 				fmt.Fprintf(tw, "  %s\t%s\tmissing entirely\t\n", libName, target)
@@ -75,4 +83,15 @@ func doctor(name string, w io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func platformsOverlap(gated, libServes []string) bool {
+	for _, p := range gated {
+		for _, l := range libServes {
+			if normPlatform(strings.ToLower(p)) == l {
+				return true
+			}
+		}
+	}
+	return false
 }

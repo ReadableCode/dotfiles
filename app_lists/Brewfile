@@ -24,6 +24,9 @@ brew "nmap"
 brew "node"
 brew "ollama"
 brew "pandoc"
+# pango pulls glib/cairo/harfbuzz/fontconfig - the native stack WeasyPrint
+# dlopens for PDF generation (any repo using weasyprint needs these on mac)
+brew "pango"
 brew "pylint"
 brew "python"
 brew "ripgrep"
