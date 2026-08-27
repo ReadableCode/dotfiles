@@ -351,12 +351,16 @@ def clones(tmp_path, monkeypatch):
     return tmp_path
 
 
-def test_generate_defaults_to_one_file_at_the_clone_root(clones):
+def test_generate_defaults_to_one_file_in_the_user_folder(clones, monkeypatch):
+    # .mcp.json is inherited by every directory below it, so the user folder is
+    # the one location that reaches every session on the machine - including
+    # repos checked out outside the clone root
+    monkeypatch.setenv("HOME", str(clones / "home"))
+    monkeypatch.setattr(claude_mcp, "GENERATED_DEST", os.path.join(str(clones / "home"), mtools.GENERATED_NAME))
+
     document, dest, config_paths = claude_mcp.generate()
 
-    # the clone root, because .mcp.json is inherited by every child directory:
-    # one file there serves sessions started in any sibling repo
-    assert dest == os.path.join(str(clones), mtools.GENERATED_NAME)
+    assert dest == os.path.join(str(clones), "home", mtools.GENERATED_NAME)
     assert list(document["mcpServers"]) == ["google", "jira"]
     assert len(config_paths) == 2
 

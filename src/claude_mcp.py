@@ -14,6 +14,14 @@ from utils import mcpservers_tools as mtools
 REPO_ROOT = parent_dir
 CREDENTIALS_ROOT = grandparent_dir
 
+# The machine's single MCP config, in the user folder rather than at the clone
+# root: .mcp.json is inherited by every directory beneath it (verified - a home
+# copy resolves from a path nowhere near the clones), so one file here reaches
+# every session on the machine, including repos checked out outside the clone
+# root. It is safe to own precisely because it is generated: one writer, so the
+# several credentials repos that declare servers cannot fight over it.
+GENERATED_DEST = os.path.join(os.path.expanduser("~"), mtools.GENERATED_NAME)
+
 
 # %%
 # Generation #
@@ -26,7 +34,7 @@ def generate(dest=None, redact=False):
     """
     servers, config_paths = mtools.load_servers(CREDENTIALS_ROOT, REPO_ROOT)
     document = mtools.build_document(servers, REPO_ROOT, CREDENTIALS_ROOT, redact=redact)
-    return document, dest or os.path.join(CREDENTIALS_ROOT, mtools.GENERATED_NAME), config_paths
+    return document, dest or GENERATED_DEST, config_paths
 
 
 def write(quiet=False, dest=None):
@@ -65,7 +73,7 @@ def parse_args(argv=None):
         action="store_true",
         help="exit non-zero if the file on disk is not what would be generated (writes nothing)",
     )
-    parser.add_argument("--output", help="write somewhere other than <repo_parent>/.mcp.json (for testing)")
+    parser.add_argument("--output", help="write somewhere other than ~/.mcp.json (for testing)")
     return parser.parse_args(argv)
 
 

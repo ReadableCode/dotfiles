@@ -45,3 +45,18 @@
 - name: removed_ahk_key_remaps_lnk
   dest:
     windows: ~/AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/key_remaps.lnk
+
+- name: removed_clone_root_mcp_json
+  dest:
+    darwin: "{repo_parent}/.mcp.json"
+    linux: "{repo_parent}/.mcp.json"
+    windows: "{repo_parent}/.mcp.json"
+  note: >-
+    src/claude_mcp.py generated the machine's .mcp.json at the clone root for one
+    day (2026-08-27) before moving to ~/.mcp.json. A home copy is inherited by
+    every directory beneath it, so it also reaches repos checked out OUTSIDE the
+    clone root, which the clone-root copy could never do. Every machine that
+    deployed the old path needs it gone: two .mcp.json files both listing the
+    same servers would merge into duplicate registrations, and the stale one
+    would keep resurrecting servers deleted from the declarations. Nothing
+    creates this path any more - drop this line once every machine has pruned.

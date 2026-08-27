@@ -17,7 +17,7 @@ authenticates the same way.
 
 Registration is **generated, not linked**. Each cloned repo declares the servers
 it owns and `src/claude_mcp.py` merges every declaration into a single
-`.mcp.json` at the clone root, on every `deploy_configs.py deploy`:
+`~/.mcp.json`, on every `deploy_configs.py deploy`:
 
 * `dotfiles/mcp_servers.yaml` — this repo's servers (`google`)
 * `<context>_credentials/<context>_mcp_servers.yaml` — that context's servers
@@ -67,15 +67,22 @@ same `src/utils/secret_tools.py` path the calendar board uses:
   env_file: na_finops.env
 ```
 
-The generated file lands at the clone root because `.mcp.json` is **inherited by
-child directories and merges** with any below it, so one file covers sessions in
-`dotfiles/`, `na-finops/` and every other clone. The root is not itself a git
-repo, so nothing dirties a checkout — and since the document can carry a live
-token it is written `0600` (a pre-existing symlink at that path is unlinked, not
-written through, so the retired `na_finops.mcp.json` era cannot rewrite a tracked
-file). `deploy_manifest.yaml` carries a `method: none` entry for
-`mcp_servers.yaml` so the payload is inventoried; the file itself is produced by
-the generator.
+The generated file lands in the **user folder** because `.mcp.json` is
+**inherited by every directory below it and merges** with any below it — verified:
+a `~/.mcp.json` server resolves from a path nowhere near the clones. One file
+there is therefore the whole machine, including repos checked out outside the
+clone root, which a clone-root copy could never reach. Home is not a git repo, so
+nothing dirties a checkout, and since the document can carry a live token it is
+written `0600` (a pre-existing symlink at that path is unlinked, not written
+through, so the retired `na_finops.mcp.json` era cannot rewrite a tracked file).
+`deploy_manifest.yaml` carries a `method: none` entry for `mcp_servers.yaml` so
+the payload is inventoried; the file itself is produced by the generator.
+
+Owning a file in the user folder is only safe because it is *generated*: one
+writer, so the several repos declaring servers cannot each deploy their own copy
+and overwrite one another. That is the same reason it is not `claude mcp add -s
+user` (below) — the problem there was never the location, it was N writers and no
+owner.
 
 Useful invocations:
 

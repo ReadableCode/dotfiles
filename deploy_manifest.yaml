@@ -167,8 +167,9 @@
   method: none
   note: >-
     GENERATED, not linked. src/claude_mcp.py merges this repo's mcp_servers.yaml
-    with every cloned <context>_credentials/<context>_mcp_servers.yaml and writes
-    ONE {repo_parent}/.mcp.json; src/deploy_configs.py runs it at the end of every
+    with every cloned sibling repo's <its own dir name>_mcp_servers.yaml (same
+    opt-in rule as overlay manifests, so working repos can declare servers too)
+    and writes ONE ~/.mcp.json; src/deploy_configs.py runs it at the end of every
     deploy (--no-mcp skips). Listed here as method: none so this file stays a
     complete inventory of deployed config.
     Why generated rather than a payload: the content is machine-specific (server
@@ -181,10 +182,15 @@
     cannot be namespaced the way ~/.claude/commands/<context>_*.md is, so if each
     repo deployed its own copy they would overwrite each other. Declaring and
     merging means N repos contribute to one file that one generator owns.
-    Lands at the repo ROOT because .mcp.json is inherited by child directories
-    and MERGES with any below it, so one file covers sessions in every clone.
-    The root is not itself a git repo, so nothing is dirtied. Generated 0600 -
-    it can carry a live API token. Added 2026-08-27.
+    Lands in the USER FOLDER because .mcp.json is inherited by every directory
+    below it and MERGES with any below it (verified: a ~/.mcp.json server resolves
+    from a path nowhere near the clones), so one file covers every session on the
+    machine - including repos checked out outside the clone root, which the
+    clone-root copy this replaced could not reach (retired the same day, see
+    removed_clone_root_mcp_json in deploy_removals.yaml). Home is not a git repo,
+    so nothing is dirtied. Owning a user-folder file is safe only because it is
+    generated: one writer, no repos racing. Generated 0600 - it can carry a live
+    API token. Added 2026-08-27.
 
 - name: claude_cloud_session_env_vars
   repo: application_configs/claude/cloud_session_env_vars.txt
