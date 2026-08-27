@@ -72,5 +72,3 @@ alias mountgoogle='google-drive-ocamlfuse ~/GoogleDrive'
 alias k="kubectl"
 alias kgp="kubectl get pods -o wide"
 alias kgn="kubectl get nodes -o wide"
-
-alias hfvpncheck='bash $gitDir/na-finops/scripts/check_hf_vpn.sh'
