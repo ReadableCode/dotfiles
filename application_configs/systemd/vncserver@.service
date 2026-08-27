@@ -1,0 +1,22 @@
+[Unit]
+Description=TigerVNC virtual desktop on display %i
+Documentation=man:Xtigervnc(1)
+# Deployed by the manifest entry vnc_virtual_desktop_unit. See
+# docs/setup_vnc_server.md - this is the HEADLESS VIRTUAL DESKTOP path
+# (Xtigervnc on its own display), not the x0vncserver screen-scraping path.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# A stale socket in /tmp/.X11-unix survives an unclean shutdown and makes
+# vncserver refuse the display; the leading - keeps a no-op kill from failing
+# the start.
+ExecStartPre=-/usr/bin/vncserver -kill :%i
+ExecStart=/usr/bin/vncserver :%i -fg -localhost no -geometry 1920x1080 -depth 24 -SecurityTypes VncAuth -PasswordFile %h/.vnc/passwd
+ExecStop=/usr/bin/vncserver -kill :%i
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target

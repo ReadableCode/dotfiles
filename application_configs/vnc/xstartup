@@ -1,0 +1,14 @@
+#!/bin/sh
+# Session launched inside the Xtigervnc display by vncserver@.service.
+# Deployed to ~/.vnc/xstartup by manifest entry vnc_virtual_desktop_xstartup.
+# vncserver falls back to /etc/X11/Xsession when this file is absent, which on
+# a headless Ubuntu box lands you in a bare twm - hence launching GNOME here
+# explicitly.
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+export GNOME_SHELL_SESSION_MODE=ubuntu
+
+exec dbus-run-session -- gnome-session --session=ubuntu
