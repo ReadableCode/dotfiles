@@ -97,6 +97,9 @@ foreach ($candidate in $gitDirCandidates) {
         break
     }
 }
+# Exported so child processes (cmdr, scripts) see the same resolution the
+# shell made - they must never re-derive this themselves.
+$env:gitDir = $gitDir
 
 # Write-Host "gitDir is: $gitDir"
 
@@ -383,14 +386,28 @@ if ($global:IsInteractiveShell -and $gitDir) {
 # install will replace this shim eventually (docs/unified_cli_tui.md).
 function cmdr {
     if (-not (Test-GitDir)) { return }
-    $bin = Join-Path $gitDir 'dotfiles\go_apps\cmdr\cmdr.exe'
-    if (-not (Test-Path $bin)) {
+    $dir = Join-Path $gitDir 'dotfiles\go_apps\cmdr'
+    $bin = Join-Path $dir 'cmdr.exe'
+    # cargo-run semantics: rebuild only when a source file is newer than the
+    # binary (a git pull freshens mtimes, so the next run after a pull
+    # rebuilds itself).
+    $stale = -not (Test-Path $bin)
+    if (-not $stale) {
+        $binTime = (Get-Item $bin).LastWriteTime
+        $newer = Get-ChildItem $dir -File | Where-Object {
+            ($_.Extension -eq '.go' -or $_.Name -in 'go.mod', 'go.sum') -and $_.LastWriteTime -gt $binTime
+        }
+        $stale = [bool]$newer
+    }
+    if ($stale) {
         if (Get-Command go -ErrorAction SilentlyContinue) {
-            Write-Host "cmdr: building (first run on this machine)..."
-            Push-Location (Join-Path $gitDir 'dotfiles\go_apps\cmdr')
+            Write-Host "cmdr: rebuilding (sources changed)..."
+            Push-Location $dir
             go build .
             Pop-Location
             if (-not (Test-Path $bin)) { return }
+        } elseif (Test-Path $bin) {
+            Write-Host "cmdr: sources changed but go is not installed - running the existing binary"
         } else {
             Write-Host "cmdr: not built and go is not installed (wanted $bin)"
             return

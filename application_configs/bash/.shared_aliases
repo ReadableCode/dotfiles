@@ -42,9 +42,12 @@ set_git_dir() {
     for _c in "${_git_dir_candidates[@]}"; do
         if [ -d "$_c" ]; then
             gitDir="$_c"
-            return
+            break
         fi
     done
+    # Exported so child processes (cmdr, scripts) see the same resolution the
+    # shell made - they must never re-derive this themselves.
+    export gitDir
 }
 
 ### Context shards ###
@@ -304,11 +307,24 @@ function ta() {
 # never committed, so build on first use when go is available. A release
 # install will replace this shim eventually (docs/unified_cli_tui.md).
 function cmdr() {
-    local bin="$gitDir/dotfiles/go_apps/cmdr/cmdr"
+    local dir="$gitDir/dotfiles/go_apps/cmdr"
+    local bin="$dir/cmdr"
+    # cargo-run semantics: rebuild only when a source file is newer than the
+    # binary (a git pull freshens mtimes, so the next run after a pull
+    # rebuilds itself). The mtime scan costs ~10ms; a no-op go build costs
+    # ~10x that, so go is only invoked when something actually changed.
+    local stale=""
     if [ ! -x "$bin" ]; then
+        stale=1
+    elif [ -n "$(find "$dir" \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "$bin" 2>/dev/null | head -n 1)" ]; then
+        stale=1
+    fi
+    if [ -n "$stale" ]; then
         if command -v go >/dev/null 2>&1; then
-            echo "cmdr: building (first run on this machine)..."
-            (cd "$gitDir/dotfiles/go_apps/cmdr" && go build .) || return 1
+            echo "cmdr: rebuilding (sources changed)..."
+            (cd "$dir" && go build .) || return 1
+        elif [ -x "$bin" ]; then
+            echo "cmdr: sources changed but go is not installed - running the existing binary"
         else
             echo "cmdr: not built and go is not installed (wanted $bin)"
             return 1

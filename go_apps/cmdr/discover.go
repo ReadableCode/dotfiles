@@ -7,25 +7,40 @@ import (
 	"sort"
 )
 
-// gitDir finds the directory holding the sibling repos (~/GitHub on most
-// machines). Order: explicit override, then walking up from cwd looking for
-// the dotfiles checkout, then the default.
+// gitDir finds the directory holding the sibling repos. The shell already
+// solved this - .shared_aliases / powershell_aliases resolve $gitDir through
+// the context-shard candidates and export it - so the exported gitDir is the
+// answer. Fallbacks, for running outside a configured shell: this binary's
+// own location (it lives at <gitdir>/dotfiles/go_apps/cmdr/, so four parents
+// up), then ~/GitHub.
+// EVERY candidate must contain a dotfiles git checkout or the process exits:
+// a guessed root once pointed the repo puller at a whole home directory.
+// Never guess here again.
 func gitDir() string {
-	if d := os.Getenv("CMDR_GIT_DIR"); d != "" {
-		return d
-	}
-	if wd, err := os.Getwd(); err == nil {
-		for dir := wd; ; dir = filepath.Dir(dir) {
-			if _, err := os.Stat(filepath.Join(dir, "dotfiles", "deploy_manifest.yaml")); err == nil {
-				return dir
+	var candidates []string
+	if d := os.Getenv("gitDir"); d != "" {
+		candidates = append(candidates, d)
+	} else {
+		if exe, err := os.Executable(); err == nil {
+			if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+				exe = resolved
 			}
-			if dir == filepath.Dir(dir) {
-				break
-			}
+			candidates = append(candidates, filepath.Dir(filepath.Dir(filepath.Dir(filepath.Dir(exe)))))
+		}
+		if home, err := os.UserHomeDir(); err == nil {
+			candidates = append(candidates, filepath.Join(home, "GitHub"))
 		}
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "GitHub")
+	for _, c := range candidates {
+		if _, err := os.Stat(filepath.Join(c, "dotfiles", ".git")); err == nil {
+			return c
+		}
+	}
+	fmt.Fprintf(os.Stderr,
+		"cmdr: cannot locate the repos directory (tried %v; each must contain a dotfiles checkout).\n"+
+			"Open a shell that sources the shared aliases so $gitDir is exported.\n", candidates)
+	os.Exit(1)
+	return ""
 }
 
 // discoverCommands globs <gitdir>/*/commands/*.cmd - the same sibling-repo
