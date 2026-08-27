@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<!--
+  Visual editor for window_layouts.json.
+
+  Served by Hammerspoon's local HTTP server (see init.lua, wl.server) at
+  http://localhost:21212/editor — Ctrl+Shift+E opens it. It reads /state,
+  you drag windows around against correctly-proportioned outlines of the two
+  real screens, and it POSTs /state back, which rewrites the JSON in the
+  dotfiles repo. The page is read from disk on every request, so editing this
+  file needs no Hammerspoon reload — just refresh the tab.
+
+  Two independent things per app, either of which may be absent:
+    assignment — which desktop its windows belong on ("all" or a number). This
+                 is the macOS Dock setting, and the config enforces it.
+    rectangle  — where the window sits. Shared across desktops for an
+                 all-desktops app, otherwise owned by one desktop.
+  So "Edge on desktop 3, don't care where" is an assignment with no rectangle,
+  and VS Code is three rectangles with no assignment. An app with neither is
+  not managed at all.
+
+  An entry may also carry a title match, which is how one VS Code window is told
+  from another: the Dock's assignment is per-app, but VS Code wants a different
+  window on each desktop. An entry with a match and no rectangle says "this
+  window belongs on this desktop, don't manage where it sits" — which is the
+  only way to say that for an app whose windows want different desktops.
+
+  Nothing here talks to anything but localhost.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Window layouts</title>
+<style>
+  :root {
+    --bg: #16181d;
+    --panel: #1e2128;
+    --line: #2f343e;
+    --ink: #e6e9ef;
+    --dim: #8b93a3;
+    --accent: #6aa9ff;
+    --accent-dim: #2c4a75;
+    --shared: #b98cff;
+    --shared-dim: #4a3570;
+    --warn: #ffb454;
+    --good: #7ddc8f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 13px/1.4 ui-sans-serif, -apple-system, "SF Pro Text", system-ui, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  button, select, input {
+    font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px;
+  }
+  button { cursor: help; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--accent-dim); border-color: var(--accent); }
+  button.danger:hover:not(:disabled) { border-color: #ff8080; color: #ff8080; }
+  input[type=number] { width: 76px; }
+  [title] { cursor: help; }
+
+  header {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header .grow { flex: 1; }
+  .tabs { display: flex; gap: 4px; }
+  .tab {
+    padding: 4px 12px; border-radius: 6px; border: 1px solid var(--line);
+    background: transparent;
+  }
+  .tab.on { background: var(--accent-dim); border-color: var(--accent); }
+  .tab .here { color: var(--good); font-size: 11px; }
+  #dirty { color: var(--warn); font-size: 12px; }
+  #banner {
+    padding: 6px 12px; background: #3a2a12; color: var(--warn);
+    border-bottom: 1px solid var(--line); display: none;
+  }
+  #banner button { margin-left: 10px; }
+
+  main { flex: 1; display: flex; min-height: 0; }
+  #stageWrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #stages {
+    flex: 1; display: flex; gap: 22px; padding: 18px; overflow: auto;
+    align-items: flex-start; justify-content: center;
+  }
+  #legend {
+    display: flex; gap: 16px; padding: 0 18px 12px; color: var(--dim); font-size: 11px;
+    align-items: center; flex-wrap: wrap;
+  }
+  #legend i { display: inline-block; width: 22px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: 5px; }
+  .swatch-desktop { background: #6aa9ff1f; border: 1px solid var(--accent); }
+  .swatch-shared { background: #b98cff1f; border: 1px dashed var(--shared); }
+  .swatch-ghost { border: 1px dashed #ffffff40; }
+
+  .screen-wrap { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .screen-label { color: var(--dim); font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }
+  .screen {
+    position: relative; background: #0f1115;
+    border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
+  }
+  .gridline { position: absolute; background: #ffffff08; pointer-events: none; }
+  .ghost { position: absolute; border: 1px dashed #ffffff26; pointer-events: none; border-radius: 2px; }
+  .ghost span { position: absolute; left: 2px; bottom: 1px; font-size: 9px; color: #ffffff33; }
+  .win {
+    position: absolute; border: 1px solid var(--accent); border-radius: 3px;
+    background: #6aa9ff1f; overflow: hidden; cursor: move; user-select: none;
+  }
+  .win.shared { border-style: dashed; border-color: var(--shared); background: #b98cff1f; }
+  .win.sel { background: #6aa9ff42; border-color: #cfe2ff; z-index: 5; box-shadow: 0 0 0 1px #cfe2ff; }
+  .win.shared.sel { background: #b98cff45; border-color: #e2d0ff; box-shadow: 0 0 0 1px #e2d0ff; }
+  .win .name {
+    padding: 2px 4px; font-size: 11px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; pointer-events: none;
+  }
+  .win .name b { color: var(--shared); font-weight: 600; }
+  .win .name i { color: var(--dim); font-style: normal; }
+  .list .item.ambiguous .meta { color: var(--warn); }
+  .win .h { position: absolute; width: 10px; height: 10px; opacity: 0; pointer-events: none; }
+  .win.sel .h { opacity: 1; pointer-events: auto; background: #cfe2ff; border-radius: 2px; }
+  .h.nw { left: -4px; top: -4px; cursor: nwse-resize; }
+  .h.n  { left: 50%; margin-left: -5px; top: -4px; cursor: ns-resize; }
+  .h.ne { right: -4px; top: -4px; cursor: nesw-resize; }
+  .h.e  { right: -4px; top: 50%; margin-top: -5px; cursor: ew-resize; }
+  .h.se { right: -4px; bottom: -4px; cursor: nwse-resize; }
+  .h.s  { left: 50%; margin-left: -5px; bottom: -4px; cursor: ns-resize; }
+  .h.sw { left: -4px; bottom: -4px; cursor: nesw-resize; }
+  .h.w  { left: -4px; top: 50%; margin-top: -5px; cursor: ew-resize; }
+  .guide { position: absolute; background: var(--warn); pointer-events: none; z-index: 20; }
+
+  aside {
+    width: 310px; border-left: 1px solid var(--line); background: var(--panel);
+    overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 14px;
+  }
+  aside h3 { margin: 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .stack { display: flex; flex-direction: column; gap: 6px; }
+  .coords { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px; align-items: center; }
+  .coords label { color: var(--dim); }
+  .list { display: flex; flex-direction: column; gap: 1px; max-height: 300px; overflow-y: auto; }
+  .list .head {
+    color: var(--dim); font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+    padding: 6px 0 2px; border-bottom: 1px solid var(--line); margin-bottom: 2px;
+  }
+  .list .item {
+    display: flex; justify-content: space-between; gap: 6px; padding: 3px 6px;
+    border-radius: 4px; cursor: pointer; border: 1px solid transparent;
+  }
+  .list .item:hover { background: #ffffff0d; }
+  .list .item.sel { background: var(--accent-dim); border-color: var(--accent); }
+  .list .item.shared.sel { background: var(--shared-dim); border-color: var(--shared); }
+  .list .item .meta { color: var(--dim); font-size: 11px; white-space: nowrap; }
+  .list .item .kill {
+    border: 0; background: transparent; color: var(--dim); padding: 0 2px;
+    line-height: 1; visibility: hidden; border-radius: 3px;
+  }
+  .list .item:hover .kill { visibility: visible; }
+  .list .item .kill:hover { color: #ff8080; background: #ff808020; }
+  .hint { color: var(--dim); font-size: 11px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chip {
+    padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line);
+    font-size: 11px; cursor: pointer;
+  }
+  .chip.on { background: var(--shared-dim); border-color: var(--shared); }
+  .assign-row { display: flex; gap: 6px; align-items: center; }
+  .assign-row .who { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .assign-row select { padding: 2px 4px; }
+  .assign-row .kill { border: 0; background: transparent; color: var(--dim); padding: 0 3px; }
+  .assign-row .kill:hover { color: #ff8080; }
+  .assign-row.bad .who { color: var(--warn); }
+  dialog {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 10px; padding: 0; max-height: 70vh; width: 420px;
+  }
+  dialog::backdrop { background: #000a; }
+  dialog .body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  dialog h4 { margin: 0; font-size: 13px; }
+  dialog .picks { display: flex; flex-direction: column; gap: 1px; max-height: 42vh; overflow-y: auto; }
+  dialog label.pick { display: flex; gap: 8px; align-items: center; padding: 3px 4px; border-radius: 4px; }
+  dialog label.pick:hover { background: #ffffff0d; }
+  dialog .pick .meta { color: var(--dim); font-size: 11px; margin-left: auto; }
+  .chip.off { background: transparent; color: var(--dim); }
+  .chip.bad { border-color: var(--warn); color: var(--warn); }
+</style>
+</head>
+<body>
+
+<header>
+  <strong>Window layouts</strong>
+  <div class="tabs" id="tabs"></div>
+  <span id="dirty"></span>
+  <span class="grow"></span>
+  <label class="hint" title="Overlay a dashed outline of where each window ACTUALLY is on screen right now, so you can compare the saved layout against reality before applying it. Only meaningful on the desktop you are standing on.">
+    <input type="checkbox" id="showLive"> ghost live windows
+  </label>
+  <label class="hint" title="What dragged edges snap to, on top of screen edges and the edges and centres of other windows. Hold Alt while dragging to ignore snapping entirely.">snap
+    <select id="grid">
+      <option value="0">edges only</option>
+      <option value="2">halves</option>
+      <option value="3" selected>thirds</option>
+      <option value="4">quarters</option>
+      <option value="6">sixths</option>
+      <option value="8">eighths</option>
+      <option value="12">twelfths</option>
+    </select>
+  </label>
+  <button id="reload" title="Throw away every unsaved edit and re-read window_layouts.json from disk.">Revert</button>
+  <button id="save" class="primary" title="Write every tab's changes to window_layouts.json in the dotfiles repo. Does not move any real window — use Apply for that.">Save</button>
+</header>
+
+<div id="banner"></div>
+
+<main>
+  <div id="stageWrap">
+    <div id="stages"></div>
+    <div id="legend">
+      <span title="A window saved for this desktop only."><i class="swatch-desktop"></i>this desktop</span>
+      <span title="An All Desktops app: one window, one shared rectangle, drawn on every desktop tab. Editing it here changes it everywhere."><i class="swatch-shared"></i>all desktops</span>
+      <span title="Where the window actually is right now (turn on 'ghost live windows')."><i class="swatch-ghost"></i>live position</span>
+      <span class="hint">apps with no box here are not managed at all</span>
+    </div>
+  </div>
+
+  <aside>
+    <div class="stack">
+      <h3>Move real windows</h3>
+      <div class="row">
+        <button data-act="/apply" id="applyOne">Apply this desktop</button>
+        <button data-act="/applyLayouts" id="applyAll">Apply all</button>
+        <button data-act="/gather" id="gather">Gather windows</button>
+      </div>
+      <div class="hint" id="applyHint"></div>
+    </div>
+
+    <div class="stack">
+      <h3>Capture from screen</h3>
+      <div class="row">
+        <button id="recapAll">Recapture all windows</button>
+        <button id="recapApp">Recapture selected app</button>
+      </div>
+      <div class="hint" id="liveHint"></div>
+    </div>
+
+    <div class="stack">
+      <h3>Selection</h3>
+      <div id="selInfo" class="hint">Nothing selected.</div>
+      <div class="coords" id="coords" hidden>
+        <label title="Left edge, as a fraction of the screen width.">x</label>
+        <input type="number" id="cx" step="0.005" min="-1" max="2" title="Left edge as a fraction of screen width (0 = left edge, 1 = right edge).">
+        <label title="Width, as a fraction of the screen width.">w</label>
+        <input type="number" id="cw" step="0.005" min="0.01" max="2" title="Width as a fraction of screen width (1 = full width).">
+        <label title="Top edge, as a fraction of the screen height.">y</label>
+        <input type="number" id="cy" step="0.005" min="-1" max="2" title="Top edge as a fraction of screen height (0 = top, 1 = bottom).">
+        <label title="Height, as a fraction of the screen height.">h</label>
+        <input type="number" id="ch" step="0.005" min="0.01" max="2" title="Height as a fraction of screen height (1 = full height).">
+      </div>
+      <div class="row" id="selActions" hidden>
+        <button id="toPortrait" title="Move this window to the vertical monitor. The x/y/w/h fractions stay the same, so it lands in the same relative spot on the new screen.">→ portrait</button>
+        <button id="toLandscape" title="Move this window to the wide monitor. The x/y/w/h fractions stay the same.">→ landscape</button>
+        <button id="dupe" title="Add a second entry for this same app on this desktop. Use it for apps you keep two windows of (GLKVM) — the two entries are matched to the two live windows in order.">Duplicate</button>
+        <button id="del" class="danger" title="Delete just the selected rectangle(s), leaving the app's other entries alone.">Delete entry</button>
+        <button id="removeApp" class="danger" title="Remove this app's configuration completely: every rectangle it has on every desktop, and its desktop assignment. Asks first.">Remove app…</button>
+      </div>
+      <div class="row" id="matchRow" hidden>
+        <button id="match" title="Copy this rectangle onto other windows, including ones on other desktops — the way to give Slack on desktop 2 and Teams on desktop 3 the same slot as Messages on desktop 1.">Match…</button>
+        <button id="togglePos">Stop positioning</button>
+      </div>
+      <div class="stack" id="titleRow" hidden>
+        <label class="hint" for="titleMatch">window title contains</label>
+        <input id="titleMatch" list="liveTitles" placeholder="(any window of this app)"
+               title="Which window of this app this rectangle is for. The Dock can only assign a whole app to a desktop, so this is what puts one VS Code window on each. Titles change as you switch files — match the stable tail, like &quot;envy (Workspace)&quot;.">
+        <datalist id="liveTitles"></datalist>
+        <div class="hint" id="titleHint"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Scope of selected app</h3>
+      <div class="row">
+        <button id="scopeShared" title="ALL DESKTOPS: pin this app to every desktop in the Dock and give it one shared rectangle, drawn on every tab. Its per-desktop entries collapse into that one.">All desktops</button>
+        <button id="scopeDesktop" title="THIS DESKTOP: unpin from All Desktops and give the app a rectangle that belongs to this desktop only.">This desktop</button>
+      </div>
+      <div class="hint" id="scopeHint">Select a window to change how it is managed.</div>
+    </div>
+
+    <div class="stack">
+      <h3>Align (2+ selected)</h3>
+      <div class="row">
+        <button data-align="left" title="Line up the left edges of the selected windows with the leftmost one.">L</button>
+        <button data-align="hcenter" title="Centre the selected windows on the same vertical axis.">H·</button>
+        <button data-align="right" title="Line up the right edges with the rightmost one.">R</button>
+        <button data-align="top" title="Line up the top edges with the topmost one.">T</button>
+        <button data-align="vcenter" title="Centre the selected windows on the same horizontal axis.">V·</button>
+        <button data-align="bottom" title="Line up the bottom edges with the bottommost one.">B</button>
+      </div>
+      <div class="row">
+        <button data-align="samew" title="Give every selected window the width of the first one you selected.">Same W</button>
+        <button data-align="sameh" title="Give every selected window the height of the first one you selected.">Same H</button>
+        <button data-align="distv" title="Even out the vertical gaps between the selected windows, keeping the top and bottom ones where they are.">Space V</button>
+        <button data-align="disth" title="Even out the horizontal gaps, keeping the leftmost and rightmost ones where they are.">Space H</button>
+      </div>
+      <div class="row">
+        <button data-align="stackv" title="Divide the whole screen height evenly between the selected windows, in their current top-to-bottom order. The quick way to tidy the vertical monitor.">Stack &amp; fill ↓</button>
+        <button data-align="stackh" title="Divide the whole screen width evenly between the selected windows, in their current left-to-right order.">Stack &amp; fill →</button>
+      </div>
+      <div class="row">
+        <button data-align="butt" title="Keep each window's height but butt them against each other downward from the topmost, removing gaps and overlaps.">Close gaps ↓</button>
+        <button data-align="fitw" title="Stretch every selected window to the full screen width.">Full width</button>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Entries</h3>
+      <div class="list" id="entryList"></div>
+      <div class="row">
+        <input list="appNames" id="newApp" placeholder="app name" style="flex:1"
+               title="Type or pick an app, then choose which scope to add it in.">
+        <datalist id="appNames"></datalist>
+      </div>
+      <div class="row">
+        <button id="addDesktop" title="Add a rectangle for this app on the current desktop only.">Add here</button>
+        <button id="addShared" title="Add a shared rectangle for this app and mark it All Desktops.">Add to all desktops</button>
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Desktop assignment</h3>
+      <div class="stack" id="assignRows"></div>
+      <div class="row">
+        <input list="appNames" id="newAssign" placeholder="app name" style="flex:1"
+               title="Which app to pin to a desktop. It needs no rectangle — assignment and position are separate.">
+        <select id="newAssignTo" title="Where its windows should live."></select>
+        <button id="addAssign" title="Record this assignment. Nothing moves until you save and enforce.">Add</button>
+      </div>
+      <div class="row">
+        <button data-act="/fixAssign" title="Fix only what has drifted: shove misplaced windows onto their desktop, and run the un-assign / re-assign cycle on any All Desktops app that has gone stale. No desktop switching.">Fix drift</button>
+        <button data-act="/fixAssign?force=1&dock=1" title="Write every assignment through the Dock, including the numbered ones. macOS resolves 'This Desktop' against wherever you are standing, so this visits each desktop in turn and comes back.">Enforce all</button>
+        <button data-act="/learnAssign" title="Record where each open app currently lives as its intended assignment. Apps that are closed keep whatever they had.">Learn</button>
+      </div>
+      <div class="hint">
+        This is the Dock's Options → Assign To setting. An app can be assigned
+        with no rectangle, which reads as "keep it here, but don't manage where
+        it sits".
+      </div>
+    </div>
+
+    <div class="stack">
+      <h3>Keys</h3>
+      <div class="hint">
+        drag = move · handles = resize · shift-click = multi-select ·
+        arrows = nudge · alt+arrows = resize · alt while dragging = ignore snapping ·
+        delete = delete entry · ⌘S = save
+      </div>
+      <div class="hint" id="fileHint"></div>
+    </div>
+  </aside>
+</main>
+
+<dialog id="matchDlg">
+  <div class="body">
+    <h4 id="matchTitle">Match rectangle</h4>
+    <div class="hint" id="matchSrc"></div>
+    <div class="picks" id="matchPicks"></div>
+    <div class="row">
+      <button id="matchAll" title="Tick every entry in the list.">Select all</button>
+      <button id="matchNone" title="Untick everything.">None</button>
+      <span class="grow" style="flex:1"></span>
+      <button id="matchCancel" title="Close without changing anything.">Cancel</button>
+      <button id="matchGo" class="primary" title="Give every ticked entry this exact screen, position and size.">Apply rectangle</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+
+const API = "";
+const $ = (s) => document.querySelector(s);
+
+let state = null;      // last /state payload
+let doc = null;        // { spaces:{n:[entry]}, shared:[entry], assign:{app:'all'|n} } — edit buffer
+let tab = "1";
+let sel = new Set();   // composite keys: "a:<i>" into shared, "d:<i>" into this desktop
+let dirty = false;
+
+const round3 = (n) => Math.round(n * 1000) / 1000;
+const clamp01 = (n) => Math.max(-0.5, Math.min(1.5, n));
+const asArray = (v) => (Array.isArray(v) ? v : []);
+
+function markDirty(v = true) {
+  dirty = v;
+  $("#dirty").textContent = v ? "● unsaved" : "";
+}
+
+// hs.json.encode turns an empty Lua table into {}, not [] — normalise so the
+// list-shaped fields are always arrays before anything iterates them.
+function normalise(s) {
+  s.live = asArray(s.live);
+  s.broken = asArray(s.broken);
+  s.shared = asArray(s.shared);
+  s.assign = (s.assign && !Array.isArray(s.assign)) ? s.assign : {};
+  s.spaces = (s.spaces && !Array.isArray(s.spaces)) ? s.spaces : {};
+  for (const k of Object.keys(s.spaces)) s.spaces[k] = asArray(s.spaces[k]);
+  return s;
+}
+
+async function load() {
+  state = normalise(await (await fetch(API + "/state")).json());
+  doc = {
+    spaces: JSON.parse(JSON.stringify(state.spaces)),
+    shared: JSON.parse(JSON.stringify(state.shared)),
+    assign: { ...state.assign },
+  };
+  if (!doc.spaces[tab]) tab = Object.keys(doc.spaces).sort()[0] || "1";
+  sel.clear();
+  markDirty(false);
+  $("#fileHint").textContent = state.file || "";
+  renderAll();
+}
+
+async function save() {
+  const r = await fetch(API + "/state", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ spaces: doc.spaces, shared: doc.shared, assign: doc.assign }),
+  });
+  const j = await r.json();
+  if (j.ok) { markDirty(false); flash("Saved"); }
+  else flash("Save failed: " + (j.error || r.status), true);
+}
+
+let flashTimer = null;
+function flash(msg, bad) {
+  const b = $("#banner");
+  b.style.display = "block";
+  b.style.background = bad ? "#4a1f1f" : "#1f3a26";
+  b.style.color = bad ? "#ff9b9b" : "var(--good)";
+  b.textContent = msg;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(showAssignBanner, 2200);
+}
+
+// state.broken is [{app, want:"all"|n, have:n|null, spaces:n}]
+function describeBroken(b) {
+  if (b.want === "all") return b.app + " should be on all desktops but is on " + b.spaces;
+  return b.app + " should be on desktop " + b.want + " but is on " + (b.have || "desktop ?");
+}
+
+function showAssignBanner() {
+  const el = $("#banner");
+  const broken = (state && state.broken) || [];
+  if (!broken.length) { el.style.display = "none"; return; }
+  el.style.display = "block";
+  el.style.background = "#3a2a12";
+  el.style.color = "var(--warn)";
+  el.innerHTML = "";
+  el.append("Assignment drift — " + broken.map(describeBroken).join("; "));
+  const fix = document.createElement("button");
+  fix.textContent = "Fix now";
+  fix.title = "Move the misplaced windows and re-pin any stale All Desktops apps.";
+  fix.onclick = () => act("/fixAssign");
+  el.append(fix);
+}
+
+async function act(path) {
+  await fetch(API + path);
+  flash("Sent " + path);
+  setTimeout(refreshLive, 2500);
+}
+
+async function refreshLive() {
+  const fresh = normalise(await (await fetch(API + "/state")).json());
+  // Only the live-side facts refresh; the edit buffer is yours until you save.
+  state.live = fresh.live;
+  state.broken = fresh.broken;
+  state.activeSpace = fresh.activeSpace;
+  if (!dirty) {
+    doc.spaces = JSON.parse(JSON.stringify(fresh.spaces));
+    doc.shared = JSON.parse(JSON.stringify(fresh.shared));
+    doc.assign = { ...fresh.assign };
+  }
+  renderAll();
+}
+
+// ---- the two lists, addressed by composite key ------------------------------
+
+function perList() { return doc.spaces[tab] || (doc.spaces[tab] = []); }
+function listFor(key) { return key[0] === "a" ? doc.shared : perList(); }
+function entryAt(key) { return listFor(key)[+key.slice(2)]; }
+function selected() { return [...sel].map(entryAt).filter(Boolean); }
+function isShared(key) { return key[0] === "a"; }
+function assignOf(app) { return doc.assign[app]; }
+function isAllDesktops(app) { return doc.assign[app] === "all"; }
+
+// Every entry drawn on this tab: the shared layout plus this desktop's own.
+function visibleKeys() {
+  return [
+    ...doc.shared.map((_, i) => "a:" + i),
+    ...perList().map((_, i) => "d:" + i),
+  ];
+}
+
+// ---- rendering --------------------------------------------------------------
+
+// Pixel size of a screen pane on the page. Both panes share one scale factor so
+// the two monitors read at their true relative sizes, the way they sit on the desk.
+function paneScale() {
+  const p = state.screens.portrait, l = state.screens.landscape;
+  const availH = Math.max(320, window.innerHeight - 230);
+  const availW = Math.max(420, window.innerWidth - 310 - 90);
+  return Math.min(availH / Math.max(p.h, l.h), availW / (p.w + l.w));
+}
+
+function renderAll() {
+  renderTabs();
+  renderStages();
+  renderInspector();
+  renderList();
+  renderAssign();
+  showAssignBanner();
+}
+
+function renderTabs() {
+  const t = $("#tabs");
+  t.innerHTML = "";
+  const keys = Object.keys(doc.spaces).map(Number);
+  const count = Math.max(state.spaceCount || 0, ...keys, 1);
+  for (let i = 1; i <= count; i++) {
+    const k = String(i);
+    const b = document.createElement("button");
+    b.className = "tab" + (k === tab ? " on" : "");
+    b.textContent = k;
+    b.title = "Desktop " + k + ": " + (doc.spaces[k] || []).length + " own window(s), plus the "
+      + doc.shared.length + " all-desktops window(s) shown on every tab."
+      + (k === state.activeSpace ? "\nThis is the desktop you are standing on." : "");
+    if (k === state.activeSpace) {
+      const s = document.createElement("span");
+      s.className = "here";
+      s.textContent = " ●";
+      b.append(s);
+    }
+    b.onclick = () => { tab = k; sel.clear(); renderAll(); };
+    t.append(b);
+  }
+}
+
+function renderStages() {
+  const host = $("#stages");
+  host.innerHTML = "";
+  const scale = paneScale();
+  const div = +$("#grid").value;
+  const showLive = $("#showLive").checked && tab === state.activeSpace;
+
+  for (const orientation of ["portrait", "landscape"]) {
+    const s = state.screens[orientation];
+    const wrap = document.createElement("div");
+    wrap.className = "screen-wrap";
+    const label = document.createElement("div");
+    label.className = "screen-label";
+    label.textContent = orientation + " · " + Math.round(s.w) + "×" + Math.round(s.h);
+    label.title = orientation === "portrait"
+      ? "The vertical monitor. Layouts are anchored to orientation, not display ID, so they survive the KVM re-enumerating the screens."
+      : "The wide monitor.";
+    const pane = document.createElement("div");
+    pane.className = "screen";
+    pane.dataset.orientation = orientation;
+    pane.style.width = s.w * scale + "px";
+    pane.style.height = s.h * scale + "px";
+
+    for (let i = 1; i < div; i++) {
+      for (const axis of ["x", "y"]) {
+        const g = document.createElement("div");
+        g.className = "gridline";
+        if (axis === "x") { g.style.left = (i / div * 100) + "%"; g.style.top = 0; g.style.width = "1px"; g.style.height = "100%"; }
+        else { g.style.top = (i / div * 100) + "%"; g.style.left = 0; g.style.height = "1px"; g.style.width = "100%"; }
+        pane.append(g);
+      }
+    }
+
+    if (showLive) {
+      for (const w of state.live) {
+        if (w.screen !== orientation) continue;
+        const g = document.createElement("div");
+        g.className = "ghost";
+        place(g, w.unit);
+        const t = document.createElement("span");
+        t.textContent = w.app;
+        g.append(t);
+        pane.append(g);
+      }
+    }
+
+    for (const key of visibleKeys()) {
+      const item = entryAt(key);
+      if (!item || !item.unit || item.screen !== orientation) continue;
+      const shared = isShared(key);
+      const el = document.createElement("div");
+      el.className = "win" + (shared ? " shared" : "") + (sel.has(key) ? " sel" : "");
+      el.dataset.key = key;
+      el.title = item.app + (shared
+        ? " — on ALL desktops. One window, one rectangle: moving it here moves it on every tab."
+        : " — on desktop " + tab + " only.")
+        + (item.match ? "\nOnly the window whose title contains \"" + item.match + "\"." : "");
+      place(el, item.unit);
+      const n = document.createElement("div");
+      n.className = "name";
+      if (shared) { const b = document.createElement("b"); b.textContent = "∀ "; n.append(b); }
+      n.append(item.app);
+      if (item.match) {
+        const i = document.createElement("i");
+        i.textContent = " · " + item.match;
+        n.append(i);
+      }
+      el.append(n);
+      for (const d of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
+        const h = document.createElement("div");
+        h.className = "h " + d;
+        h.dataset.dir = d;
+        el.append(h);
+      }
+      el.addEventListener("pointerdown", (ev) => beginDrag(ev, key, pane, orientation));
+      pane.append(el);
+    }
+
+    wrap.append(label, pane);
+    host.append(wrap);
+  }
+}
+
+function place(el, u) {
+  el.style.left = (u.x * 100) + "%";
+  el.style.top = (u.y * 100) + "%";
+  el.style.width = (u.w * 100) + "%";
+  el.style.height = (u.h * 100) + "%";
+}
+
+function renderInspector() {
+  const keys = [...sel];
+  const items = selected();
+  const oneKey = keys.length === 1 ? keys[0] : null;
+  const one = oneKey ? entryAt(oneKey) : null;
+  const isHere = tab === state.activeSpace;
+
+  $("#coords").hidden = !one || !one.unit;
+  $("#selActions").hidden = items.length === 0;
+  if (items.length === 0) {
+    $("#selInfo").textContent = "Nothing selected.";
+  } else if (one) {
+    $("#selInfo").textContent = one.app + " · "
+      + (isShared(oneKey) ? "all desktops" : "desktop " + tab)
+      + (one.unit ? " · " + one.screen : " · not positioned");
+    if (one.unit) {
+      $("#cx").value = round3(one.unit.x);
+      $("#cy").value = round3(one.unit.y);
+      $("#cw").value = round3(one.unit.w);
+      $("#ch").value = round3(one.unit.h);
+    }
+  } else {
+    $("#selInfo").textContent = items.length + " selected: " + items.map((i) => i.app).join(", ");
+  }
+
+  for (const id of ["scopeShared", "scopeDesktop"]) $("#" + id).disabled = !one;
+  $("#scopeHint").textContent = one
+    ? one.app + ": " + (one.unit ? "positioned " : "kept ")
+      + (isShared(oneKey) ? "on all desktops" : "on desktop " + tab)
+      + ", assignment " + (doc.assign[one.app] === undefined ? "not managed" : describeAssign(doc.assign[one.app])) + "."
+    : "Select a window to change how it is managed.";
+  $("#matchRow").hidden = !one;
+  $("#match").hidden = !one || !one.unit;
+  if (one) {
+    $("#togglePos").textContent = one.unit ? "Stop positioning" : "Give it a rectangle";
+    $("#togglePos").title = one.unit
+      ? "Drop this rectangle but keep the entry, so " + one.app + " still belongs on this desktop"
+        + " and nobody manages where it sits. That is how Chrome and Edge are set up."
+      : "Give " + one.app + " a rectangle here, so apply starts positioning it as well as"
+        + " keeping it on this desktop.";
+  }
+  $("#titleRow").hidden = !one;
+  if (one) {
+    $("#titleMatch").value = one.match || "";
+    const rival = isShared(oneKey) ? [] : sameAppElsewhere(one);
+    const hint = $("#titleHint");
+    if (rival.length && !one.match) {
+      hint.textContent = "⚠ " + one.app + " also has a rectangle on " + rival.join(", ")
+        + ", and nothing can tell those windows apart without a title match.";
+      hint.style.color = "var(--warn)";
+    } else if (rival.length) {
+      hint.textContent = one.app + " is also on " + rival.join(", ")
+        + "; each one is picked out by its own title match.";
+      hint.style.color = "var(--dim)";
+    } else {
+      hint.textContent = "Leave blank to take any " + one.app + " window.";
+      hint.style.color = "var(--dim)";
+    }
+  }
+
+  const titles = $("#liveTitles");
+  titles.innerHTML = "";
+  state.live.filter((w) => !one || w.app === one.app).forEach((w) => {
+    if (!w.title) return;
+    const o = document.createElement("option");
+    o.value = w.title;
+    titles.append(o);
+  });
+
+  $("#gather").title = "Move every window visible from here onto the desktop the config says it belongs on."
+    + " This is the fix after a restart, when VS Code reopens all its windows on one desktop.";
+
+  $("#removeApp").disabled = !one;
+  $("#removeApp").title = one
+    ? "Remove " + one.app + " from the layout entirely: " + countEntries(one.app)
+      + ". It stops being managed — apply will never touch it again. Asks first."
+    : "Select one window first, then this removes that app's rectangles everywhere.";
+
+  $("#recapAll").disabled = !isHere;
+  $("#recapApp").disabled = !isHere || !one;
+  $("#recapAll").title = "Update desktop " + tab + "'s saved entries from where its windows actually sit right now."
+    + "\nAll-desktops apps update the one shared rectangle instead, and windows on screen with no entry are added."
+    + "\nTitle matches, unpositioned entries and apps that are closed survive it; unsaved edits on this tab do not."
+    + (isHere ? "" : "\nDisabled: you are not on desktop " + tab + ".");
+  $("#recapApp").title = one
+    ? "Update only " + one.app + "'s saved rectangle from its live window, leaving every other entry exactly as it is."
+      + (isShared(oneKey) ? "\nIt is an all-desktops app, so this updates the shared rectangle." : "")
+      + (isHere ? "" : "\nDisabled: you are not on desktop " + tab + ".")
+    : "Select one window first. This updates only that app's rectangle and touches nothing else.";
+  $("#liveHint").textContent = isHere
+    ? "You are on desktop " + tab + ", so capture reads from this screen."
+    : "Switch to desktop " + tab + " (Ctrl+" + tab + ") to capture from it.";
+
+  $("#applyOne").title = "Move the real windows on desktop " + tab
+    + " into these saved rectangles. All-desktops windows are placed first.";
+  $("#applyAll").title = "Repair any stale All Desktops pins, then walk every desktop in order applying its"
+    + " layout, and come back to the one you started on.";
+  $("#applyHint").textContent = "Apply moves real windows. It never edits this file.";
+}
+
+function renderList() {
+  const host = $("#entryList");
+  host.innerHTML = "";
+
+  const groups = [
+    ["All desktops", doc.shared.map((_, i) => "a:" + i).filter((k) => entryAt(k).unit)],
+    ["Desktop " + tab, perList().map((_, i) => "d:" + i).filter((k) => entryAt(k).unit)],
+    ["Desktop " + tab + ", not positioned",
+      perList().map((_, i) => "d:" + i).filter((k) => !entryAt(k).unit)],
+  ].filter(([, keys]) => keys.length);
+  for (const [title, keys] of groups) {
+    const h = document.createElement("div");
+    h.className = "head";
+    h.textContent = title + " (" + keys.length + ")";
+    h.title = title === "All desktops"
+      ? "One rectangle each, drawn on every desktop tab."
+      : title.endsWith("not positioned")
+        ? "These windows are kept on this desktop, but nobody manages where they sit."
+        : "Windows saved for this desktop only.";
+    host.append(h);
+    for (const key of keys) {
+      const item = entryAt(key);
+      const row = document.createElement("div");
+      row.className = "item" + (isShared(key) ? " shared" : "") + (sel.has(key) ? " sel" : "");
+      row.title = "Click to select, shift-click to add to the selection.";
+      const a = document.createElement("span");
+      a.textContent = item.app;
+      const m = document.createElement("span");
+      m.className = "meta";
+      const rival = isShared(key) ? [] : sameAppElsewhere(item);
+      if (item.match) {
+        m.textContent = "“" + item.match + "”";
+      } else if (!item.unit) {
+        m.textContent = "any window";
+      } else if (rival.length) {
+        m.textContent = "⚠ also on " + rival.length + " other";
+        row.classList.add("ambiguous");
+        row.title = item.app + " has a rectangle on other desktops too and no title match,"
+          + " so nothing can tell its windows apart. Select it and fill in the title match.";
+      } else {
+        m.textContent = item.screen[0] + " " + round3(item.unit.x) + "," + round3(item.unit.y);
+      }
+      const kill = document.createElement("button");
+      kill.className = "kill";
+      kill.textContent = "×";
+      kill.title = "Delete this rectangle. Revert undoes it until you save.";
+      kill.onclick = (ev) => { ev.stopPropagation(); removeKeys([key]); };
+      m.append(" ");
+      row.append(a, m, kill);
+      row.onclick = (ev) => {
+        if (!ev.shiftKey) sel.clear();
+        sel.has(key) ? sel.delete(key) : sel.add(key);
+        renderAll();
+      };
+      host.append(row);
+    }
+  }
+
+  // Apps that are assigned to a desktop but have no rectangle anywhere. Without
+  // this group they would be invisible here, which is exactly how "Edge lives on
+  // desktop 3" used to get lost.
+  const placed = new Set([...Object.values(doc.spaces).flat(), ...doc.shared].map((e) => e.app));
+  const bare = Object.keys(doc.assign).filter((a) => !placed.has(a)).sort();
+  if (bare.length) {
+    const h = document.createElement("div");
+    h.className = "head";
+    h.textContent = "Assigned, no rectangle (" + bare.length + ")";
+    h.title = "Pinned to a desktop, but nobody manages where they sit.";
+    host.append(h);
+    for (const app of bare) {
+      const row = document.createElement("div");
+      row.className = "item";
+      row.title = app + " is kept on " + describeAssign(doc.assign[app])
+        + ", with no saved position. Give it one with Add here / Add to all desktops.";
+      const a = document.createElement("span");
+      a.textContent = app;
+      const m = document.createElement("span");
+      m.className = "meta";
+      m.textContent = describeAssign(doc.assign[app]);
+      const kill = document.createElement("button");
+      kill.className = "kill";
+      kill.textContent = "×";
+      kill.title = "Stop managing " + app + " entirely.";
+      kill.onclick = () => { delete doc.assign[app]; markDirty(); renderAll(); };
+      m.append(" ");
+      row.append(a, m, kill);
+      host.append(row);
+    }
+  }
+
+  const names = new Set();
+  [...Object.values(doc.spaces).flat(), ...doc.shared].forEach((e) => names.add(e.app));
+  state.live.forEach((e) => names.add(e.app));
+  Object.keys(doc.assign).forEach((n) => names.add(n));
+  $("#appNames").innerHTML = "";
+  [...names].sort().forEach((n) => {
+    const o = document.createElement("option");
+    o.value = n;
+    $("#appNames").append(o);
+  });
+}
+
+// Desktops other than this one that also hold a rectangle for the same app.
+// Two of those with no title match is the case gather cannot resolve.
+function sameAppElsewhere(entry) {
+  const out = [];
+  for (const k of Object.keys(doc.spaces).sort((a, b) => +a - +b)) {
+    if (k === tab) continue;
+    if (doc.spaces[k].some((e) => e.app === entry.app)) out.push("desktop " + k);
+  }
+  return out;
+}
+
+function describeAssign(want) {
+  return want === "all" ? "all desktops" : "desktop " + want;
+}
+
+function desktopNumbers() {
+  const keys = Object.keys(doc.spaces).map(Number);
+  const n = Math.max(state.spaceCount || 0, ...keys, 1);
+  return Array.from({ length: n }, (_, i) => i + 1);
+}
+
+function assignOptions(select, current) {
+  select.innerHTML = "";
+  const opts = [["all", "All desktops"], ...desktopNumbers().map((n) => [String(n), "Desktop " + n])];
+  for (const [v, label] of opts) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label;
+    o.selected = String(current) === v;
+    select.append(o);
+  }
+}
+
+function renderAssign() {
+  const host = $("#assignRows");
+  host.innerHTML = "";
+  const broken = new Map((state.broken || []).map((b) => [b.app, b]));
+  const placed = new Set([...Object.values(doc.spaces).flat(), ...doc.shared].map((e) => e.app));
+
+  for (const app of Object.keys(doc.assign).sort()) {
+    const want = doc.assign[app];
+    const bad = broken.get(app);
+    const row = document.createElement("div");
+    row.className = "assign-row" + (bad ? " bad" : "");
+
+    const who = document.createElement("span");
+    who.className = "who";
+    who.textContent = app + (bad ? " ⚠" : "") + (placed.has(app) ? "" : " ·");
+    who.title = app + " is kept on " + describeAssign(want) + "."
+      + (bad ? "\nRight now: " + describeBroken(bad) + "." : "")
+      + (placed.has(app) ? "" : "\nNo rectangle, so nobody manages where it sits.");
+
+    const sel_ = document.createElement("select");
+    sel_.title = "Which desktop " + app + " belongs on. Changing this re-files its rectangle too, if it has one.";
+    assignOptions(sel_, want);
+    sel_.onchange = () => setAssign(app, sel_.value === "all" ? "all" : Number(sel_.value));
+
+    const kill = document.createElement("button");
+    kill.className = "kill";
+    kill.textContent = "×";
+    kill.title = "Stop managing which desktop " + app + " lives on. Its rectangle, if any, stays.";
+    kill.onclick = () => { delete doc.assign[app]; markDirty(); renderAll(); };
+
+    row.append(who, sel_, kill);
+    host.append(row);
+  }
+  if (!Object.keys(doc.assign).length) {
+    host.innerHTML = '<span class="hint">nothing assigned — hit Learn while everything is where you want it</span>';
+  }
+  assignOptions($("#newAssignTo"), $("#newAssignTo").value || "all");
+}
+
+// ---- scope and removal ------------------------------------------------------
+
+// Pull every rectangle an app has out of the document and hand them back, so a
+// scope change can re-file one of them and a removal can just drop the lot.
+function stripApp(name) {
+  const found = [];
+  for (const k of Object.keys(doc.spaces)) {
+    doc.spaces[k] = doc.spaces[k].filter((e) => (e.app === name && found.push(e), e.app !== name));
+  }
+  doc.shared = doc.shared.filter((e) => (e.app === name && found.push(e), e.app !== name));
+  return found;
+}
+
+// Where an app's rectangles are, in words, for confirmation prompts.
+function countEntries(name) {
+  const bits = [];
+  const shared = doc.shared.filter((e) => e.app === name).length;
+  if (shared) bits.push(shared + " shared");
+  for (const k of Object.keys(doc.spaces).sort((a, b) => +a - +b)) {
+    const n = doc.spaces[k].filter((e) => e.app === name).length;
+    if (n) bits.push(n + " on desktop " + k);
+  }
+  if (!bits.length) return "no entries";
+  const total = bits.reduce((s, b) => s + parseInt(b, 10), 0);
+  return total + " entr" + (total === 1 ? "y" : "ies") + " (" + bits.join(", ") + ")";
+}
+
+// Set which desktop an app belongs on, and re-file the rectangle it already has
+// so the two never disagree. Only ever moves an existing rectangle — creating
+// one is what the Add buttons are for, so assigning an app that has no position
+// does not invent a box for it.
+function setAssign(name, want) {
+  doc.assign[name] = want;
+  const existing = stripApp(name);
+  const keep = existing[0];
+  if (keep) {
+    if (want === "all") doc.shared.push(keep);
+    else (doc.spaces[String(want)] = doc.spaces[String(want)] || []).push(keep);
+  }
+  sel.clear();
+  markDirty();
+  renderAll();
+  flash(name + " → " + describeAssign(want) + (keep ? "" : " (no rectangle)"));
+}
+
+// Give an app a rectangle in a scope, creating one if it has none.
+function addRect(name, scope) {
+  const existing = stripApp(name);
+  const keep = existing[0] || { app: name, screen: "landscape", unit: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } };
+  if (!keep.unit) keep.unit = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+  if (scope === "shared") {
+    doc.assign[name] = "all";
+    doc.shared.push(keep);
+  } else {
+    if (doc.assign[name] === "all") delete doc.assign[name];
+    perList().push(keep);
+  }
+  sel.clear();
+  markDirty();
+  renderAll();
+  flash(name + " → " + (scope === "shared" ? "all desktops" : "desktop " + tab));
+}
+
+// Delete specific rectangles. Cheap and reversible with Revert, so no prompt.
+function removeKeys(keys) {
+  const dead = new Set(keys);
+  doc.shared = doc.shared.filter((_, i) => !dead.has("a:" + i));
+  doc.spaces[tab] = perList().filter((_, i) => !dead.has("d:" + i));
+  sel.clear();
+  markDirty();
+  renderAll();
+}
+
+// Remove an app from the layout entirely: every rectangle, every desktop. This
+// is the "stop configuring this app" action - an app with no rectangle is not
+// managed, so there is nothing else to switch off.
+function removeApp(name) {
+  const want = doc.assign[name];
+  const msg = "Remove " + name + " from the layout?\n\n"
+    + "Deletes " + countEntries(name) + "."
+    + (want !== undefined ? "\nDrops its assignment to " + describeAssign(want) + "." : "")
+    + "\n\nApply will stop moving it, and a full recapture will pick it up again if it is on screen.";
+  if (!confirm(msg)) return;
+  stripApp(name);
+  delete doc.assign[name];
+  sel.clear();
+  markDirty();
+  renderAll();
+  flash("Removed " + name);
+}
+
+// ---- match: copy one rectangle onto entries anywhere in the file -------------
+// The entry list only ever shows one desktop, so aligning Slack on desktop 2
+// against Messages on desktop 1 is impossible by selection alone. This picker
+// spans the whole file instead.
+
+function everyEntry() {
+  const out = doc.shared.map((e, i) => ({ e, where: "all desktops", key: "a:" + i }));
+  for (const k of Object.keys(doc.spaces).sort((a, b) => +a - +b)) {
+    doc.spaces[k].forEach((e, i) => out.push({ e, where: "desktop " + k, key: k + ":" + i }));
+  }
+  return out.filter(({ e }) => e.unit);   // nothing to copy onto an entry with no rectangle
+}
+
+let matchSource = null;
+
+function openMatch() {
+  const src = selected()[0];
+  if (!src) return;
+  matchSource = src;
+  const u = src.unit;
+  $("#matchTitle").textContent = "Give other windows " + src.app + "'s rectangle";
+  $("#matchSrc").textContent = src.screen + " · x " + round3(u.x) + " y " + round3(u.y)
+    + " · w " + round3(u.w) + " h " + round3(u.h);
+
+  const picks = $("#matchPicks");
+  picks.innerHTML = "";
+  for (const { e, where } of everyEntry()) {
+    if (e === src) continue;
+    const label = document.createElement("label");
+    label.className = "pick";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.dataset.app = e.app;
+    cb.__entry = e;
+    const name = document.createElement("span");
+    name.textContent = e.app;
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.textContent = where + " · " + e.screen[0] + " " + round3(e.unit.x) + "," + round3(e.unit.y);
+    label.append(cb, name, meta);
+    label.title = "Give " + e.app + " on " + where + " the same screen, position and size.";
+    picks.append(label);
+  }
+  $("#matchDlg").showModal();
+}
+
+function applyMatch() {
+  if (!matchSource) return;
+  const boxes = [...$("#matchPicks").querySelectorAll("input:checked")];
+  for (const cb of boxes) {
+    cb.__entry.screen = matchSource.screen;
+    cb.__entry.unit = { ...matchSource.unit };   // geometry only: the title match identifies a window, not a slot
+  }
+  $("#matchDlg").close();
+  if (!boxes.length) return;
+  markDirty();
+  renderAll();
+  flash("Matched " + boxes.length + " window" + (boxes.length === 1 ? "" : "s") + " to " + matchSource.app);
+}
+
+// ---- drag / resize with snapping --------------------------------------------
+
+const SNAP_PX = 7;
+
+// Every value an edge can snap to on one axis: screen edges, the chosen grid
+// division, and the edges and centres of the other windows on the same screen.
+function snapTargets(orientation, axis, skipKey) {
+  const t = [0, 1];
+  const div = +$("#grid").value;
+  for (let i = 1; i < div; i++) t.push(i / div);
+  for (const key of visibleKeys()) {
+    if (key === skipKey) continue;
+    if (sel.has(key) && sel.size > 1 && sel.has(skipKey)) continue;
+    const item = entryAt(key);
+    if (!item || item.screen !== orientation) continue;
+    const u = item.unit;
+    if (axis === "x") t.push(u.x, u.x + u.w, u.x + u.w / 2);
+    else t.push(u.y, u.y + u.h, u.y + u.h / 2);
+  }
+  return t;
+}
+
+// Given candidate edge positions of the moving box, find the smallest shift that
+// lands one of them on a target. Returns {delta, at} or null.
+function bestSnap(edges, targets, tolFrac) {
+  let best = null;
+  for (const e of edges) {
+    for (const t of targets) {
+      const d = t - e;
+      if (Math.abs(d) <= tolFrac && (!best || Math.abs(d) < Math.abs(best.delta))) best = { delta: d, at: t };
+    }
+  }
+  return best;
+}
+
+function clearGuides(pane) { pane.querySelectorAll(".guide").forEach((g) => g.remove()); }
+
+function drawGuide(pane, axis, frac) {
+  const g = document.createElement("div");
+  g.className = "guide";
+  if (axis === "x") { g.style.left = (frac * 100) + "%"; g.style.top = 0; g.style.width = "1px"; g.style.height = "100%"; }
+  else { g.style.top = (frac * 100) + "%"; g.style.left = 0; g.style.height = "1px"; g.style.width = "100%"; }
+  pane.append(g);
+}
+
+function beginDrag(ev, key, pane, orientation) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const dir = ev.target.dataset.dir || null;
+
+  if (!sel.has(key)) {
+    if (!ev.shiftKey) sel.clear();
+    sel.add(key);
+    renderAll();
+    pane = document.querySelector('.screen[data-orientation="' + orientation + '"]');
+  } else if (ev.shiftKey) {
+    sel.delete(key);
+    renderAll();
+    return;
+  }
+
+  const rect = pane.getBoundingClientRect();
+  const startX = ev.clientX, startY = ev.clientY;
+  const moving = dir ? [key] : [...sel].filter((k) => entryAt(k) && entryAt(k).unit && entryAt(k).screen === orientation);
+  const origin = {};
+  moving.forEach((k) => { origin[k] = { ...entryAt(k).unit }; });
+  if (dir) origin[key] = { ...entryAt(key).unit };
+  const tolX = SNAP_PX / rect.width, tolY = SNAP_PX / rect.height;
+
+  function redraw(k) {
+    const el = pane.querySelector('.win[data-key="' + k + '"]');
+    if (el) place(el, entryAt(k).unit);
+  }
+
+  function onMove(e) {
+    let dx = (e.clientX - startX) / rect.width;
+    let dy = (e.clientY - startY) / rect.height;
+    clearGuides(pane);
+    const snapOff = e.altKey;
+
+    if (!dir) {
+      // move: snap the grabbed box's edges, shift the whole selection by the same delta
+      const o = origin[key];
+      if (!snapOff && o) {
+        const sx = bestSnap([o.x + dx, o.x + o.w + dx, o.x + o.w / 2 + dx], snapTargets(orientation, "x", key), tolX);
+        const sy = bestSnap([o.y + dy, o.y + o.h + dy, o.y + o.h / 2 + dy], snapTargets(orientation, "y", key), tolY);
+        if (sx) { dx += sx.delta; drawGuide(pane, "x", sx.at); }
+        if (sy) { dy += sy.delta; drawGuide(pane, "y", sy.at); }
+      }
+      moving.forEach((k) => {
+        const u = entryAt(k).unit, s = origin[k];
+        u.x = round3(clamp01(s.x + dx));
+        u.y = round3(clamp01(s.y + dy));
+      });
+    } else {
+      const s = origin[key], u = entryAt(key).unit;
+      let left = s.x, top = s.y, right = s.x + s.w, bottom = s.y + s.h;
+      if (dir.includes("w")) left = s.x + dx;
+      if (dir.includes("e")) right = s.x + s.w + dx;
+      if (dir.includes("n")) top = s.y + dy;
+      if (dir.includes("s")) bottom = s.y + s.h + dy;
+      if (!snapOff) {
+        const xs = [], ys = [];
+        if (dir.includes("w")) xs.push(left);
+        if (dir.includes("e")) xs.push(right);
+        if (dir.includes("n")) ys.push(top);
+        if (dir.includes("s")) ys.push(bottom);
+        const sx = xs.length && bestSnap(xs, snapTargets(orientation, "x", key), tolX);
+        const sy = ys.length && bestSnap(ys, snapTargets(orientation, "y", key), tolY);
+        if (sx) { dir.includes("w") ? (left += sx.delta) : (right += sx.delta); drawGuide(pane, "x", sx.at); }
+        if (sy) { dir.includes("n") ? (top += sy.delta) : (bottom += sy.delta); drawGuide(pane, "y", sy.at); }
+      }
+      u.x = round3(Math.min(left, right - 0.02));
+      u.y = round3(Math.min(top, bottom - 0.02));
+      u.w = round3(Math.max(0.02, right - u.x));
+      u.h = round3(Math.max(0.02, bottom - u.y));
+    }
+
+    moving.forEach(redraw);
+    if (dir) redraw(key);
+    syncCoordInputs();
+  }
+
+  function onUp() {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    clearGuides(pane);
+    markDirty();
+    renderList();
+  }
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+}
+
+function syncCoordInputs() {
+  const items = selected().filter((e) => e.unit);
+  if (items.length !== 1) return;
+  const u = items[0].unit;
+  $("#cx").value = round3(u.x); $("#cy").value = round3(u.y);
+  $("#cw").value = round3(u.w); $("#ch").value = round3(u.h);
+}
+
+// ---- alignment tools --------------------------------------------------------
+
+function alignOp(op) {
+  const items = selected().filter((e) => e.unit);
+  if (items.length < 2) { flash("Select two or more windows first", true); return; }
+  const us = items.map((i) => i.unit);
+  const L = Math.min(...us.map((u) => u.x));
+  const R = Math.max(...us.map((u) => u.x + u.w));
+  const T = Math.min(...us.map((u) => u.y));
+  const B = Math.max(...us.map((u) => u.y + u.h));
+  const byY = [...us].sort((a, b) => a.y - b.y);
+  const byX = [...us].sort((a, b) => a.x - b.x);
+
+  switch (op) {
+    case "left":    us.forEach((u) => u.x = L); break;
+    case "right":   us.forEach((u) => u.x = R - u.w); break;
+    case "hcenter": { const c = (L + R) / 2; us.forEach((u) => u.x = c - u.w / 2); break; }
+    case "top":     us.forEach((u) => u.y = T); break;
+    case "bottom":  us.forEach((u) => u.y = B - u.h); break;
+    case "vcenter": { const c = (T + B) / 2; us.forEach((u) => u.y = c - u.h / 2); break; }
+    case "samew":   { const w = us[0].w; us.forEach((u) => u.w = w); break; }
+    case "sameh":   { const h = us[0].h; us.forEach((u) => u.h = h); break; }
+    case "fitw":    us.forEach((u) => { u.x = 0; u.w = 1; }); break;
+    case "distv": {
+      const gap = (B - T - byY.reduce((s, u) => s + u.h, 0)) / (byY.length - 1);
+      let y = T; byY.forEach((u) => { u.y = y; y += u.h + gap; }); break;
+    }
+    case "disth": {
+      const gap = (R - L - byX.reduce((s, u) => s + u.w, 0)) / (byX.length - 1);
+      let x = L; byX.forEach((u) => { u.x = x; x += u.w + gap; }); break;
+    }
+    case "butt": { let y = byY[0].y; byY.forEach((u) => { u.y = y; y += u.h; }); break; }
+    case "stackv": { const h = 1 / byY.length; byY.forEach((u, i) => { u.y = i * h; u.h = h; }); break; }
+    case "stackh": { const w = 1 / byX.length; byX.forEach((u, i) => { u.x = i * w; u.w = w; }); break; }
+  }
+  us.forEach((u) => { u.x = round3(u.x); u.y = round3(u.y); u.w = round3(u.w); u.h = round3(u.h); });
+  markDirty();
+  renderAll();
+}
+
+// ---- wiring -----------------------------------------------------------------
+
+$("#save").onclick = save;
+$("#reload").onclick = () => { if (!dirty || confirm("Throw away unsaved changes?")) load(); };
+$("#grid").onchange = renderStages;
+$("#showLive").onchange = renderStages;
+window.addEventListener("resize", renderStages);
+
+document.querySelectorAll("[data-act]").forEach((b) => {
+  b.onclick = () => act(b.dataset.act === "/apply" ? "/apply?space=" + tab : b.dataset.act);
+});
+
+$("#recapAll").onclick = async () => {
+  if (dirty && !confirm("Recapture updates desktop " + tab + " from the live windows. Discard unsaved edits?")) return;
+  await fetch(API + "/snapshot?space=" + tab);
+  setTimeout(() => { markDirty(false); load(); }, 700);
+};
+
+$("#recapApp").onclick = async () => {
+  const one = selected()[0];
+  if (!one) return;
+  if (dirty && !confirm("Recapture rewrites " + one.app + " from its live window. Discard unsaved edits?")) return;
+  await fetch(API + "/snapshotApp?space=" + tab + "&app=" + encodeURIComponent(one.app));
+  setTimeout(() => { markDirty(false); load(); }, 700);
+};
+
+for (const [id, field] of [["cx", "x"], ["cy", "y"], ["cw", "w"], ["ch", "h"]]) {
+  $("#" + id).oninput = () => {
+    const one = selected()[0];
+    if (!one) return;
+    const v = parseFloat($("#" + id).value);
+    if (!isNaN(v)) { one.unit[field] = round3(v); markDirty(); renderStages(); renderList(); }
+  };
+}
+
+$("#titleMatch").oninput = () => {
+  const one = selected()[0];
+  if (!one) return;
+  const v = $("#titleMatch").value.trim();
+  if (v) one.match = v; else delete one.match;
+  markDirty();
+  renderStages();
+  renderList();
+};
+
+$("#toPortrait").onclick = () => { selected().forEach((e) => e.screen = "portrait"); markDirty(); renderAll(); };
+$("#toLandscape").onclick = () => { selected().forEach((e) => e.screen = "landscape"); markDirty(); renderAll(); };
+
+$("#dupe").onclick = () => {
+  const copies = selected().map((e) => JSON.parse(JSON.stringify(e)));
+  perList().push(...copies);
+  sel.clear(); markDirty(); renderAll();
+};
+
+$("#del").onclick = deleteSelected;
+function deleteSelected() {
+  if (sel.size) removeKeys([...sel]);
+}
+
+$("#scopeShared").onclick = () => { const e = selected()[0]; if (e) addRect(e.app, "shared"); };
+$("#scopeDesktop").onclick = () => { const e = selected()[0]; if (e) addRect(e.app, "desktop"); };
+$("#removeApp").onclick = () => { const e = selected()[0]; if (e) removeApp(e.app); };
+
+function addApp(scope) {
+  const name = $("#newApp").value.trim();
+  if (!name) return;
+  addRect(name, scope);
+  $("#newApp").value = "";
+}
+
+$("#addAssign").onclick = () => {
+  const name = $("#newAssign").value.trim();
+  if (!name) return;
+  const v = $("#newAssignTo").value;
+  setAssign(name, v === "all" ? "all" : Number(v));
+  $("#newAssign").value = "";
+};
+$("#addDesktop").onclick = () => addApp("desktop");
+$("#addShared").onclick = () => addApp("shared");
+
+document.querySelectorAll("[data-align]").forEach((b) => { b.onclick = () => alignOp(b.dataset.align); });
+
+$("#togglePos").onclick = () => {
+  const one = selected()[0];
+  if (!one) return;
+  if (one.unit) {
+    delete one.unit;
+    flash(one.app + " stays on this desktop, position no longer managed");
+  } else {
+    one.unit = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+    flash(one.app + " now has a rectangle — drag it where you want it");
+  }
+  markDirty();
+  renderAll();
+};
+
+$("#match").onclick = openMatch;
+$("#matchGo").onclick = applyMatch;
+$("#matchCancel").onclick = () => $("#matchDlg").close();
+$("#matchAll").onclick = () => $("#matchPicks").querySelectorAll("input").forEach((c) => (c.checked = true));
+$("#matchNone").onclick = () => $("#matchPicks").querySelectorAll("input").forEach((c) => (c.checked = false));
+
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT") return;
+  if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); return; }
+  if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); deleteSelected(); return; }
+  const step = e.shiftKey ? 0.02 : 0.002;
+  const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  const d = map[e.key];
+  if (!d || !sel.size) return;
+  e.preventDefault();
+  selected().filter((it) => it.unit).forEach((it) => {
+    const u = it.unit;
+    if (e.altKey) {
+      u.w = round3(Math.max(0.02, u.w + d[0] * step));
+      u.h = round3(Math.max(0.02, u.h + d[1] * step));
+    } else {
+      u.x = round3(u.x + d[0] * step);
+      u.y = round3(u.y + d[1] * step);
+    }
+  });
+  markDirty(); renderStages(); syncCoordInputs(); renderList();
+});
+
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+load();
+</script>
+</body>
+</html>

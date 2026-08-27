@@ -1118,7 +1118,12 @@ MANIFEST_FREE_PAYLOADS = {
     "hammerspoon/window_layouts.json": (
         "generated data, not a config: the hammerspoon_init entry deploys init.lua, and "
         "init.lua readlinks that deployed symlink to find this folder and writes layouts "
-        "back into it (see its _file resolution) - it is an output of a managed config"
+        "back into it (see wl.dir) - it is an output of a managed config"
+    ),
+    "hammerspoon/window_layout_editor.html": (
+        "never installed anywhere: init.lua reads it off disk from this folder (same wl.dir "
+        "readlink) and serves it over its localhost HTTP server, so deploying a copy would "
+        "only create a second version to drift"
     ),
 }
 

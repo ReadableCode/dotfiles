@@ -345,25 +345,191 @@ Current hotkeys defined in `application_configs/hammerspoon/init.lua`:
 | `Ctrl+Shift+F` | Copy selection, open as Google Drive folder URL |
 | `Cmd+Shift+V` | Paste as plain text (strips formatting) |
 | `Ctrl+Shift+T` | Open front Finder window in Terminal |
-| `Ctrl+Shift+S` | Save current space's window layout (asks for a space number) |
-| `Ctrl+Shift+L` | Load a saved window layout (asks for a space number) |
+| `Ctrl+Shift+L` | Apply saved layouts to every desktop in sequence |
+| `Ctrl+Shift+A` | Apply the saved layout to this desktop only |
+| `Ctrl+Shift+S` | Recapture **all** windows on this desktop |
+| `Ctrl+Shift+W` | Recapture **only the focused app's** window(s) |
+| `Ctrl+Shift+E` | Open the visual layout editor in a browser |
+| `Ctrl+Shift+P` | Enforce every app's desktop assignment |
+| `Ctrl+Shift+G` | Send visible windows to the desktop they belong on |
 | `Ctrl+Shift+H` | Show the hotkey cheatsheet |
 
-### Window layouts (per space)
+### Window layouts (per desktop)
 
-Saved layouts live in `application_configs/hammerspoon/window_layouts.json`,
-keyed by a space number you type. Because `init.lua` is symlinked from the repo,
-Hammerspoon follows the link and writes that JSON back into the repo, so it can
-be committed.
-
-- **Save:** switch to a space, arrange its windows, press `Ctrl+Shift+S`, and
-  type that space's number. Repeat on each space, then commit
-  `window_layouts.json`.
-- **Load:** switch to a space, press `Ctrl+Shift+L`, type the same number.
-  Repeat per space (e.g. after a KVM switch) to snap windows back into place.
+Saved layouts live in `application_configs/hammerspoon/window_layouts.json`.
+Because `init.lua` is symlinked from the repo, Hammerspoon follows the link and
+writes that JSON back into the repo, so it can be committed. The desktop number
+is detected automatically — you are only prompted if detection fails.
 
 Layouts anchor on screen *orientation* (portrait vs landscape) rather than
 display IDs, so they survive the KVM re-enumerating the monitors.
+
+#### Assignment and position are separate
+
+*Which desktop* an app lives on and *where on the screen* it sits are different
+questions, so they are different config, and either can exist without the other:
+
+| | Where it lives in the JSON | What it means |
+|---|---------------------------|---------------|
+| assignment | `"assign": {"Mail": "all", "Microsoft Edge": 3}` | Which desktop the app's windows belong on. This is the Dock's Options → Assign To setting, which the config enforces. |
+| rectangle | `"all"` for all-desktops apps, `"1"`/`"2"`/`"3"` otherwise | Where the window sits. |
+| title match | `"match"` on a rectangle | *Which window* of that app the rectangle is for. |
+
+So `"Microsoft Edge": 3` with no rectangle is "keep Edge on desktop 3, I don't
+care where it sits". VS Code is the mirror image: three rectangles, no
+assignment, because it is three separate windows.
+
+An All Desktops app has **one** window that shows up everywhere, so it cannot be
+in two places at once — a per-desktop rectangle for it is a lie waiting to drift.
+Those windows live in `"all"` and are drawn on every tab of the editor, and the
+assignment is what decides which side a captured window lands on.
+
+An app with neither is simply not managed: apply never touches it. Un-configuring
+an app means dropping both, which the editor's **Remove app…** does in one go.
+
+#### Telling one window of an app from another
+
+The Dock can only assign a whole app to a desktop, which is no help for VS Code:
+it wants a different window on each. So a rectangle may carry `"match"`, a
+substring of the window title:
+
+```json
+{ "app": "Code", "match": "envy (Workspace)", "screen": "landscape", ... }
+```
+
+Titles change as you switch files, so match the stable tail — VS Code puts the
+workspace there (`envy (Workspace)`, `hellofreshjason`, `jasonc-hp665`) and
+Chrome puts the profile there (`Jason (Personal)` on desktop 1,
+`Jason (HelloFresh)` on desktop 2).
+
+An entry may also **omit `unit` entirely**:
+
+```json
+{ "app": "Google Chrome", "match": "Jason (Personal)", "screen": "landscape" }
+```
+
+That says "this window belongs on this desktop, don't manage where it sits" — the
+per-window version of an assignment, and the only way to say it for an app whose
+windows want different desktops. Gather uses those entries; apply ignores them.
+In the editor they appear under "Desktop N, not positioned", and the
+**Stop positioning** / **Give it a rectangle** button moves an entry between the
+two states.
+
+A match beats the screen when apply hands windows out, and recapture refills a
+matched slot from the window it names rather than whichever one came up first —
+otherwise a recapture would swap two VS Code windows' rectangles. The editor
+warns when an app has rectangles on more than one desktop and no match, since
+that is the case nothing can resolve.
+
+**Capture is split in two**, because recapturing everything after nudging one
+window is how a half-arranged desktop overwrites good entries:
+
+- `Ctrl+Shift+S` — recapture every window on this desktop.
+- `Ctrl+Shift+W` — recapture only the focused app, leaving the rest of that
+  desktop's saved entries untouched. This is the one to use after moving a
+  single window. An app with two saved windows (GLKVM) keeps both slots, matched
+  in order.
+
+Both **merge** rather than replace. A saved entry carries things no capture can
+reconstruct — its title match, and whether it is positioned at all — so
+rebuilding the list from the screen would silently delete them. Merging also
+means closing an app does not delete its layout. Windows on screen with no entry
+are still added.
+
+**Apply** with `Ctrl+Shift+L` (walks every desktop in turn) or `Ctrl+Shift+A`
+(this desktop only). Both gather first — see below.
+
+#### Getting windows onto the right desktop after a restart
+
+VS Code reopens every window on one desktop at login. `Ctrl+Shift+G` (**gather**)
+sends each window visible from here to the desktop the config names, working it
+out from the app's assignment, then from a rectangle whose title match fits the
+window, then — if the app has rectangles on exactly one desktop — that one.
+Anything ambiguous is left alone. `Ctrl+Shift+L` gathers on every desktop first
+and lays everything out second, so a window that arrives somewhere already
+processed still gets positioned.
+
+The move itself is a hand gesture, not an API call. `hs.spaces.moveWindowToSpace`
+is the obvious route and it is a lie on this macOS: it returns `true` and the
+window does not move (verified — `windowSpaces` reports the same space before and
+after). What does work is what a person does: macOS carries a window that is
+mid-drag when you press its "switch to desktop N" shortcut, so `wl.dragToDesktop`
+grabs the title bar, holds, switches, and lets go. It grabs 30% across to stay
+clear of the traffic lights and of whatever an app puts in the middle of its
+title bar.
+
+#### Visual editor
+
+`Ctrl+Shift+E` opens `window_layout_editor.html` at
+<http://localhost:21212/editor>, served by Hammerspoon's own local HTTP server.
+It draws both monitors at their true proportions and lets you drag and resize
+the saved rectangles instead of editing fractions by hand:
+
+- Solid blue outlines are this desktop's windows; dashed purple ones marked `∀`
+  are the all-desktops windows, drawn on every tab — drag one and it moves on all
+  of them, because it is one window.
+- Drag to move, corner/edge handles to resize; shift-click for multi-select.
+- Windows snap to screen edges, a chosen grid (halves … twelfths), and the edges
+  and centres of the other windows, with guides showing what caught. Hold
+  <kbd>alt</kbd> while dragging to ignore snapping.
+- **Scope** buttons move the selected app between all-desktops and this-desktop.
+  They only ever re-file a rectangle the app already has; the **Add** buttons are
+  what create one.
+- **Match…** copies the selected rectangle onto any other entries you tick,
+  including ones on other desktops. The entry list only shows one desktop at a
+  time, so this is the way to give Slack on desktop 2 and Teams on desktop 3 the
+  same slot as Messages on desktop 1.
+- The **Desktop assignment** panel is a row per app with a dropdown, listing apps
+  whether or not they have a rectangle. Apps assigned with no rectangle also show
+  up in the entry list under "Assigned, no rectangle", so they cannot get lost.
+- Removing config: hover any row in the entry list for an `×` that deletes that
+  one rectangle, or use **Remove app…** to drop every rectangle the app has on
+  every desktop. That one confirms first, spelling out exactly what it deletes.
+  It leaves the All Desktops pin alone — drop that with the app's chip.
+- Every button carries a hover tooltip spelling out exactly what it rewrites —
+  the two recapture buttons name the desktop and say what gets lost.
+- Alignment tools for the selection: align, distribute, equal size, close gaps,
+  and **stack &amp; fill**, which divides the screen among the selected windows in
+  their current order — the fast way to tidy the vertical monitor.
+- Arrow keys nudge, alt+arrows resize, `⌘S` saves.
+- "Ghost live windows" overlays where the windows actually are right now, so you
+  can see saved-versus-actual before applying.
+- Recapture-all and recapture-this-app are buttons too, and they only light up
+  on the desktop you are standing on.
+
+Saves are written by a fixed-key-order encoder, so editing one window produces
+one window's worth of git diff rather than reshuffling the whole file.
+
+The same server backs the Stream Deck keys (Website action, "GET request in
+background"): `/applyLayouts`, `/apply?space=N`, `/snapshot`, `/snapshotApp`,
+`/fixSticky`, `/learnSticky`, `/reload`. It binds to localhost only.
+
+#### Enforcing assignments
+
+Two things go wrong. An app pinned to All Desktops still *shows* the checkmark in
+its Dock menu but stops following you between desktops (typically after a KVM
+flip); and an app that belongs on one desktop drifts onto another. Both are
+repaired from `"assign"`.
+
+Detection needs no menus: `hs.spaces.windowSpaces()` reports every space a window
+is on, and `wl.spaceIndex()` maps space IDs to desktop numbers, so "on every
+desktop" and "on exactly desktop N" are directly observable. A mismatch with
+`"assign"` is the bug.
+
+The repairs drive the Dock's own right-click menu (Options → All Desktops / This
+Desktop / None), readable and pressable without ever being rendered:
+
+- **Fix drift** shoves misplaced windows onto their desktop and runs the
+  un-assign / re-assign cycle on any stale All Desktops app. No desktop
+  switching, so this is what runs automatically five seconds after a display
+  change and again before `Ctrl+Shift+L`.
+- **Enforce all** (`Ctrl+Shift+P`) also writes the numbered assignments. macOS
+  resolves "This Desktop" against wherever you are standing, so this visits each
+  desktop in turn and comes back. Every step is traced to the Hammerspoon console
+  with a `[wl]` prefix.
+- **Learn** records where each open app currently lives as its intended
+  assignment. It merges rather than replaces, so apps that happen to be closed
+  keep whatever they had.
 
 ## Enable SSH Server
 

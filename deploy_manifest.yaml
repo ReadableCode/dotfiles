@@ -326,7 +326,8 @@
   repo: application_configs/hammerspoon/init.lua
   dest:
     darwin: ~/.hammerspoon/init.lua
-  note: "Hammerspoon follows the link and writes window_layouts.json back into the repo."
+  note: "Hammerspoon follows the link back to the repo folder: it writes window_layouts.json
+    there and serves window_layout_editor.html from there, so neither needs its own entry."
 
 # --- Windows automation (AutoHotkey startup scripts) ---
 #
