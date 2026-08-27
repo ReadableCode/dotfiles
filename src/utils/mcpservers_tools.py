@@ -48,6 +48,17 @@ def discover_mcp_configs(credentials_root, repo_root=None):
     return configs
 
 
+def silent_credentials_dirs(credentials_root, config_paths):
+    """
+    Credentials repos that were scanned but declared no MCP server. A missing
+    server looks identical to a repo that is not cloned, so naming the repos that
+    were seen and contributed nothing is the difference between "jira is gone"
+    and "that clone has no <context>_mcp_servers.yaml yet".
+    """
+    declared = {os.path.dirname(os.path.abspath(path)) for path in config_paths}
+    return [path for path in find_credentials_dirs(credentials_root) if os.path.abspath(path) not in declared]
+
+
 def load_servers(credentials_root, repo_root=None, config_path=None):
     """
     Load every discovered declaration, returning (servers, config_paths).

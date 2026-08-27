@@ -69,11 +69,28 @@ def parse_args(argv=None):
     return parser.parse_args(argv)
 
 
+def describe_discovery(target, config_paths):
+    """
+    Say what was searched, not just what was found. A server missing from the
+    document is either a repo that is not cloned or a clone with no declaration
+    yet, and those look the same in the output unless the scan is spelled out.
+    """
+    lines = [f"# would write {target}"]
+    for path in config_paths:
+        lines.append(f"#   declared by {os.path.relpath(path, CREDENTIALS_ROOT)}")
+    silent = mtools.silent_credentials_dirs(CREDENTIALS_ROOT, config_paths)
+    if silent:
+        names = ", ".join(os.path.basename(path) for path in silent)
+        lines.append(f"#   scanned, no {mtools.MCP_CONFIG_NAME} of its own: {names}")
+    lines.append("#   accounts are NOT here - the server reads them at runtime, ask it for list_accounts")
+    return "\n".join(lines)
+
+
 def main(argv=None):
     args = parse_args(argv)
     if args.print_only:
-        document, target, _ = generate(dest=args.output, redact=True)
-        print(f"# would write {target}")
+        document, target, config_paths = generate(dest=args.output, redact=True)
+        print(describe_discovery(target, config_paths))
         print(mtools.serialize(document), end="")
         return 0
     if args.check:

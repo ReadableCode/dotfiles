@@ -350,6 +350,30 @@ def test_check_exits_non_zero_while_stale_and_zero_once_written(clones):
     assert claude_mcp.main(["--check", "--output", dest]) == 0
 
 
+def test_print_names_the_repos_that_declared_nothing(clones, capsys):
+    make_credentials_repo(clones, "quiet")  # cloned, but declares no MCP server
+
+    claude_mcp.main(["--print", "--output", str(clones / "out" / mtools.GENERATED_NAME)])
+
+    printed = capsys.readouterr().out
+    # relative to the clone root, so the line names the repo that declared it
+    assert "declared by dotfiles/mcp_servers.yaml" in printed
+    assert "declared by acme_credentials/acme_mcp_servers.yaml" in printed
+    # the distinction that matters: scanned-and-silent, not simply absent
+    assert "scanned, no mcp_servers.yaml of its own: quiet_credentials" in printed
+
+
+def test_silent_credentials_dirs_ignores_the_repos_that_did_declare(tmp_path):
+    make_repo_root(tmp_path, servers=[GOOGLE_SERVER])
+    make_credentials_repo(tmp_path, "acme", servers=[JIRA_SERVER], env={"JIRA_TOKEN": "t"})
+    make_credentials_repo(tmp_path, "quiet")
+    _, config_paths = mtools.load_servers(str(tmp_path), os.path.join(str(tmp_path), "dotfiles"))
+
+    silent = mtools.silent_credentials_dirs(str(tmp_path), config_paths)
+
+    assert [os.path.basename(path) for path in silent] == ["quiet_credentials"]
+
+
 def test_print_redacts_secrets_and_writes_nothing(clones, capsys):
     dest = str(clones / "out" / mtools.GENERATED_NAME)
 
