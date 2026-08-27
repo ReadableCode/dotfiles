@@ -1169,6 +1169,25 @@ a doc/automation task in this repo.
   token exchange — enter exactly as displayed); the 0.0.32 nightly never
   attempts the reconcile at all; upstream issue creation is restricted, so
   report via their Discord.
+- **File chips resolve relative paths against the workspace root, inventing an
+  absolute path that does not exist (upstream, found 2026-08-27 on 0.0.34)**:
+  when an assistant message mentions a file by a repo-relative path — say
+  `references/rules.tsv` for a file that actually lives at
+  `<repo>/some/deep/dir/references/rules.tsv` — T3 renders it as a file chip
+  whose hover tooltip reads `~/GitHub/references/rules.tsv`. That path is
+  fabricated: the text fragment is joined to the workspace root with no check
+  that anything is there. The tooltip looks authoritative and absolute, so it
+  reads as fact. It cost real time here — the invented path pointed at the
+  bare `~/GitHub` directory, which looked like an agent had written files
+  outside any repo, and only a birth-time sweep of every file created that day
+  under `~/GitHub` ruled it out. The failure is one-sided: chips whose path
+  *does* resolve open the right file, so the feature works until it silently
+  doesn't. Fix: only render a chip when the joined path exists, and otherwise
+  leave the text plain rather than showing an absolute path that does not;
+  resolving against the thread's cwd instead of the workspace root would fix
+  the common case. Workaround: treat chip tooltips as a guess — confirm with
+  `ls` before believing a file is somewhere surprising, and ask agents to
+  write workspace-relative paths in messages so the join happens to be right.
 
 ## More docs
 
