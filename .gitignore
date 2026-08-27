@@ -41,3 +41,7 @@ authorized_keys
 # Tools that drop auth/state into XDG_CONFIG_HOME alongside the configs we track
 application_configs/github-copilot/
 
+
+# cmdr ships via releases, not committed binaries (docs/unified_cli_tui.md)
+go_apps/cmdr/cmdr
+go_apps/cmdr/cmdr.exe
