@@ -5,7 +5,7 @@ import json
 import os
 
 import yaml
-from utils.inventory_tools import credentials_context, find_credentials_dirs
+from utils.inventory_tools import find_overlay_dirs, overlay_context
 from utils.secret_tools import resolve_secret
 
 # %%
@@ -30,33 +30,35 @@ REPO_PARENT_TOKEN = "{repo_parent}"
 
 def discover_mcp_configs(credentials_root, repo_root=None):
     """
-    Locate every MCP server declaration: an optional ``mcp_servers.yaml`` in the
-    dotfiles repo root (tracked, so no secret values - only env var names) plus,
-    for each sibling ``*_credentials`` repo, an optional
-    ``<context>_mcp_servers.yaml``. Same overlay pattern as the calendar board
-    and the googlemail configs. Returns a list of (config_path, base_dir) pairs.
+    Locate every MCP server declaration on this machine: an optional
+    ``mcp_servers.yaml`` in the dotfiles repo root (tracked, so no secret values -
+    only env var names) plus an optional ``<context>_mcp_servers.yaml`` in EVERY
+    cloned sibling repo, not just the ``*_credentials`` ones - same opt-in rule
+    deploy uses for overlay manifests (``find_overlay_dirs``). A working repo that
+    ships its own MCP server declares it itself; the machine gets whatever is
+    cloned on it. Returns a list of (config_path, base_dir) pairs.
     """
     configs = []
     if repo_root:
         main_config = os.path.join(repo_root, MCP_CONFIG_NAME)
         if os.path.exists(main_config):
             configs.append((main_config, repo_root))
-    for credentials_dir in find_credentials_dirs(credentials_root):
-        overlay = os.path.join(credentials_dir, f"{credentials_context(credentials_dir)}_{MCP_CONFIG_NAME}")
+    for overlay_dir in find_overlay_dirs(credentials_root):
+        overlay = os.path.join(overlay_dir, f"{overlay_context(overlay_dir)}_{MCP_CONFIG_NAME}")
         if os.path.exists(overlay):
-            configs.append((overlay, credentials_dir))
+            configs.append((overlay, overlay_dir))
     return configs
 
 
-def silent_credentials_dirs(credentials_root, config_paths):
+def silent_overlay_dirs(credentials_root, config_paths):
     """
-    Credentials repos that were scanned but declared no MCP server. A missing
-    server looks identical to a repo that is not cloned, so naming the repos that
-    were seen and contributed nothing is the difference between "jira is gone"
-    and "that clone has no <context>_mcp_servers.yaml yet".
+    Repos that were scanned but declared no MCP server. A missing server looks
+    identical to a repo that is not cloned, so naming the repos that were seen and
+    contributed nothing is the difference between "jira is gone" and "that clone
+    has no <context>_mcp_servers.yaml yet".
     """
     declared = {os.path.dirname(os.path.abspath(path)) for path in config_paths}
-    return [path for path in find_credentials_dirs(credentials_root) if os.path.abspath(path) not in declared]
+    return [path for path in find_overlay_dirs(credentials_root) if os.path.abspath(path) not in declared]
 
 
 def load_servers(credentials_root, repo_root=None, config_path=None):

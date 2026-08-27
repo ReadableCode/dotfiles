@@ -1,8 +1,10 @@
 # MCP servers this repo owns, merged into the machine's .mcp.json by
 # src/claude_mcp.py (run automatically by src/deploy_configs.py deploy).
 #
-# Each cloned repo DECLARES its own servers - dotfiles here, a credentials repo
-# in <context>_mcp_servers.yaml - and one generator writes one file. That is why
+# Each cloned repo DECLARES its own servers - dotfiles here, any other sibling
+# repo (credentials or working) in <its own dir name>_mcp_servers.yaml, the same
+# opt-in rule overlay manifests use - and one generator writes one file, holding
+# every server the machine's clones add up to. That is why
 # nothing races: .mcp.json has a single fixed name per directory and cannot be
 # namespaced, so N declarations merging into one file is the only arrangement
 # where two repos are not overwriting each other's copy.

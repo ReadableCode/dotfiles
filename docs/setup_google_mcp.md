@@ -22,6 +22,12 @@ it owns and `src/claude_mcp.py` merges every declaration into a single
 * `dotfiles/mcp_servers.yaml` — this repo's servers (`google`)
 * `<context>_credentials/<context>_mcp_servers.yaml` — that context's servers
   (`hellofresh_mcp_servers.yaml` holds `jira`)
+* `<any-cloned-repo>/<its-dir-name>_mcp_servers.yaml` — a working repo that ships
+  its own server declares it itself, the same opt-in rule overlay manifests use
+
+Discovery is **every cloned sibling**, so the generated file is whatever the
+machine's clones add up to: clone one more repo and its servers appear on the next
+deploy, with nothing to register by hand.
 
 Declare-and-merge rather than deploy-a-file is the whole design. `.mcp.json` has
 **one fixed name per directory** and cannot be namespaced the way `hellofresh_*`

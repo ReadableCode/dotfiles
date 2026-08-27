@@ -78,7 +78,7 @@ def describe_discovery(target, config_paths):
     lines = [f"# would write {target}"]
     for path in config_paths:
         lines.append(f"#   declared by {os.path.relpath(path, CREDENTIALS_ROOT)}")
-    silent = mtools.silent_credentials_dirs(CREDENTIALS_ROOT, config_paths)
+    silent = mtools.silent_overlay_dirs(CREDENTIALS_ROOT, config_paths)
     if silent:
         names = ", ".join(os.path.basename(path) for path in silent)
         lines.append(f"#   scanned, no {mtools.MCP_CONFIG_NAME} of its own: {names}")

@@ -34,6 +34,19 @@ def make_credentials_repo(root, context, servers=None, env=None):
     return repo
 
 
+def make_working_repo(root, name, servers=None):
+    """
+    A cloned sibling that is NOT a *_credentials repo. It opts into deploy
+    discovery by naming its declaration after its own directory, exactly as
+    overlay manifests do.
+    """
+    repo = os.path.join(str(root), name)
+    os.makedirs(repo, exist_ok=True)
+    if servers is not None:
+        write_yaml(os.path.join(repo, f"{name}_{mtools.MCP_CONFIG_NAME}"), servers)
+    return repo
+
+
 def make_repo_root(root, servers=None):
     repo_root = os.path.join(str(root), "dotfiles")
     os.makedirs(repo_root, exist_ok=True)
@@ -77,6 +90,22 @@ def test_discover_finds_the_repo_root_config_and_every_credentials_overlay(tmp_p
 
     assert [os.path.basename(path) for path, _ in found] == ["mcp_servers.yaml", "acme_mcp_servers.yaml"]
     assert [base for _, base in found] == [repo_root, os.path.join(str(tmp_path), "acme_credentials")]
+
+
+def test_discover_includes_any_cloned_repo_that_declares_servers_not_just_credentials_repos(tmp_path):
+    repo_root = make_repo_root(tmp_path, servers=[GOOGLE_SERVER])
+    make_credentials_repo(tmp_path, "acme", servers=[JIRA_SERVER], env={"JIRA_TOKEN": "t"})
+    make_working_repo(tmp_path, "acme-etl", servers=[{"name": "etl", "command": "acme-etl-mcp"}])
+    make_working_repo(tmp_path, "no-opt-in")  # cloned but declares nothing
+
+    found = mtools.discover_mcp_configs(str(tmp_path), repo_root)
+
+    # the machine gets what is cloned on it, whatever kind of repo declared it
+    assert [os.path.basename(path) for path, _ in found] == [
+        "mcp_servers.yaml",
+        "acme-etl_mcp_servers.yaml",
+        "acme_mcp_servers.yaml",
+    ]
 
 
 def test_discover_tolerates_a_repo_with_no_declaration_at_all(tmp_path):
@@ -363,13 +392,13 @@ def test_print_names_the_repos_that_declared_nothing(clones, capsys):
     assert "scanned, no mcp_servers.yaml of its own: quiet_credentials" in printed
 
 
-def test_silent_credentials_dirs_ignores_the_repos_that_did_declare(tmp_path):
+def test_silent_overlay_dirs_ignores_the_repos_that_did_declare(tmp_path):
     make_repo_root(tmp_path, servers=[GOOGLE_SERVER])
     make_credentials_repo(tmp_path, "acme", servers=[JIRA_SERVER], env={"JIRA_TOKEN": "t"})
     make_credentials_repo(tmp_path, "quiet")
     _, config_paths = mtools.load_servers(str(tmp_path), os.path.join(str(tmp_path), "dotfiles"))
 
-    silent = mtools.silent_credentials_dirs(str(tmp_path), config_paths)
+    silent = mtools.silent_overlay_dirs(str(tmp_path), config_paths)
 
     assert [os.path.basename(path) for path in silent] == ["quiet_credentials"]
 

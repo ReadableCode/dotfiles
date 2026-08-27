@@ -43,8 +43,8 @@ def find_overlay_dirs(overlay_root):
     """
     Return every sibling repo that may contribute deploy overlays: all the
     ``*_credentials`` repos, plus any other sibling that opts in by declaring a
-    ``<dirname>_manifest.yaml``, ``<dirname>_removals.yaml`` or
-    ``<dirname>_repos.yaml`` at its root.
+    ``<dirname>_manifest.yaml``, ``<dirname>_removals.yaml``,
+    ``<dirname>_repos.yaml`` or ``<dirname>_mcp_servers.yaml`` at its root.
 
     The opt-in form exists so an overlay can live in a repo that is NOT cloned
     everywhere its credentials repo is. A credentials repo travels to the
@@ -60,7 +60,7 @@ def find_overlay_dirs(overlay_root):
         context = overlay_context(path)
         if any(
             os.path.exists(os.path.join(path, f"{context}_{kind}.yaml"))
-            for kind in ("manifest", "removals", "repos")
+            for kind in ("manifest", "removals", "repos", "mcp_servers")
         ):
             dirs.append(path)
             seen.add(path)
