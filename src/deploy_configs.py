@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -409,9 +410,9 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
         print("  adopted the newer system edits into the repo file - the worktree is now dirty; "
               "git diff to review, then commit or revert")
     if os.path.isdir(system_path):
-        shutil.rmtree(system_path)
+        force_rmtree(system_path)
     else:
-        os.remove(system_path)
+        force_remove_file(system_path)
     if not adopting:
         print("  replaced system version with the repo version (local edits live only in the backup)")
     action = create_link(repo_path, system_path)
@@ -892,6 +893,32 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assu
     return sorted((dest, reason, allow_dir) for dest, (reason, allow_dir) in candidates.items())
 
 
+def force_rmtree(path):
+    """
+    shutil.rmtree that survives Windows read-only files. Git marks everything
+    under .git/objects read-only, and os.unlink on a read-only file raises
+    WinError 5, so a plain rmtree dies partway through a checkout and leaves a
+    gutted .git behind. Clear the attribute and retry the failed operation.
+    """
+    def on_error(func, target, _exc_info):
+        try:
+            os.chmod(target, stat.S_IWRITE)
+        except OSError:
+            raise
+        func(target)
+
+    shutil.rmtree(path, onerror=on_error)
+
+
+def force_remove_file(path):
+    """os.remove that survives a read-only file, same reason as force_rmtree."""
+    try:
+        os.remove(path)
+    except PermissionError:
+        os.chmod(path, stat.S_IWRITE)
+        os.remove(path)
+
+
 def classify_prune_target(dest, allow_directory=False):
     """(removable, description) for a prune candidate that exists on disk."""
     if os.path.islink(dest):
@@ -927,12 +954,35 @@ def classify_repo_directory(dest):
             ["git", "-C", dest, "remote"], text=True, stderr=subprocess.DEVNULL
         ).strip()
     except (OSError, subprocess.CalledProcessError):
+        if gutted_git_dir(dest):
+            # an earlier prune died partway through this same removal (Windows
+            # read-only .git objects), so the checkout is already destroyed:
+            # nothing here is recoverable and finishing the job is the only
+            # way out of the loop where every later run skips it forever
+            return True, "partially removed checkout from an interrupted prune"
         return False, "git state unreadable - left in place"
     if dirty:
         return False, "git checkout has uncommitted changes - left in place"
     if not remotes:
         return False, "git repo has NO remote (origin hub) - left in place"
     return True, "clean git checkout with a remote"
+
+
+def gutted_git_dir(dest):
+    """
+    Whether dest/.git is the wreckage of a half-finished deletion rather than a
+    real repository. An intact checkout always has both .git/HEAD and
+    .git/config; a transient failure (git off PATH, index.lock, a permission
+    blip) leaves both in place, so this stays narrow enough not to fire on a
+    healthy repo we merely failed to read.
+    """
+    git_dir = os.path.join(dest, ".git")
+    if not os.path.isdir(git_dir):
+        return False
+    return not (
+        os.path.exists(os.path.join(git_dir, "HEAD"))
+        and os.path.exists(os.path.join(git_dir, "config"))
+    )
 
 
 def run_prune(candidates, apply_changes=False):
@@ -959,10 +1009,17 @@ def run_prune(candidates, apply_changes=False):
             skipped += 1
             continue
         if apply_changes:
-            if os.path.isdir(dest) and not os.path.islink(dest):
-                shutil.rmtree(dest)
-            else:
-                os.remove(dest)
+            try:
+                if os.path.isdir(dest) and not os.path.islink(dest):
+                    force_rmtree(dest)
+                else:
+                    force_remove_file(dest)
+            except OSError as exc:
+                # one stubborn destination (a file held open, an ACL we cannot
+                # clear) must not abort the rest of the prune
+                print(f"  {paint('FAILED', 'red')}  {dest}  ({exc}; {reason})")
+                skipped += 1
+                continue
             try:  # a skill-style dir is left empty behind its removed file
                 os.rmdir(os.path.dirname(dest))
             except OSError:
