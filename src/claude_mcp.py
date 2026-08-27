@@ -51,6 +51,10 @@ def write(quiet=False, dest=None):
         names = ", ".join(document["mcpServers"]) or "no servers"
         sources = ", ".join(os.path.basename(path) for path in config_paths) or "no declarations found"
         print(f"mcp: {outcome} {target} ({names}) from {sources}")
+    # never quiet: a declaring repo out of sync with its upstream means this
+    # file and some other machine's file disagree, whatever this run printed
+    for warning in mtools.sync_warnings(config_paths):
+        print(warning)
     return outcome
 
 
@@ -91,6 +95,8 @@ def describe_discovery(target, config_paths):
         names = ", ".join(os.path.basename(path) for path in silent)
         lines.append(f"#   scanned, no {mtools.MCP_CONFIG_NAME} of its own: {names}")
     lines.append("#   accounts are NOT here - the server reads them at runtime, ask it for list_accounts")
+    for warning in mtools.sync_warnings(config_paths):
+        lines.append(f"# {warning}")
     return "\n".join(lines)
 
 

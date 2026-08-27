@@ -4,6 +4,7 @@
 import json
 import os
 import stat
+import subprocess
 
 import config_test_utils  # noqa F401
 import pytest
@@ -419,3 +420,73 @@ def test_print_redacts_secrets_and_writes_nothing(clones, capsys):
 
 
 # %%
+
+
+# %%
+# Upstream sync warnings #
+
+
+def _run_git(repo_dir, *args):
+    subprocess.run(
+        ["git", "-C", repo_dir, "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        check=True, capture_output=True,
+    )
+
+
+def _tracked_clone(tmp_path, name):
+    """A clone with an upstream, one pushed commit containing a declaration file."""
+    origin = str(tmp_path / f"{name}_origin.git")
+    subprocess.run(["git", "init", "-q", "--bare", origin], check=True, capture_output=True)
+    clone = str(tmp_path / name)
+    subprocess.run(["git", "clone", "-q", origin, clone], check=True, capture_output=True)
+    config_path = os.path.join(clone, f"{name}_mcp_servers.yaml")
+    with open(config_path, "w", encoding="utf-8") as handle:
+        handle.write("[]\n")
+    _run_git(clone, "add", ".")
+    _run_git(clone, "commit", "-qm", "declare")
+    _run_git(clone, "push", "-q", "origin", "HEAD")
+    return clone, config_path
+
+
+def test_sync_warnings_quiet_when_clone_matches_upstream(tmp_path):
+    _, config_path = _tracked_clone(tmp_path, "acme_credentials")
+    assert mtools.sync_warnings([config_path]) == []
+
+
+def test_sync_warnings_flag_unpushed_declarations(tmp_path):
+    clone, config_path = _tracked_clone(tmp_path, "acme_credentials")
+    with open(config_path, "a", encoding="utf-8") as handle:
+        handle.write("# changed\n")
+    _run_git(clone, "commit", "-aqm", "unpushed declaration change")
+    warnings = mtools.sync_warnings([config_path])
+    assert len(warnings) == 1
+    assert "1 unpushed commit" in warnings[0]
+    assert "acme_credentials" in warnings[0]
+    assert "invisible to every other machine" in warnings[0]
+
+
+def test_sync_warnings_flag_a_stale_clone_after_fetch(tmp_path):
+    clone, config_path = _tracked_clone(tmp_path, "acme_credentials")
+    other = str(tmp_path / "other")
+    subprocess.run(["git", "clone", "-q", str(tmp_path / "acme_credentials_origin.git"), other],
+                   check=True, capture_output=True)
+    with open(os.path.join(other, "acme_credentials_mcp_servers.yaml"), "a", encoding="utf-8") as handle:
+        handle.write("# newer\n")
+    _run_git(other, "commit", "-aqm", "newer upstream declaration")
+    _run_git(other, "push", "-q", "origin", "HEAD")
+    _run_git(clone, "fetch", "-q")
+    warnings = mtools.sync_warnings([config_path])
+    assert len(warnings) == 1
+    assert "behind its upstream" in warnings[0]
+
+
+def test_sync_warnings_skip_repos_with_no_upstream(tmp_path):
+    hub = str(tmp_path / "hub_credentials")
+    os.makedirs(hub)
+    subprocess.run(["git", "-C", hub, "init", "-q"], check=True, capture_output=True)
+    config_path = os.path.join(hub, "hub_credentials_mcp_servers.yaml")
+    with open(config_path, "w", encoding="utf-8") as handle:
+        handle.write("[]\n")
+    _run_git(hub, "add", ".")
+    _run_git(hub, "commit", "-qm", "hub of record")
+    assert mtools.sync_warnings([config_path]) == []

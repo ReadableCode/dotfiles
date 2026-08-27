@@ -3,6 +3,7 @@
 
 import json
 import os
+import subprocess
 
 import yaml
 from utils.inventory_tools import find_overlay_dirs, overlay_context
@@ -137,6 +138,48 @@ def _validate_shapes(server, config_path):
 
 def _all_in_environment(env_secrets):
     return all(os.environ.get(var) for var in env_secrets.values())
+
+
+def _git_output(repo_dir, *args):
+    return subprocess.check_output(
+        ["git", "-C", repo_dir, *args], text=True, stderr=subprocess.DEVNULL
+    ).strip()
+
+
+def sync_warnings(config_paths):
+    """
+    One warning line per declaring repo whose branch has diverged from its
+    upstream. A declaration committed but not pushed generates a correct
+    .mcp.json HERE and silently never reaches any other machine - that is
+    invisible in the generated file itself, so the generator says it out loud
+    (2026-08-27: a labeled google server sat unpushed for an hour and another
+    machine deployed without it). A repo with no upstream is the hub of record
+    and has nothing to be behind; "behind" counts are as of the last fetch.
+    """
+    warnings = []
+    for path in config_paths:
+        repo_dir = os.path.dirname(os.path.abspath(path))
+        try:
+            ahead, behind = (
+                int(count)
+                for count in _git_output(
+                    repo_dir, "rev-list", "--left-right", "--count", "@{upstream}...HEAD"
+                ).split()[::-1]
+            )
+        except (subprocess.CalledProcessError, OSError, ValueError):
+            continue  # not a repo, detached, or no upstream: nothing to compare
+        name = os.path.basename(repo_dir)
+        if ahead:
+            warnings.append(
+                f"mcp: WARNING {name} has {ahead} unpushed commit(s) - "
+                f"declarations from {os.path.basename(path)} are invisible to every other machine"
+            )
+        if behind:
+            warnings.append(
+                f"mcp: WARNING {name} is {behind} commit(s) behind its upstream (as of last fetch) - "
+                f"this machine may be generating from stale declarations"
+            )
+    return warnings
 
 
 # %%
