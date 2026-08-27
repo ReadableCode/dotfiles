@@ -320,7 +320,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             variants[index][column] = os.path.basename(row["repo"])
         host["prune"] = [
             portable_path(dest)
-            for dest, _ in deploy_configs.build_prune_candidates(
+            for dest, _, _ in deploy_configs.build_prune_candidates(
                 entries, host["os"], host["name"], repo_root, assume_requires=True
             )
         ]

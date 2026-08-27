@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 import sys
 import time
 
@@ -781,7 +782,7 @@ def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
             print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'))}", "dim"))
         print()
 
-    orphans = [(dest, reason) for dest, reason in (prune_candidates or []) if os.path.lexists(dest)]
+    orphans = [(dest, reason) for dest, reason, _ in (prune_candidates or []) if os.path.lexists(dest)]
     if orphans:
         print_section("Orphaned - no manifest entry wants these", len(orphans), "yellow")
         for dest, reason in orphans:
@@ -864,7 +865,9 @@ def run_deploy(plan, platform_key, problems_only=False):
 def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assume_requires=False):
     """
     Every destination the removals files say must not exist, as sorted
-    (dest, reason).
+    (dest, reason, allow_directory). allow_directory reflects the entry's
+    opt-in ``directory: true`` key - without it a real directory is never
+    touched.
 
     A destination that some manifest entry still wants is never a candidate, so
     re-adding an entry silently wins over a stale removals line instead of the
@@ -885,16 +888,19 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assu
         # this machine never cloned has no link to prune.
         if not dest or dest in wanted or not requires_satisfied(entry, {}, hostname, repo_root, assume_requires):
             continue
-        candidates.setdefault(dest, f"removals:{entry['name']}")
-    return sorted(candidates.items())
+        candidates.setdefault(dest, (f"removals:{entry['name']}", bool(entry.get("directory"))))
+    return sorted((dest, reason, allow_dir) for dest, (reason, allow_dir) in candidates.items())
 
 
-def classify_prune_target(dest):
+def classify_prune_target(dest, allow_directory=False):
     """(removable, description) for a prune candidate that exists on disk."""
     if os.path.islink(dest):
         return True, "symlink"
     if os.path.isdir(dest):
-        # never rmtree: a real directory here means something other than a deployed file
+        if allow_directory:
+            return classify_repo_directory(dest)
+        # never rmtree without the entry's explicit directory: true opt-in - a
+        # real directory here usually means something other than a deployed file
         return False, "real directory - left in place"
     if os.path.isfile(dest):
         # A hard link is indistinguishable from a regular file once its source is
@@ -903,11 +909,38 @@ def classify_prune_target(dest):
     return False, "special file - left in place"
 
 
+def classify_repo_directory(dest):
+    """
+    Whether a directory named by a ``directory: true`` removal may go. Three
+    guards, each protecting a real failure mode: only git checkouts (anything
+    else was never a managed clone), only clean trees (uncommitted work), and
+    only repos WITH a remote - a remoteless repo is a git origin hub and
+    deleting it destroys the only copy.
+    """
+    if not os.path.isdir(os.path.join(dest, ".git")):
+        return False, "directory is not a git checkout - left in place"
+    try:
+        dirty = subprocess.check_output(
+            ["git", "-C", dest, "status", "--porcelain"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+        remotes = subprocess.check_output(
+            ["git", "-C", dest, "remote"], text=True, stderr=subprocess.DEVNULL
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return False, "git state unreadable - left in place"
+    if dirty:
+        return False, "git checkout has uncommitted changes - left in place"
+    if not remotes:
+        return False, "git repo has NO remote (origin hub) - left in place"
+    return True, "clean git checkout with a remote"
+
+
 def run_prune(candidates, apply_changes=False):
     """
     Delete the destinations the removals files list, wherever they still exist.
-    Dry run unless apply_changes: deleting files should never be a side effect of
-    a normal deploy.
+    The standalone prune command dry-runs unless --apply so the list can be
+    previewed; deploy applies it automatically (prune_after_deploy) because the
+    removals files are committed, explicit enumerations - never patterns.
     """
     removed = skipped = absent = 0
 
@@ -916,17 +949,20 @@ def run_prune(candidates, apply_changes=False):
         len(candidates),
         "cyan" if apply_changes else "yellow",
     )
-    for dest, reason in candidates:
+    for dest, reason, allow_directory in candidates:
         if not os.path.lexists(dest):
             absent += 1
             continue
-        removable, description = classify_prune_target(dest)
+        removable, description = classify_prune_target(dest, allow_directory=allow_directory)
         if not removable:
             print(f"  {paint('SKIP', 'yellow')}  {dest}  ({description}; {reason})")
             skipped += 1
             continue
         if apply_changes:
-            os.remove(dest)
+            if os.path.isdir(dest) and not os.path.islink(dest):
+                shutil.rmtree(dest)
+            else:
+                os.remove(dest)
             try:  # a skill-style dir is left empty behind its removed file
                 os.rmdir(os.path.dirname(dest))
             except OSError:
@@ -963,7 +999,8 @@ def parse_args(argv=None):
         default="deploy",
         help="deploy (default) creates the links; status is a read-only combined "
         "drift report + dry run (non-zero exit on drift); prune removes managed "
-        "links no manifest wants any more (dry run unless --apply); map only "
+        "links no manifest wants any more (dry run unless --apply; deploy also "
+        "applies it automatically); map only "
         "regenerates the deployment map (deploy regenerates it too)",
     )
     parser.add_argument("--status", action="store_true", help="same as the status command")
@@ -995,6 +1032,11 @@ def parse_args(argv=None):
         "--no-mcp",
         action="store_true",
         help="deploy only: skip regenerating .mcp.json from the MCP server declarations",
+    )
+    parser.add_argument(
+        "--no-prune",
+        action="store_true",
+        help="deploy only: skip removing the dead paths the removals files list",
     )
     return parser.parse_args(argv)
 
@@ -1034,6 +1076,21 @@ def regenerate_mcp(quiet=False):
         return False
 
 
+def prune_after_deploy(candidates):
+    """
+    Apply the removals list as part of a normal deploy - the default, so every
+    machine converges on the committed removals without anyone remembering a
+    separate `prune --apply`. Only candidates still on disk are reported: a
+    deploy with nothing dead prints nothing, and the standalone prune command
+    remains the place to see the full list including already-absent paths.
+    """
+    live = [candidate for candidate in candidates if os.path.lexists(candidate[0])]
+    if not live:
+        return
+    print()
+    run_prune(live, apply_changes=True)
+
+
 def main(argv=None):
     args = parse_args(argv)
     entries, manifest_paths = load_manifests(args.manifest)
@@ -1059,6 +1116,8 @@ def main(argv=None):
     if args.status or args.dry_run or args.command == "status":
         return run_status(plan, platform_key, candidates, problems_only=args.problems)
     result = run_deploy(plan, platform_key, problems_only=args.problems)
+    if not args.manifest and not args.no_prune:
+        prune_after_deploy(candidates)
     # deploy is the default command and every updater alias runs it bare, so the
     # map refreshes itself without anyone remembering to ask
     # (--manifest is the isolated test path; it must not touch the real repos)

@@ -100,7 +100,11 @@ end)
 --
 -- Layouts live in `window_layouts.json` (NOT in this file). Because init.lua is
 -- symlinked into ~/.hammerspoon from the dotfiles repo, we follow that symlink
--- and read/write the JSON next to the real init.lua, so it can be committed.
+-- and read/write the JSON next to the real init.lua. That path is itself a
+-- symlink deployed from the private credentials repo (window titles carry real
+-- hostnames and client Chrome profile names, so the data cannot live in this
+-- public repo); reads and editor saves both go through it, so changes land in
+-- the credentials repo to be committed there.
 --
 -- File shape:
 --   { "all":    [ {app, screen, unit{x,y,w,h}}, ... ],

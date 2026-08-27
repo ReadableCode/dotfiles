@@ -14,12 +14,11 @@
 # every machine at the path of whichever machine wrote it. Never put a secret
 # VALUE in this file - env_secrets names the env var to resolve at generate time
 # (see docs/setup_google_mcp.md).
-
-- name: google
-  command: uv
-  args:
-    - run
-    - --project
-    - "{repo_root}"
-    - python
-    - "{repo_root}/src/google_mcp.py"
+#
+# dotfiles declares NO servers of its own today. The google server's CODE lives
+# here (src/google_mcp.py), but which accounts it reaches is a context question,
+# so each credentials repo declares its own labeled instance pinned to its own
+# configs - e.g. `acme_google` with `--context acme` in acme_mcp_servers.yaml.
+# An unlabeled `google` declared here would reach every context's accounts at
+# once and say so nowhere, which is exactly what per-context naming prevents.
+[]

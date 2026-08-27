@@ -416,6 +416,20 @@ function cmdr {
     & $bin @args
 }
 
+# deployconfigs: run the dotfiles config deploy from anywhere (uv resolves the
+# repo venv via --project, so no cd needed). Args pass straight through and the
+# script itself defaults to `deploy`, so bare `deployconfigs` deploys and
+# `deployconfigs prune --apply` / `deployconfigs status` work as written.
+function deployconfigs {
+    if (-not (Test-GitDir)) { return }
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Host "deployconfigs: uv is not installed (wanted to run src/deploy_configs.py)"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    uv run --project $repo python (Join-Path $repo 'src\deploy_configs.py') @args
+}
+
 function ntfyme {
     if (-not (Test-GitDir)) { return }
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args

@@ -21,9 +21,9 @@ GMAIL_API = "https://gmail.googleapis.com/gmail/v1"
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 DEFAULT_HTTP_TIMEOUT = 30
 
-# Matches na-finops/src/utils/gmail_tools.py, which mints these tokens and
-# drives the AP/AR Airflow DAGs off them - gmail.modify covers read, label,
-# trash and send, but never permanent deletion.
+# Matches the scope the contexts' own mail tooling mints its tokens with -
+# gmail.modify covers read, label, trash and send, but never permanent
+# deletion.
 GMAIL_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
 
 MAILBOX_TYPES = ("gmail",)

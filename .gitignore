@@ -45,3 +45,7 @@ application_configs/github-copilot/
 # cmdr ships via releases, not committed binaries (docs/unified_cli_tui.md)
 go_apps/cmdr/cmdr
 go_apps/cmdr/cmdr.exe
+
+# window layout data is private (window titles name real hosts and client
+# Chrome profiles): deployed here as a symlink from personal_credentials
+application_configs/hammerspoon/window_layouts.json

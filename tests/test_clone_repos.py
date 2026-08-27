@@ -58,7 +58,7 @@ def test_exclude_hosts_blocks_a_machine_that_would_otherwise_match():
     entry = {"name": "x", "exclude_hosts": ["ELITEDESK"]}
     assert not clone_repos.entry_matches_host(entry, "elitedesk.local")
     assert clone_repos.entry_matches_host(entry, "ENVY")
-    assert clone_repos.entry_matches_host(entry, "JASONC-HP665")
+    assert clone_repos.entry_matches_host(entry, "ACME-LAPTOP")
 
 
 def test_exclude_hosts_wins_over_an_allow_list():

@@ -19,20 +19,38 @@ Registration is **generated, not linked**. Each cloned repo declares the servers
 it owns and `src/claude_mcp.py` merges every declaration into a single
 `~/.mcp.json`, on every `deploy_configs.py deploy`:
 
-* `dotfiles/mcp_servers.yaml` — this repo's servers (`google`)
+* `dotfiles/mcp_servers.yaml` — this repo's servers (none today; see below)
 * `<context>_credentials/<context>_mcp_servers.yaml` — that context's servers
-  (`hellofresh_mcp_servers.yaml` holds `jira`)
+  (e.g. `acme_mcp_servers.yaml` holding that client's ticketing server and its
+  `acme_google` instance)
 * `<any-cloned-repo>/<its-dir-name>_mcp_servers.yaml` — a working repo that ships
   its own server declares it itself, the same opt-in rule overlay manifests use
+
+The google server's **code** lives in dotfiles, but dotfiles does not declare
+it: which accounts it reaches is a context question. Each credentials repo
+declares its own instance, named for the context and pinned to that context's
+configs with `--context`:
+
+```yaml
+- name: acme_google
+  command: uv
+  args: ["run", "--project", "{repo_root}", "python",
+         "{repo_root}/src/google_mcp.py", "--context", "acme"]
+```
+
+So a machine holding several contexts registers `acme_google` and
+`personal_google` side by side — each labeled, each reaching exactly its own
+context's calendar sources and mailboxes, with nothing shared between them and
+no unlabeled server whose account set depends on what happens to be cloned.
 
 Discovery is **every cloned sibling**, so the generated file is whatever the
 machine's clones add up to: clone one more repo and its servers appear on the next
 deploy, with nothing to register by hand.
 
 Declare-and-merge rather than deploy-a-file is the whole design. `.mcp.json` has
-**one fixed name per directory** and cannot be namespaced the way `hellofresh_*`
+**one fixed name per directory** and cannot be namespaced the way `<context>_*`
 commands are, so if each repo deployed its own copy they would overwrite each
-other's — the exact race that client-prefixed filenames exist to prevent
+other's — the exact race that context-prefixed filenames exist to prevent
 everywhere else. N declarations, one writer, no collision. Server *names* must be
 unique across all declarations; a duplicate is a real conflict between repos and
 the generator refuses it by name rather than letting load order pick a winner.
@@ -61,10 +79,10 @@ same `src/utils/secret_tools.py` path the calendar board uses:
   command: npx
   args: ["-y", "mcp-jira-cloud"]
   env:
-    JIRA_BASE_URL: https://hellofresh.atlassian.net
+    JIRA_BASE_URL: https://acme.atlassian.net
   env_secrets:
     JIRA_API_TOKEN: JIRA_TOKEN
-  env_file: na_finops.env
+  env_file: acme.env
 ```
 
 The generated file lands in the **user folder** because `.mcp.json` is
@@ -74,7 +92,7 @@ there is therefore the whole machine, including repos checked out outside the
 clone root, which a clone-root copy could never reach. Home is not a git repo, so
 nothing dirties a checkout, and since the document can carry a live token it is
 written `0600` (a pre-existing symlink at that path is unlinked, not written
-through, so the retired `na_finops.mcp.json` era cannot rewrite a tracked file).
+through, so the retired deploy-a-symlink era cannot rewrite a tracked file).
 `deploy_manifest.yaml` carries a `method: none` entry for `mcp_servers.yaml` so
 the payload is inventoried; the file itself is produced by the generator.
 
@@ -106,11 +124,13 @@ in-session approval** the first time you use it from a given directory ("New MCP
 server found in this project"), exactly as jira did. `claude mcp list` shows
 `⏸ Pending approval` until then.
 
-Note the server discovers **every** sibling `*_credentials` repo, so on a
-multi-client machine it reaches all of their accounts, selected by
-`source=`/`mailbox=`. That is deliberate: a machine holding two clients'
-credentials is a personal machine and should reach both, matching the calendar
-board, which renders every context side by side.
+With `--context` the server reaches only that context's
+`<context>_calendarboard.yaml` / `<context>_googlemail.yaml`; a pinned context
+whose repo is not cloned (or has no such config) reports no accounts rather
+than falling back to another context's. Run WITHOUT `--context` the server
+discovers **every** sibling `*_credentials` repo, selected by
+`source=`/`mailbox=` — the calendar board's behaviour, kept for ad-hoc use,
+but registered servers should always pin.
 
 ## Where credentials come from
 
@@ -133,10 +153,10 @@ secrets-never-in-the-config rule:
 ```
 
 Both env vars hold **JSON documents**, matching the `GMAIL_OAUTH_<ACCOUNT>` /
-`GMAIL_TOKEN_<ACCOUNT>` convention that `na-finops/src/utils/gmail_tools.py`
-already uses to drive its Airflow DAGs, so an existing mailbox needs no
-re-consent. The client id/secret are taken from the token JSON when it carries
-them and fall back to the OAuth JSON when it does not.
+`GMAIL_TOKEN_<ACCOUNT>` convention a context's own mail tooling already mints,
+so an existing mailbox needs no re-consent (each credentials repo documents
+where its tokens come from). The client id/secret are taken from the token
+JSON when it carries them and fall back to the OAuth JSON when it does not.
 
 Mailboxes are opt-in one at a time. A shared team inbox is a deliberate
 decision, not a default — this server has write scope, so listing one hands an
@@ -158,8 +178,10 @@ Only needed for an account the calendar board has never authenticated.
    later as calendar and mail dying every week for no obvious reason.
 3. Calendar: `uv run python src/calendar_board.py --auth <source>` on a machine
    with a browser, then paste the printed refresh token into the env file.
-4. Mail: mint the token with the flow in `na-finops/src/utils/gmail_tools.py`
-   (scope `gmail.modify`) and put the resulting JSON in the env file.
+4. Mail: mint a google-auth "authorized user" JSON with a standard
+   `InstalledAppFlow` consent (scope `gmail.modify`) and put it in the env
+   file — or reuse the flow the context's own mail tooling already has, per
+   that credentials repo's notes.
 
 Calendar consent is `auth/calendar` and mail consent is `gmail.modify` — both
 read/write. No single token covers both; they are separate grants.

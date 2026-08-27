@@ -12,8 +12,9 @@
 # known-dead paths on its next `prune --apply`. `prune` ignores any dest a live
 # manifest entry still wants, so re-adding an entry beats a stale line here.
 #
-# Workflow: delete a manifest entry -> add its dest here -> prune. Once every
-# machine has pruned, the line can be dropped.
+# Workflow: delete a manifest entry -> add its dest here -> every machine's
+# next deploy applies it automatically (or `prune --apply` by hand; bare
+# `prune` previews). Once every machine has deployed, the line can be dropped.
 
 - name: removed_ahk_key_remaps_startup
   dest:

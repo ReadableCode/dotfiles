@@ -398,9 +398,12 @@ substring of the window title:
 ```
 
 Titles change as you switch files, so match the stable tail — VS Code puts the
-workspace there (`envy (Workspace)`, `hellofreshjason`, `jasonc-hp665`) and
-Chrome puts the profile there (`Jason (Personal)` on desktop 1,
-`Jason (HelloFresh)` on desktop 2).
+workspace there (`envy (Workspace)`, or a remote machine's hostname) and
+Chrome puts the profile there (`Jason (Personal)` on desktop 1, a work
+profile on desktop 2). Because those matches name real hostnames and client
+Chrome profiles, `window_layouts.json` is private: dotfiles carries only a
+gitignored symlink and the data deploys from personal_credentials
+(entry `hammerspoon_window_layouts`).
 
 An entry may also **omit `unit` entirely**:
 

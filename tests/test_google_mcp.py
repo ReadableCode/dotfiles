@@ -137,3 +137,63 @@ def test_every_tool_is_registered_once():
 
 
 # %%
+
+
+# %%
+# Context pinning #
+
+
+def _write_empty(path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("")
+
+
+def test_context_pins_calendar_discovery_to_that_repos_config(monkeypatch, tmp_path):
+    config = tmp_path / "acme_credentials" / "acme_calendarboard.yaml"
+    _write_empty(config)
+    captured = {}
+
+    def fake_load(root, repo_root=None, config_path=None):
+        captured["config_path"] = config_path
+        return [], [config_path]
+
+    monkeypatch.setattr(google_mcp, "load_sources", fake_load)
+    monkeypatch.setattr(google_mcp, "CREDENTIALS_ROOT", str(tmp_path))
+    monkeypatch.setattr(google_mcp, "_context", "acme")
+    assert google_mcp._calendar_sources() == []
+    assert captured["config_path"] == str(config)
+
+
+def test_context_pins_mailbox_discovery_to_that_repos_config(monkeypatch, tmp_path):
+    config = tmp_path / "acme_credentials" / "acme_googlemail.yaml"
+    _write_empty(config)
+    captured = {}
+
+    def fake_load(root, repo_root=None, config_path=None):
+        captured["config_path"] = config_path
+        return [], [config_path]
+
+    monkeypatch.setattr(google_mcp.gtools, "load_mailboxes", fake_load)
+    monkeypatch.setattr(google_mcp, "CREDENTIALS_ROOT", str(tmp_path))
+    monkeypatch.setattr(google_mcp, "_context", "acme")
+    assert google_mcp._mailboxes() == []
+    assert captured["config_path"] == str(config)
+
+
+def test_pinned_context_without_a_config_reports_no_accounts_not_everyones(monkeypatch, tmp_path):
+    (tmp_path / "acme_credentials").mkdir()
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("discovery must not run for a pinned context with no config")
+
+    monkeypatch.setattr(google_mcp, "load_sources", explode)
+    monkeypatch.setattr(google_mcp.gtools, "load_mailboxes", explode)
+    monkeypatch.setattr(google_mcp, "CREDENTIALS_ROOT", str(tmp_path))
+    monkeypatch.setattr(google_mcp, "_context", "acme")
+    assert google_mcp._calendar_sources() == []
+    assert google_mcp._mailboxes() == []
+
+
+def test_parse_args_context_defaults_to_unpinned():
+    assert google_mcp.parse_args([]).context == ""
+    assert google_mcp.parse_args(["--context", "acme"]).context == "acme"

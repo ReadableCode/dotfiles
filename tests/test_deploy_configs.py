@@ -1017,7 +1017,7 @@ def test_prune_candidates_come_from_removals_and_skip_still_wanted_dests(monkeyp
     ])
     entries = [{"name": "keep", "repo": "r.txt", "dest": {"darwin": "~/.keep"}}]
     candidates = deploy_configs.build_prune_candidates(entries, "darwin", "ENVY")
-    assert [dest for dest, _ in candidates] == [os.path.join(str(fake_home), ".gone")]
+    assert [dest for dest, _, _ in candidates] == [os.path.join(str(fake_home), ".gone")]
     assert candidates[0][1] == "removals:dead"
 
 
@@ -1035,7 +1035,7 @@ def test_prune_removes_orphaned_symlink_only_with_apply(tmp_path, fake_home):
     dest = os.path.join(str(fake_home), "skills", "old", "SKILL.md")
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     os.symlink(source, dest)
-    candidates = [(dest, "removals:old")]
+    candidates = [(dest, "removals:old", False)]
 
     deploy_configs.run_prune(candidates, apply_changes=False)
     assert os.path.lexists(dest), "dry run must not delete"
@@ -1054,7 +1054,7 @@ def test_prune_removes_dangling_symlink_and_leaves_real_dirs(tmp_path, fake_home
     os.makedirs(real_dir, exist_ok=True)
 
     deploy_configs.run_prune(
-        [(dangling, "removals:x"), (real_dir, "removals:y")], apply_changes=True
+        [(dangling, "removals:x", False), (real_dir, "removals:y", False)], apply_changes=True
     )
     assert not os.path.lexists(dangling), "a dangling symlink is still ours to remove"
     assert os.path.isdir(real_dir), "a real directory is never pruned"
@@ -1063,13 +1063,13 @@ def test_prune_removes_dangling_symlink_and_leaves_real_dirs(tmp_path, fake_home
 def test_prune_removes_hard_link_style_regular_file(fake_home):
     """The Windows fallback: a hard link is a plain file once its source is gone."""
     dest = write_file(os.path.join(str(fake_home), "hardlinked.md"), "stale content")
-    deploy_configs.run_prune([(dest, "removals:old")], apply_changes=True)
+    deploy_configs.run_prune([(dest, "removals:old", False)], apply_changes=True)
     assert not os.path.exists(dest)
 
 
 def test_prune_is_idempotent_when_targets_are_already_gone(fake_home, capsys):
     dest = os.path.join(str(fake_home), "never-existed.md")
-    assert deploy_configs.run_prune([(dest, "removals:x")], apply_changes=True) == 0
+    assert deploy_configs.run_prune([(dest, "removals:x", False)], apply_changes=True) == 0
     assert "already absent 1" in capsys.readouterr().out
 
 
@@ -1115,11 +1115,6 @@ def test_real_removals_files_parse_and_name_no_still_wanted_dest():
 # the drift this whole system exists to catch, so a new line here needs a
 # reason that is about the FILE, not about not having gotten to it yet.
 MANIFEST_FREE_PAYLOADS = {
-    "hammerspoon/window_layouts.json": (
-        "generated data, not a config: the hammerspoon_init entry deploys init.lua, and "
-        "init.lua readlinks that deployed symlink to find this folder and writes layouts "
-        "back into it (see wl.dir) - it is an output of a managed config"
-    ),
     "hammerspoon/window_layout_editor.html": (
         "never installed anywhere: init.lua reads it off disk from this folder (same wl.dir "
         "readlink) and serves it over its localhost HTTP server, so deploying a copy would "
@@ -1256,3 +1251,88 @@ def test_payload_exemption_lists_stay_in_step_with_the_files():
         "a manifest entry now deploys these, so drop them from MANIFEST_FREE_PAYLOADS: "
         + ", ".join(sorted(now_managed))
     )
+
+
+def test_deploy_prunes_live_removals_by_default(tmp_path, capsys):
+    dead = tmp_path / "dead_link"
+    dead.symlink_to(tmp_path / "gone")
+    deploy_configs.prune_after_deploy([(str(dead), "removals:test_entry", False)])
+    assert not os.path.lexists(dead)
+    assert "REMOVED" in capsys.readouterr().out
+
+
+def test_deploy_prune_prints_nothing_when_no_candidate_is_on_disk(tmp_path, capsys):
+    deploy_configs.prune_after_deploy([(str(tmp_path / "absent"), "removals:test_entry", False)])
+    assert capsys.readouterr().out == ""
+
+
+def test_deploy_prune_still_skips_what_run_prune_protects(tmp_path, capsys):
+    real_dir = tmp_path / "real_dir"
+    real_dir.mkdir()
+    deploy_configs.prune_after_deploy([(str(real_dir), "removals:test_entry", False)])
+    assert real_dir.is_dir()
+    assert "SKIP" in capsys.readouterr().out
+
+
+def test_no_prune_flag_parses():
+    assert deploy_configs.parse_args(["deploy", "--no-prune"]).no_prune is True
+    assert deploy_configs.parse_args(["deploy"]).no_prune is False
+
+
+def _git_repo(path, remote=True):
+    os.makedirs(path, exist_ok=True)
+    subprocess.run(["git", "-C", path, "init", "-q"], check=True)
+    write_file(os.path.join(path, "f.txt"), "x")
+    subprocess.run(["git", "-C", path, "add", "."], check=True)
+    subprocess.run(
+        ["git", "-C", path, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "x"],
+        check=True,
+    )
+    if remote:
+        subprocess.run(["git", "-C", path, "remote", "add", "origin", "git@example.com:x/y.git"], check=True)
+    return path
+
+
+def test_directory_flag_flows_from_removals_entry(monkeypatch, fake_home):
+    _removals(monkeypatch, [
+        {"name": "dead_repo", "dest": {"darwin": "~/gone-repo"}, "directory": True},
+        {"name": "dead_file", "dest": {"darwin": "~/.gone-file"}},
+    ])
+    candidates = deploy_configs.build_prune_candidates([], "darwin", "ENVY")
+    assert [(os.path.basename(dest), allow) for dest, _, allow in candidates] == [
+        (".gone-file", False), ("gone-repo", True),
+    ]
+
+
+def test_prune_directory_removes_only_a_clean_remoted_git_checkout(tmp_path, capsys):
+    repo = _git_repo(str(tmp_path / "clean_repo"))
+    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    assert not os.path.exists(repo)
+    assert "REMOVED" in capsys.readouterr().out
+
+
+def test_prune_directory_skips_dirty_checkout_and_plain_dirs(tmp_path, capsys):
+    dirty = _git_repo(str(tmp_path / "dirty_repo"))
+    write_file(os.path.join(dirty, "uncommitted.txt"), "wip")
+    plain = str(tmp_path / "plain_dir")
+    os.makedirs(plain)
+    deploy_configs.run_prune(
+        [(dirty, "removals:x", True), (plain, "removals:y", True)], apply_changes=True
+    )
+    out = capsys.readouterr().out
+    assert os.path.isdir(dirty) and "uncommitted changes" in out
+    assert os.path.isdir(plain) and "not a git checkout" in out
+
+
+def test_prune_directory_never_deletes_a_remoteless_origin_hub(tmp_path, capsys):
+    hub = _git_repo(str(tmp_path / "hub_repo"), remote=False)
+    deploy_configs.run_prune([(hub, "removals:x", True)], apply_changes=True)
+    assert os.path.isdir(hub)
+    assert "NO remote" in capsys.readouterr().out
+
+
+def test_prune_directory_without_flag_still_refuses_git_repos(tmp_path, capsys):
+    repo = _git_repo(str(tmp_path / "unflagged_repo"))
+    deploy_configs.run_prune([(repo, "removals:x", False)], apply_changes=True)
+    assert os.path.isdir(repo)
+    assert "real directory" in capsys.readouterr().out

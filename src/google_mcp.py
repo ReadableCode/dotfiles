@@ -4,7 +4,9 @@
 # An MCP stdio server speaks JSON-RPC on stdout, so anything else printed there
 # corrupts the protocol - and importing config creates missing repo dirs with a
 # print. Every import that could talk to stdout goes through this redirect.
+import argparse
 import contextlib
+import os
 import sys
 from datetime import date, datetime, timedelta
 
@@ -16,12 +18,23 @@ with contextlib.redirect_stdout(sys.stderr):
         fetch_google_events,
         load_sources,
     )
+    from utils.inventory_tools import (  # noqa: E402
+        credentials_context,
+        find_credentials_dirs,
+    )
 
 # %%
 # Variables #
 
 REPO_ROOT = parent_dir
 CREDENTIALS_ROOT = grandparent_dir
+
+# Set by --context: pins account discovery to ONE context's configs, so a
+# declaration like `acme_google --context acme` reaches exactly that
+# context's accounts and a multi-context machine registers one clearly
+# labeled server per context instead of an unlabeled union. Empty = discover
+# every cloned credentials repo (the calendar board's behaviour).
+_context = ""
 
 SERVER_INSTRUCTIONS = """
 Jason's own Google Calendar and Gmail, over his own Google Cloud OAuth client -
@@ -46,17 +59,42 @@ server = MCPServer(name="google", instructions=SERVER_INSTRUCTIONS, version="0.1
 # Account resolution #
 
 
+def _pinned_config(kind):
+    """
+    The pinned context's ``<context>_<kind>.yaml`` path, or None when that
+    repo is not cloned or has no such config (a pinned server with nothing
+    configured reports no accounts rather than leaking another context's).
+    """
+    for credentials_dir in find_credentials_dirs(CREDENTIALS_ROOT):
+        if credentials_context(credentials_dir) == _context:
+            path = os.path.join(credentials_dir, f"{_context}_{kind}.yaml")
+            return path if os.path.exists(path) else None
+    return None
+
+
 def _calendar_sources():
     """
     Every configured google_calendar source. Outlook sources live in the same
     calendarboard configs but are the board's business, not this server's.
     """
-    sources, _ = load_sources(CREDENTIALS_ROOT, REPO_ROOT)
+    if _context:
+        path = _pinned_config("calendarboard")
+        if not path:
+            return []
+        sources, _ = load_sources(CREDENTIALS_ROOT, REPO_ROOT, config_path=path)
+    else:
+        sources, _ = load_sources(CREDENTIALS_ROOT, REPO_ROOT)
     return [source for source in sources if source["type"] == "google_calendar"]
 
 
 def _mailboxes():
-    mailboxes, _ = gtools.load_mailboxes(CREDENTIALS_ROOT, REPO_ROOT)
+    if _context:
+        path = _pinned_config("googlemail")
+        if not path:
+            return []
+        mailboxes, _ = gtools.load_mailboxes(CREDENTIALS_ROOT, REPO_ROOT, config_path=path)
+    else:
+        mailboxes, _ = gtools.load_mailboxes(CREDENTIALS_ROOT, REPO_ROOT)
     return mailboxes
 
 
@@ -359,7 +397,20 @@ def gmail_send_message(
 # Entry point #
 
 
-def main():
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description="Google Calendar + Gmail MCP stdio server.")
+    parser.add_argument(
+        "--context",
+        default="",
+        help="pin account discovery to one context's <context>_calendarboard.yaml / "
+        "<context>_googlemail.yaml instead of every cloned credentials repo",
+    )
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    global _context
+    _context = parse_args(argv).context
     server.run(transport="stdio")
 
 

@@ -333,6 +333,18 @@ function cmdr() {
     "$bin" "$@"
 }
 
+# deployconfigs: run the dotfiles config deploy from anywhere (uv resolves the
+# repo venv via --project, so no cd needed). Args pass straight through and the
+# script itself defaults to `deploy`, so bare `deployconfigs` deploys and
+# `deployconfigs prune --apply` / `deployconfigs status` work as written.
+function deployconfigs() {
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "deployconfigs: uv is not installed (wanted to run src/deploy_configs.py)"
+        return 1
+    fi
+    uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/deploy_configs.py" "$@"
+}
+
 alias myupdater='bash $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='bash $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='bash $gitDir/dotfiles/scripts/get_my_public_ip.sh'
