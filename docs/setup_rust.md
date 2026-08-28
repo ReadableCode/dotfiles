@@ -57,8 +57,10 @@
 
 Use this path when you can't run `winget`, can't install the Visual Studio
 Build Tools, and can only write to your user profile. We install everything
-under `C:\Users\<you>\userapps\rust` and use the **GNU toolchain** (which links
-against MinGW gcc) so we don't need MSVC at all.
+under `C:\Users\<you>\userapps\rust` (the layout in
+[setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md)) and
+use the **GNU toolchain** (which links against MinGW gcc) so we don't need MSVC
+at all.
 
 Prerequisite: MSYS2 (set it up by following [msys2.md](./msys2.md)) with the
 `mingw-w64-x86_64-gcc` package from
@@ -68,7 +70,7 @@ Prerequisite: MSYS2 (set it up by following [msys2.md](./msys2.md)) with the
 C:\msys64\usr\bin\bash.exe -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc"
 ```
 
-The path mod block below already adds `C:\msys64\mingw64\bin` to `PATH`,
+The shared path mod block already adds `C:\msys64\mingw64\bin` to `PATH`,
 which is where `gcc.exe` and `ld.exe` live.
 
 ### 1. Download the rustup installer
@@ -111,77 +113,17 @@ Flags explained:
   builds use MinGW gcc/ld and don't require MSVC Build Tools.
 - `--profile minimal` — skip docs/components we don't need on this machine.
 
-### 3. Add Rust to the PowerShell profile
+### 3. Get it on PATH
 
-Edit `$PROFILE` (run `notepad $PROFILE` if it doesn't exist yet) and extend
-the existing `## Path Mods ###` block so the `cargo\bin` directory is on
-`PATH` and `RUSTUP_HOME` / `CARGO_HOME` are exported for every session:
+Nothing to edit in this repo. `rust\cargo\bin`, `RUSTUP_HOME`, `CARGO_HOME`
+and `CC=gcc` (so a crate with a `build.rs` that compiles C picks up MinGW) go in
+the hostname-guarded block in that machine's context shard — see
+[setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md).
+Pull the credentials repo on the machine and restart PowerShell.
 
-```powershell
-if ($env:COMPUTERNAME -eq 'WORK-LAPTOP') {
-    $userapps = "$env:USERPROFILE\userapps"
-
-    # WinPython and fzf carry their version in the folder name, so that name changes
-    # every time they are updated. Look them up by pattern rather than pinning a version.
-    # Newest by write time, not by name: name order is alphabetical, so a leftover
-    # WPy64-3900 would beat the newer WPy64-31350.
-    function Get-NewestUserApp {
-        param([string]$Pattern)
-        Get-ChildItem "$userapps\$Pattern" -Directory -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty Name
-    }
-
-    $wpy = Get-NewestUserApp 'WPy64-*'
-    $fzf = Get-NewestUserApp 'fzf-*'
-    if (-not $wpy) { Write-Host 'portable config: no WPy64-* folder in userapps, python is off PATH' -ForegroundColor Yellow }
-    if (-not $fzf) { Write-Host 'portable config: no fzf-* folder in userapps, fzf is off PATH' -ForegroundColor Yellow }
-
-    # blank when the lookup above found nothing, which drops them from the list
-    $wpyPython = if ($wpy) { "$wpy\python" }
-    $wpyScripts = if ($wpy) { "$wpy\python\Scripts" }
-
-    # all relative to userapps
-    $userappPaths = @(
-        'nvim-win64\bin',
-        'node',
-        'rg',
-        'fd',
-        $wpyPython,
-        $wpyScripts,
-        'PortableGit\bin',
-        $fzf,
-        'rust\cargo\bin'
-    )
-
-    # Windows and msys64 are not under userapps, so they are spelled out in full. Entries
-    # are prepended in order, so the last ones here end up first in PATH: msys64 wins,
-    # then the userapps tools, then System32.
-    $paths = @('C:\Windows\System32')
-    $paths += $userappPaths | Where-Object { $_ } | ForEach-Object { "$userapps\$_" }
-    $paths += 'C:\msys64\mingw64\bin', 'C:\msys64\usr\bin'
-
-    $curr = ($env:Path -split ';') | Where-Object { $_ }
-    foreach ($p in $paths) {
-        if (-not (Test-Path -LiteralPath $p)) {
-            Write-Host "portable config: not on disk, leaving off PATH: $p" -ForegroundColor Yellow
-            continue
-        }
-        if (-not ($curr -contains $p)) {
-            $env:Path = "$p;$env:Path"
-        }
-    }
-    Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
-
-    # Set CC to gcc so any crate with a build.rs that compiles C picks up MinGW
-    $env:CC = "gcc"
-
-    # Tell rustup/cargo to keep their state under userapps instead of the home dir
-    $env:RUSTUP_HOME = "$env:USERPROFILE\userapps\rust\rustup"
-    $env:CARGO_HOME  = "$env:USERPROFILE\userapps\rust\cargo"
-
-    Write-Host 'portable toolchain config loaded' -ForegroundColor Green
-}
-```
+The `RUSTUP_HOME` / `CARGO_HOME` you exported by hand in step 2 must match what
+that block sets, or rustup installs into `userapps` and later sessions look for
+the toolchain in `%USERPROFILE%` instead.
 
 Close and reopen PowerShell (and VS Code), then verify with the commands in
 the next section. If `cargo build` later complains about a missing linker,

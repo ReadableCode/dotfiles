@@ -3,6 +3,9 @@
 ## Install portable python
 
 - Download and extract from [WinPython](https://github.com/winpython/winpython/wiki)
+  into `%USERPROFILE%\userapps\` — the shared PATH block finds the newest
+  `WPy64-*` folder by pattern, see
+  [setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md)
 
 ## Setup uv with portable python
 

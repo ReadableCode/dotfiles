@@ -50,6 +50,69 @@ go version
   winget install -e --id GoLang.Go
   ```
 
+## Setup on Locked-Down Windows (No Admin Rights)
+
+Use this path when you can't run `winget` and can only write to your user
+profile. Go ships as a plain zip with no installer and no registry writes, so
+everything lands under `C:\Users\<you>\userapps\go`, following the layout in
+[setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md).
+
+Nothing here needs MSYS2. A pure-Go build (`go_apps/cmdr` included) links with
+Go's own linker. MSYS2's `mingw-w64-x86_64-gcc` only matters if a dependency
+turns on cgo, and `C:\msys64\mingw64\bin` is already on `PATH` from the shared
+portable paths file if that day comes.
+
+### 1. Download and extract the zip
+
+Pick the current `go<version>.windows-amd64.zip` from
+[go.dev/dl](https://go.dev/dl/) and set `$ver` to match. The archive contains a
+top-level `go\` folder, so extract to `userapps` and not to `userapps\go`, or
+you end up with `userapps\go\go\bin`.
+
+```powershell
+$ver = "1.25.0"   # pin whatever is current on go.dev/dl
+$userapps = "$env:USERPROFILE\userapps"
+New-Item -ItemType Directory -Force -Path $userapps | Out-Null
+$zip = "$env:TEMP\go$ver.windows-amd64.zip"
+
+Invoke-WebRequest -Uri "https://go.dev/dl/go$ver.windows-amd64.zip" -OutFile $zip
+# upgrading in place: delete the old GOROOT first, Expand-Archive won't merge cleanly
+Remove-Item -Recurse -Force "$userapps\go" -ErrorAction SilentlyContinue
+Expand-Archive -Path $zip -DestinationPath $userapps -Force
+Remove-Item $zip
+```
+
+### 2. Get it on PATH
+
+Nothing to edit in this repo. `go\bin`, `go-path\bin`, `GOPATH` and `GOCACHE`
+belong in the hostname-guarded block in that machine's context shard, alongside
+the rust entries — see
+[setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md).
+Pull the credentials repo on the machine and restart PowerShell.
+
+`GOROOT` is deliberately not set anywhere: the `go` binary infers it from its
+own location, which is what makes the zip relocatable. `GOPATH` must not equal
+`GOROOT`, hence the separate `go-path` folder — `go` creates it on first build.
+The defaults (`%USERPROFILE%\go`, `%LOCALAPPDATA%\go-build`) are user-writable
+and would work; pointing them at `userapps` keeps the toolchain in one
+directory to back up or delete.
+
+### 3. Verify
+
+Close and reopen PowerShell (and VS Code), then:
+
+```powershell
+where.exe go        # expect ...\userapps\go\bin\go.exe
+go version
+go env GOROOT GOPATH GOCACHE
+cmdr                # builds go_apps/cmdr on first run, then runs it
+```
+
+If `go build` hangs or fails resolving modules, the corporate proxy is likely
+blocking `proxy.golang.org`. Check with `go env GOPROXY` and, if there's an
+internal mirror, set `$env:GOPROXY` in the same profile block rather than
+falling back to `GOFLAGS=-mod=mod` against a blocked upstream.
+
 ## Testing and Finishing Installation
 
 - If using Visual Studio Code, install the Go extension by searching for `@id:golang.go` in the extensions tab.

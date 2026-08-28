@@ -145,7 +145,9 @@ pkg install neovim nodejs
 ### Portable Install (Windows, no admin rights)
 
 Use this when you can't install software system-wide on a Windows machine
-(locked-down work laptop, shared PC, etc.).
+(locked-down work laptop, shared PC, etc.). The `userapps` layout and the
+PowerShell block that puts all of these on `PATH` live in
+[setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md).
 
 #### 1. Download and extract Neovim
 
