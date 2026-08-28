@@ -133,57 +133,69 @@ CREATE TABLE IF NOT EXISTS <schema>.users (
 
 `password_changed_at` is load-bearing: sessions issued before it are rejected,
 so a password change, a disable, and a re-enable each revoke every live session
-without any server-side session store. Book-Bot lacks `role`, `disabled`,
-`display_name` and `password_changed_at` and therefore cannot revoke a session;
-adding the columns is additive and safe.
+without any server-side session store. Book-Bot and load-log gained the four
+missing columns (`role`, `display_name`, `disabled`, `password_changed_at`)
+additively when the §4 decision landed; postgrest-auth now requires this shape
+for every schema it serves.
 
 `password_hash` is an **opaque string**. It is never parsed, reformatted, or
 re-encoded by any migration. Algorithms are self-identifying by prefix
 (`$2b$` bcrypt, `$argon2id$` argon2id), which is what makes a future unified
 verifier possible without touching stored data.
 
-## 4. Auth — UNRESOLVED, and deliberately out of scope for the migrations
+## 4. Auth — DECIDED 2026-08-28: the shared service is the standard
 
-Three different login flows exist today (see §5). Jason's constraints on any
-unification:
+Jason took the decision: **central password verification via postgrest-auth**,
+upgraded to Solitaire's crypto and revocation. C2 (one account shared across
+sites) was dropped — accounts stay per-app. The surviving constraints and how
+each is met:
 
-- **C1. No user-visible change to how anyone logs in, and no password resets.**
-  Existing hashes must keep working exactly as they are.
-- **C2. Ideally one shared account usable across sites**, not one account per
-  app.
-- **C3. Any combined solution must still gate access to a *site*, not only
-  access to the *database*** — i.e. it has to cover what Authelia forward-auth
-  does today for apps that have no login of their own.
-- **C4. If auth is combined, the redundant edge layer (Authelia / nginx basic
-  auth) gets turned off rather than left stacked.**
+- **C1. No user-visible change to how anyone logs in, and no password
+  resets.** Met by prefix dispatch: the service verifies `$argon2id$` and
+  legacy `$2b$` hashes alike and transparently rehashes bcrypt to argon2id on
+  the next successful login.
+- **C3. Access to the *site* is still gated**, by each app's own login page
+  (the syncplex posture) — Authelia forward-auth is not needed for the
+  self-built apps.
+- **C4. No stacked edge layer.** Authelia fronts only the third-party
+  services that cannot gate themselves; its dead `bookbot` rule and the
+  `friends` group are retired.
 
-**No migration plan may implement, change, or unify auth.** Each app keeps its
-current login mechanism and its current `password_hash` values byte-for-byte
-through its migration. The plans move *storage*; the auth decision is a
-separate piece of work that C1 makes strictly easier once every hash lives in
-Postgres. Moving hashes verbatim is forward-compatible with every option on the
-table.
+The division of labor:
+
+- **Verification is central** (postgrest-auth): argon2id KDF policy,
+  per-username+per-IP lockout, dummy-hash timing defense, `disabled`
+  rejected identically to a bad password. Tokens carry
+  `role`/`user_id`/`username`/`app_role`/`iat`/`exp`, with an optional
+  per-app `ttl_hours` (≤ 720 h) so each app keeps its session policy.
+- **Session validation is app-side**: decode the JWT with the shared secret
+  and compare `iat` against `password_changed_at` (30 s cached direct-DB
+  read). Solitaire's `app/auth.py` is the reference; Book-Bot mirrors it.
+  load-log holds the token opaquely and relies on PostgREST's `exp` check
+  only (single-user, RLS deferred — documented in its plan).
+- **Account management stays app-side**: each app's CLI/signup creates
+  argon2id hashes and bumps `password_changed_at` on password change,
+  disable, and re-enable.
 
 ## 5. Current auth flows (audited 2026-08-27)
 
 | Flow | Mechanism | Used by |
 |---|---|---|
 | **A. Authelia forward-auth** | SSO cookie on `tinkernet.me`, argon2 hashes in `users_database.yml` (file backend, on-server only, not in git), groups `admins`/`friends`, `password_reset: disable`, regulation 4 tries / 2 min → 10 min ban, sessions in `/config/db.sqlite3` | Self-built: `assistant`, `crowncentral`, `herdstone`, `ourcash`. Third-party: `sonarr`(+elite), `radarr`(+elite,4k), `readarr`, `readarraudio`, `lazylibrarian`, `bazarr`, `nzbget`(+elite), `deluge`, `calibre` |
-| **B. postgrest-auth service** | `POST https://auth.tinkernet.me/token {schema,username,password}`, **bcrypt** in `<schema>.users`, mints HS256 JWT with `role`/`user_id` | `book_bot`, `load_log` |
-| **C. In-app verify, self-minted JWT** | **argon2id**, app's own `app/auth.py`, same shared `POSTGREST_JWT_SECRET`, session cookie holds the token | `solitaire` (hashes in Postgres), `syncplex` (hashes in `users.json`) |
+| **B. postgrest-auth service** (the standard since 2026-08-28) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire` |
+| **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | `syncplex` (hashes in `users.json`) |
 | **D. nginx basic auth** | `.htpasswd` at the proxy | None as of 2026-08-27 (`duck_db_api` retired; every other occurrence is commented out) |
 | **E. App's own internal auth** | Out of scope | `jellyfin`, `nextcloud`, `grafana`, `bitwarden`, `homeassistant` |
 | **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `a-girls-guide-to-georgetown`, `minecraft*`, `minio`, `ntfy`, `auth`†, `pgrest`† |
 
 \* Open **at the proxy** by design — the app itself requires a login (flow B or
-C). Authelia's config comments this explicitly for syncplex, and `bookbot` has
-an Authelia rule for `admins`+`friends` that is dead while its proxy-conf omits
-`authelia-location.conf` — **worth confirming that is intentional.**
+C). Authelia's config comments this explicitly for the whole group; the dead
+`bookbot` rule (`admins`+`friends`) was removed 2026-08-28.
 
 † `auth` and `pgrest` are correctly ungated at nginx: each authenticates its
 own requests, and the proxy-confs say so in comments.
 
-### What blocks a single shared login today
+### What blocked a single shared login (historical — C2 dropped 2026-08-28)
 
 1. **postgrest-auth is per-schema, not per-identity.** `POST /token` takes a
    `schema` and looks up `<schema>.users`. Accounts are per-app by
@@ -208,8 +220,9 @@ own requests, and the proxy-confs say so in comments.
    It only becomes a blocker if a component is chosen that can verify just one
    algorithm.
 
-None of the above is decided. It is written down so the decision can be made
-with the real constraints visible.
+Resolution: Jason dropped C2 — accounts stay per-app, so items 1 and 2 are
+moot. Item 3 was solved exactly as described: the service dispatches on the
+hash prefix and rehashes to argon2id on the next successful login.
 
 ---
 
@@ -224,4 +237,4 @@ Every one of these has a `POSTGRES_MIGRATION_PLAN.md` in its repo.
 | `Terminal_To_Do` | SQLite file round-tripped through S3. Violates I1, I2, I5, I6, I8. |
 | `Book-Bot` | SQLite `dev mode` fallback (I8); users table missing `role`/`disabled`/`password_changed_at` so sessions cannot be revoked (§3). |
 | `load-log` | Alembic instead of the version-gated `deploy/*.sql` bootstrap (I6/I7) — the only app with a second migration mechanism. |
-| `Solitaire_Associations` | Conforms. Its only divergence is auth flow C vs B, which §4 defers. |
+| `Solitaire_Associations` | Conforms. Moved from flow C to flow B when the §4 decision landed (2026-08-28). |
