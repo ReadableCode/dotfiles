@@ -75,7 +75,11 @@ $userapps = "$env:USERPROFILE\userapps"
 New-Item -ItemType Directory -Force -Path $userapps | Out-Null
 $zip = "$env:TEMP\go$ver.windows-amd64.zip"
 
-Invoke-WebRequest -Uri "https://go.dev/dl/go$ver.windows-amd64.zip" -OutFile $zip
+# curl.exe ships with Windows and streams to disk. Invoke-WebRequest works too,
+# but Windows PowerShell 5.1 renders a progress bar per chunk and drags a ~75MB
+# download out to many minutes - if you use it, set
+# $ProgressPreference = 'SilentlyContinue' first.
+curl.exe -L -o $zip "https://go.dev/dl/go$ver.windows-amd64.zip"
 # upgrading in place: delete the old GOROOT first, Expand-Archive won't merge cleanly
 Remove-Item -Recurse -Force "$userapps\go" -ErrorAction SilentlyContinue
 Expand-Archive -Path $zip -DestinationPath $userapps -Force
