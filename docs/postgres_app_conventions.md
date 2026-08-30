@@ -1,9 +1,14 @@
 # Shared Postgres / PostgREST App Conventions
 
-**Status: UNCOMMITTED DRAFT (2026-08-27).** Written as the single authority the
-per-repo `POSTGRES_MIGRATION_PLAN.md` files defer to. Every self-built app that
-touches the elitedesk Postgres instance must end up matching this document, and
-the migration plans exist to close the gaps.
+**Status: UNCOMMITTED DRAFT (2026-08-27, amended 2026-08-28).** Written as the
+single authority the per-repo `POSTGRES_MIGRATION_PLAN.md` files defer to. Every
+self-built app that touches the elitedesk Postgres instance must end up matching
+this document, and the migration plans exist to close the gaps.
+
+One recorded exception: **`Cash_Flow_Commander` (§7)**, which is not a PostgREST
+app and is not going to become one. Exceptions get a numbered section stating the
+constraint that forces them and the invariants they do and do not keep — not a
+row in §6 that reads as unfinished work forever.
 
 The reference implementation is **`~/GitHub/Solitaire_Associations`**. Where this
 document and that repo disagree, the repo wins and this document is the bug.
@@ -67,12 +72,23 @@ Failures are logged and the app serves anyway — the next boot retries.
 surprise. Bootstrap ends with `NOTIFY pgrst, 'reload schema';` in its own
 committed transaction.
 
-**I8 — No non-Postgres fallback data store.**
-No SQLite default, no JSON file, no DuckDB, no "dev mode" that silently swaps
-backends. If the database is unreachable the app fails loudly. A fallback that
+**I8 — No *silent* fallback data store.**
+No JSON file, no DuckDB, no "dev mode" that swaps backends behind your back. The
+hazard is not a second backend, it is an *unannounced* one: a fallback that
 silently accepts writes is how you end up running against an empty database and
-not noticing — the exact hazard `Cash_Flow_Commander/src/db.py` already guards
-against by hand, and the reason `duck_db_api` was retired.
+not noticing, which is why `duck_db_api` was retired and why
+`Cash_Flow_Commander/src/db.py` grew its guard by hand after exactly that
+happened.
+
+So the rule is about how the backend is chosen, not which one it is. A backend
+the operator selected and was told about is fine. A misconfigured app that
+quietly opens an empty local file instead of the real database is not. Concretely
+(`Cash_Flow_Commander`, §7): no config at all → SQLite, with a printed warning
+naming the file and saying nothing backs it up; config present but the database
+URL missing → hard failure, never a fallback.
+
+Apps that serve over HTTP have no such story and stay Postgres-only: if the
+database is unreachable they fail loudly.
 
 **I9 — Every PostgREST request pins its schema.**
 `Accept-Profile: <schema>` on reads, `Accept-Profile` + `Content-Profile` on
@@ -181,7 +197,7 @@ The division of labor:
 
 | Flow | Mechanism | Used by |
 |---|---|---|
-| **A. Authelia forward-auth** | SSO cookie on `tinkernet.me`, argon2 hashes in `users_database.yml` (file backend, on-server only, not in git), groups `admins`/`friends`, `password_reset: disable`, regulation 4 tries / 2 min → 10 min ban, sessions in `/config/db.sqlite3` | Self-built: `assistant`, `crowncentral`, `herdstone`, `ourcash`. Third-party: `sonarr`(+elite), `radarr`(+elite,4k), `readarr`, `readarraudio`, `lazylibrarian`, `bazarr`, `nzbget`(+elite), `deluge`, `calibre` |
+| **A. Authelia forward-auth** | SSO cookie on `tinkernet.me`, argon2 hashes in `users_database.yml` (file backend, on-server only, not in git), groups `admins`/`friends`, `password_reset: disable`, regulation 4 tries / 2 min → 10 min ban, sessions in `/config/db.sqlite3` | Self-built: `assistant`, `crowncentral`, `herdstone`. Third-party: `sonarr`(+elite), `radarr`(+elite,4k), `readarr`, `readarraudio`, `lazylibrarian`, `bazarr`, `nzbget`(+elite), `deluge`, `calibre` |
 | **B. postgrest-auth service** (the standard since 2026-08-28) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire` |
 | **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | `syncplex` (hashes in `users.json`) |
 | **D. nginx basic auth** | `.htpasswd` at the proxy | None as of 2026-08-27 (`duck_db_api` retired; every other occurrence is commented out) |
@@ -191,6 +207,11 @@ The division of labor:
 \* Open **at the proxy** by design — the app itself requires a login (flow B or
 C). Authelia's config comments this explicitly for the whole group; the dead
 `bookbot` rule (`admins`+`friends`) was removed 2026-08-28.
+
+`ourcash` was dropped from flow A on 2026-08-28: the container had already been
+removed from the compose file (`a05d584`) and the app is retired. Its git-side
+remnants are gone; its **Authelia rule, SWAG proxy-conf, and Cloudflare DNS
+record are on the server only** and still need retiring there.
 
 † `auth` and `pgrest` are correctly ungated at nginx: each authenticates its
 own requests, and the proxy-confs say so in comments.
@@ -233,8 +254,54 @@ Every one of these has a `POSTGRES_MIGRATION_PLAN.md` in its repo.
 | Repo | Gap |
 |---|---|
 | `Sync_Plex` | Accounts + request queue in JSON files on a host bind-mount. No schema at all. Violates I1, I2, I5, I8. |
-| `Cash_Flow_Commander` | Right database and schema, but SQLAlchemy direct-to-Postgres with a `LOGIN` role and password, a SQLite default, no RLS, no PostgREST registration, manual schema creation. Violates I2, I3, I5, I6, I8, I11. |
+| `Cash_Flow_Commander` | **Sanctioned exception, decided 2026-08-28 — see §7.** Stays on SQLAlchemy: I2, I3, I5 and I11 do not apply, and I8 applies in the amended form. I6 was closed (`src/bootstrap.py`). |
 | `Terminal_To_Do` | SQLite file round-tripped through S3. Violates I1, I2, I5, I6, I8. |
-| `Book-Bot` | SQLite `dev mode` fallback (I8); users table missing `role`/`disabled`/`password_changed_at` so sessions cannot be revoked (§3). |
-| `load-log` | Alembic instead of the version-gated `deploy/*.sql` bootstrap (I6/I7) — the only app with a second migration mechanism. |
+| `Book-Bot` | Conforms as of 2026-08-28. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). Its `test_postgrest_real.py` stays red until `postgrest-auth` is redeployed — deploy the service **before** Book-Bot's app code, or every user locks out. |
+| `load-log` | Conforms as of 2026-08-28. Alembic removed in favour of `deploy/*.sql` + `src/bootstrap.py` called from the Streamlit and TUI startup paths; `users` brought to the §3 shape. One open backlog item is fleet-level, not load-log's own conformance: its historic migration set `search_path` on the whole shared `apps` database (`load-log/backlog/shared-apps-search-path.md`). |
 | `Solitaire_Associations` | Conforms. Moved from flow C to flow B when the §4 decision landed (2026-08-28). |
+
+---
+
+## 7. Cash_Flow_Commander — DECIDED 2026-08-28: not a PostgREST app
+
+Jason took the decision: **CFC keeps SQLAlchemy and does not migrate.** Its
+`POSTGRES_MIGRATION_PLAN.md` is superseded; the permanent record is in
+`Cash_Flow_Commander/deploy/DEPLOY.md`.
+
+The decisive constraint is a product requirement, not a preference: **anyone
+cloning the repo must be able to run it against their own database, including a
+local SQLite file.** PostgREST cannot serve SQLite, so conforming to I2 would
+mean two data-access paths to the same tables — one per backend — which is worse
+than the divergence it fixes. SQLAlchemy is the only seam that spans both.
+
+Two supporting facts, either of which would be insufficient alone:
+
+- **No multi-user story.** Each person runs their own database at their own URL.
+  With one account, an RLS policy of `USING (user_id = jwt_user_id())` filters
+  nothing, and a `users` table would exist purely to mint a token. This is the
+  same posture as `load-log`, which is also single-user and also has no
+  `04_rls.sql`.
+- **Not internet-facing.** A TUI and ten CLIs on the LAN or Tailscale, so the
+  `LOGIN` role is not exposed the way a web app's would be.
+
+What this means for the invariants, so the state is not re-flagged as a gap:
+
+| | CFC |
+|---|---|
+| **I1** | Holds. One schema, `cash_flow_commander`, in `apps`. |
+| **I2** | Does not apply. Direct SQLAlchemy is the design. |
+| **I3** | Does not apply. `cash_flow_commander_user` keeps `LOGIN` + password. |
+| **I4/I5** | Do not apply. No `users` table, no RLS, single-user. |
+| **I6** | **Closed.** `src/bootstrap.py`, version-gated on `deploy_meta`, called from all ten entry points. Previously only three called `create_tables()`. |
+| **I7** | Holds. `create_all(checkfirst=True)`; a definition change is a reviewed migration. |
+| **I8** | Holds in the amended form (see I8). SQLite is chosen and announced, never a silent fallback. |
+| **I9/I11** | Do not apply. No PostgREST. |
+| **I10** | Open. `tests/test_raw_store.py::test_postgres_ingest_and_dedup` still `skipif`s on `CFC_TEST_DATABASE_URL`. |
+
+Grafana keeps reading the tables directly as `grafana_ro` (`SELECT`-only,
+schema-scoped). Under the original plan RLS would have blanked every dashboard;
+without RLS that problem does not arise.
+
+**This exception does not generalize.** It rests on the clone-and-run
+requirement. An app that serves over HTTP, or that ever gains a second user,
+falls back under I2–I5 and I11.
