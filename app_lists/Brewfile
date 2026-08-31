@@ -27,6 +27,11 @@ brew "pandoc"
 # pango pulls glib/cairo/harfbuzz/fontconfig - the native stack WeasyPrint
 # dlopens for PDF generation (any repo using weasyprint needs these on mac)
 brew "pango"
+# pwsh exists ONLY so powershell_aliases.ps1 edits can be parse-checked
+# (`pwsh -NoProfile`) before they ship to the Windows machines. It never
+# becomes a login shell or default anything - just a prefix-contained binary
+# (formula, not cask: no pkg installer, no sudo; pulls in dotnet).
+brew "powershell"
 brew "pylint"
 brew "python"
 brew "ripgrep"
