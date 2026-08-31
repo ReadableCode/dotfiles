@@ -99,20 +99,26 @@ if ($env:COMPUTERNAME -eq 'WORK-LAPTOP') {
         'PortableGit\bin',
         $fzf,
         'rust\cargo\bin',
-        'go\bin',
-        'go-path\bin'
+        'go\bin'
     )
+
+    # GOPATH\bin holds whatever `go install` has built, and go does not create it
+    # until the first install. Add it unconditionally rather than testing for it:
+    # an absent directory on PATH is inert, and this way the first install is
+    # runnable in the shell that did it instead of after a restart.
+    $goBin = "$userapps\go-path\bin"
 
     # Windows and msys64 are not under userapps, so they are spelled out in full. Entries
     # are prepended in order, so the last ones here end up first in PATH: msys64 wins,
     # then the userapps tools, then System32.
     $paths = @('C:\Windows\System32')
     $paths += $userappPaths | Where-Object { $_ } | ForEach-Object { "$userapps\$_" }
+    $paths += $goBin
     $paths += 'C:\msys64\mingw64\bin', 'C:\msys64\usr\bin'
 
     $curr = ($env:Path -split ';') | Where-Object { $_ }
     foreach ($p in $paths) {
-        if (-not (Test-Path -LiteralPath $p)) {
+        if ($p -ne $goBin -and -not (Test-Path -LiteralPath $p)) {
             Write-Host "portable config: not on disk, leaving off PATH: $p" -ForegroundColor Yellow
             continue
         }

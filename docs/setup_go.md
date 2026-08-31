@@ -96,7 +96,10 @@ Pull the credentials repo on the machine and restart PowerShell.
 
 `GOROOT` is deliberately not set anywhere: the `go` binary infers it from its
 own location, which is what makes the zip relocatable. `GOPATH` must not equal
-`GOROOT`, hence the separate `go-path` folder — `go` creates it on first build.
+`GOROOT`, hence the separate `go-path` folder. `go` does not create `go-path`
+until the first `go install`, so the profile block puts `go-path\bin` on PATH
+without a `Test-Path` guard instead of warning about a folder that is
+legitimately absent.
 The defaults (`%USERPROFILE%\go`, `%LOCALAPPDATA%\go-build`) are user-writable
 and would work; pointing them at `userapps` keeps the toolchain in one
 directory to back up or delete.
