@@ -5,6 +5,7 @@
 #
 # Packages needing a third-party repo first (VS Code, NVIDIA drivers) stay in
 # linux_apps_non_apt.md - they cannot be installed from a plain list.
+fastfetch
 flatpak
 gnome-shell-extension-gsconnect
 libxcrypt-compat
