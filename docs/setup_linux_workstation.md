@@ -216,6 +216,175 @@ sudo dnf upgrade --refresh
 sudo dnf autoremove
 ```
 
+## What `myupdater` Repairs Every Run
+
+Beyond upgrading packages, `myupdater` re-checks three things a release upgrade
+or a vendor installer silently breaks, and repairs each in place after a `[y/N]`.
+All three are **no-ops once healthy**, so a normal run prints where it stands and
+changes nothing. None of them is a manual step — that is the point. Every one of
+these was a "run these commands after an upgrade" note in this document, and each
+one had been skipped for years on the machine it was written for.
+
+| Check | What it repairs |
+|-------|-----------------|
+| `check_apt_sources()` | Third-party apt sources the upgrader switched off (below) |
+| `check_vpn_client_health()` | `zstunnel` left disabled or without a restart policy ([details](#zscaler-disconnected-after-reboot-tunnel-not-running)) |
+| `check_release_upgrade()` | The distro release itself, capped per host by the credentials repo's release policy (below) |
+
+### Third-party apt sources
+
+A release upgrade sets `Enabled: no` on **every** third-party source in
+`/etc/apt/sources.list.d/` and rewrites the old `.list` files as deb822
+`.sources`. Nothing re-enables them, so the app stops updating while apt keeps
+exiting 0. On this machine `code` sat on 1.71.0 (Sept 2022) from the 21.10 →
+24.04 upgrade until 2026-08-31 for exactly this reason.
+
+The repair names **no packages**. A well-behaved third-party `.deb` registers its
+own apt source and key from its `postinst`, so `myupdater` finds the owning
+installed package by matching the dead source's URI host against the `postinst`
+scripts under `/var/lib/dpkg/info/`, then re-runs that package's own hook and
+lets the vendor write whatever it currently considers correct — current suite,
+current key, current file format.
+
+| Disabled source | What `myupdater` offers |
+|-----------------|-------------------------|
+| An installed package registers it | Re-run that package's own hook, then delete the stale file |
+| No installed package registers it | Delete it — nothing can repair it, and it is already inert |
+| `cdrom:` install-media source | Delete it — that's the ISO the machine was installed from |
+| `*.save` / `*.distUpgrade` backups | Delete them — apt never reads these |
+
+Re-running the hook is what makes this work offline: with the source disabled apt
+has no candidate, so `apt-get install --reinstall` **cannot** fix it, while the
+already-installed package's hook carries its own key inline. A source pinned to a
+dead codename (`Suites: impish`) is flagged as such using `distro-info`'s local
+data, and gets fixed by the same hook re-run, since the vendor writes the current
+suite.
+
+This runs **before** the package upgrade, so a source repaired this run is one
+the upgrade in the same run actually reads.
+
+### Distro release upgrades
+
+The release check moves the machine forward only as far as this host's ceiling
+allows. That ceiling exists because Zscaler Client Connector is certified against
+specific releases, and a machine that runs ahead of that list loses the VPN,
+which loses the work the VPN is for.
+
+The ceiling is declared **per host**, in the credentials repo that owns the host:
+`<context>_credentials/<context>_os_release_policy.conf`, discovered by the same
+sibling-repo glob as the overlay manifests. Keys are
+`<host>.<distro>=<version>` — the hostname lowercased and cut at the first dot,
+e.g. `workstation-1.ubuntu=26.04` — with a bare `<distro>=` as a default for
+the other hosts in that same file. Nothing in dotfiles declares a ceiling,
+deliberately: this repo is cloned onto every machine, so a ceiling here would
+vouch for the VPN client on machines nobody has checked, and a host with no
+entry is simply never release-upgraded.
+
+On every run the check does one of these and then gets out of the way:
+
+| Situation | What `myupdater` does |
+|-----------|----------------------|
+| Already at the ceiling | Prints where it stands, changes nothing |
+| Newer release out, at or under the ceiling | Prompts `[y/N]`; runs `do-release-upgrade` only on an explicit yes |
+| Newer release out, above the ceiling | Prints a `NOTE` naming the release and the policy file, every run, and offers the ceiling instead |
+| Ceiling names a release that is already EOL | Prints a `WARNING` and does nothing — a stale ceiling is not a target |
+| Ceiling names a release that never shipped | Prints a `WARNING` and does nothing |
+| Machine somehow past the ceiling | Prints a `WARNING` — the VPN is on an unvetted release |
+| This host, or this distro on this host, has no entry | Leaves the release alone (unknown ceiling means don't move) |
+| No credentials repo cloned, so no policy at all | Leaves the release alone, and says where the file belongs |
+
+It also reports, from `distro-info`'s local CSV so it works with the VPN down:
+the newest stable release, and how many days the running release has before EOL
+(loudly inside `eol_warn_days`, louder once past it). On Ubuntu it prints the
+date Zscaler packaged the installed client next to the target release's release
+date, and says so when the client is the older of the two. That is a prompt to
+check the tunnel after the reboot, not a reason to answer no: the newest client
+Zscaler ships is routinely older than the newest Ubuntu, so on a fully patched
+machine there is nothing newer to install.
+
+So you can't drift behind silently (the prompt and the day count keep coming
+back) and you can't drift ahead of the VPN silently (the ceiling is a hard
+stop). Nothing upgrades or reboots without a yes at a terminal; with stdin
+redirected it declines to prompt.
+
+### Cadence: `Prompt=normal`, not `lts`
+
+These are workstations, so the policy sets `<host>.ubuntu_prompt=normal`
+— the upgrader offers the next **supported** release whether or not it's an LTS,
+which means an upgrade roughly every six months instead of sitting two years
+behind on an LTS. Interim releases only carry nine months of support, so that
+cadence is the trade being made deliberately.
+
+`normal` does not drag the machine through dead releases. The upgrader skips any
+release whose `Supported` flag is `0` in `changelogs.ubuntu.com/meta-release`
+(the `if not dist.supported ... continue` in `_buildMetaRelease`,
+`/usr/lib/python3/dist-packages/UpdateManager/Core/MetaRelease.py`), so from
+24.04 it steps straight over the EOL 24.10/25.04/25.10 to 26.04.
+
+This is also why `lts` is the setting that strands you: `meta-release-lts` gates
+LTS→LTS upgrades until the `.1` point release, so a machine set to `lts` sees
+nothing for months after a new LTS ships, while `normal` is offered it the day
+the release goes stable.
+
+`myupdater` never asks about this key as its own question — that would be a
+question about a config file, not about the machine. It works out the target
+release from `distro-info`'s local CSV instead of from `do-release-upgrade -c`,
+precisely *because* that command is itself gated by `Prompt=` and reports
+nothing on a machine set to `lts`, which is how this workstation sat on 24.04
+while 26.04 was sitting right there. So there is one question — upgrade or not —
+and the `Prompt=` edit is listed inside it as one of the things a yes will do,
+applied only after you say yes.
+
+### Raising the ceiling
+
+1. Confirm the VPN client is supported on **the release you are moving to** —
+   not on the one you are leaving. This distinction cost this machine its VPN on
+   2026-08-31: the ceiling was raised to 26.04 because the client installed and
+   the tunnel came up, but that was observed on 24.04 and proved nothing about
+   26.04. The upgrade then deleted the client, because it hard-depended on
+   `libqt5webkit5` and 26.04 dropped that package. Zscaler's supported-platform
+   matrix is behind a login, so no script here can check it for you; this step is
+   the whole reason the file is manual.
+2. **Download the installer for the newest client before you start**, and keep
+   it somewhere the upgrade won't touch. If the client does get removed you
+   cannot apt-install it back — it is in no repo — and if the download point is
+   itself behind the VPN you are stuck. The client's own logs name the version
+   the portal is offering: `grep -i 'ZCC version' /opt/zscaler/logs/*.log`.
+3. Edit the one line for this host in that credentials repo's
+   `<context>_os_release_policy.conf` (e.g. `workstation-1.ubuntu=26.04`),
+   commit it there. `myupdater` names the file and the exact key in the message
+   that told you the machine was capped.
+4. Run `myupdater` and answer `y`. Read the list of packages it prints that have
+   no apt source behind them — those are the ones exposed to removal.
+
+To skip the check entirely for one run:
+
+```bash
+MYUPDATER_SKIP_RELEASE_UPGRADE=1 myupdater
+```
+
+### After a release upgrade
+
+Re-run `myupdater` first. Disabled third-party sources and a `zstunnel` unit
+reset by the VPN client are both checks it performs, so that run repairs them.
+
+The one thing it cannot repair is a **VPN client the upgrade removed outright**,
+which is what 24.04 → 26.04 did here on 2026-08-31: the client hard-depended on a
+Qt package the new release had dropped, so apt had no way to keep it. `myupdater`
+detects and reports that state (`/opt/zscaler` survives holding only its
+uninstaller, so a directory check alone looks healthy), but the fix needs the
+`.deb` from the Zscaler portal — the client ships in no apt repository, so
+`--reinstall` has nothing to reinstall from.
+
+Putting it back is rarely one command: a client built against the release you
+left can declare libraries the new one no longer ships, some of them stale
+metadata that nothing actually links and some of them real. Which is which is
+per-client, per-release work, so the analysis and a repair script for a given
+machine belong in the repo that owns that machine's context, beside its release
+policy — not here. Whatever the procedure, install with
+`apt install ./file.deb` rather than `dpkg -i`: `dpkg` won't pull dependencies
+and leaves a half-configured package behind.
+
 ## Install Apps from Dotfiles Repo
 
 ### Ubuntu/Debian
@@ -268,40 +437,23 @@ sudo dnf install -y curl fzf gh git htop iperf3 mailx ncdu neovim net-tools npm 
 
 ### Ubuntu/Debian (x64)
 
-Install via the apt repo so `myupdater` keeps it current automatically. The
-installer `.deb` approach works once but leaves Chrome orphaned from the package
-manager.
+Install Google's `.deb`. Don't hand-write an apt source for it:
 
 ```bash
-# 1. Add Google's signing key
-curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/google-chrome.gpg
-
-# 2. Add the apt source (DEB822 format — works on Ubuntu 24.04 Noble+)
-#    Pinning Architectures: amd64 is required — without it apt also tries i386,
-#    which Google doesn't ship, causing the entire source to be silently skipped.
-sudo tee /etc/apt/sources.list.d/google-chrome.sources > /dev/null << 'EOF'
-Enabled: yes
-Types: deb
-URIs: https://dl.google.com/linux/chrome/deb/
-Suites: stable
-Components: main
-Architectures: amd64
-Signed-By: /etc/apt/trusted.gpg.d/google-chrome.gpg
-EOF
-
-# 3. Install
-sudo apt update
-sudo apt install -y google-chrome-stable
+curl -fsSLo /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install -y /tmp/chrome.deb
 ```
 
-* Sign in to sync data
+That package configures its **own** apt source and keyring, and ships
+`/etc/cron.daily/google-chrome` (→ `/opt/google/chrome/cron/google-chrome`)
+which recreates both every day — see `create_sources_lists()` and
+`GPG_FILE=/usr/share/keyrings/google-chrome.gpg` in that script. So
+`myupdater` keeps Chrome current with no special handling, and a
+hand-written `google-chrome.sources` is not just redundant, it gets
+**overwritten** — the live file says so in its own header
+(`### THIS FILE IS AUTOMATICALLY CONFIGURED ###`).
 
-> **After a distro upgrade (e.g. to Noble):** the upgrade process sets
-> `Enabled: no` in `google-chrome.sources` and invalidates the signing key.
-> Re-run steps 1–3 above to restore updates. See
-> [Troubleshooting: Chrome won't update](#chrome-wont-update-after-a-distro-upgrade)
-> below.
+* Sign in to sync data
 
 ### Fedora
 
@@ -596,38 +748,54 @@ vcgencmd measure_temp
 
 ## Troubleshooting
 
-### Chrome won't update after a distro upgrade
+### A third-party app stops updating after a distro upgrade
 
-**Symptom:** Chrome shows "Can't update Chrome" / `myupdater` runs without
-error but Chrome stays on an old version. `apt-cache policy google-chrome-stable`
-shows only the locally installed version with no remote candidate.
+**Symptom:** `myupdater` runs without error but Chrome / VS Code / etc. stays on
+an old version. `apt-cache policy <pkg>` shows only the locally installed
+version with no remote candidate.
 
-**Cause:** Upgrading Ubuntu (e.g. focal → noble) automatically sets
-`Enabled: no` in `/etc/apt/sources.list.d/google-chrome.sources` and the old
-signing key may no longer match. Additionally, if `Architectures: amd64` is
-missing, apt silently skips the source because it can't find an i386 build.
+**Cause:** A release upgrade sets `Enabled: no` on every third-party source in
+`/etc/apt/sources.list.d/` and converts the old `.list` files to deb822
+`.sources`. Nothing re-enables them, so the app silently freezes at whatever
+version it had. On this machine that went unnoticed for two years — `code` sat
+at 1.71.0 (Sept 2022) from the 21.10 → 24.04 upgrade.
 
-**Fix:**
+**Fix: run `myupdater`.** `check_apt_sources()` finds every disabled source,
+identifies the owning package, and offers the repair per file — see
+[Third-party apt sources](#third-party-apt-sources) above for how it decides.
+You should not need anything below; it is here for a machine where the automatic
+repair reported that it could not help.
+
+Find them by hand with:
 
 ```bash
-# Refresh the signing key
-curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-  | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/google-chrome.gpg
-
-# Rewrite the source file with the correct flags
-sudo tee /etc/apt/sources.list.d/google-chrome.sources > /dev/null << 'EOF'
-Enabled: yes
-Types: deb
-URIs: https://dl.google.com/linux/chrome/deb/
-Suites: stable
-Components: main
-Architectures: amd64
-Signed-By: /etc/apt/trusted.gpg.d/google-chrome.gpg
-EOF
-
-sudo apt update
-sudo apt install -y google-chrome-stable
+grep -rl 'Enabled: no' /etc/apt/sources.list.d/
 ```
+
+**Do not hand-write the source file.** For a package that self-registers, re-run
+its own hook — this works with the source still disabled and the network down,
+which `apt-get install --reinstall` cannot, since a disabled source leaves apt
+with no candidate to reinstall from:
+
+```bash
+# find the owner by URI host, then re-run its hook
+grep -l packages.microsoft.com /var/lib/dpkg/info/*.postinst
+sudo /var/lib/dpkg/info/code.postinst configure
+sudo rm -f /etc/apt/sources.list.d/vscode.sources   # stale deb822 leftover
+sudo apt update
+```
+
+Failing that, reinstall the vendor's `.deb`, which re-registers everything:
+
+```bash
+curl -fsSLo /tmp/code.deb 'https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64'
+sudo apt install -y /tmp/code.deb
+```
+
+**Not every disabled source is worth restoring.** Check whether the package is
+even installed (`dpkg -l <pkg>`) and whether the suite still exists. Sources
+pinned to a dead codename (`Suites: impish`) will 404, and `cdrom:` sources from
+the install ISO are pure cruft — delete those instead.
 
 ### Zscaler disconnected after reboot (tunnel not running)
 
@@ -642,13 +810,20 @@ enabled) but `zstunnel` does not, leaving the VPN dead. The two services also
 have no dependency wiring between them and `zstunnel` has no restart policy, so
 a crash also leaves it dead until manual intervention.
 
-**Fix (run once after install, survives future reboots):**
+**Every client upgrade re-breaks this.** Installing a newer client resets
+`zstunnel` to disabled and deletes the drop-in below (confirmed on the
+1.5.0.41 → 3.7.2.31 upgrade, 2026-08-31), so re-run the fix after any Zscaler
+install — not just a first-time one.
+
+**Fix: run `myupdater`.** `check_vpn_client_health()` checks both conditions
+every run and offers the repair, which is the only thing that holds — a one-time
+manual fix does not, because the *next* client install undoes it again.
+
+By hand, if you need it:
 
 ```bash
-# Enable the tunnel service at boot
 sudo systemctl enable zstunnel
 
-# Drop in a restart policy so crashes self-heal
 sudo mkdir -p /etc/systemd/system/zstunnel.service.d
 sudo tee /etc/systemd/system/zstunnel.service.d/restart.conf > /dev/null << 'EOF'
 [Service]

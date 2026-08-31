@@ -267,8 +267,13 @@ function clonerepos() {
     uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/clone_repos.py"
 }
 
-# updatepackages: OS package updates only (softwareupdate/brew on macOS,
-# dnf/apt on Linux) plus fastfetch - no repo pulls, no config deploy.
+# updatepackages: OS updates only (softwareupdate/brew on macOS, dnf/apt on
+# Linux) - no repo pulls, no config deploy, and no per-package handling: it
+# upgrades whatever is installed and prints fastfetch at the end. On Linux it
+# also offers a distro RELEASE upgrade, capped per host by
+# <context>_credentials/<context>_os_release_policy.conf so the machine never
+# outruns the VPN client, and never without a [y/N] at the terminal - see
+# docs/setup_linux_workstation.md.
 function updatepackages() {
     bash "$gitDir/dotfiles/scripts/my_updater.sh"
 }
