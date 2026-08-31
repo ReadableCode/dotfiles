@@ -1,19 +1,12 @@
 #!/bin/bash
 
-echo "#################   Running System Update   #####################"
+# OS package updates for macOS/Linux — the `updatepackages` step, nothing more.
+# Repo pulls and config deploys live in the shell functions (.shared_aliases):
+# `myupdater` runs pullrepos → clonerepos → updatepackages → deployconfigs →
+# prune, deploying AFTER the package updates in case an upgrade clobbers a
+# linked config.
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-
-echo "############ Dotfiles Pull ############"
-
-# Pull before anything else so the deploy below links the latest configs
-# (note: an updated my_updater.sh takes effect on the NEXT run).
-if command -v git &> /dev/null; then
-    git -C "$DOTFILES_DIR" pull --ff-only \
-        || echo "WARNING: dotfiles pull failed (offline or diverged) - resolve manually in $DOTFILES_DIR"
-else
-    echo "git not found, skipping dotfiles pull."
-fi
+echo "#################   Updating Packages   #####################"
 
 # Function for updating & upgrading macOS with Brew and system updates
 update_macos() {
@@ -77,7 +70,7 @@ install_sysinfo() {
 # Detect the operating system
 OS="$(uname)"
 case "$OS" in
-  "Linux") 
+  "Linux")
     # dnf first: Fedora ships both dnf and (sometimes) an apt shim.
     if command -v dnf &> /dev/null; then
         update_dnf
@@ -87,7 +80,7 @@ case "$OS" in
         echo "Neither dnf nor apt found, skipping package updates."
     fi
     ;;
-  "Darwin") 
+  "Darwin")
     if command -v brew &> /dev/null; then
         update_macos
     else
@@ -113,16 +106,3 @@ else
         echo "Failed to install fastfetch."
     fi
 fi
-
-echo "############ Config Deploy ############"
-
-# Deploy configs after the pull: idempotent, and re-links anything the pull
-# orphaned (hard-link machines). See docs/deploy_configs.md.
-if command -v uv &> /dev/null && [ -f "$DOTFILES_DIR/deploy_manifest.yaml" ]; then
-    (cd "$DOTFILES_DIR" && uv run python src/deploy_configs.py) \
-        || echo "WARNING: config deploy failed - run 'uv run python src/deploy_configs.py' in $DOTFILES_DIR"
-else
-    echo "Skipping config deploy (uv or deploy_manifest.yaml not found)."
-fi
-
-echo "############ Done ############"

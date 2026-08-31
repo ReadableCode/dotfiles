@@ -180,6 +180,11 @@ function statusboard() {
     run_python_script "$gitDir/status_board/src/status_board.py" "$@"
 }
 
+function cashflow() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    run_python_script "$gitDir/Cash_Flow_Commander/src/cfc_tui.py" "$@"
+}
+
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
@@ -216,8 +221,13 @@ function gsw() {
         | xargs -r git switch
 }
 
-function gitpullall() {
-    local arch os bin
+# pullrepos: pull every repo under $gitDir in parallel via the committed
+# git_puller binary (arch-selected). Never aborts the caller: repos that
+# cannot be pulled (WIP protected, failed, auth required) get a summary
+# warning so later steps knowingly run from those repos' current, possibly
+# stale, checkouts.
+function pullrepos() {
+    local arch os bin out unpulled
     arch=$(uname -m)
     os=$(uname -s | tr '[:upper:]' '[:lower:]')
     bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
@@ -237,33 +247,72 @@ function gitpullall() {
     fi
 
     chmod +x "$bin"
-    "$bin" -path "$gitDir" -r
-    echo ""
-	echo ""
-
-    if command -v uv >/dev/null 2>&1; then
-        # Offer missing clones after the pulls (the pulls refresh the
-        # <context>_repos.yaml configs in the *_credentials repos) and BEFORE
-        # the deploy, since a fresh clone may be a deploy target.
-        printf '\033[1;36m%s\033[0m\n' '──────────────  Checking for repos to clone  ──────────────'
-        (cd "$gitDir/dotfiles" && uv run python src/clone_repos.py)
-        echo ""
-        # Deploy after the pulls: idempotent, and re-links the hard links
-        # the pulls just orphaned (no-symlink machines like work laptops).
-        printf '\033[1;36m%s\033[0m\n' '──────────────  Deploying configs  ──────────────'
-        (cd "$gitDir/dotfiles" && uv run python src/deploy_configs.py)
-        echo ""
-        # Prune last, with --apply: the removals files are a committed list of
-        # paths that must not exist, so every machine has to act on them for
-        # the list to ever be finished. A dry run here would reprint the same
-        # dead links forever and still need a second command by hand. Safe
-        # after the deploy because prune only removes a path a removals entry
-        # names AND no live manifest entry wants (see docs/deploy_configs.md).
-        printf '\033[1;36m%s\033[0m\n' '──────────────  Pruning removed configs  ──────────────'
-        (cd "$gitDir/dotfiles" && uv run python src/deploy_configs.py prune --apply)
-    else
-        echo "uv not found, skipping repo clone check, config deploy and prune."
+    out=$(mktemp)
+    "$bin" -path "$gitDir" -r | tee "$out"
+    unpulled=$(grep -cE '^\[(WIP PROTECTED|FAILED|AUTH REQUIRED)\]' "$out")
+    rm -f "$out"
+    if [[ "$unpulled" -gt 0 ]]; then
+        printf '\033[1;33mWARNING: %s repo(s) could not be pulled (tagged above) - later steps run from their current, possibly stale, checkouts.\033[0m\n' "$unpulled"
     fi
+}
+
+# clonerepos: offer clones of entitled-but-missing repos, driven by the
+# <context>_repos.yaml configs in the *_credentials repos (which a preceding
+# pullrepos refreshes). Runs from anywhere via --project, like deployconfigs.
+function clonerepos() {
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "clonerepos: uv is not installed (wanted to run src/clone_repos.py)"
+        return 1
+    fi
+    uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/clone_repos.py"
+}
+
+# updatepackages: OS package updates only (softwareupdate/brew on macOS,
+# dnf/apt on Linux) plus fastfetch - no repo pulls, no config deploy.
+function updatepackages() {
+    bash "$gitDir/dotfiles/scripts/my_updater.sh"
+}
+
+function _fleet_banner() {
+    printf '\033[1;36m──────────────  %s  ──────────────\033[0m\n' "$1"
+}
+
+# _fleet_refresh_configs: the shared tail of gitpullall and myupdater.
+# Clone check first (a fresh clone may be a deploy target), then deploy
+# (idempotent, and re-links the hard links the pulls just orphaned on
+# no-symlink machines like work laptops), then prune with --apply: the
+# removals files are a committed list of paths that must not exist, so every
+# machine has to act on them for the list to ever be finished. A dry run here
+# would reprint the same dead links forever and still need a second command
+# by hand. Safe after the deploy because prune only removes a path a removals
+# entry names AND no live manifest entry wants (see docs/deploy_configs.md).
+function _fleet_refresh_configs() {
+    _fleet_banner 'Checking for repos to clone'
+    clonerepos
+    echo ""
+    _fleet_banner 'Deploying configs'
+    deployconfigs
+    echo ""
+    _fleet_banner 'Pruning removed configs'
+    deployconfigs prune --apply
+}
+
+function gitpullall() {
+    pullrepos
+    echo ""
+    _fleet_refresh_configs
+}
+
+# myupdater: gitpullall plus package updates. The packages run between the
+# pull and the deploy so anything an upgrade clobbers gets re-linked.
+function myupdater() {
+    _fleet_banner 'Running System Update'
+    pullrepos
+    echo ""
+    _fleet_banner 'Updating packages'
+    updatepackages
+    echo ""
+    _fleet_refresh_configs
 }
 
 ### tmux ###
@@ -345,7 +394,6 @@ function deployconfigs() {
     uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/deploy_configs.py" "$@"
 }
 
-alias myupdater='bash $gitDir/dotfiles/scripts/my_updater.sh'
 alias weather='bash $gitDir/dotfiles/scripts/weather.sh'
 alias getpubip='bash $gitDir/dotfiles/scripts/get_my_public_ip.sh'
 alias ntfyme='python3 $gitDir/dotfiles/scripts/ntfyme.py'

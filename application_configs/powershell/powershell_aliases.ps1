@@ -244,6 +244,12 @@ function statusboard {
     run-python-script $scriptPath @args
 }
 
+function cashflow {
+    if (-not (Test-GitDir)) { return }
+    $scriptPath = (Join-Path $gitDir 'Cash_Flow_Commander\src\cfc_tui.py')
+    run-python-script $scriptPath @args
+}
+
 
 ### Command Shortcuts ###
 
@@ -304,46 +310,76 @@ function gsw {
     if ($branch) { git switch $branch }
 }
 
-function gitpullall {
+# pullrepos: pull every repo under $gitDir in parallel via the committed
+# git_puller binary. Never aborts the caller: repos that cannot be pulled
+# (WIP protected, failed, auth required) get a summary warning so later steps
+# knowingly run from those repos' current, possibly stale, checkouts.
+function pullrepos {
     if (-not (Test-GitDir)) { return }
     $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
-    & $binary -path $gitDir -r
-    Write-Host ""
-    Write-Host ""
-    if (Get-Command uv -ErrorAction SilentlyContinue) {
-        # Offer missing clones after the pulls (the pulls refresh the
-        # <context>_repos.yaml configs in the *_credentials repos) and BEFORE
-        # the deploy, since a fresh clone may be a deploy target.
-        Write-Host "==============  Checking for repos to clone  ==============" -ForegroundColor Cyan
-        Push-Location (Join-Path $gitDir 'dotfiles')
-        uv run python src/clone_repos.py
-        Pop-Location
-        Write-Host ""
-        # Deploy after the pulls: idempotent, and re-links the hard links
-        # the pulls just orphaned (no-symlink machines like work laptops).
-        Write-Host "==============  Deploying configs  ==============" -ForegroundColor Cyan
-        Push-Location (Join-Path $gitDir 'dotfiles')
-        uv run python src/deploy_configs.py
-        Pop-Location
-        Write-Host ""
-        # Prune last, with --apply: the removals files are a committed list of
-        # paths that must not exist, so every machine has to act on them for
-        # the list to ever be finished. A dry run here would reprint the same
-        # dead links forever and still need a second command by hand. Safe
-        # after the deploy because prune only removes a path a removals entry
-        # names AND no live manifest entry wants (see docs/deploy_configs.md).
-        Write-Host "==============  Pruning removed configs  ==============" -ForegroundColor Cyan
-        Push-Location (Join-Path $gitDir 'dotfiles')
-        uv run python src/deploy_configs.py prune --apply
-        Pop-Location
-    } else {
-        Write-Host "uv not found, skipping repo clone check, config deploy and prune." -ForegroundColor Yellow
+    & $binary -path $gitDir -r | Tee-Object -Variable pullOutput
+    $unpulled = @($pullOutput | Where-Object { $_ -match '^\[(WIP PROTECTED|FAILED|AUTH REQUIRED)\]' }).Count
+    if ($unpulled -gt 0) {
+        Write-Host "WARNING: $unpulled repo(s) could not be pulled (tagged above) - later steps run from their current, possibly stale, checkouts." -ForegroundColor Yellow
     }
-    # The slow AutoHotkey probes (registry scan, choco list) are too expensive
-    # for shell startup, so the thorough pass rides along here where seconds do
-    # not matter. Silent on a correct machine.
+}
+
+# clonerepos: offer clones of entitled-but-missing repos, driven by the
+# <context>_repos.yaml configs in the *_credentials repos (which a preceding
+# pullrepos refreshes). Runs from anywhere via --project, like deployconfigs.
+function clonerepos {
+    if (-not (Test-GitDir)) { return }
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Host "clonerepos: uv is not installed (wanted to run src/clone_repos.py)"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    uv run --project $repo python (Join-Path $repo 'src\clone_repos.py')
+}
+
+# updatepackages: OS package updates only (winget, then choco) - no repo
+# pulls, no config deploy.
+function updatepackages {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "Updating via winget..." -ForegroundColor Green
+        winget upgrade --all
+    }
+    if (Get-Command choco -ErrorAction SilentlyContinue) {
+        Write-Host "Updating via Chocolatey..." -ForegroundColor Green
+        choco upgrade all -y
+    }
+}
+
+# The shared tail of gitpullall and myupdater. Clone check first (a fresh
+# clone may be a deploy target), then deploy (idempotent, and re-links the
+# hard links the pulls just orphaned on no-symlink machines like work
+# laptops), then prune with --apply: the removals files are a committed list
+# of paths that must not exist, so every machine has to act on them for the
+# list to ever be finished. A dry run here would reprint the same dead links
+# forever and still need a second command by hand. Safe after the deploy
+# because prune only removes a path a removals entry names AND no live
+# manifest entry wants (see docs/deploy_configs.md). The slow AutoHotkey
+# probes (registry scan, choco list) ride along last - too expensive for
+# shell startup, cheap here where seconds do not matter. Silent on a correct
+# machine.
+function _FleetRefreshConfigs {
+    Write-Host "==============  Checking for repos to clone  ==============" -ForegroundColor Cyan
+    clonerepos
+    Write-Host ""
+    Write-Host "==============  Deploying configs  ==============" -ForegroundColor Cyan
+    deployconfigs
+    Write-Host ""
+    Write-Host "==============  Pruning removed configs  ==============" -ForegroundColor Cyan
+    deployconfigs prune --apply
     $ensureAhk = Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1'
     if (Test-Path $ensureAhk) { & $ensureAhk -AutoFix -Full }
+}
+
+function gitpullall {
+    if (-not (Test-GitDir)) { return }
+    pullrepos
+    Write-Host ""
+    _FleetRefreshConfigs
 }
 
 # Bring this machine's AutoHotkey install in line with the repo's v2 scripts:
@@ -435,32 +471,17 @@ function ntfyme {
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
 }
 
+# myupdater: gitpullall plus package updates. The packages run between the
+# pull and the deploy so anything an upgrade clobbers gets re-linked.
 function myupdater {
+    if (-not (Test-GitDir)) { return }
     Write-Host "#################   Running System Update   #####################" -ForegroundColor Cyan
-    if (Test-GitDir) {
-        $dotfiles = Join-Path $gitDir 'dotfiles'
-        Write-Host "Pulling dotfiles..." -ForegroundColor Green
-        git -C $dotfiles pull --ff-only
-        if (Get-Command uv -ErrorAction SilentlyContinue) {
-            # Deploy after the pull: idempotent, and re-links the hard links
-            # the pull just orphaned (no-symlink machines like work laptops).
-            Write-Host "==============  Deploying configs  ==============" -ForegroundColor Cyan
-            Push-Location $dotfiles
-            uv run python src/deploy_configs.py
-            Pop-Location
-        } else {
-            Write-Host "uv not found, skipping config deploy." -ForegroundColor Yellow
-        }
-    }
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "Updating via winget..." -ForegroundColor Green
-        winget upgrade --all
-    }
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Host "Updating via Chocolatey..." -ForegroundColor Green
-        choco upgrade all -y
-    }
-    Write-Host "############ Done ############" -ForegroundColor Cyan
+    pullrepos
+    Write-Host ""
+    Write-Host "==============  Updating packages  ==============" -ForegroundColor Cyan
+    updatepackages
+    Write-Host ""
+    _FleetRefreshConfigs
 }
 
 function weather {

@@ -19,14 +19,17 @@ before writing any code.
 implement the same command set twice, in two languages. `gitpullall` and
 `myupdater` each exist as both a bash function and a PowerShell function.
 
-They have already drifted. The bash `my_updater.sh` deploys configs **last**,
-after package updates. The PowerShell `myupdater` deploys them **second**,
-before package updates. Both carry a comment explaining that the deploy must
-follow the pull. Nobody decided the orders should differ.
+They have already drifted, repeatedly. For months the bash `my_updater.sh`
+deployed configs after package updates while the PowerShell `myupdater`
+deployed before them; worse, both myupdaters pulled **only dotfiles** before
+deploying, even though the deploy reads manifests and payloads from every
+sibling `*_credentials` repo. That was hand-aligned in 2026-08 (both shells
+now compose the same `pullrepos` → `clonerepos` → `updatepackages` →
+`deployconfigs` → prune steps), but nothing stops the next drift — the same
+sequence still exists twice, once per language.
 
-Two more gaps from the same cause: the bash updater handles `apt` but not
-`dnf`, despite Fedora being in the fleet, and neither implementation can
-report what is outdated without also upgrading it.
+One more gap from the same cause: neither implementation can report what is
+outdated without also upgrading it.
 
 No amount of discipline fixes two implementations. The fix is one
 implementation with the platform-specific parts confined to where they

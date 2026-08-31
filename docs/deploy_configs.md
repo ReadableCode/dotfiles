@@ -210,10 +210,16 @@ everything is `OK`.
 
 ## Running it automatically
 
-The `myupdater` alias (`scripts/my_updater.sh` on bash machines, the
-`myupdater` function in `powershell_aliases.ps1` on Windows) pulls the
-dotfiles repo first and then runs a full deploy, so every manual update run
-links the latest configs and re-links any hard links the pull orphaned.
+`gitpullall` and `myupdater` (shell functions in `.shared_aliases` and
+`powershell_aliases.ps1`, same shape on both) are compositions of individually
+callable steps: `pullrepos` (git_puller over every sibling repo — **all** of
+them, since the deploy reads overlay manifests, host inventories and payload
+files from the `*_credentials` repos, not just dotfiles), `clonerepos`,
+`updatepackages` (myupdater only; packages run before the deploy so anything
+an upgrade clobbers gets re-linked), `deployconfigs`, then
+`deployconfigs prune --apply`. A repo that cannot be pulled (local WIP,
+auth) is warned about but never blocks the run — the deploy proceeds from
+that repo's current, possibly stale, checkout.
 
 To run it from cron (add via `crontab -e` on the machine — cron jobs are
 managed per-host, see [homelab_deployments.md](./homelab_deployments.md) for
