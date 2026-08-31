@@ -206,5 +206,15 @@
   {
     "command": "themeEditor.toggle",
     "key": "mod+alt+shift+t"
+  },
+  {
+    "command": "thread.settle",
+    "key": "mod+shift+s",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "thread.pin",
+    "key": "mod+shift+p",
+    "when": "!terminalFocus"
   }
 ]
