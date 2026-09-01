@@ -549,6 +549,51 @@ def cmd_pr_status(args):
          f"ignored={len(report['ignored'])})", report)
 
 
+def cmd_update_branch(args):
+    """
+    Merge the base branch into the PR's head branch server-side, clearing
+    GitHub's "This branch is out-of-date with the base branch" state.
+
+    Server-side on purpose: the local checkout may be dirty or on another
+    branch, and a local merge would need a clean tree plus a push. GitHub does
+    the merge commit itself, which also means the caller never resolves
+    conflicts by accident -- a conflicting update returns 422 and is reported as
+    such so a human can do the merge deliberately.
+    """
+    repo = resolve_repo(args.repo)
+    if resolve_provider(args.repo) == "bitbucket":
+        raise SystemExit("update-branch is GitHub-only; Bitbucket has no equivalent endpoint")
+    headers = github_headers()
+    if args.dry_run:
+        print(f"[dry-run] would update PR #{args.pr or '<current branch>'} in {repo} from its base")
+        emit("dry run", {"updated": False, "dry_run": True})
+        return
+    pull = resolve_pr(repo, headers, args.pr)
+    number, base = pull["number"], pull["base"]["ref"]
+    # Compare base..head: "behind_by" is how many base commits the branch lacks.
+    comparison = http_json(
+        "GET", f"{GITHUB_API}/repos/{repo}/compare/{base}...{pull['head']['sha']}", headers)
+    behind = (comparison or {}).get("behind_by", 0)
+    if not behind:
+        emit(f"PR #{number} is already up to date with {base}",
+             {"pr": number, "base": base, "behind_by": 0, "updated": False,
+              "url": pull["html_url"]})
+        return
+    # 422 = the merge would conflict, or the branch moved since the sha we sent.
+    result = http_json(
+        "PUT", f"{GITHUB_API}/repos/{repo}/pulls/{number}/update-branch", headers,
+        payload={"expected_head_sha": pull["head"]["sha"]}, tolerate=(422,))
+    if result is None:
+        raise SystemExit(
+            f"PR #{number} is {behind} commit(s) behind {base} and GitHub refused the update "
+            f"(HTTP 422). Usually a merge conflict, sometimes a concurrent push. Merge {base} "
+            f"into the branch by hand, resolve, and push.")
+    emit(f"PR #{number} updated from {base} (was {behind} commit(s) behind) - "
+         f"this pushes a merge commit, so CI will re-run",
+         {"pr": number, "base": base, "behind_by": behind, "updated": True,
+          "message": result.get("message"), "url": pull["html_url"]})
+
+
 def bb_find_member(workspace, headers, query):
     """Match a workspace member by nickname or display name (case-insensitive)."""
     wanted = query.lower()
@@ -687,6 +732,12 @@ def build_parser():
     status.add_argument("--interval", type=int, default=90, help="poll interval seconds")
     status.add_argument("--timeout", type=int, default=3600, help="max wait seconds")
     status.set_defaults(func=cmd_pr_status)
+
+    update = sub.add_parser("update-branch",
+                            help="merge the base branch into the PR branch (GitHub only)")
+    update.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    update.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
+    update.set_defaults(func=cmd_update_branch)
 
     review = sub.add_parser("request-review", help="request PR reviewers via the REST API")
     review.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
