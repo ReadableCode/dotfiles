@@ -9,6 +9,7 @@ epicgameslauncher
 etcher
 ffmpeg
 firefox
+golang
 gsudo
 hoppscotch
 logitech-options

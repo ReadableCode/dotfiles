@@ -427,9 +427,11 @@ if ($global:IsInteractiveShell -and $gitDir) {
 
 ### Script Shortcuts ###
 
-# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine,
-# never committed, so build on first use when go is available. A release
-# install will replace this shim eventually (docs/unified_cli_tui.md).
+# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine and
+# never committed, so it builds itself on first use - including installing the
+# go toolchain when the machine has none, because "install go by hand first" is
+# not something a fleet command may ask for. A release install will replace
+# this shim eventually (docs/unified_cli_tui.md).
 function cmdr {
     if (-not (Test-GitDir)) { return }
     $dir = Join-Path $gitDir 'dotfiles\go_apps\cmdr'
@@ -446,16 +448,34 @@ function cmdr {
         $stale = [bool]$newer
     }
     if ($stale) {
-        if (Get-Command go -ErrorAction SilentlyContinue) {
-            Write-Host "cmdr: rebuilding (sources changed)..."
+        Write-Host "cmdr: building (no binary yet, or sources are newer)..."
+        # ensure_go.ps1 emits the go path and nothing else, installing a
+        # toolchain first if the machine has none. It is re-run on every stale
+        # invocation rather than remembering a failure: you only get here by
+        # typing cmdr, so a retry is what you asked for.
+        $ensure = Join-Path $gitDir 'dotfiles\scripts\ensure_go.ps1'
+        $goBin = $null
+        if (Test-Path $ensure) {
+            # Select-Object -Last 1 and a Test-Path guard: an installer that
+            # narrates to the success stream would otherwise hand back its own
+            # output with the path buried in it (dnf did exactly this on the
+            # bash side, 2026-09-01).
+            $goBin = & $ensure | Select-Object -Last 1
+            if ($LASTEXITCODE -ne 0 -or -not ($goBin -and (Test-Path -LiteralPath $goBin))) { $goBin = $null }
+        } else {
+            # clone predates ensure_go.ps1
+            $onPath = Get-Command go -ErrorAction SilentlyContinue
+            if ($onPath) { $goBin = $onPath.Source }
+        }
+        if ($goBin) {
             Push-Location $dir
-            go build .
+            & $goBin build .
             Pop-Location
             if (-not (Test-Path $bin)) { return }
         } elseif (Test-Path $bin) {
-            Write-Host "cmdr: sources changed but go is not installed - running the existing binary"
+            Write-Host "cmdr: no go toolchain and none could be installed - running the existing binary"
         } else {
-            Write-Host "cmdr: not built and go is not installed (wanted $bin)"
+            Write-Host "cmdr: no go toolchain and none could be installed, so $bin cannot be built (see docs/setup_go.md)"
             return
         }
     }

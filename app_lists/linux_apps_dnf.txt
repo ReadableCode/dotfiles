@@ -8,4 +8,5 @@
 fastfetch
 flatpak
 gnome-shell-extension-gsconnect
+golang
 libxcrypt-compat

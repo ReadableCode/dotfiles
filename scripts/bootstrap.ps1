@@ -246,6 +246,31 @@ if ($SkipApps) {
 }
 
 # %%
+# Go toolchain #
+
+# The choco list carries golang, so the step above usually already installed it.
+# This one is the guarantee: it also covers -SkipApps and an unelevated shell,
+# where the choco step is skipped but winget still works. cmdr calls the same
+# script on first use, so a machine that skips this here still ends up with a
+# toolchain the first time anyone types cmdr.
+Write-Step "go"
+$ensureGo = Join-Path $DotfilesDir 'scripts\ensure_go.ps1'
+if (-not (Test-Path $ensureGo)) {
+    Write-Fail "not found: $ensureGo (is this clone up to date?)"
+} elseif ($DryRun) {
+    $goPath = & $ensureGo -Check -Quiet
+    if ($LASTEXITCODE -eq 0) { Write-Skip "go present ($goPath)" } else { Write-Todo "install a go toolchain" }
+} else {
+    $goPath = & $ensureGo
+    if ($LASTEXITCODE -eq 0) {
+        Write-Ok "go ready ($goPath)"
+    } else {
+        Write-Warn "no go toolchain - cmdr and the other go_apps cannot be built"
+        Add-Manual "install go by hand: docs/setup_go.md"
+    }
+}
+
+# %%
 # What is left #
 
 Write-Step "Still manual"

@@ -4,6 +4,7 @@ clang
 cmake
 fastfetch
 git
+golang
 htop
 libandroid-execinfo
 libcrypt

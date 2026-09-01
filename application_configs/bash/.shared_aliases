@@ -358,9 +358,11 @@ function ta() {
 
 ### Script Shortcuts ###
 
-# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine,
-# never committed, so build on first use when go is available. A release
-# install will replace this shim eventually (docs/unified_cli_tui.md).
+# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine and
+# never committed, so it builds itself on first use - including installing the
+# go toolchain when the machine has none, because "install go by hand first" is
+# not something a fleet command may ask for. A release install will replace
+# this shim eventually (docs/unified_cli_tui.md).
 function cmdr() {
     local dir="$gitDir/dotfiles/go_apps/cmdr"
     local bin="$dir/cmdr"
@@ -375,13 +377,27 @@ function cmdr() {
         stale=1
     fi
     if [ -n "$stale" ]; then
-        if command -v go >/dev/null 2>&1; then
-            echo "cmdr: rebuilding (sources changed)..."
-            (cd "$dir" && go build .) || return 1
+        echo "cmdr: building (no binary yet, or sources are newer)..."
+        # ensure_go.sh prints the go path on stdout and nothing else, installing
+        # a toolchain first if the machine has none. It is re-run on every stale
+        # invocation rather than remembering a failure: you only get here by
+        # typing cmdr, so a retry is what you asked for.
+        local ensure="$gitDir/dotfiles/scripts/ensure_go.sh"
+        local go_bin=""
+        if [ -x "$ensure" ]; then
+            go_bin="$("$ensure")"
+        elif command -v go >/dev/null 2>&1; then
+            go_bin="$(command -v go)"    # clone predates ensure_go.sh
+        fi
+        # -x, not -n: an installer that narrates to stdout would otherwise hand
+        # back its own output with the path buried in it, and bash would try to
+        # exec the whole thing (dnf did exactly this, 2026-09-01).
+        if [ -x "$go_bin" ]; then
+            (cd "$dir" && "$go_bin" build .) || return 1
         elif [ -x "$bin" ]; then
-            echo "cmdr: sources changed but go is not installed - running the existing binary"
+            echo "cmdr: no go toolchain and none could be installed - running the existing binary"
         else
-            echo "cmdr: not built and go is not installed (wanted $bin)"
+            echo "cmdr: no go toolchain and none could be installed, so $bin cannot be built (see docs/setup_go.md)"
             return 1
         fi
     fi

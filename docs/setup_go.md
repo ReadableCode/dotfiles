@@ -1,51 +1,78 @@
 # Setup Go
 
-## Setup on Linux (not raspberry pi)
+## You should not need this page
 
-- Using apt
+Go installs itself on this fleet. `scripts/ensure_go.sh` (and
+`scripts/ensure_go.ps1` on Windows) resolves a toolchain and installs one when
+the machine has none:
 
-  - Open terminal and run the following commands:
+- `cmdr` calls it before building `go_apps/cmdr`, so the first `cmdr` on a
+  machine with no Go installs Go, builds, and runs.
+- `scripts/bootstrap.sh` / `bootstrap.ps1` run it as their own step.
+- `go` is on every platform app list (`app_lists/*`), so the normal package
+  install covers it too.
 
-  ```bash
-  sudo apt update
-  sudo apt install golang
-  ```
+The rest of this page is what those scripts do, for when one of them cannot.
+
+```bash
+scripts/ensure_go.sh --check   # print the go path, exit 1 if there is none
+scripts/ensure_go.sh           # ... and install one if there is none
+```
+
+**Minimum version 1.21.** Every `go_apps/*/go.mod` asks for `go 1.26.x`, and a
+toolchain from 1.21 onward downloads a newer one on demand
+(`GOTOOLCHAIN=auto`). Older than that and the module will not build at all, so
+`ensure_go.sh` treats a below-floor distro package as missing and goes to the
+tarball instead. Ubuntu 22.04's `golang-go` (1.18) is the case this exists for.
+
+## Setup on Linux by hand
+
+Debian / Ubuntu:
+
+```bash
+sudo apt update
+sudo apt install golang-go
+```
+
+Fedora / RHEL:
+
+```bash
+sudo dnf install -y golang
+```
+
+Arch: `sudo pacman -S go`. openSUSE: `sudo zypper install go`.
+Alpine: `sudo apk add go`.
 
 ## Setup on Raspberry Pi
 
-- Installing from apt will get you an odler version without support for new features
+Installing from apt gets you an older version without support for new features.
 
-- Uninstall the apt version first
+Uninstall the apt version first:
 
-  ```bash
-  sudo apt remove golang
-  sudo rm -rf /usr/local/go
-  ```
+```bash
+sudo apt remove golang
+sudo rm -rf /usr/local/go
+```
 
-- To install the latest version, download the latest version from the official website
-
-- Open terminal and run the following commands:
+Then take the latest from the official site. `ensure_go.sh` automates exactly
+this, including reading the current version from `go.dev/VERSION?m=text` rather
+than pinning one here:
 
 ```bash
 cd && wget https://go.dev/dl/go1.22.2.linux-armv6l.tar.gz
 sudo tar -C /usr/local -xzf go1.22.2.linux-armv6l.tar.gz
 ```
 
-- Add the following to the end of the `~/.profile` file:
-
-```bash
-nvim ~/.profile
-export PATH=/usr/local/go/bin:$PATH
-source ~/.profile
-go version
-```
+`application_configs/bash/.bashrc` already adds `/usr/local/go/bin` to `PATH`
+when that directory exists, so on a machine with the deployed shell config
+there is nothing to add to `~/.profile` — just open a new shell.
 
 ## Setup on Windows
 
 - Using WinGet
 
   - Open powershell as administrator and run:
-  
+
   ```bash
   winget install -e --id GoLang.Go
   ```
