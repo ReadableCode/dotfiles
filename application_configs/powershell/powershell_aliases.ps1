@@ -97,10 +97,13 @@ if (Test-Path "$HOME\.powershell_local.d") {
     }
 }
 
-$gitDir = ''
+# Assigned at global scope for the same reason srcaliases promotes functions:
+# a plain assignment during an in-function re-source would die with the
+# function scope, leaving the session on the stale value from shell startup.
+$global:gitDir = ''
 foreach ($candidate in $gitDirCandidates) {
     if (Test-Path $candidate) {
-        $gitDir = $candidate
+        $global:gitDir = $candidate
         break
     }
 }
