@@ -329,9 +329,10 @@ On every run the check does one of these and then gets out of the way:
 | This host, or this distro on this host, has no entry | Leaves the release alone (unknown ceiling means don't move) |
 | No credentials repo cloned (or no `python3`), so no policy readable | Leaves the release alone, and says why |
 
-It also reports, from `distro-info`'s local CSV so it works offline: the
-newest stable release, and how many days the running release has before EOL
-(loudly inside `eol_warn_days`, louder once past it). Just before the prompt
+It also reports the newest stable release and how many days the running
+release has before EOL (loudly inside `eol_warn_days`, louder once past it) —
+on Ubuntu from `distro-info`'s local CSV so it works offline, on Fedora from
+Bodhi at run time (see the Fedora section below). Just before the prompt
 it runs this host's mapped `release_preflight` scripts, so a context can put
 its own facts next to the question — client versions, known incompatibilities
 with the target — without any of that code living here.
@@ -369,6 +370,34 @@ nothing on a machine set to `lts`, which is how this workstation sat on 24.04
 while 26.04 was sitting right there. So there is one question — upgrade or not —
 and the `Prompt=` edit is listed inside it as one of the things a yes will do,
 applied only after you say yes.
+
+### Fedora machines
+
+Same policy, same key (`updater.release_ceiling.fedora`), different mechanics,
+because Fedora ships no offline release database and no `do-release-upgrade`:
+
+- **Bodhi answers what exists.** The newest released Fedora and the running
+  release's EOL date come from `bodhi.fedoraproject.org` at run time. When it
+  is unreachable the check still upgrades packages but will not offer a
+  release upgrade: a branched-but-unreleased Fedora already answers on the
+  mirrors, so repo availability alone cannot tell a release from a beta.
+- **Two releases per hop.** `dnf system-upgrade` jumps at most two releases,
+  so a far-behind machine steps (40 → 42 → 44), re-running `myupdater` after
+  each hop.
+- **Unsourced packages** are listed before the prompt via `dnf list --extras`,
+  the same warning the apt path gives: the upgrade is a distro-sync and drops
+  anything whose dependencies stop resolving on the new release. `kmod-*` rows
+  are akmods-built kernel modules and rebuild themselves on the new kernel.
+- **Repo preflight.** Every enabled repo is probed for the target release
+  before the prompt — third-party repos routinely lag a new Fedora, and one
+  dead repo aborts the whole download. The probe asks each repo for its
+  package list at the target `--releasever` (`makecache` cannot be the probe:
+  dnf5 exits 0 with every mirror 404ing), and the metadata it fetches under
+  sudo is the same root cache the download step reads, so nothing is fetched
+  twice.
+- **Download now, reboot by hand.** A yes only runs
+  `dnf system-upgrade download`. The actual upgrade happens offline after
+  `sudo dnf system-upgrade reboot`, which the script prints and never runs.
 
 ### Raising the ceiling
 

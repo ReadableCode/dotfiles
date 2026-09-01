@@ -626,25 +626,228 @@ ubuntu_release_upgrade() {
     echo "sources this upgrade turned off and re-runs this host's mapped checks."
 }
 
+# What Bodhi (Fedora's release service) says is maintained right now, as raw
+# JSON. Fedora ships no offline release database — no distro-info analog — so
+# standing and "has this release actually shipped" need the network. Empty
+# means unknown, and unknown means don't move.
+fedora_current_releases() {
+    command -v curl &> /dev/null && command -v python3 &> /dev/null || return 0
+    curl -sf --max-time 10 \
+        'https://bodhi.fedoraproject.org/releases/?state=current&rows_per_page=100' 2>/dev/null
+}
+
+# Newest maintained Fedora out of that payload, or nothing. Only bare F<n>
+# rows count — Bodhi lists EPEL and container releases in the same feed.
+fedora_newest_release() {
+    [ -n "$1" ] || return 0
+    printf '%s' "$1" | python3 -c '
+import json, re, sys
+versions = [int(m.group(1)) for r in json.load(sys.stdin).get("releases", [])
+            if (m := re.fullmatch(r"F(\d+)", r.get("name", "")))]
+print(max(versions) if versions else "")
+' 2>/dev/null
+}
+
+# True when Bodhi lists F<ver> as current — released and still supported. The
+# metalink for a branched-but-unreleased Fedora already answers, so repo
+# availability alone would cheerfully land a machine on a beta.
+fedora_release_is_current() {
+    local ver="$1" json="$2"
+    [ -n "$json" ] || return 1
+    printf '%s' "$json" | python3 -c '
+import json, sys
+sys.exit(0 if any(r.get("name") == "F" + sys.argv[1]
+                  for r in json.load(sys.stdin).get("releases", [])) else 1)
+' "$ver" 2>/dev/null
+}
+
+# Where this release stands: the newest maintained Fedora, and how long this
+# one has left. Quiet when Bodhi was unreachable, and quiet about EOL on a
+# machine running AHEAD of stable (a beta is not past end of life).
+fedora_release_standing() {
+    local ver="$1" json="$2" warn
+    [ -n "$json" ] || return 0
+    warn="$(policy_lookup eol_warn_days)"
+    # A Fedora release only lives ~13 months, so the 180-day default the Ubuntu
+    # path uses would nag for half of one; 60 still leaves two months to move.
+    case "$warn" in ''|*[!0-9]*) warn=60 ;; esac
+    printf '%s' "$json" | python3 -c '
+import json, re, sys
+from datetime import date
+ver, warn = sys.argv[1], int(sys.argv[2])
+rels = {int(m.group(1)): r.get("eol") or "" for r in json.load(sys.stdin).get("releases", [])
+        if (m := re.fullmatch(r"F(\d+)", r.get("name", "")))}
+if rels:
+    print(f"Newest:   Fedora {max(rels)}")
+if not ver.isdigit() or not rels or int(ver) > max(rels):
+    sys.exit()
+eol = rels.get(int(ver))
+if eol is None:
+    print(f"EOL:      Fedora {ver} IS PAST END OF LIFE — no security updates. Upgrade now.")
+    sys.exit()
+try:
+    days = (date.fromisoformat(eol) - date.today()).days
+except ValueError:
+    sys.exit()
+if days <= 0:
+    print(f"EOL:      Fedora {ver} IS PAST END OF LIFE — no security updates. Upgrade now.")
+elif days <= warn:
+    print(f"EOL:      {days} days left on Fedora {ver} (until {eol}) — inside the {warn}-day window, upgrade soon.")
+else:
+    print(f"EOL:      {days} days left on Fedora {ver} (until {eol})")
+' "$ver" "$warn" 2>/dev/null
+}
+
+# Installed packages no enabled repo serves, as name.arch. Same exposure as
+# unsourced_packages above: the upgrade runs as a distro-sync, which keeps such
+# a package only while its dependencies still resolve on the new release, and
+# nothing can reinstall it afterwards. dnf keeps the "Extra packages" header
+# even under -q, so match the rows (name.arch version repo) instead of
+# counting lines.
+fedora_unsourced_packages() {
+    dnf -q list --extras 2>/dev/null \
+        | awk 'NF >= 3 && $1 ~ /\./ { print $1 }'
+}
+
+# Enabled repos that do not serve the target release yet. Third-party repos
+# routinely lag a new Fedora by weeks, and system-upgrade download aborts on
+# the first dead repo. dnf itself resolves each repo's metalink/baseurl at the
+# target releasever, so every URL scheme is handled without parsing repo
+# files. makecache cannot be the probe — dnf5 exits 0 with every mirror 404ing
+# — so ask each repo for its package list and call empty "not serving". Run
+# under sudo so the metadata lands in the root cache the download step reads,
+# fetched once. Progress goes to stderr; stdout is the captured result.
+fedora_lagging_repos() {
+    local target="$1" id lagging=""
+    for id in $(dnf -q repolist --enabled 2>/dev/null | awk 'NR > 1 { print $1 }'); do
+        echo "  $id" >&2
+        [ -n "$(sudo dnf -q repoquery --releasever="$target" --repo="$id" --qf '%{name}\n' 2>/dev/null | head -n1)" ] \
+            || lagging="$lagging $id"
+    done
+    printf '%s' "$lagging"
+}
+
 fedora_release_upgrade() {
-    local ver="$1" ceiling="$2"
+    local ver="$1" ceiling="$2" json newest target at_risk lagging
 
-    # No query command like do-release-upgrade -c here, so the ceiling IS the
-    # target. dnf supports jumping one or two releases; more than that wants
-    # intermediate hops, so bump the ceiling in steps if it has drifted far.
+    json="$(fedora_current_releases)"
+    fedora_release_standing "$ver" "$json"
+
+    case "$ver$ceiling" in *[!0-9]*)
+        echo "Fedora releases are plain integers; VERSION_ID '$ver' / ceiling '$ceiling' are not. Skipping."
+        return 0 ;;
+    esac
+
+    # Unlike Ubuntu there is no offline data and no query command to name the
+    # next release, so Bodhi names the newest and the ceiling caps it.
+    newest="$(fedora_newest_release "$json")"
+    if [ -z "$newest" ]; then
+        echo "Cannot reach Bodhi to learn the newest released Fedora (a branched beta's"
+        echo "repos already answer, so repo availability proves nothing). Leaving the"
+        echo "release alone this run."
+        return 0
+    fi
+
+    if [ "$newest" -le "$ceiling" ]; then
+        target="$newest"
+    else
+        target="$ceiling"
+        echo ""
+        echo "NOTE: Fedora $newest is out, but this machine is capped at $ceiling."
+        echo "      To go further, raise this host's updater.release_ceiling.fedora to"
+        echo "      $newest in $(policy_location) — check first what this cap protects"
+        echo "      (that repo's docs say what was vetted and how)."
+    fi
+
+    if [ "$target" -le "$ver" ]; then
+        echo "On Fedora $ver, which is as new as this machine is allowed to be. Nothing to do."
+        return 0
+    fi
+    # Only reachable when the ceiling is stale: below the newest release yet no
+    # longer maintained. Same guard as the Ubuntu path's EOL ceiling.
+    if [ "$target" -lt "$newest" ] && ! fedora_release_is_current "$target" "$json"; then
+        echo ""
+        echo "WARNING: the ceiling names Fedora $target, which is already past end of life, so"
+        echo "         upgrading onto it would land this machine on a release getting no security"
+        echo "         updates. Nothing was done. Vet $newest for this host and raise its"
+        echo "         updater.release_ceiling.fedora in $(policy_location)."
+        return 0
+    fi
+    # dnf system-upgrade supports jumping at most two releases at once.
+    if [ $((target - ver)) -gt 2 ]; then
+        echo ""
+        echo "NOTE: dnf can jump at most two releases at once, so this run steps to"
+        echo "      $((ver + 2)) first — run myupdater again after that upgrade to continue"
+        echo "      toward $target."
+        target=$((ver + 2))
+    fi
+
     echo ""
-    echo "Fedora $ceiling is newer than $ver and within the ceiling."
-    run_mapped_checks release_preflight --target "$ceiling"
-    confirm "Download the Fedora $ceiling upgrade now?" || return 0
+    echo "Fedora $target is out, and this machine is allowed to run it."
+    # The repo preflight below downloads the target release's metadata under
+    # sudo, which is minutes of work the final [y/N] would only throw away when
+    # there is no terminal to say yes on. Bail here instead of at the prompt.
+    if [ ! -t 0 ]; then
+        echo "A release upgrade needs a terminal to confirm; re-run myupdater interactively."
+        return 0
+    fi
+    run_mapped_checks release_preflight --target "$target"
 
-    sudo dnf install -y dnf-plugin-system-upgrade || return 1
-    if ! sudo dnf system-upgrade download --releasever="$ceiling"; then
-        echo "Download failed — nothing has changed. Resolve the conflicts above and re-run."
+    at_risk="$(fedora_unsourced_packages)"
+    if [ -n "$at_risk" ]; then
+        echo ""
+        echo "          These are installed but come from no dnf repo, so the upgrade will drop"
+        echo "          any whose dependencies Fedora $target no longer satisfies — and nothing"
+        echo "          in this script can put them back:"
+        # shellcheck disable=SC2086
+        printf '            %s\n' $at_risk
+        echo "          kmod-* rows are akmods-built kernel modules and rebuild themselves on"
+        echo "          the new kernel; for the rest, have installers downloaded BEFORE you"
+        echo "          say yes."
+    fi
+
+    echo ""
+    echo "Checking every enabled repo answers for Fedora $target (third-party repos often"
+    echo "lag a new release, and one dead repo aborts the whole download)..."
+    lagging="$(fedora_lagging_repos "$target")"
+    if [ -n "$lagging" ]; then
+        echo ""
+        echo "          These enabled repos do not serve Fedora $target yet:"
+        # shellcheck disable=SC2086
+        printf '            %s\n' $lagging
+        echo "          Wait for them, or disable each one first"
+        echo "          ('sudo dnf config-manager setopt <repo>.enabled=0'), accepting that"
+        echo "          its packages stop updating until it is re-enabled."
+    else
+        echo "All enabled repos already serve Fedora $target."
+    fi
+
+    echo ""
+    echo "Answering yes only DOWNLOADS the upgrade. Nothing changes until you run the"
+    echo "reboot command printed at the end, which reboots immediately and installs"
+    echo "offline. akmod kernel modules (nvidia) rebuild during the first boot, which"
+    echo "can take a few minutes at a black screen — let it finish."
+    echo ""
+    confirm "Download the Fedora $target upgrade now?" || return 0
+
+    # dnf5 ships system-upgrade in dnf5-plugins; the dnf4 plugin package name
+    # (dnf-plugin-system-upgrade) no longer exists, so only install when the
+    # subcommand is actually missing.
+    if ! dnf system-upgrade --help &> /dev/null; then
+        sudo dnf install -y dnf5-plugins || {
+            echo "Could not install dnf5-plugins, so there is no system-upgrade command. Stopping."
+            return 1
+        }
+    fi
+    if ! sudo dnf system-upgrade download --releasever="$target"; then
+        echo "Download failed — nothing has changed. Resolve the errors above and re-run."
         return 1
     fi
     echo ""
     echo "Downloaded. Finish with:  sudo dnf system-upgrade reboot"
     echo "(left to you on purpose — that command reboots immediately)"
+    echo "After it settles, run myupdater again: it re-checks this host's mapped checks"
+    echo "and whether every repo made the jump."
 }
 
 # Offer a distro release upgrade, never past the policy ceiling. Idempotent:
@@ -708,11 +911,7 @@ check_release_upgrade() {
         ubuntu_release_upgrade "$ver" "$ceiling"
         ;;
       fedora)
-        if [ "$ver" = "$ceiling" ]; then
-            echo "Nothing to do."
-        else
-            fedora_release_upgrade "$ver" "$ceiling"
-        fi
+        fedora_release_upgrade "$ver" "$ceiling"
         ;;
       debian)
         if [ "$ver" = "$ceiling" ]; then
