@@ -5,7 +5,7 @@
     "pr": "",
     "sessionUrl": false
   },
-  "model": "claude-fable-5[1m]",
+  "model": "fable[1m]",
   "hooks": {
     "Notification": [
       {
@@ -72,6 +72,10 @@
     "type": "command",
     "command": "bash ~/.claude/statusline.sh"
   },
+  "enabledPlugins": {
+    "swift-lsp@claude-plugins-official": true,
+    "unslop@unslop-marketplace": true
+  },
   "extraKnownMarketplaces": {
     "unslop-marketplace": {
       "source": {
@@ -79,10 +83,6 @@
         "repo": "MohamedAbdallah-14/unslop"
       }
     }
-  },
-  "enabledPlugins": {
-    "swift-lsp@claude-plugins-official": true,
-    "unslop@unslop-marketplace": true
   },
   "feedbackSurveyRate": 0,
   "effortLevel": "high",
