@@ -65,8 +65,15 @@ if (Get-Command fastfetch -ErrorAction SilentlyContinue) {
 
 # Ordered candidates for the git projects directory. First one that EXISTS wins —
 # a candidate whose directory is absent is skipped, so a machine without ~\GitHub
-# falls through to a later one.
-$global:gitDirCandidates = @("$HOME\GitHub\", "$HOME\GitHubWSL\")
+# falls through to a later one. $PROFILE dot-sources this file straight out of
+# the repo checkout, so the grandparent of this file's dotfiles clone is always
+# a valid root — the fallback for machines whose clone lives somewhere
+# nonstandard (tried after the personal roots, which must keep winning).
+$global:gitDirCandidates = @(
+    "$HOME\GitHub\",
+    "$HOME\GitHubWSL\",
+    (Split-Path (Split-Path (Split-Path $PSScriptRoot)))
+)
 
 # Context shards call this to add their own root; they must never assign $gitDir
 # directly. Appended candidates are tried last, so a client root can never win on

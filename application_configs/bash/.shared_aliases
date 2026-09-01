@@ -270,9 +270,10 @@ function clonerepos() {
 # updatepackages: OS updates only (softwareupdate/brew on macOS, dnf/apt on
 # Linux) - no repo pulls, no config deploy, and no per-package handling: it
 # upgrades whatever is installed and prints fastfetch at the end. On Linux it
-# also offers a distro RELEASE upgrade, capped per host by
-# <context>_credentials/<context>_os_release_policy.conf so the machine never
-# outruns the VPN client, and never without a [y/N] at the terminal - see
+# also runs whatever check scripts THIS host is mapped to and offers a distro
+# RELEASE upgrade up to this host's ceiling, both from the "updater" block on
+# its <context>_hosts.json inventory entry (src/updater_policy.py resolves
+# it), and never without a [y/N] at the terminal - see
 # docs/setup_linux_workstation.md.
 function updatepackages() {
     bash "$gitDir/dotfiles/scripts/my_updater.sh"

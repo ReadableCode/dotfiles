@@ -228,8 +228,8 @@ one had been skipped for years on the machine it was written for.
 | Check | What it repairs |
 |-------|-----------------|
 | `check_apt_sources()` | Third-party apt sources the upgrader switched off (below) |
-| `check_vpn_client_health()` | `zstunnel` left disabled or without a restart policy ([details](#zscaler-disconnected-after-reboot-tunnel-not-running)) |
-| `check_release_upgrade()` | The distro release itself, capped per host by the credentials repo's release policy (below) |
+| `run_mapped_checks()` | Whatever check scripts this hostname is mapped to in a credentials repo's updater policy (below) |
+| `check_release_upgrade()` | The distro release itself, capped per host by the same `updater` block (below) |
 
 ### Third-party apt sources
 
@@ -263,22 +263,58 @@ suite.
 This runs **before** the package upgrade, so a source repaired this run is one
 the upgrade in the same run actually reads.
 
+### Host-mapped checks
+
+Context-specific health checks — a work machine's tunnel client, say — never
+live in `my_updater.sh`. A host's entry in its credentials repo's inventory
+(`<context>_hosts.json`, the same files `ssh_aliases.py` and
+`deploy_configs.py` already read) may carry an `updater` block mapping it to
+check scripts by path relative to the GitHub parent dir:
+
+```json
+{
+  "name": "Workstation-1",
+  "updater": {
+    "release_ceiling": { "ubuntu": "26.04" },
+    "post_update_check": ["some-work-repo/scripts/check_client_health.sh"],
+    "release_preflight": ["some-work-repo/scripts/check_client_health.sh"]
+  }
+}
+```
+
+`src/updater_policy.py` (stdlib-only, bare `python3`, same bootstrap contract
+as `ssh_aliases.py`) resolves the block for the current machine, matching its
+short hostname against inventory names and aliases case-insensitively.
+
+`post_update_check` scripts run after the package upgrade with no arguments;
+`release_preflight` scripts run just before the release-upgrade `[y/N]` with
+`--target <version>`. The scripts are standalone by contract: they print their
+own findings, ask their own `[y/N]` before repairing anything, and no-op
+quietly when healthy — so they stay runnable by hand, from cron, or by a
+teammate who has only the repo that carries them and no dotfiles at all. A
+mapped path whose repo is not cloned prints a loud skip, and a host with no
+mapping runs nothing.
+
+This is hostname gating, not repo-presence gating, on purpose: cloning a work
+context's credentials repo onto a personal machine must not put that context's
+checks (or any of their code) onto it. For the same reason the `updater` block
+lives on the **host entry only** — no group-level or context-level defaults,
+because "every machine in this group may run release X" vouches for machines
+nobody has checked.
+
 ### Distro release upgrades
 
 The release check moves the machine forward only as far as this host's ceiling
-allows. That ceiling exists because Zscaler Client Connector is certified against
-specific releases, and a machine that runs ahead of that list loses the VPN,
-which loses the work the VPN is for.
+allows. Why a given host has a ceiling is that host's business — its
+credentials repo's docs say what was vetted and what the cap protects (a work
+machine typically caps at the newest release its mandatory client software is
+known to survive).
 
-The ceiling is declared **per host**, in the credentials repo that owns the host:
-`<context>_credentials/<context>_os_release_policy.conf`, discovered by the same
-sibling-repo glob as the overlay manifests. Keys are
-`<host>.<distro>=<version>` — the hostname lowercased and cut at the first dot,
-e.g. `workstation-1.ubuntu=26.04` — with a bare `<distro>=` as a default for
-the other hosts in that same file. Nothing in dotfiles declares a ceiling,
-deliberately: this repo is cloned onto every machine, so a ceiling here would
-vouch for the VPN client on machines nobody has checked, and a host with no
-entry is simply never release-upgraded.
+The ceiling is `updater.release_ceiling.<distro>` on the host's inventory
+entry, the distro key being the `ID=` field of `/etc/os-release`. Nothing in
+dotfiles declares a ceiling, deliberately: this repo is cloned onto every
+machine, so a ceiling here would vouch for machines nobody has checked, and a
+host with no entry is simply never release-upgraded.
 
 On every run the check does one of these and then gets out of the way:
 
@@ -286,30 +322,29 @@ On every run the check does one of these and then gets out of the way:
 |-----------|----------------------|
 | Already at the ceiling | Prints where it stands, changes nothing |
 | Newer release out, at or under the ceiling | Prompts `[y/N]`; runs `do-release-upgrade` only on an explicit yes |
-| Newer release out, above the ceiling | Prints a `NOTE` naming the release and the policy file, every run, and offers the ceiling instead |
+| Newer release out, above the ceiling | Prints a `NOTE` naming the release and the inventory file, every run, and offers the ceiling instead |
 | Ceiling names a release that is already EOL | Prints a `WARNING` and does nothing — a stale ceiling is not a target |
 | Ceiling names a release that never shipped | Prints a `WARNING` and does nothing |
-| Machine somehow past the ceiling | Prints a `WARNING` — the VPN is on an unvetted release |
+| Machine somehow past the ceiling | Prints a `WARNING` — it is running a release nobody signed off on |
 | This host, or this distro on this host, has no entry | Leaves the release alone (unknown ceiling means don't move) |
-| No credentials repo cloned, so no policy at all | Leaves the release alone, and says where the file belongs |
+| No credentials repo cloned (or no `python3`), so no policy readable | Leaves the release alone, and says why |
 
-It also reports, from `distro-info`'s local CSV so it works with the VPN down:
-the newest stable release, and how many days the running release has before EOL
-(loudly inside `eol_warn_days`, louder once past it). On Ubuntu it prints the
-date Zscaler packaged the installed client next to the target release's release
-date, and says so when the client is the older of the two. That is a prompt to
-check the tunnel after the reboot, not a reason to answer no: the newest client
-Zscaler ships is routinely older than the newest Ubuntu, so on a fully patched
-machine there is nothing newer to install.
+It also reports, from `distro-info`'s local CSV so it works offline: the
+newest stable release, and how many days the running release has before EOL
+(loudly inside `eol_warn_days`, louder once past it). Just before the prompt
+it runs this host's mapped `release_preflight` scripts, so a context can put
+its own facts next to the question — client versions, known incompatibilities
+with the target — without any of that code living here.
 
 So you can't drift behind silently (the prompt and the day count keep coming
-back) and you can't drift ahead of the VPN silently (the ceiling is a hard
-stop). Nothing upgrades or reboots without a yes at a terminal; with stdin
-redirected it declines to prompt.
+back) and you can't drift ahead of what was vetted silently (the ceiling is a
+hard stop). Nothing upgrades or reboots without a yes at a terminal; with
+stdin redirected it declines to prompt.
 
 ### Cadence: `Prompt=normal`, not `lts`
 
-These are workstations, so the policy sets `<host>.ubuntu_prompt=normal`
+These are workstations, so a host's `updater` block sets
+`"ubuntu_prompt": "normal"`
 — the upgrader offers the next **supported** release whether or not it's an LTS,
 which means an upgrade roughly every six months instead of sitting two years
 behind on an LTS. Interim releases only carry nine months of support, so that
@@ -337,23 +372,21 @@ applied only after you say yes.
 
 ### Raising the ceiling
 
-1. Confirm the VPN client is supported on **the release you are moving to** —
-   not on the one you are leaving. This distinction cost this machine its VPN on
-   2026-08-31: the ceiling was raised to 26.04 because the client installed and
-   the tunnel came up, but that was observed on 24.04 and proved nothing about
-   26.04. The upgrade then deleted the client, because it hard-depended on
-   `libqt5webkit5` and 26.04 dropped that package. Zscaler's supported-platform
-   matrix is behind a login, so no script here can check it for you; this step is
-   the whole reason the file is manual.
-2. **Download the installer for the newest client before you start**, and keep
-   it somewhere the upgrade won't touch. If the client does get removed you
-   cannot apt-install it back — it is in no repo — and if the download point is
-   itself behind the VPN you are stuck. The client's own logs name the version
-   the portal is offering: `grep -i 'ZCC version' /opt/zscaler/logs/*.log`.
-3. Edit the one line for this host in that credentials repo's
-   `<context>_os_release_policy.conf` (e.g. `workstation-1.ubuntu=26.04`),
-   commit it there. `myupdater` names the file and the exact key in the message
-   that told you the machine was capped.
+1. Do whatever vetting this host's cap exists for, on **the release you are
+   moving to** — not on the one you are leaving. "It works today" observed on
+   the old release proves nothing about the new one: a vendor package that
+   hard-depends on a library the new release dropped is removed by the upgrade
+   outright. The host's credentials repo's docs say what has to be checked
+   and record how it went last time; the host's `release_preflight` script
+   prints the relevant facts at the prompt.
+2. **Have installers downloaded before you start** for anything `myupdater`
+   lists as having no apt source behind it. Those cannot be apt-installed
+   back, and if the download point is only reachable through software the
+   upgrade might break, waiting until after is too late.
+3. Raise `updater.release_ceiling.<distro>` on this host's entry in that
+   credentials repo's `<context>_hosts.json`, commit it there. `myupdater`
+   names the file and the exact key in the message that told you the machine
+   was capped.
 4. Run `myupdater` and answer `y`. Read the list of packages it prints that have
    no apt source behind them — those are the ones exposed to removal.
 
@@ -365,25 +398,20 @@ MYUPDATER_SKIP_RELEASE_UPGRADE=1 myupdater
 
 ### After a release upgrade
 
-Re-run `myupdater` first. Disabled third-party sources and a `zstunnel` unit
-reset by the VPN client are both checks it performs, so that run repairs them.
+Re-run `myupdater` first. Disabled third-party sources and whatever this
+host's mapped checks repair are both re-checked, so that run fixes them.
 
-The one thing it cannot repair is a **VPN client the upgrade removed outright**,
-which is what 24.04 → 26.04 did here on 2026-08-31: the client hard-depended on a
-Qt package the new release had dropped, so apt had no way to keep it. `myupdater`
-detects and reports that state (`/opt/zscaler` survives holding only its
-uninstaller, so a directory check alone looks healthy), but the fix needs the
-`.deb` from the Zscaler portal — the client ships in no apt repository, so
-`--reinstall` has nothing to reinstall from.
-
-Putting it back is rarely one command: a client built against the release you
-left can declare libraries the new one no longer ships, some of them stale
-metadata that nothing actually links and some of them real. Which is which is
-per-client, per-release work, so the analysis and a repair script for a given
-machine belong in the repo that owns that machine's context, beside its release
-policy — not here. Whatever the procedure, install with
-`apt install ./file.deb` rather than `dpkg -i`: `dpkg` won't pull dependencies
-and leaves a half-configured package behind.
+What no check can repair is a **package the upgrade removed outright**: one
+from no apt source whose dependencies the new release stopped satisfying (apt
+removes it in the same batch as ordinary cruft, and `--reinstall` has nothing
+to reinstall from afterwards). That is what the pre-upgrade list of unsourced
+packages exists to warn about. Recovery is per-package, per-release work — a
+package built against the release you left can declare libraries the new one
+no longer ships, some stale metadata nothing links and some real — so the
+analysis and repair scripts live with the repo that owns the affected
+software, reachable through the host's mapped checks, not here. Whatever the
+procedure, install with `apt install ./file.deb` rather than `dpkg -i`:
+`dpkg` won't pull dependencies and leaves a half-configured package behind.
 
 ## Install Apps from Dotfiles Repo
 
@@ -797,53 +825,19 @@ even installed (`dpkg -l <pkg>`) and whether the suite still exists. Sources
 pinned to a dead codename (`Suites: impish`) will 404, and `cdrom:` sources from
 the install ISO are pure cruft — delete those instead.
 
-### Zscaler disconnected after reboot (tunnel not running)
+### A vendor service is dead after a reboot or its own upgrade
 
-**Symptom:** After a reboot Zscaler shows as disconnected or the tray icon
-indicates no tunnel. `systemctl status zstunnel` shows the service as inactive.
-Reinstalling Zscaler fixes it temporarily but the problem returns on the next
-reboot.
+**Symptom:** A vendor-installed agent (a tunnel client, a sync daemon) works
+until the next reboot, or stops working right after its own installer runs.
+`systemctl status <service>` shows it inactive, and a reinstall fixes it only
+until the next reboot.
 
-**Cause:** The Zscaler installer starts `zstunnel` for the current session but
-never enables it in systemd. On the next boot `zsaservice` starts (it is
-enabled) but `zstunnel` does not, leaving the VPN dead. The two services also
-have no dependency wiring between them and `zstunnel` has no restart policy, so
-a crash also leaves it dead until manual intervention.
+**Cause:** Many vendor installers start their service for the current session
+but never `systemctl enable` it, ship no restart policy, and reset both on
+every upgrade of themselves — so a one-time manual fix does not hold.
 
-**Every client upgrade re-breaks this.** Installing a newer client resets
-`zstunnel` to disabled and deletes the drop-in below (confirmed on the
-1.5.0.41 → 3.7.2.31 upgrade, 2026-08-31), so re-run the fix after any Zscaler
-install — not just a first-time one.
-
-**Fix: run `myupdater`.** `check_vpn_client_health()` checks both conditions
-every run and offers the repair, which is the only thing that holds — a one-time
-manual fix does not, because the *next* client install undoes it again.
-
-By hand, if you need it:
-
-```bash
-sudo systemctl enable zstunnel
-
-sudo mkdir -p /etc/systemd/system/zstunnel.service.d
-sudo tee /etc/systemd/system/zstunnel.service.d/restart.conf > /dev/null << 'EOF'
-[Service]
-Restart=always
-RestartSec=5s
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl restart zstunnel
-```
-
-Verify:
-
-```bash
-systemctl is-enabled zsaservice zstunnel   # both: enabled
-systemctl status zstunnel                  # active (running)
-```
-
-**If the tunnel is down right now** (without reinstalling):
-
-```bash
-sudo systemctl start zstunnel
-```
+**Fix: run `myupdater`.** If this host has a mapped `post_update_check` for
+that vendor (see [Host-mapped checks](#host-mapped-checks)), it re-checks and
+offers the repair on every run, which is the only thing that survives the next
+installer. The check script itself lives in the repo of the context that owns
+the vendor relationship; its header documents the by-hand version.

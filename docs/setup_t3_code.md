@@ -1188,6 +1188,42 @@ a doc/automation task in this repo.
   the common case. Workaround: treat chip tooltips as a guess — confirm with
   `ls` before believing a file is somewhere surprising, and ask agents to
   write workspace-relative paths in messages so the join happens to be right.
+- **Enumerating a hung FUSE mount wedges the whole server while systemd calls
+  it healthy (upstream, OPEN, found 2026-09-01)**: on a work Linux box (0.0.37
+  boot service), a thread enumerated into the `google-drive-ocamlfuse` mount
+  at `~/GoogleDrive` and the server went dark — clients saw it as a crash.
+  Nothing had actually exited. The ocamlfuse daemon had wedged (main thread
+  parked normally on `/dev/fuse` — wchan `fuse_dev_do_read` — one worker
+  busy-spinning, no open TCP sockets), so every stat/readdir on the
+  mountpoint blocked in the kernel forever; even `timeout 5 ls ~/GoogleDrive`
+  hung. Inside t3, one worker thread sat in wchan `request_wait_answer` (the
+  kernel FUSE wait) and **every HTTP request timed out** — `curl
+  127.0.0.1:3773` gave `000` after 15 s — while the process stayed
+  `active (running)`, the event loop kept ticking (`PortDiscovery.pollTick`
+  spans still landing in `server.trace.ndjson` every 3 s), and the only
+  visible symptom was the relay spamming `Incoming request ended abruptly:
+  context canceled`. So `Restart=always` never fires (nothing exits) and
+  `systemctl --user status` reads healthy — the exact blind spot as the
+  Windows wedged-wrapper entry above: probe the port, don't trust the unit
+  state. Diagnosis: `timeout 5 ls <mountpoint>` per FUSE mount (`mount | grep
+  fuse`), then per-thread wchan on the serve pid (`for t in
+  /proc/<pid>/task/*; do cat $t/wchan; done`) — `request_wait_answer` is the
+  tell. Recovery: kill the fuse daemon (SIGTERM was ignored; SIGKILL worked,
+  and the mtab entry cleaned itself up), then restart t3 from outside its
+  cgroup (`systemd-run --user --collect --unit=t3-restart-manual systemctl
+  --user restart t3code.service` — `KillMode=mixed` SIGKILLs a `systemctl`
+  run inside it). Server answered in 18 ms immediately after. Remount with
+  `google-drive-ocamlfuse ~/GoogleDrive` and note the first listing on a
+  fresh mount can take >10 s while the cache repopulates — don't misread
+  that as still-hung (it settled to 0.3 s). This machine re-arms the trap by
+  design: the mount comes back at every login
+  (`~/.config/autostart/google-drive-ocamlfuse.desktop`) and holds a stale
+  checkout at `~/GoogleDrive/Projects`, so any file picker or project
+  enumeration browsing `$HOME` can walk into it. Upstream fix: filesystem
+  walks should skip (or stat with a timeout) FUSE-backed paths so one dead
+  network filesystem can't take down every thread on the box; a liveness
+  probe of its own HTTP port would also let the service self-restart out of
+  this state.
 
 ## More docs
 

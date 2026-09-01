@@ -11,26 +11,29 @@
 # a vendor installer silently breaks, and each one used to be a manual step in
 # the docs that nobody remembers to run:
 #   check_apt_sources()      third-party apt sources the upgrader switched off
-#   check_vpn_client_health()  zstunnel left disabled / without a restart policy
+#   run_mapped_checks()      whatever check scripts THIS host's inventory entry
+#                            maps to it (the "updater" block in a sibling
+#                            credentials repo's <context>_hosts.json) — see the
+#                            Host-mapped checks section below
 #   check_release_upgrade()  a DISTRO RELEASE upgrade (24.04 → 26.04), capped
-#                            PER HOST by the release policy in this machine's
-#                            credentials repo so it can never outrun the VPN
-#                            client — read that file for why the cap exists and
-#                            how to raise it
+#                            PER HOST by the same updater block — that repo's
+#                            docs say why the cap exists and how to raise it
 # All three are no-ops once healthy, so the normal run prints where it stands
 # and changes nothing. macOS and Windows are untouched by all of it — Windows
 # lives in application_configs/powershell.
 #
-# NO PER-PACKAGE SPECIAL CASES HERE. Individual packages are installed by the
-# app_lists/ + scripts/install_*.sh path and upgraded by the bulk apt/dnf/brew
-# commands below, whatever they are. If a package needs a third-party apt
-# source first (VS Code, Chrome) that is one-time machine setup and belongs in
-# docs/setup_linux_workstation.md, not here. Zscaler is the sole exception, and
-# only because it is the CEILING on release upgrades, not to install it — see
-# vpn_client_standing(). A fastfetch install path lived here until 2026-08-31
+# NO PER-PACKAGE OR PER-CONTEXT SPECIAL CASES HERE. Individual packages are
+# installed by the app_lists/ + scripts/install_*.sh path and upgraded by the
+# bulk apt/dnf/brew commands below, whatever they are. If a package needs a
+# third-party apt source first (VS Code, Chrome) that is one-time machine setup
+# and belongs in docs/setup_linux_workstation.md, not here. A check that only
+# one context's machines need (a work VPN client, say) lives in a repo that
+# context owns and is wired up per host through the inventory — a vendor
+# health check lived inline here until 2026-08-31 and ran (as a no-op) on every
+# personal machine too. A fastfetch install path lived here until the same day
 # and was pure duplication: it was already in app_lists/linux_apps.txt the whole
 # time, and the "missing package" it worked around was just 24.04 predating
-# fastfetch's arrival in the Ubuntu archive (24.10). Don't re-add its like.
+# fastfetch's arrival in the Ubuntu archive (24.10). Don't re-add their like.
 
 echo "#################   Updating Packages   #####################"
 
@@ -136,7 +139,7 @@ apt_source_disabled() {
 }
 
 # True when a suite names an Ubuntu release that is already dead, so the source
-# would 404 even if switched back on. Local data, so it works with the VPN down.
+# would 404 even if switched back on. Local data, so it works offline.
 apt_suite_is_eol() {
     local days
     [ -n "$1" ] || return 1
@@ -267,125 +270,90 @@ check_apt_sources() {
     return 0
 }
 
-##############################   VPN client health   ##############################
+##############################   Updater policy   ##############################
 
-# The one package allowed a special case in this script, and only because a
-# broken tunnel costs the work the tunnel is for.
+# Anything host-specific is declared PER HOST in the credentials repo that owns
+# the host, never in dotfiles. This repo is cloned onto every machine, so a
+# value written here would speak for machines nobody has checked. Each sibling
+# <context>_credentials repo already carries that context's host inventory
+# (<context>_hosts.json, the same files ssh_aliases.py and deploy_configs.py
+# read), so an "updater" block on a host's entry is where its updater
+# decisions live: release ceiling, upgrade cadence, mapped check scripts. The
+# block sits on the HOST entry only — no group or context defaults — so a
+# machine is governed only by an entry that names it, and cloning another
+# context's credentials repo changes nothing here.
 #
-# The Zscaler installer starts zstunnel for the current session but never
-# enables it, and it ships no restart policy -- so the VPN is dead after the
-# next boot or the first crash. EVERY client install re-breaks this: the
-# 1.5.0.41 -> 3.7.2.31 upgrade on 2026-08-31 reset the unit to disabled and
-# deleted the drop-in below. A one-time manual fix therefore does not hold,
-# which is why it is re-checked here on every run. Prints nothing once healthy.
-check_vpn_client_health() {
-    local dropin=/etc/systemd/system/zstunnel.service.d/restart.conf
-    [ -d /opt/zscaler ] || return 0
-    command -v systemctl &> /dev/null || return 0
+# src/updater_policy.py (stdlib-only, bare python3, like ssh_aliases.py) does
+# the lookup. No python3 or a broken inventory means the policy is unknown,
+# and unknown means don't move: the release check says so and skips, mapped
+# checks run nothing, package updates still happen.
+REPO_PARENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+POLICY_HELPER="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/src/updater_policy.py"
 
-    # A removed client leaves the directory standing: dpkg keeps the config
-    # files (rc state) and the vendor's installer leaves /opt/zscaler holding
-    # only UninstallApplication, so testing the directory alone reports a
-    # healthy client that is not on the machine. Checking for the daemon itself
-    # is what distinguishes them -- this exact state came out of the 24.04 ->
-    # 26.04 upgrade on 2026-08-31, and the old directory test said nothing.
-    if [ ! -x /opt/zscaler/bin/zstunnel ]; then
-        echo ""
-        echo "############   Checking VPN Client   ############"
-        echo "The Zscaler client is GONE: /opt/zscaler is still here, its binaries are not."
-        case "$(dpkg-query -W -f='${Status}' zscaler-client 2>/dev/null)" in
-          *config-files*) echo "dpkg confirms it: removed but not purged, config files kept." ;;
-        esac
-        echo ""
-        echo "A release upgrade removes this client outright when the new release drops a"
-        echo "library it depends on. This is the one repair here that CANNOT be automatic:"
-        echo "the client is in no apt source, so the installer has to be downloaded from the"
-        echo "Zscaler portal by hand. Once you have it:"
-        echo "    sudo apt purge zscaler-client"
-        echo "    sudo apt install ./zscaler-client_<version>_amd64.deb"
-        echo ""
-        echo "If that install fails on missing libraries, the release dropped something the"
-        echo "client still declares -- see docs/setup_linux_workstation.md, 'After a release"
-        echo "upgrade', for what that looks like and where this machine's repair notes live."
-        echo "Re-run myupdater afterwards either way: it enables the service the installer"
-        echo "leaves off."
-        return 0
+# Short pre-dot hostname, lowercased — only used in messages; the helper does
+# its own matching against the inventory names and aliases the same way.
+POLICY_HOST="$(hostname 2>/dev/null | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
+
+policy_available() {
+    command -v python3 &> /dev/null && [ -f "$POLICY_HELPER" ]
+}
+
+# Value of a dotted key inside THIS host's updater block, e.g.
+# `policy_lookup release_ceiling.ubuntu`. Lists come back comma-joined; a
+# missing host or key comes back empty. stderr is left alone on purpose: a
+# broken inventory complains on the terminal while the captured value stays
+# empty, so breakage is loud and the updater still fails safe.
+policy_lookup() {
+    policy_available || return 0
+    python3 "$POLICY_HELPER" --root "$REPO_PARENT" "$1"
+}
+
+# Named by every message that asks you to change the policy. Prints the
+# inventory files found, or where one would live when there are none — a
+# machine whose credentials repo is not cloned has no policy at all, and
+# saying so beats naming a path that does not exist.
+policy_location() {
+    local files=""
+    policy_available && files="$(python3 "$POLICY_HELPER" --root "$REPO_PARENT" --where 2>/dev/null)"
+    if [ -n "$files" ]; then
+        printf '%s' "$files" | tr '\n' ' ' | sed 's/ *$//'
+    else
+        printf '%s' "$REPO_PARENT/<context>_credentials/<context>_hosts.json"
     fi
+}
 
-    systemctl list-unit-files zstunnel.service &> /dev/null || return 0
+##############################   Host-mapped checks   ##############################
 
-    local enabled="" needs_dropin=""
-    systemctl is-enabled zstunnel &> /dev/null || enabled="no"
-    [ -f "$dropin" ] || needs_dropin="yes"
-    [ -z "$enabled" ] && [ -z "$needs_dropin" ] && return 0
-
-    echo ""
-    echo "############   Checking VPN Client   ############"
-    [ -n "$enabled" ] && echo "zstunnel is NOT enabled at boot -- the VPN will be dead after the next reboot."
-    [ -n "$needs_dropin" ] && echo "zstunnel has no restart policy -- a crash leaves the tunnel down until noticed."
-    echo "(a Zscaler install resets both; see docs/setup_linux_workstation.md)"
-
-    confirm "Enable zstunnel at boot and install the restart drop-in?" || return 0
-
-    [ -n "$enabled" ] && sudo systemctl enable zstunnel > /dev/null 2>&1
-    if [ -n "$needs_dropin" ]; then
-        sudo mkdir -p "$(dirname "$dropin")"
-        printf '[Service]\nRestart=always\nRestartSec=5s\n' | sudo tee "$dropin" > /dev/null
-    fi
-    sudo systemctl daemon-reload
-    echo "Done: $(systemctl is-enabled zstunnel 2>/dev/null), $(systemctl is-active zstunnel 2>/dev/null)."
+# Context-specific health checks never live in this script. A host's updater
+# block maps it to check scripts by path relative to the repo parent dir, so
+# the code lives in whichever repo should share it — a work context's checks
+# go in that context's own working repo where teammates get them too, and a
+# machine whose inventory entry has no mapping runs nothing and holds none of
+# the code. Two keys are consulted:
+#   post_update_check     run after the package upgrade, no arguments
+#   release_preflight     run before the release-upgrade prompt, passed
+#                         --target <version>
+# The scripts are standalone by contract: they print their own findings, ask
+# their own [y/N] before repairing anything, and must no-op quietly when
+# healthy. Exit codes are not acted on here.
+run_mapped_checks() {
+    local key="$1"; shift
+    local paths path
+    paths="$(policy_lookup "$key")"
+    [ -n "$paths" ] || return 0
+    for path in ${paths//,/ }; do
+        if [ -f "$REPO_PARENT/$path" ]; then
+            bash "$REPO_PARENT/$path" "$@"
+        else
+            echo ""
+            echo "WARNING: this host maps $key to $path, but nothing is at"
+            echo "         $REPO_PARENT/$path — clone the repo that carries it. Skipping."
+        fi
+    done
+    return 0
 }
 
 ##############################   Release upgrades   ##############################
-
-# The ceiling is declared PER HOST in the credentials repo that owns the host,
-# never in dotfiles. This repo is cloned onto every machine, so a ceiling written
-# here would vouch for the VPN client on machines nobody has checked — which is
-# exactly the mistake that cost this machine its VPN on 2026-08-31. Each sibling
-# <context>_credentials repo already carries that context's host inventory
-# (<context>_hosts.json), so <context>_os_release_policy.conf beside it is where
-# "the VPN has been checked on this release, on this machine" belongs. Same
-# overlay discovery as deploy_configs.py's <context>_manifest.yaml: glob the
-# sibling repos, no list of contexts anywhere.
-REPO_PARENT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-POLICY_FILES="$(ls "$REPO_PARENT"/*_credentials/*_os_release_policy.conf 2>/dev/null)"
-
-# Short pre-dot hostname, lowercased, as the keys are written: WORKSTATION-1
-# becomes workstation-1. Matches how deploy_configs.py resolves host tokens.
-POLICY_HOST="$(hostname 2>/dev/null | cut -d. -f1 | tr '[:upper:]' '[:lower:]')"
-
-# Value for a key: host-scoped first ("workstation-1.ubuntu=26.04"), then bare
-# ("ubuntu=26.04") as a default for the hosts of whichever repo declares it.
-# Host-scoped wins across ALL files before any bare key is considered, so the
-# repo that actually names this machine always beats another context's default.
-# Tolerates comments, blank lines and surrounding whitespace.
-policy_lookup() {
-    local key="$1" scope file val
-    [ -n "$POLICY_FILES" ] || return 0
-    for scope in "${POLICY_HOST:-no-such-host}\." ""; do
-        while IFS= read -r file; do
-            [ -r "$file" ] || continue
-            val="$(sed -n "s/^[[:space:]]*${scope}${key}[[:space:]]*=[[:space:]]*\([^[:space:]#]*\).*/\1/p" \
-                "$file" | head -n1)"
-            if [ -n "$val" ]; then
-                printf '%s' "$val"
-                return 0
-            fi
-        done <<< "$POLICY_FILES"
-    done
-}
-
-# Named by every message that asks you to change the policy. Prints the files
-# found, or where to create one when there are none — a machine whose
-# credentials repo is not cloned has no policy at all, and saying so beats
-# naming a path that does not exist.
-policy_location() {
-    if [ -n "$POLICY_FILES" ]; then
-        printf '%s' "$POLICY_FILES" | tr '\n' ' ' | sed 's/ *$//'
-    else
-        printf '%s' "$REPO_PARENT/<context>_credentials/<context>_os_release_policy.conf"
-    fi
-}
 
 # True when $1 <= $2 as dotted versions. sort -V so 26.04 beats 24.04 and 9
 # doesn't beat 10.
@@ -435,15 +403,15 @@ ubuntu_release_date() {
 # REMOVES any whose dependencies the new release no longer satisfies, in the
 # same batch as ordinary cruft, without singling them out.
 #
-# That is how the VPN client vanished here on 2026-08-31: zscaler-client
-# 3.7.2.31 hard-depended on libqt5webkit5 (no alternative listed), 26.04 dropped
-# that package, so apt removed the client and the machine came back up with no
-# VPN and no way to reinstall it offline. kubectl, google-drive-ocamlfuse and
-# realvnc-vnc-server were flagged Obsolete in the same run and survived, because
-# their dependencies still resolved -- so "Obsolete" alone is not the warning,
-# and there is no reliable way to test the target release's dependencies from
-# here. Listing the exposed packages BEFORE the upgrade is what is possible:
-# it names them while there is still a working machine to fetch installers with.
+# That is how the 24.04 -> 26.04 upgrade on 2026-08-31 removed a vendor .deb
+# outright here: it hard-depended on a library (no alternative listed) that
+# 26.04 dropped, so apt removed it, and being in no repo it could not be
+# reinstalled afterwards. kubectl, google-drive-ocamlfuse and realvnc-vnc-server
+# were flagged Obsolete in the same run and survived, because their dependencies
+# still resolved -- so "Obsolete" alone is not the warning, and there is no
+# reliable way to test the target release's dependencies from here. Listing the
+# exposed packages BEFORE the upgrade is what is possible: it names them while
+# there is still a working machine to fetch installers with.
 unsourced_packages() {
     local pkgs
     command -v apt-mark &> /dev/null || return 0
@@ -493,7 +461,7 @@ ubuntu_bare_version() {
 
 # Where this release stands: what the newest stable is, and how long this one
 # has left. distro-info ships the dates locally, so this still reports when the
-# VPN is down or the archive is unreachable.
+# network or the archive is unreachable.
 ubuntu_release_standing() {
     local ver="$1" series newest newest_ver eol_days warn
     command -v ubuntu-distro-info &> /dev/null || return 0
@@ -516,44 +484,6 @@ ubuntu_release_standing() {
         echo "EOL:      $eol_days days left on $ver — inside the $warn-day window, upgrade soon."
     else
         echo "EOL:      $eol_days days left on $ver"
-    fi
-}
-
-# The VPN client's age against the release being proposed. Says so when the
-# client is older than the release, because that is the one risk in the whole
-# upgrade — but does NOT tell you to go install a newer one. Zscaler ships a
-# client every few months and the newest one that exists is routinely older
-# than the newest Ubuntu, so on a fully up-to-date machine that advice is
-# impossible to follow: 3.7.2.31 was installed here 2026-08-31 and still dates
-# from 2025-05-29. The date shown is the mtime dpkg preserved from the vendor's
-# archive, so it is when Zscaler packaged the binary, not when it was
-# installed. Silent on machines with no Zscaler install.
-vpn_client_standing() {
-    local target="$1" ver packaged target_date
-    [ -d /opt/zscaler ] || return 0
-
-    # A removed client leaves /opt/zscaler standing, so reaching this with no
-    # daemon means the client is gone rather than merely unreadable -- saying
-    # "version unknown" there reads like a parsing hiccup instead of no VPN.
-    if [ ! -x /opt/zscaler/bin/zstunnel ]; then
-        echo "VPN:      NOT INSTALLED -- /opt/zscaler is a leftover, the client is gone."
-        return 0
-    fi
-
-    ver="$(sed -n 's/^CLIENT_CONNECTOR_VERSION="\([^"]*\)".*/\1/p' \
-        /opt/zscaler/.config/.ZCCVersion 2>/dev/null | head -n1)"
-    packaged="$(date -r /opt/zscaler/bin/zstunnel +%Y-%m-%d 2>/dev/null)"
-    echo "VPN:      Zscaler Client Connector ${ver:-version unknown}${packaged:+, packaged $packaged}"
-
-    target_date="$(ubuntu_release_date "$target")"
-    if [ -n "$packaged" ] && [ -n "$target_date" ] && [[ "$packaged" < "$target_date" ]]; then
-        echo ""
-        echo "          This client is older than Ubuntu $target (released $target_date), so it"
-        echo "          was built before the release it would end up running on. That is normal"
-        echo "          and often unavoidable. If Zscaler has a client newer than ${ver:-this one},"
-        echo "          install it first; if this is already the newest, go ahead and check the"
-        echo "          tunnel once the machine is back up:"
-        echo "            systemctl status zstunnel zsaservice && ip addr show zcctun0"
     fi
 }
 
@@ -601,8 +531,9 @@ ubuntu_release_upgrade() {
         target="$ceiling"
         echo ""
         echo "NOTE: Ubuntu $newest_ver is out, but this machine is capped at $ceiling."
-        echo "      To go further: confirm the VPN client works on $newest_ver, then set"
-        echo "      '$POLICY_HOST.ubuntu=$newest_ver' in $(policy_location)."
+        echo "      To go further, raise this host's updater.release_ceiling.ubuntu to"
+        echo "      $newest_ver in $(policy_location) — check first what this cap protects"
+        echo "      (that repo's docs say what was vetted and how)."
     fi
 
     if version_le "$target" "$ver"; then
@@ -613,7 +544,8 @@ ubuntu_release_upgrade() {
     if [ -z "$(ubuntu_release_date "$target")" ]; then
         echo ""
         echo "WARNING: the ceiling names Ubuntu $target, which distro-info has never heard of."
-        echo "         Fix '$POLICY_HOST.ubuntu=' in $(policy_location); not attempting an upgrade."
+        echo "         Fix this host's updater.release_ceiling.ubuntu in $(policy_location);"
+        echo "         not attempting an upgrade."
         return 0
     fi
     # Only reachable when the ceiling is stale, since the newest stable release
@@ -624,8 +556,8 @@ ubuntu_release_upgrade() {
         echo ""
         echo "WARNING: the ceiling names Ubuntu $target, which is already past end of life, so"
         echo "         upgrading onto it would land this machine on a release getting no security"
-        echo "         updates. Nothing was done. Confirm the VPN client on $newest_ver and set"
-        echo "         '$POLICY_HOST.ubuntu=$newest_ver' in $(policy_location)."
+        echo "         updates. Nothing was done. Vet $newest_ver for this host and raise its"
+        echo "         updater.release_ceiling.ubuntu in $(policy_location)."
         return 0
     fi
     if ! command -v do-release-upgrade &> /dev/null; then
@@ -640,7 +572,7 @@ ubuntu_release_upgrade() {
 
     echo ""
     echo "Ubuntu $target is out, and this machine is allowed to run it."
-    vpn_client_standing "$target"
+    run_mapped_checks release_preflight --target "$target"
     local at_risk
     at_risk="$(unsourced_packages)"
     if [ -n "$at_risk" ]; then
@@ -651,7 +583,7 @@ ubuntu_release_upgrade() {
         # shellcheck disable=SC2086
         printf '            %s\n' $at_risk
         echo "          Have their installers downloaded BEFORE you say yes. This is not"
-        echo "          hypothetical: it is how 26.04 removed the VPN client on 2026-08-31."
+        echo "          hypothetical: 26.04 removed one of these outright on 2026-08-31."
     fi
 
     echo ""
@@ -662,8 +594,9 @@ ubuntu_release_upgrade() {
         && echo "  - switch this machine to being offered every new release instead of only" \
         && echo "    LTS ones, which is what has been hiding $target from it"
     echo ""
-    echo "The upgrade turns off third-party apt sources and resets the VPN service."
-    echo "Re-running myupdater afterwards puts both back."
+    echo "The upgrade turns off third-party apt sources, and vendor installers it pulls"
+    echo "in can reset their own services. Re-running myupdater afterwards repairs the"
+    echo "sources and re-runs this host's mapped checks."
     echo ""
     confirm "Upgrade this machine from $ver to $target now?" || return 0
 
@@ -690,7 +623,7 @@ ubuntu_release_upgrade() {
     sudo do-release-upgrade
     echo ""
     echo "After the reboot, run myupdater again. It puts back the third-party apt"
-    echo "sources this upgrade turned off and the VPN service it reset."
+    echo "sources this upgrade turned off and re-runs this host's mapped checks."
 }
 
 fedora_release_upgrade() {
@@ -701,6 +634,7 @@ fedora_release_upgrade() {
     # intermediate hops, so bump the ceiling in steps if it has drifted far.
     echo ""
     echo "Fedora $ceiling is newer than $ver and within the ceiling."
+    run_mapped_checks release_preflight --target "$ceiling"
     confirm "Download the Fedora $ceiling upgrade now?" || return 0
 
     sudo dnf install -y dnf-plugin-system-upgrade || return 1
@@ -728,9 +662,9 @@ check_release_upgrade() {
         echo "No readable /etc/os-release, cannot identify this distro, skipping."
         return 0
     fi
-    if [ -z "$POLICY_FILES" ]; then
-        echo "No release policy in any sibling *_credentials repo, skipping (an unknown"
-        echo "ceiling means don't move). Expected at $(policy_location)."
+    if ! policy_available; then
+        echo "python3 or src/updater_policy.py is missing, so this host's policy cannot be"
+        echo "read. Skipping (an unknown ceiling means don't move)."
         return 0
     fi
 
@@ -744,11 +678,11 @@ check_release_upgrade() {
         return 0
     fi
 
-    ceiling="$(policy_lookup "$id")"
+    ceiling="$(policy_lookup "release_ceiling.$id")"
     if [ -z "$ceiling" ]; then
         echo "$pretty: no ceiling declared for '$id' on this host, leaving the release alone."
-        echo "Add '$POLICY_HOST.$id=<max VERSION_ID>' to $(policy_location) once you know"
-        echo "which release the VPN client supports on this machine."
+        echo "Add updater.release_ceiling.$id to this host's entry ($POLICY_HOST) in"
+        echo "$(policy_location) once you have decided the newest release it should run."
         return 0
     fi
 
@@ -762,9 +696,10 @@ check_release_upgrade() {
 
     if ! version_le "$ver" "$ceiling"; then
         echo ""
-        echo "WARNING: this machine is PAST the ceiling ($ver > $ceiling), so the VPN client"
-        echo "         is running on a release nobody signed off on. Either verify support and"
-        echo "         raise '$POLICY_HOST.$id=' in $(policy_location), or rebuild onto $ceiling."
+        echo "WARNING: this machine is PAST the ceiling ($ver > $ceiling), so it is running a"
+        echo "         release nobody signed off on. Either vet this release and raise this"
+        echo "         host's updater.release_ceiling.$id in $(policy_location), or rebuild"
+        echo "         onto $ceiling."
         return 0
     fi
 
@@ -808,9 +743,10 @@ case "$OS" in
     else
         echo "Neither dnf nor apt found, skipping package updates."
     fi
-    # After the upgrade: if it pulled in a new VPN client, that client just
-    # reset its own systemd units, so this has to run downstream of it.
-    check_vpn_client_health
+    # After the upgrade: if it pulled in a new vendor package, that package may
+    # just have reset its own systemd units, so the checks that repair such
+    # state run downstream of it.
+    run_mapped_checks post_update_check
     # Last: a release upgrade refuses to start on a machine with pending
     # updates anyway.
     check_release_upgrade
