@@ -136,13 +136,13 @@ alias srcaliases='source ~/.zshrc'
 
 ### Functions ###
 
-# syncplex = the media remote CLI/TUI; syncdrive = mirror configured media
-# onto a drive (defaults to /Users/jason/Media, pass a path to override).
+# The media remote CLI/TUI (Sync_Plex).
 function syncplex() {
     [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
     uv run --project "$gitDir/Sync_Plex/backends/python" syncplex "$@"
 }
 
+# Mirror configured media onto a drive (defaults to /Users/jason/Media; pass a path to override).
 function syncdrive() {
     [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
     if [ "$#" -eq 0 ]; then

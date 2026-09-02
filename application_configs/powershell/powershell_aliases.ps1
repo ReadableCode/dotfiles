@@ -17,6 +17,7 @@ if ($env:OS -eq 'Windows_NT') {
 
 ### Terminal Config ###
 
+# List every shortcut the profile loaded with a one-line description; `cataliases <name>` shows one definition.
 function cataliases {
     # CLI-style table of every shortcut the profile loaded: one command per
     # line with a one-line description, from this file, every
@@ -83,11 +84,13 @@ function _AliasTable {
     }
 }
 
+# Open this profile's alias file in nvim.
 function editaliases {
     if (-not (Test-GitDir)) { return }
     nvim $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
 }
 
+# Reload the PowerShell profile into the current session.
 function srcaliases {
     # Reload the PowerShell profile. Dot-sourcing inside a function traps the
     # re-defined functions in this function's scope, so promote them to the
@@ -102,11 +105,13 @@ if (Test-Path "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe") {
     if (Get-Alias diff -ErrorAction SilentlyContinue) {
         Remove-Item alias:diff -Force
     }
+    # GNU diff from chocolatey's diffutils, replacing the Compare-Object alias.
     function diff {
         & "C:\ProgramData\chocolatey\lib\diffutils\tools\bin\diff.exe" @args
     }
 }
 
+# Directory tree including files (tree.com /f).
 function treed {
     & "$env:SystemRoot\System32\tree.com" /f @args
 }
@@ -182,14 +187,17 @@ function Test-GitDir {
     return $true
 }
 
+# cd to $gitDir.
 function githubdir {
     if (-not (Test-GitDir)) { return }
     Set-Location $gitDir
 }
+# cd to dotfiles/scripts.
 function myscripts {
     if (-not (Test-GitDir)) { return }
     Set-Location (Join-Path $gitDir 'dotfiles\scripts')
 }
+# cd to Data_Tool_Pack_Py.
 function datatoolpack {
     if (-not (Test-GitDir)) { return }
     Set-Location (Join-Path $gitDir 'Data_Tool_Pack_Py')
@@ -198,6 +206,7 @@ function datatoolpack {
 
 ### Python ###
 
+# Activate the nearest .venv, walking up from the current directory.
 function venvactivate {
     # Walk upward from the current directory looking for a .venv folder
     $dir = Get-Item -Path (Get-Location)
@@ -213,6 +222,7 @@ function venvactivate {
     Write-Host "venvactivate: no .venv found in $(Get-Location) or any parent directory" -ForegroundColor Red
 }
 
+# Deactivate the current venv.
 function venvdeactivate { deactivate }
 
 # Run a python script with the right interpreter for ITS project, from any cwd.
@@ -302,6 +312,7 @@ function run-python-script {
     }
 }
 
+# The Terminal_To_Do TUI.
 function todo {
     if (-not (Test-GitDir)) { return }
     # Run the main.py script using run-python-script
@@ -309,12 +320,14 @@ function todo {
     run-python-script $scriptPath
 }
 
+# The status board TUI (status_board repo); args pass through.
 function statusboard {
     if (-not (Test-GitDir)) { return }
     $scriptPath = (Join-Path $gitDir 'status_board\src\status_board.py')
     run-python-script $scriptPath @args
 }
 
+# The Cash_Flow_Commander TUI; args pass through.
 function cashflow {
     if (-not (Test-GitDir)) { return }
     $scriptPath = (Join-Path $gitDir 'Cash_Flow_Commander\src\cfc_tui.py')
@@ -324,14 +337,17 @@ function cashflow {
 
 ### Command Shortcuts ###
 
+# Long listing including hidden files.
 function ll {
     Get-ChildItem -Force
 }
 
+# Where a command resolves from (Get-Command).
 function which {
     Get-Command $args
 }
 
+# Open every file this branch changed vs the default branch.
 function openbranchdiffs {
     # Navigate to the root of the Git repository
     $repoRoot = git rev-parse --show-toplevel 2>$null
@@ -446,6 +462,7 @@ function _FleetRefreshConfigs {
     if (Test-Path $ensureAhk) { & $ensureAhk -AutoFix -Full }
 }
 
+# Pull every repo, then redeploy configs and prune removed ones.
 function gitpullall {
     if (-not (Test-GitDir)) { return }
     pullrepos
@@ -557,6 +574,7 @@ function deployconfigs {
     uv run --project $repo python (Join-Path $repo 'src\deploy_configs.py') @args
 }
 
+# Send a push notification through ntfy (scripts/ntfyme.py).
 function ntfyme {
     if (-not (Test-GitDir)) { return }
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
@@ -575,18 +593,22 @@ function myupdater {
     _FleetRefreshConfigs
 }
 
+# Weather report from wttr.in.
 function weather {
     Invoke-RestMethod "https://wttr.in"
 }
 
+# Public IP via ifconfig.me.
 function getpubip {
     (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing).Content.Trim()
 }
 
+# Run a speedtest.
 function speed { speedtest }
 
 ### Servers ###
 
+# Serve JupyterLab from $gitDir on all interfaces.
 function startjupyterlab {
     if (-not (Test-GitDir)) { return }
     # Change to the directory defined by $gitDir
@@ -608,6 +630,7 @@ function startjupyterlab {
 # plainly (no CLAUDE_CODE_IDE_SKIP_AUTO_INSTALL), so it inherits VS Code's env
 # for IDE integration and will auto-(re)install the extension if it's missing.
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+    # Fallback launcher: the Claude Code binary bundled with the VS Code extension, when none is on PATH.
     function claude {
         $extRoots = @(
             (Join-Path $env:USERPROFILE '.vscode-server\extensions'),
@@ -628,6 +651,7 @@ if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
     }
 }
 
+# Start the ollama server (prints the install hint if it is missing).
 function startollama {
     if (Get-Command ollama -ErrorAction SilentlyContinue) {
         ollama serve
@@ -637,10 +661,14 @@ function startollama {
     }
 }
 
+# Pull the default ollama model (llama2-uncensored).
 function pullollamamodels { ollama pull llama2-uncensored }
+# Chat with the default ollama model.
 function runollama { ollama run llama2-uncensored }
+# Kill the ollama process.
 function stopollama { Stop-Process -Name "ollama" -ErrorAction SilentlyContinue }
 
+# Launch stable-diffusion-webui (loads its .env from the credentials deploy when present).
 function startstablediffusion {
     if (-not (Test-GitDir)) { return }
     $scriptPath = "~\GitHub\stable-diffusion-webui\webui.bat"
@@ -667,6 +695,7 @@ function startstablediffusion {
     & $scriptPath --listen --gradio-auth jason:$password
 }
 
+# Launch the AMD GPU fork, stable-diffusion-webui-amdgpu.
 function startstablediffusionamd {
     if (-not (Test-GitDir)) { return }
     $scriptPath = "~\GitHub\stable-diffusion-webui-amdgpu\webui.bat"
@@ -695,6 +724,7 @@ function startstablediffusionamd {
 
 ### GPU Shortcuts ###
 
+# Live nvidia-smi, refreshed every half second.
 function gpustatus {
     # Windows equivalent of 'watch -n 0.5 nvidia-smi'
     while ($true) {
@@ -706,26 +736,33 @@ function gpustatus {
 
 ### Kubectl ###
 
+# kubectl.
 function k { kubectl @args }
+# kubectl get pods -o wide.
 function kgp { kubectl get pods -o wide @args }
+# kubectl get nodes -o wide.
 function kgn { kubectl get nodes -o wide @args }
 
 ### WSL ###
 
+# List installed WSL distros.
 function wsllistdistros {
     wsl --list
 }
 
+# Open a shell in the default WSL distro.
 function wslbashinto {
     wsl
 }
 
+# Open a shell in the named WSL distro.
 function wslbashintodistro {
     wsl -d $args
 }
 
 ### WiFi ###
 
+# SSID of the current Wi-Fi network.
 function getwifiname {
     (netsh wlan show interfaces) | ForEach-Object {
         if ($_ -match '^\s*SSID\s+:\s+(.*)') {
@@ -735,6 +772,7 @@ function getwifiname {
 }
 
 
+# Saved password of the current Wi-Fi network.
 function getwifipass {
     $wifiName = getwifiname
     (netsh wlan show profile name="$wifiName" key=clear)  | ForEach-Object {
@@ -745,6 +783,7 @@ function getwifipass {
 }
 
 
+# Print the current Wi-Fi name and password.
 function showwifi {
     $wifiName = getwifiname
     $wifiPass = getwifipass

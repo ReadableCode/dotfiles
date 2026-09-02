@@ -27,6 +27,7 @@ alias neofetch='fastfetch'
 
 alias startcodeserver='code-server serve-local --host 0.0.0.0 --without-connection-token'
 
+# Serve JupyterLab from $gitDir on 0.0.0.0:8181.
 function startjupyterlab {
 	# Change to the directory defined by gitDir
 	cd $gitDir
@@ -37,6 +38,7 @@ function startjupyterlab {
 
 ### AI Shortcuts ###
 
+# Start the ollama server (prints the install hint if it is missing).
 function startollama {
 	if command -v ollama >/dev/null 2>&1; then
 		ollama serve
