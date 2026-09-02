@@ -136,22 +136,6 @@ alias srcaliases='source ~/.zshrc'
 
 ### Functions ###
 
-# The media remote CLI/TUI (Sync_Plex).
-function syncplex() {
-    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    uv run --project "$gitDir/Sync_Plex/backends/python" syncplex "$@"
-}
-
-# Mirror configured media onto a drive (defaults to /Users/jason/Media; pass a path to override).
-function syncdrive() {
-    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    if [ "$#" -eq 0 ]; then
-        uv run --project "$gitDir/Sync_Plex/backends/python" syncplex-drive-sync /Users/jason/Media
-    else
-        uv run --project "$gitDir/Sync_Plex/backends/python" syncplex-drive-sync "$@"
-    fi
-}
-
 # Every VS Code extension update drops a fresh, quarantined copy of the Claude
 # Code native binary at
 # ~/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude,

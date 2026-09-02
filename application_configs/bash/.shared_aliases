@@ -172,22 +172,10 @@ function run_python_script() {
     )
 }
 
-# The Terminal_To_Do TUI.
-function todo() {
-    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    run_python_script "$gitDir/Terminal_To_Do/src/main.py"
-}
-
 # The status board TUI (status_board repo); args pass through.
 function statusboard() {
     [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
     run_python_script "$gitDir/status_board/src/status_board.py" "$@"
-}
-
-# The Cash_Flow_Commander TUI; args pass through.
-function cashflow() {
-    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
-    run_python_script "$gitDir/Cash_Flow_Commander/src/cfc_tui.py" "$@"
 }
 
 ### Command Shortcuts ###

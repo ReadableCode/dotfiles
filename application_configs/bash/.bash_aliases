@@ -15,7 +15,6 @@ alias srcaliases='source ~/.bashrc'
 
 alias myscripts='cd $gitDir/dotfiles/scripts/'
 alias linux='cd ~/Documents/Technology/Linux/'
-alias datatoolpack='cd $gitDir/Data_Tool_Pack_Py/'
 
 ### Program Shortcuts ###
 

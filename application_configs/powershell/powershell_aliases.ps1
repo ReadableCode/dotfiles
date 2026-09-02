@@ -197,11 +197,6 @@ function myscripts {
     if (-not (Test-GitDir)) { return }
     Set-Location (Join-Path $gitDir 'dotfiles\scripts')
 }
-# cd to Data_Tool_Pack_Py.
-function datatoolpack {
-    if (-not (Test-GitDir)) { return }
-    Set-Location (Join-Path $gitDir 'Data_Tool_Pack_Py')
-}
 
 
 ### Python ###
@@ -312,25 +307,10 @@ function run-python-script {
     }
 }
 
-# The Terminal_To_Do TUI.
-function todo {
-    if (-not (Test-GitDir)) { return }
-    # Run the main.py script using run-python-script
-    $scriptPath = (Join-Path $gitDir 'Terminal_To_Do\src\main.py')
-    run-python-script $scriptPath
-}
-
 # The status board TUI (status_board repo); args pass through.
 function statusboard {
     if (-not (Test-GitDir)) { return }
     $scriptPath = (Join-Path $gitDir 'status_board\src\status_board.py')
-    run-python-script $scriptPath @args
-}
-
-# The Cash_Flow_Commander TUI; args pass through.
-function cashflow {
-    if (-not (Test-GitDir)) { return }
-    $scriptPath = (Join-Path $gitDir 'Cash_Flow_Commander\src\cfc_tui.py')
     run-python-script $scriptPath @args
 }
 
