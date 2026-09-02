@@ -216,5 +216,10 @@
     "command": "thread.pin",
     "key": "mod+shift+p",
     "when": "!terminalFocus"
+  },
+  {
+    "command": "thread.copyReference",
+    "key": "mod+shift+c",
+    "when": "!terminalFocus"
   }
 ]

@@ -9,6 +9,7 @@
   "confirmQuit": true,
   "confirmThreadArchive": false,
   "confirmThreadDelete": true,
+  "confirmThreadUnpin": false,
   "diffIgnoreWhitespace": true,
   "dismissedProviderUpdateNotificationKeys": [],
   "environmentIdentificationMode": "artwork",
