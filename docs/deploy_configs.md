@@ -166,6 +166,13 @@ deploys (`application_configs/git/ignore`) lists `**/.claude/commands` and
 directory in its own `.gitignore`, is excluded from the directory entry, and
 gets any shared commands as individual file entries instead.
 
+One path stays user-level on purpose: `~/.claude/commands` is linked as a
+whole directory to **one** context's commands per machine (the personal
+overlay everywhere it is cloned, a client overlay host-filtered to that
+client's machines). T3 Code builds its slash menu from a single probe run in
+its server's home directory, so that path is the only one its picker can
+list; Claude Code sessions themselves rely on the per-repo links.
+
 Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is
 built — so they are absent in a fresh clone until the first deploy; `status`
