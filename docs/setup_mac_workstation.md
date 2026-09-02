@@ -89,6 +89,7 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - FaceTime
 - Contacts
 - Mail
+- Gmail
 - Calendar
 - Personal Calendar
 - Outlook (PWA)
@@ -340,7 +341,7 @@ cd ~/GitHub/dotfiles && uv run python src/deploy_configs.py
 Current hotkeys defined in `application_configs/hammerspoon/init.lua`:
 
 | Hotkey | Action |
-|--------|--------|
+| -------- | -------- |
 | `Ctrl+Shift+C` | Copy selection, open as Google Sheets URL |
 | `Ctrl+Shift+F` | Copy selection, open as Google Drive folder URL |
 | `Cmd+Shift+V` | Paste as plain text (strips formatting) |
@@ -370,7 +371,7 @@ display IDs, so they survive the KVM re-enumerating the monitors.
 questions, so they are different config, and either can exist without the other:
 
 | | Where it lives in the JSON | What it means |
-|---|---------------------------|---------------|
+| --- | --------------------------- | --------------- |
 | assignment | `"assign": {"Mail": "all", "Microsoft Edge": 3}` | Which desktop the app's windows belong on. This is the Dock's Options → Assign To setting, which the config enforces. |
 | rectangle | `"all"` for all-desktops apps, `"1"`/`"2"`/`"3"` otherwise | Where the window sits. |
 | title match | `"match"` on a rectangle | *Which window* of that app the rectangle is for. |
