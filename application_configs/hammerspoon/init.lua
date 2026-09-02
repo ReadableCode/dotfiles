@@ -351,10 +351,39 @@ local function titleMatches(item, win)
 end
 
 -- Every standard window currently visible on this desktop, in stacking order.
+-- Every standard window on this desktop.
+--
+-- hs.window.orderedWindows walks each app's AXWindows list, and the Chromium
+-- apps here (Slack, Edge, Teams) answer that list with NOTHING on some reads
+-- and one window on the next - `#app:allWindows()` flips between 0 and 1 with
+-- no change on screen. A gather that samples at the wrong instant skips the
+-- app, which is how Slack sat on desktop 1 with a desktop-2 rectangle and
+-- Ctrl+Shift+G kept reporting nothing to move. AXMainWindow keeps answering
+-- while AXWindows is empty, so also ask every app for its main/focused window
+-- and take the union - held to this desktop so the fallback can't pull in a
+-- window that lives elsewhere (orderedWindows is already on-screen only).
 local function currentWindows()
-    local out = {}
-    for _, win in ipairs(hs.window.orderedWindows()) do
-        if win:isStandard() then out[#out + 1] = win end
+    local out, seen = {}, {}
+    local idx, ids = wl.spaceIndex()
+    local here = idx and ids[idx]
+    local function add(win, hereOnly)
+        if not win or seen[win:id()] or not win:isStandard() then return end
+        if hereOnly then
+            local on = false
+            for _, id in ipairs(hs.spaces.windowSpaces(win) or {}) do
+                if id == here then on = true break end
+            end
+            if not on then return end
+        end
+        seen[win:id()] = true
+        out[#out + 1] = win
+    end
+    for _, win in ipairs(hs.window.orderedWindows()) do add(win) end
+    for _, app in ipairs(hs.application.runningApplications()) do
+        if app:kind() == 1 then
+            add(app:mainWindow(), true)
+            add(app:focusedWindow(), true)
+        end
     end
     return out
 end
@@ -738,17 +767,17 @@ end
 -- press its "switch to desktop N" shortcut, and that shortcut is already the
 -- one wl.gotoIndex leans on. Grab the title bar, hold, switch, let go.
 --
--- Grab point: 30% across rather than the middle, which keeps clear of both the
--- traffic lights on the left and whatever an app puts in the centre of its title
--- bar (VS Code's command centre). The drag is a few pixels so macOS reads it as
--- a drag and not a click on whatever is under the cursor.
-function wl.dragToDesktop(win, n)
-    local _, ids = wl.spaceIndex()
-    if not (win and ids[n]) then return false end
-    local before = hs.spaces.windowSpaces(win) or {}
-    local f = win:frame()
-    local x = f.x + math.min(f.w - 30, math.max(100, f.w * 0.3))
-    local y = f.y + 10
+-- Grab point: the title strip is not uniformly draggable. 30% across keeps
+-- clear of the traffic lights and of whatever an app puts dead centre (VS
+-- Code's command centre), but Slack's search box spans roughly 17%-80% of its
+-- header and a press there focuses the box instead of lifting the window -
+-- the drag ran, the desktop switched, Slack stayed put. So try a few spots in
+-- turn, verifying the move after each: 30%, then just right of the traffic
+-- lights, then just right of a centred search box. A failed attempt has
+-- already switched desktops, so come home before the next one. The drag is a
+-- few pixels so macOS reads it as a drag and not a click on whatever is under
+-- the cursor.
+local function dragOnce(win, n, ids, x, y)
     local ev = hs.eventtap.event
     local at = function(dx, dy) return hs.geometry.point(x + (dx or 0), y + (dy or 0)) end
 
@@ -766,15 +795,34 @@ function wl.dragToDesktop(win, n)
 
     -- windowSpaces lags the drop by a beat, so poll rather than take one late
     -- reading as a failure - it was reporting "no move" for moves that worked.
-    local after, ok = before, false
     for _ = 1, 8 do
         hs.timer.usleep(250000)
-        after = hs.spaces.windowSpaces(win) or {}
-        if after[1] == ids[n] then ok = true break end
+        local after = hs.spaces.windowSpaces(win) or {}
+        if after[1] == ids[n] then return true end
     end
-    wl.log("drag %s -> desktop %d: %s (%s)", win:application():name(), n,
-        ok and "ok" or "no move", (win:title() or ""):sub(1, 40))
-    return ok
+    return false
+end
+
+function wl.dragToDesktop(win, n)
+    local home, ids = wl.spaceIndex()
+    if not (win and home and ids[n]) then return false end
+    local f = win:frame()
+    local grabs = {
+        { "30%",     math.min(f.w - 30, math.max(100, f.w * 0.3)) },
+        { "left",    math.min(f.w - 30, 120) },
+        { "right",   math.max(100, f.w * 0.85) },
+    }
+    for i, g in ipairs(grabs) do
+        if i > 1 then
+            wl.gotoIndex(home, ids[home])
+            hs.timer.usleep(800000)
+        end
+        local ok = dragOnce(win, n, ids, f.x + g[2], f.y + 10)
+        wl.log("drag %s -> desktop %d at %s: %s (%s)", win:application():name(), n, g[1],
+            ok and "ok" or "no move", (win:title() or ""):sub(1, 40))
+        if ok then return true end
+    end
+    return false
 end
 
 -- Which windows visible from here are on the wrong desktop?
