@@ -1,1 +1,5 @@
 **/.claude/settings.local.json
+# deploy_configs links each context's commands dir and generated MCP registration
+# into every checkout of that context (per_context_repo entries); never tracked
+**/.claude/commands
+**/.mcp.json

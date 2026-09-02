@@ -61,3 +61,11 @@
     same servers would merge into duplicate registrations, and the stale one
     would keep resurrecting servers deleted from the declarations. Nothing
     creates this path any more - drop this line once every machine has pruned.
+
+- name: removed_user_mcp_json
+  dest:
+    darwin: "~/.mcp.json"
+    linux: "~/.mcp.json"
+    windows: "~/.mcp.json"
+  note: >-
+    Retired 2026-09-02. From 2026-08-27 src/claude_mcp.py wrote one machine-level .mcp.json in the user folder, inherited by every session, so every cloned context's servers loaded everywhere. It now writes one data/mcp/<context>.mcp.json per declaring context and each context's manifest links that file into its own checkouts (per_context_repo entries), so a session registers only its own context's servers. Not a symlink - a regular generated file, which prune removes as a hard link / regular file.

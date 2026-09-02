@@ -329,6 +329,21 @@ def test_write_replaces_a_dangling_symlink(tmp_path):
     assert os.path.isfile(dest) and not os.path.islink(dest)
 
 
+def test_an_update_rewrites_in_place_so_a_hard_link_keeps_seeing_it(tmp_path):
+    # Windows deploys fall back to hard links, which share the inode: replacing
+    # the file by rename would leave every linked checkout holding old content
+    dest = str(tmp_path / mtools.GENERATED_NAME)
+    mtools.write_document(dest, {"mcpServers": {"google": {"command": "uv"}}})
+    linked = str(tmp_path / "linked.json")
+    os.link(dest, linked)
+
+    assert mtools.write_document(dest, {"mcpServers": {"google": {"command": "python"}}}) == "updated"
+
+    assert os.stat(dest).st_ino == os.stat(linked).st_ino
+    assert "python" in open(linked, "r", encoding="utf-8").read()
+    assert stat.S_IMODE(os.stat(dest).st_mode) == 0o600
+
+
 def test_no_temporary_file_is_left_behind(tmp_path):
     dest = str(tmp_path / mtools.GENERATED_NAME)
 
@@ -348,46 +363,82 @@ def clones(tmp_path, monkeypatch):
     make_credentials_repo(tmp_path, "acme", servers=[JIRA_SERVER], env={"JIRA_TOKEN": "live-token"})
     monkeypatch.setattr(claude_mcp, "REPO_ROOT", repo_root)
     monkeypatch.setattr(claude_mcp, "CREDENTIALS_ROOT", str(tmp_path))
+    monkeypatch.setattr(claude_mcp, "GENERATED_DIR", os.path.join(repo_root, mtools.GENERATED_DIRNAME))
     monkeypatch.delenv("JIRA_TOKEN", raising=False)
     return tmp_path
 
 
-def test_generate_defaults_to_one_file_in_the_user_folder(clones, monkeypatch):
-    # .mcp.json is inherited by every directory below it, so the user folder is
-    # the one location that reaches every session on the machine - including
-    # repos checked out outside the clone root
-    monkeypatch.setenv("HOME", str(clones / "home"))
-    monkeypatch.setattr(claude_mcp, "GENERATED_DEST", os.path.join(str(clones / "home"), mtools.GENERATED_NAME))
+def test_generate_writes_one_document_per_declaring_context(clones):
+    # a checkout linked to acme.mcp.json must never see another context's
+    # servers, so the split is by the repo that declared each server
+    documents, target_dir, config_paths = claude_mcp.generate()
 
-    document, dest, config_paths = claude_mcp.generate()
-
-    assert dest == os.path.join(str(clones), "home", mtools.GENERATED_NAME)
-    assert list(document["mcpServers"]) == ["google", "jira"]
+    assert target_dir == os.path.join(str(clones), "dotfiles", "data", "mcp")
+    assert {context: list(document["mcpServers"]) for context, document in documents.items()} == {
+        "dotfiles": ["google"],
+        "acme": ["jira"],
+    }
     assert len(config_paths) == 2
 
 
-def test_write_creates_the_file_and_reports_both_servers_and_both_sources(clones, capsys):
-    dest = str(clones / "out" / mtools.GENERATED_NAME)
+def test_a_context_that_declares_nothing_gets_no_document(clones):
+    make_credentials_repo(clones, "quiet", servers=[])
 
-    assert claude_mcp.write(dest=dest) == "created"
+    documents, _, _ = claude_mcp.generate()
 
+    assert "quiet" not in documents
+
+
+def test_write_creates_one_file_per_context_and_reports_each(clones, capsys):
+    out = str(clones / "out")
+
+    outcomes = claude_mcp.write(output_dir=out)
+
+    assert outcomes == {
+        os.path.join(out, "acme.mcp.json"): "created",
+        os.path.join(out, "dotfiles.mcp.json"): "created",
+    }
     printed = capsys.readouterr().out
-    assert "created" in printed and "google, jira" in printed
-    assert "mcp_servers.yaml, acme_mcp_servers.yaml" in printed
+    assert "created" in printed and "acme.mcp.json (jira)" in printed and "dotfiles.mcp.json (google)" in printed
+    with open(os.path.join(out, "acme.mcp.json"), encoding="utf-8") as handle:
+        assert list(json.load(handle)["mcpServers"]) == ["jira"]
+
+
+def test_write_removes_the_file_of_a_context_no_longer_cloned(clones, capsys):
+    out = str(clones / "out")
+    gone = os.path.join(out, "old.mcp.json")
+    os.makedirs(out)
+    with open(gone, "w", encoding="utf-8") as handle:
+        handle.write("{}")
+
+    outcomes = claude_mcp.write(output_dir=out)
+
+    assert outcomes[gone] == "removed"
+    assert not os.path.exists(gone)
+    assert "removed" in capsys.readouterr().out
 
 
 def test_check_exits_non_zero_while_stale_and_zero_once_written(clones):
-    dest = str(clones / "out" / mtools.GENERATED_NAME)
+    out = str(clones / "out")
 
-    assert claude_mcp.main(["--check", "--output", dest]) == 1
-    claude_mcp.write(quiet=True, dest=dest)
-    assert claude_mcp.main(["--check", "--output", dest]) == 0
+    assert claude_mcp.main(["--check", "--output", out]) == 1
+    claude_mcp.write(quiet=True, output_dir=out)
+    assert claude_mcp.main(["--check", "--output", out]) == 0
+
+
+def test_check_flags_a_stray_file_for_a_context_that_is_gone(clones):
+    out = str(clones / "out")
+    claude_mcp.write(quiet=True, output_dir=out)
+    with open(os.path.join(out, "old.mcp.json"), "w", encoding="utf-8") as handle:
+        handle.write("{}")
+
+    assert claude_mcp.main(["--check", "--output", out]) == 1
 
 
 def test_print_names_the_repos_that_declared_nothing(clones, capsys):
     make_credentials_repo(clones, "quiet")  # cloned, but declares no MCP server
 
-    claude_mcp.main(["--print", "--output", str(clones / "out" / mtools.GENERATED_NAME)])
+    claude_mcp.main(["--print", "--output", str(clones / "out")])
 
     printed = capsys.readouterr().out
     # relative to the clone root, so the line names the repo that declared it
@@ -395,6 +446,7 @@ def test_print_names_the_repos_that_declared_nothing(clones, capsys):
     assert "declared by acme_credentials/acme_mcp_servers.yaml" in printed
     # the distinction that matters: scanned-and-silent, not simply absent
     assert "scanned, no mcp_servers.yaml of its own: quiet_credentials" in printed
+    assert "# acme.mcp.json" in printed and "# dotfiles.mcp.json" in printed
 
 
 def test_silent_overlay_dirs_ignores_the_repos_that_did_declare(tmp_path):
@@ -409,14 +461,14 @@ def test_silent_overlay_dirs_ignores_the_repos_that_did_declare(tmp_path):
 
 
 def test_print_redacts_secrets_and_writes_nothing(clones, capsys):
-    dest = str(clones / "out" / mtools.GENERATED_NAME)
+    out = str(clones / "out")
 
-    assert claude_mcp.main(["--print", "--output", dest]) == 0
+    assert claude_mcp.main(["--print", "--output", out]) == 0
 
     printed = capsys.readouterr().out
     assert mtools.REDACTED in printed
     assert "live-token" not in printed
-    assert not os.path.exists(dest)
+    assert not os.path.exists(out)
 
 
 # %%

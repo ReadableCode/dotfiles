@@ -356,14 +356,147 @@ def test_real_manifests_are_valid_and_repo_paths_exist():
     assert manifest_paths[0] == os.path.join(deploy_configs.REPO_ROOT, "deploy_manifest.yaml")
     for entry in entries:
         repo_path = os.path.join(entry["_base_dir"], entry["repo"])
-        # a repo path may exist as-is, or only as <base>.<host-or-platform>.<ext> variants
-        assert os.path.exists(repo_path) or deploy_configs._any_variant_exists(repo_path), (
+        # a repo path may exist as-is, or only as <base>.<host-or-platform>.<ext> variants;
+        # a `generated: true` source is produced by the deploy itself and may not exist yet
+        assert entry.get("generated") or os.path.exists(repo_path) or deploy_configs._any_variant_exists(repo_path), (
             f"manifest entry {entry['name']} points at missing repo path {repo_path} (no variants either)"
         )
         if entry.get("method", "symlink") != "none":
             dests = entry.get("dest") or {}
             assert dests, f"manifest entry {entry['name']} has no dest and is not method: none"
             assert set(dests) <= {"darwin", "linux", "windows"}
+
+
+# %%
+# Per-repo expansion #
+
+
+def write_repos_file(path, names):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file_handle:
+        yaml.safe_dump({"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": n} for n in names]},
+                       file_handle)
+
+
+def per_repo_entry(**overrides):
+    entry = {
+        "name": "acme_repo_mcp",
+        "repo": "generated/acme.mcp.json",
+        "dest": {"darwin": "{repo_parent}/{context_repo}/.mcp.json", "linux": "{repo_parent}/{context_repo}/.mcp.json"},
+        "per_context_repo": True,
+    }
+    entry.update(overrides)
+    return entry
+
+
+def test_per_context_repo_expands_into_one_entry_per_declared_repo(overlay_tree):
+    write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["svc-a", "svc-b"])
+    write_manifest_at(str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"), [per_repo_entry()])
+
+    entries, _ = deploy_configs.load_manifests()
+    names = [entry["name"] for entry in entries if entry.get("_expanded_from")]
+
+    assert names == ["acme_repo_mcp__svc-a", "acme_repo_mcp__svc-b"]
+    first = next(entry for entry in entries if entry["name"] == "acme_repo_mcp__svc-a")
+    assert first["dest"] == {"darwin": "{repo_parent}/svc-a/.mcp.json", "linux": "{repo_parent}/svc-a/.mcp.json"}
+    # each expansion gates on its checkout existing, so an uncloned repo is a skip
+    assert first["requires"] == ["{repo_parent}/svc-a"]
+    assert first["_context_repo"] == "svc-a"
+    assert "per_context_repo" not in first
+    plan = {row["name"]: row for row in deploy_configs.build_plan(entries, "darwin", "ENVY")}
+    assert plan["acme_repo_mcp__svc-a"]["action"] == "skip_requires"
+    os.makedirs(str(overlay_tree / "svc-a"))
+    plan = {row["name"]: row for row in deploy_configs.build_plan(entries, "darwin", "ENVY")}
+    assert plan["acme_repo_mcp__svc-a"]["action"] == "apply"
+    assert plan["acme_repo_mcp__svc-a"]["dest"] == os.path.join(str(overlay_tree), "svc-a", ".mcp.json")
+
+
+def test_per_context_repo_can_name_other_contexts_and_add_or_drop_repos(overlay_tree):
+    # an opt-in overlay (acme_dev) targeting the credentials context's repo list,
+    # plus dotfiles' own list, plus a repo no list declares, minus one
+    write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["svc-a", "svc-b"])
+    write_repos_file(str(overlay_tree / "dotfiles" / "dotfiles_repos.yaml"), ["dotfiles", "svc-b"])
+    write_manifest_at(
+        str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
+        [per_repo_entry(per_context_repo=["acme", "dotfiles"], extra_repos=["acme_credentials"],
+                        exclude_repos=["svc-b"], requires="{repo_parent}/acme_credentials")],
+    )
+
+    entries, _ = deploy_configs.load_manifests()
+    expanded = [entry for entry in entries if entry.get("_expanded_from") == "acme_repo_mcp"]
+
+    assert [entry["_context_repo"] for entry in expanded] == ["svc-a", "dotfiles", "acme_credentials"]
+    # an explicit requires is kept and the checkout gate is added in front of it, never duplicated
+    assert expanded[0]["requires"] == ["{repo_parent}/svc-a", "{repo_parent}/acme_credentials"]
+    assert expanded[2]["requires"] == ["{repo_parent}/acme_credentials"]
+
+
+def test_per_context_repo_keeps_hosts_and_note_and_token_in_requires(overlay_tree):
+    write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["svc-a"])
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [per_repo_entry(hosts=["ENVY"], note="n", requires=["{repo_parent}/{context_repo}/sub"])],
+    )
+    inventory = str(overlay_tree / "acme_credentials" / "acme_hosts.json")
+    write_file(inventory, json.dumps({"hosts": [{"name": "Envy"}]}))
+
+    entries, _ = deploy_configs.load_manifests()
+    entry = next(entry for entry in entries if entry["name"] == "acme_repo_mcp__svc-a")
+
+    assert entry["hosts"] == ["ENVY"] and entry["note"] == "n"
+    assert entry["requires"] == ["{repo_parent}/svc-a", "{repo_parent}/svc-a/sub"]
+
+
+def test_excluding_a_repo_no_context_declares_raises(overlay_tree):
+    write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["svc-a"])
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"), [per_repo_entry(exclude_repos=["svc-x"])]
+    )
+    with pytest.raises(ValueError, match="svc-x"):
+        deploy_configs.load_manifests()
+
+
+def test_per_context_repo_without_a_repos_file_raises(overlay_tree):
+    write_manifest_at(str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"), [per_repo_entry()])
+    with pytest.raises(ValueError, match="acme_repos.yaml"):
+        deploy_configs.load_manifests()
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        per_repo_entry(dest={"darwin": "{repo_parent}/fixed/.mcp.json"}),  # token missing -> one path for all
+        per_repo_entry(per_context_repo=None, dest={"darwin": "{repo_parent}/{context_repo}/x"}),  # token, no key
+        per_repo_entry(per_context_repo=7),
+        per_repo_entry(per_context_repo=[]),
+        per_repo_entry(per_context_repo=None, extra_repos=["a"]),
+        per_repo_entry(extra_repos="a"),
+        per_repo_entry(exclude_repos=[""]),
+        {"name": "g", "repo": "x", "dest": {"darwin": "~/x"}, "generated": "yes"},
+    ],
+)
+def test_per_context_repo_schema_errors(tmp_path, entry):
+    entry = {key: value for key, value in entry.items() if value is not None}
+    with pytest.raises(ValueError):
+        deploy_configs.load_manifest(write_manifest(tmp_path, [entry]))
+
+
+def test_prune_refuses_a_path_inside_a_linked_directory(fake_home):
+    # a removals line under a directory the manifest links whole would delete
+    # the repo file behind the link, not a deployed copy
+    source = fake_home / "repo" / "commands"
+    source.mkdir(parents=True)
+    (source / "cmd.md").write_text("x", encoding="utf-8")
+    linked = fake_home / ".claude" / "commands"
+    linked.parent.mkdir()
+    os.symlink(str(source), str(linked))
+
+    removable, description = deploy_configs.classify_prune_target(str(linked / "cmd.md"))
+
+    assert removable is False and "linked directory" in description
+    assert (source / "cmd.md").exists()
+    # the link itself is still a normal prune target
+    assert deploy_configs.classify_prune_target(str(linked)) == (True, "symlink")
 
 
 # %%
@@ -1228,7 +1361,7 @@ def test_regenerate_mcp_reports_a_failure_loudly_instead_of_aborting_the_deploy(
 
     # a deploy that already linked everything must still finish, but say so
     assert deploy_configs.regenerate_mcp() is False
-    assert "FAILED to regenerate .mcp.json" in capsys.readouterr().out
+    assert "FAILED to regenerate the MCP files" in capsys.readouterr().out
 
 
 def test_regenerate_mcp_passes_quiet_through_and_reports_success(monkeypatch):

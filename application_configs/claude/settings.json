@@ -73,17 +73,9 @@
     "command": "bash ~/.claude/statusline.sh"
   },
   "enabledPlugins": {
-    "swift-lsp@claude-plugins-official": true,
-    "unslop@unslop-marketplace": true
+    "swift-lsp@claude-plugins-official": true
   },
-  "extraKnownMarketplaces": {
-    "unslop-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "MohamedAbdallah-14/unslop"
-      }
-    }
-  },
+  "enableAllProjectMcpServers": true,
   "feedbackSurveyRate": 0,
   "effortLevel": "high",
   "autoUpdatesChannel": "latest",

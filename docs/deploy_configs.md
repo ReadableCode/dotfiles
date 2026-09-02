@@ -48,6 +48,12 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
                                           # (overlay manifests only, see below)
   method: symlink | none                  # default symlink
   on_drift: replace | adopt               # default replace; see below
+  generated: true                         # optional: the deploy itself produces the
+                                          # source (data/mcp/*.mcp.json); may be absent
+                                          # in a fresh clone until the first deploy
+  per_context_repo: true | acme | [a, b]  # optional: one link per repo of a context,
+  extra_repos: [acme_credentials]         #   see "One entry per repo of a context"
+  exclude_repos: [some-repo]
   note: free text caveat
 ```
 
@@ -115,6 +121,57 @@ one-liner at the top of every run (e.g.
 `--manifest <file>` loads only that single file (repo paths relative to the
 dotfiles root) and skips overlay discovery — a test escape hatch.
 
+### One entry per repo of a context
+
+Some links belong in **every checkout of a context** rather than at one path:
+a context's Claude commands (`<repo>/.claude/commands`) and its generated MCP
+registration (`<repo>/.mcp.json`). Writing those by hand means one entry per
+repo per kind, kept in step with the clone list forever. Instead an entry
+names the checkout with the `{context_repo}` placeholder and asks the loader
+to expand it:
+
+```yaml
+- name: acme_repo_claude_commands
+  repo: claude/commands                     # a directory: the whole folder is linked
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.claude/commands"
+    linux: "{repo_parent}/{context_repo}/.claude/commands"
+    windows: "{repo_parent}/{context_repo}/.claude/commands"
+  per_context_repo: true                    # this manifest's own context
+  extra_repos: [acme_credentials]           # checkouts no repos file lists
+  exclude_repos: [some-repo]                # must name listed repos, or loading fails
+```
+
+The repo list is the context's **`<context>_repos.yaml`** — the same file
+`clone_repos.py` offers to clone from, so adding a repo to a context puts the
+links in it on the next deploy with no manifest edit. `true` means the
+manifest's own context (`acme_credentials` → `acme`; the main manifest →
+`dotfiles`, which has its own `dotfiles_repos.yaml`); a context name or a list
+of names reads those files instead, which is how an opt-in overlay such as
+`acme_dev` targets `acme`'s repos while keeping the entry out of the
+credentials repo.
+
+At load time the entry becomes one plain entry per repo, named
+`<entry>__<repo>`, with `{context_repo}` replaced in `dest` and `requires` and
+the checkout itself (`{repo_parent}/<repo>`) added to `requires` — so a repo
+this machine never cloned is a `SKIP_REQUIRES`, never a folder created for it.
+Deploy, status, prune and the map only ever see the expanded entries. Every
+`dest` must contain the placeholder (otherwise all the repos' links would land
+on one path), and an `exclude_repos` name that no context declares is an
+error rather than a silent no-op.
+
+The links are untracked in the target repos: the global git ignore dotfiles
+deploys (`application_configs/git/ignore`) lists `**/.claude/commands` and
+`**/.mcp.json`. A repo that tracks its own `.claude/commands` re-includes the
+directory in its own `.gitignore`, is excluded from the directory entry, and
+gets any shared commands as individual file entries instead.
+
+Sources marked **`generated: true`** are produced by the deploy itself —
+`src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is
+built — so they are absent in a fresh clone until the first deploy; `status`
+reports them as `REPO_MISSING` until then, and the manifest tests do not
+require them to exist.
+
 ### Host / platform variant files
 
 A `repo` path is resolved against variant files named `<base>.<token>.<ext>`
@@ -140,6 +197,8 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
 - `{repo_parent}` — the directory containing the repo checkout (e.g.
   `~/GitHub`), used for the VS Code workspace links that must live next to
   the sibling project folders they reference.
+- `{context_repo}` — only in `per_context_repo` entries: the name of the
+  checkout each expansion targets (see above).
 
 ## How deployment behaves
 
@@ -387,6 +446,10 @@ So the workflow is:
 names it, cleans up a directory left empty behind a removed file (e.g. a skill
 folder), and **ignores any dest a live manifest entry still wants** — so
 re-adding an entry beats a stale removals line instead of the two fighting.
+It also refuses any path **inside a linked directory**: a removals line naming
+a file under a folder the manifest links whole (a commands dir, a memory dir)
+would resolve through the link and delete the repo file behind it, so such a
+line is reported and left alone rather than trusted.
 Running it twice is a no-op; already-gone paths are just reported as absent.
 
 Pruning is deliberately a separate command: deleting files should never be a

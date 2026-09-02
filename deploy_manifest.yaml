@@ -166,12 +166,17 @@
   repo: mcp_servers.yaml
   method: none
   note: >-
-    GENERATED, not linked. src/claude_mcp.py merges this repo's mcp_servers.yaml
-    with every cloned sibling repo's <its own dir name>_mcp_servers.yaml (same
-    opt-in rule as overlay manifests, so working repos can declare servers too)
-    and writes ONE ~/.mcp.json; src/deploy_configs.py runs it at the end of every
-    deploy (--no-mcp skips). Listed here as method: none so this file stays a
-    complete inventory of deployed config.
+    GENERATED, then linked per repo. src/claude_mcp.py reads this repo's
+    mcp_servers.yaml and every cloned sibling repo's <its own dir
+    name>_mcp_servers.yaml (same opt-in rule as overlay manifests, so working
+    repos can declare servers too) and writes ONE data/mcp/<context>.mcp.json
+    PER DECLARING CONTEXT; src/deploy_configs.py runs it at the start of every
+    deploy (--no-mcp skips), and each context's manifest links its file into
+    that context's checkouts as <repo>/.mcp.json (per_context_repo entries
+    marked generated: true), so a session registers only its own context's
+    servers. Before 2026-09-02 this was one ~/.mcp.json holding every context.
+    Listed here as method: none so this file stays a complete inventory of
+    deployed config.
     Why generated rather than a payload: the content is machine-specific (server
     args need an absolute path to this clone, and deploy has no templating, so a
     committed default would aim every machine at one machine's path - a relative

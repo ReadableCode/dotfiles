@@ -14,6 +14,10 @@ from utils.secret_tools import resolve_secret
 
 MCP_CONFIG_NAME = "mcp_servers.yaml"
 GENERATED_NAME = ".mcp.json"
+# Generated documents live in dotfiles' gitignored data/ folder, one per
+# declaring context (<context>.mcp.json), and the per-repo manifest entries link
+# each context's file into that context's checkouts as <repo>/.mcp.json.
+GENERATED_DIRNAME = os.path.join("data", "mcp")
 REQUIRED_SERVER_KEYS = ("name", "command")
 KNOWN_SERVER_KEYS = REQUIRED_SERVER_KEYS + ("args", "env", "env_secrets", "env_file")
 REDACTED = "***"
@@ -89,8 +93,24 @@ def load_servers(credentials_root, repo_root=None, config_path=None):
             seen[server["name"]] = path
             server["_base_dir"] = base_dir
             server["_config"] = path
+            # the context a server belongs to is the repo that declared it -
+            # dotfiles' own mcp_servers.yaml is the "dotfiles" context
+            server["_context"] = overlay_context(base_dir)
             servers.append(server)
     return servers, [path for path, _ in located]
+
+
+def generated_filename(context):
+    """``<context>.mcp.json`` - the per-context document's name inside the generated dir."""
+    return f"{context}{GENERATED_NAME}"
+
+
+def group_by_context(servers):
+    """Servers keyed by declaring context, contexts sorted, each context's servers sorted by name."""
+    grouped: dict = {}
+    for server in sorted(servers, key=lambda server: (server["_context"], server["name"])):
+        grouped.setdefault(server["_context"], []).append(server)
+    return grouped
 
 
 def _parse_server_config(config_path):
@@ -230,12 +250,24 @@ def _resolve_env_secret(server, source_var):
 
 
 def build_document(servers, repo_root, repo_parent, redact=False):
-    """The whole .mcp.json document, servers sorted for a stable diff."""
+    """One .mcp.json document, servers sorted for a stable diff."""
     return {
         "mcpServers": {
             server["name"]: render_server(server, repo_root, repo_parent, redact=redact)
             for server in sorted(servers, key=lambda server: server["name"])
         }
+    }
+
+
+def build_documents(servers, repo_root, repo_parent, redact=False):
+    """
+    One document per declaring context, keyed by context. A context's file
+    holds ONLY the servers that context declared, so a checkout linked to it
+    never names another context's servers - that is the reason for splitting.
+    """
+    return {
+        context: build_document(group, repo_root, repo_parent, redact=redact)
+        for context, group in group_by_context(servers).items()
     }
 
 
@@ -259,17 +291,24 @@ def write_document(dest, document):
     """
     Write the document to dest, returning "unchanged", "updated" or "created".
 
-    Two things this must get right. A pre-existing SYMLINK is unlinked rather
+    Three things this must get right. A pre-existing SYMLINK is unlinked rather
     than written through - the dest used to be a managed symlink into the repo,
-    and following it would rewrite a tracked file. And the result is chmod 600,
-    because a generated document can carry a live API token and the repo file it
-    replaced was world-readable.
+    and following it would rewrite a tracked file. An existing regular file is
+    rewritten IN PLACE, not replaced by rename: on Windows the per-repo links to
+    this file are hard links (the unprivileged fallback), which share the inode
+    and would silently keep the old content if the inode were swapped. And the
+    result is chmod 600, because a generated document can carry a live API
+    token.
     """
     text = serialize(document)
     existing = read_existing(dest)
     if existing == text:
         return "unchanged"
-    outcome = "updated" if existing is not None else "created"
+    if existing is not None:
+        with open(dest, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.chmod(dest, 0o600)
+        return "updated"
     parent = os.path.dirname(dest)
     if parent:
         os.makedirs(parent, exist_ok=True)
@@ -280,7 +319,22 @@ def write_document(dest, document):
         handle.write(text)
     os.chmod(temporary, 0o600)
     os.replace(temporary, dest)
-    return outcome
+    return "created"
+
+
+def stale_generated_files(output_dir, contexts):
+    """
+    Generated files in output_dir for contexts no longer declared - a
+    credentials repo that was removed from this machine. Sorted paths.
+    """
+    if not os.path.isdir(output_dir):
+        return []
+    wanted = {generated_filename(context) for context in contexts}
+    return sorted(
+        os.path.join(output_dir, name)
+        for name in os.listdir(output_dir)
+        if name.endswith(GENERATED_NAME) and name not in wanted
+    )
 
 
 # %%

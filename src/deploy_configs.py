@@ -464,7 +464,7 @@ def load_manifests(manifest_path=None, inventory_path=None):
     entries = []
     seen: dict = {}
     for path, base_dir in located:
-        for entry in _parse_manifest_file(path):
+        for entry in expand_context_repo_entries(_parse_manifest_file(path), base_dir):
             if path == main_manifest and entry.get("hosts"):
                 raise ValueError(
                     f"Manifest entry '{entry['name']}' in {path} uses a hosts filter; hosts "
@@ -487,7 +487,7 @@ def load_manifests(manifest_path=None, inventory_path=None):
 
 def load_manifest(manifest_path=None, inventory_path=None):
     """Load and validate a single manifest file (no overlay discovery), returning its entry dicts."""
-    entries = _parse_manifest_file(manifest_path or MANIFEST_PATH)
+    entries = expand_context_repo_entries(_parse_manifest_file(manifest_path or MANIFEST_PATH), REPO_ROOT)
     validate_manifest_hosts(entries, inventory_path)
     return entries
 
@@ -517,7 +517,147 @@ def _parse_manifest_file(manifest_path):
                     f"Manifest entry {entry['name']} has invalid requires "
                     f"(must be a non-empty path or list of paths): {requires}"
                 )
+        if "generated" in entry and not isinstance(entry["generated"], bool):
+            raise ValueError(f"Manifest entry {entry['name']} has non-boolean generated: {entry['generated']}")
+        _validate_context_repo_keys(entry, manifest_path)
     return entries
+
+
+# %%
+# Per-repo expansion #
+
+# One entry, one link per repo of a context: the entry's dest names the checkout
+# with {context_repo}, and the loader expands it over every repo the context's
+# <context>_repos.yaml declares (the same list clone_repos.py offers to clone),
+# so adding a repo to a context needs no manifest edit. The expansion happens at
+# load time, so deploy, status, prune and the map only ever see plain entries.
+CONTEXT_REPO_TOKEN = "{context_repo}"
+CONTEXT_REPO_KEYS = ("per_context_repo", "extra_repos", "exclude_repos")
+
+
+def _is_name_list(value):
+    return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item.strip() for item in value)
+
+
+def _validate_context_repo_keys(entry, manifest_path):
+    """Schema check for per_context_repo / extra_repos / exclude_repos and the {context_repo} token."""
+    spec = entry.get("per_context_repo")
+    for key in ("extra_repos", "exclude_repos"):
+        value = entry.get(key)
+        if value is None:
+            continue
+        if spec is None:
+            raise ValueError(f"Manifest entry {entry['name']} in {manifest_path} sets {key} without per_context_repo")
+        if not _is_name_list(value):
+            raise ValueError(
+                f"Manifest entry {entry['name']} in {manifest_path} has invalid {key} "
+                f"(must be a non-empty list of repo names): {value}"
+            )
+    if spec is None:
+        if any(CONTEXT_REPO_TOKEN in str(path) for path in (entry.get("dest") or {}).values()):
+            raise ValueError(
+                f"Manifest entry {entry['name']} in {manifest_path} uses {CONTEXT_REPO_TOKEN} in its dest "
+                "without per_context_repo"
+            )
+        return
+    if spec is not True and not (isinstance(spec, str) and spec.strip()) and not _is_name_list(spec):
+        raise ValueError(
+            f"Manifest entry {entry['name']} in {manifest_path} has invalid per_context_repo "
+            f"(must be true, a context name or a list of context names): {spec}"
+        )
+    dests = entry.get("dest") or {}
+    if not dests or any(CONTEXT_REPO_TOKEN not in str(path) for path in dests.values()):
+        raise ValueError(
+            f"Manifest entry {entry['name']} in {manifest_path} uses per_context_repo but every dest "
+            f"must contain {CONTEXT_REPO_TOKEN} (otherwise each repo's link would land on one path)"
+        )
+
+
+def find_repos_config(context, overlay_root=None):
+    """
+    The ``<context>_repos.yaml`` for a context: dotfiles' own file for the
+    ``dotfiles`` context, otherwise the sibling overlay repo whose context token
+    matches (``acme_credentials`` -> ``acme``, ``acme_dev`` -> ``acme_dev``).
+    """
+    overlay_root = overlay_root or grandparent_dir
+    for directory in [REPO_ROOT] + find_overlay_dirs(overlay_root):
+        if overlay_context(directory) != context:
+            continue
+        path = os.path.join(directory, f"{context}_repos.yaml")
+        if os.path.exists(path):
+            return path
+    raise ValueError(f"No {context}_repos.yaml found for context '{context}' under {overlay_root}")
+
+
+def load_context_repo_names(context, overlay_root=None):
+    """Repo names a context declares, in file order. Returns (names, config_path)."""
+    path = find_repos_config(context, overlay_root)
+    with open(path, "r", encoding="utf-8") as handle:
+        data = yaml.safe_load(handle) or {}
+    names = []
+    for repo in data.get("repos") or []:
+        if not isinstance(repo, dict) or not repo.get("name"):
+            raise ValueError(f"Repos entry without a name in {path}: {repo}")
+        names.append(str(repo["name"]))
+    return names, path
+
+
+def expand_context_repo_entries(entries, base_dir, overlay_root=None):
+    """
+    Replace every ``per_context_repo`` entry with one plain entry per repo.
+
+    ``per_context_repo: true`` means the manifest's own context; a name or a
+    list of names reads those contexts' repos files instead (an opt-in overlay
+    such as ``acme_dev`` targets ``acme``'s repos that way). ``extra_repos``
+    appends checkouts no repos file lists (typically the credentials repo
+    itself); ``exclude_repos`` drops names, and must name only repos that were
+    listed, so a typo fails instead of silently excluding nothing.
+
+    Each expansion is named ``<entry>__<repo>``, has {context_repo} replaced in
+    dest and requires, and gates on the checkout existing - a repo this machine
+    never cloned is a clean skip, never a folder created for it.
+    """
+    expanded = []
+    for entry in entries:
+        spec = entry.get("per_context_repo")
+        if spec is None:
+            expanded.append(entry)
+            continue
+        if spec is True:
+            contexts = [overlay_context(base_dir)]
+        else:
+            contexts = [spec] if isinstance(spec, str) else list(spec)
+        names: list = []
+        for context in contexts:
+            names.extend(name for name in load_context_repo_names(context, overlay_root)[0] if name not in names)
+        names.extend(name for name in entry.get("extra_repos") or [] if name not in names)
+        excluded = list(entry.get("exclude_repos") or [])
+        unknown = [name for name in excluded if name not in names]
+        if unknown:
+            raise ValueError(
+                f"Manifest entry {entry['name']} excludes repos none of its contexts "
+                f"({', '.join(contexts)}) declare: {', '.join(unknown)}"
+            )
+        template = {key: value for key, value in entry.items() if key not in CONTEXT_REPO_KEYS}
+        for name in names:
+            if name in excluded:
+                continue
+            clone = dict(template)
+            clone["name"] = f"{entry['name']}__{name}"
+            clone["dest"] = {
+                platform: str(path).replace(CONTEXT_REPO_TOKEN, name) for platform, path in entry["dest"].items()
+            }
+            requires = entry.get("requires")
+            requires = [requires] if isinstance(requires, str) else list(requires or [])
+            requires = [path.replace(CONTEXT_REPO_TOKEN, name) for path in requires]
+            checkout = f"{{repo_parent}}/{name}"
+            if checkout not in requires:
+                requires.insert(0, checkout)
+            clone["requires"] = requires
+            clone["_context_repo"] = name
+            clone["_expanded_from"] = entry["name"]
+            expanded.append(clone)
+    return expanded
 
 
 def validate_manifest_hosts(entries, inventory_path=None):
@@ -919,8 +1059,29 @@ def force_remove_file(path):
         os.remove(path)
 
 
+def inside_linked_directory(path):
+    """
+    Whether any ancestor of path (below the home folder) is a symlink. A
+    removals line that names a file under a directory the manifest links whole
+    (a commands dir, a memory dir) would resolve through the link and delete
+    the REPO file behind it, so prune refuses those rather than trusting the
+    list. The walk stops at the home folder: everything deploy manages lives
+    below it, and platform-level links above it (macOS /var -> /private/var)
+    are not ours to reason about.
+    """
+    home = os.path.normpath(os.path.expanduser("~"))
+    parent = os.path.dirname(os.path.normpath(path))
+    while parent.startswith(home + os.sep):
+        if os.path.islink(parent):
+            return True
+        parent = os.path.dirname(parent)
+    return False
+
+
 def classify_prune_target(dest, allow_directory=False):
     """(removable, description) for a prune candidate that exists on disk."""
+    if inside_linked_directory(dest):
+        return False, "inside a linked directory - left in place (removing it would delete the link's source)"
     if os.path.islink(dest):
         return True, "symlink"
     if os.path.isdir(dest):
@@ -1088,7 +1249,7 @@ def parse_args(argv=None):
     parser.add_argument(
         "--no-mcp",
         action="store_true",
-        help="deploy only: skip regenerating .mcp.json from the MCP server declarations",
+        help="deploy only: skip regenerating data/mcp/<context>.mcp.json from the MCP server declarations",
     )
     parser.add_argument(
         "--no-prune",
@@ -1115,13 +1276,13 @@ def regenerate_map(entries, quiet=False):
 
 def regenerate_mcp(quiet=False):
     """
-    Rewrite the machine's .mcp.json from every cloned repo's MCP server
-    declarations. Returns True on success.
+    Rewrite the per-context MCP files (data/mcp/<context>.mcp.json) from every
+    cloned repo's server declarations. Returns True on success.
 
-    NOT best-effort, unlike the map: this file is what gives every Claude session
+    NOT best-effort, unlike the map: these files are what give a Claude session
     its calendar, mail and jira tools, so a silent failure looks exactly like the
-    hosted-connector outage it exists to replace. It is reported loudly and sets
-    a non-zero exit, but still cannot abort the deploy that produced it.
+    hosted-connector outage they exist to replace. It is reported loudly and sets
+    a non-zero exit, but still cannot abort the deploy that follows.
     """
     import claude_mcp
 
@@ -1129,7 +1290,7 @@ def regenerate_mcp(quiet=False):
         claude_mcp.write(quiet=quiet)
         return True
     except Exception as error:  # noqa: BLE001 - report, don't mask the deploy
-        print(paint(f"mcp: FAILED to regenerate .mcp.json ({type(error).__name__}: {error})", "red"))
+        print(paint(f"mcp: FAILED to regenerate the MCP files ({type(error).__name__}: {error})", "red"))
         return False
 
 
@@ -1160,6 +1321,14 @@ def main(argv=None):
         manifests_label += f" + {len(manifest_paths) - 1} overlays ({overlays})"
     print(f"manifests: {manifests_label}")
     print()
+    # The per-context MCP files are generated by the deploy and LINKED by it (the
+    # per-repo .mcp.json entries point at data/mcp/), so generation has to run
+    # before the plan is built or the first deploy would report their sources
+    # missing. Read-only commands leave the files alone.
+    mcp_ok = True
+    if args.command == "deploy" and not (args.status or args.dry_run or args.manifest or args.no_mcp):
+        mcp_ok = regenerate_mcp()
+        print()
     plan = build_plan(entries, platform_key, hostname)
     # --manifest is the single-file test escape hatch: it skips overlay discovery,
     # so it must skip removals discovery too or an isolated run would
@@ -1175,16 +1344,11 @@ def main(argv=None):
     result = run_deploy(plan, platform_key, problems_only=args.problems)
     if not args.manifest and not args.no_prune:
         prune_after_deploy(candidates)
+    if not mcp_ok:
+        result = result or 1
     # deploy is the default command and every updater alias runs it bare, so the
     # map refreshes itself without anyone remembering to ask
     # (--manifest is the isolated test path; it must not touch the real repos)
-    # .mcp.json is generated, not linked, because its content is machine-specific
-    # (absolute clone paths) and repo-specific (whichever *_credentials repos are
-    # cloned) - the two things a committed payload cannot be at once.
-    if not args.manifest and not args.no_mcp:
-        print()
-        if not regenerate_mcp():
-            result = result or 1
     if not args.manifest and not args.no_map:
         print()
         regenerate_map(entries)

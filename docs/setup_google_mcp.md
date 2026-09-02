@@ -15,9 +15,12 @@ authenticates the same way.
 
 ## Registering it
 
-Registration is **generated, not linked**. Each cloned repo declares the servers
-it owns and `src/claude_mcp.py` merges every declaration into a single
-`~/.mcp.json`, on every `deploy_configs.py deploy`:
+Registration is **generated, then linked per repo**. Each cloned repo declares
+the servers it owns and `src/claude_mcp.py` renders every declaration into
+**one `data/mcp/<context>.mcp.json` per declaring context** at the start of
+every `deploy_configs.py deploy`; each context's manifest then links its file
+into every checkout of that context as `<repo>/.mcp.json` (a `per_context_repo`
+entry, see [deploy_configs.md](./deploy_configs.md)). Declarations come from:
 
 * `dotfiles/mcp_servers.yaml` — this repo's servers (none today; see below)
 * `<context>_credentials/<context>_mcp_servers.yaml` — that context's servers
@@ -47,13 +50,16 @@ Discovery is **every cloned sibling**, so the generated file is whatever the
 machine's clones add up to: clone one more repo and its servers appear on the next
 deploy, with nothing to register by hand.
 
-Declare-and-merge rather than deploy-a-file is the whole design. `.mcp.json` has
-**one fixed name per directory** and cannot be namespaced the way `<context>_*`
-commands are, so if each repo deployed its own copy they would overwrite each
-other's — the exact race that context-prefixed filenames exist to prevent
-everywhere else. N declarations, one writer, no collision. Server *names* must be
-unique across all declarations; a duplicate is a real conflict between repos and
-the generator refuses it by name rather than letting load order pick a winner.
+Declare-and-generate rather than deploy-a-committed-file is the whole design.
+`.mcp.json` has **one fixed name per directory** and cannot be namespaced the
+way `<context>_*` commands are, so the file a checkout gets has to be the one
+its context owns: a context's generated file holds **only that context's
+servers**, is linked only into that context's checkouts, and no file anywhere
+names another context's servers. A session started outside a checkout registers
+nothing — deliberate. Server *names* must still be unique across all
+declarations (they are context-prefixed); a duplicate is a real conflict between
+repos and the generator refuses it by name rather than letting load order pick a
+winner.
 
 **Adding a machine is nothing.** Declarations use the `{repo_root}` and
 `{repo_parent}` tokens, expanded at generate time against the machine actually
@@ -85,28 +91,31 @@ same `src/utils/secret_tools.py` path the calendar board uses:
   env_file: acme.env
 ```
 
-The generated file lands in the **user folder** because `.mcp.json` is
-**inherited by every directory below it and merges** with any below it — verified:
-a `~/.mcp.json` server resolves from a path nowhere near the clones. One file
-there is therefore the whole machine, including repos checked out outside the
-clone root, which a clone-root copy could never reach. Home is not a git repo, so
-nothing dirties a checkout, and since the document can carry a live token it is
-written `0600` (a pre-existing symlink at that path is unlinked, not written
-through, so the retired deploy-a-symlink era cannot rewrite a tracked file).
-`deploy_manifest.yaml` carries a `method: none` entry for `mcp_servers.yaml` so
-the payload is inventoried; the file itself is produced by the generator.
+The generated files live in dotfiles' gitignored `data/mcp/` — never in a
+checkout's tracked tree, and since a document can carry a live token each is
+written `0600`. Updates are written **in place** rather than by rename: on
+Windows the per-repo links are hard links (the unprivileged fallback), which
+share the inode and would keep old content if it were swapped. The per-repo
+links themselves are untracked via the global git ignore (`**/.mcp.json`).
+Approval is `enableAllProjectMcpServers` in the user settings dotfiles deploys,
+so no per-repo enabled list is needed. `deploy_manifest.yaml` carries a
+`method: none` entry for `mcp_servers.yaml` so the payload is inventoried; the
+files themselves are produced by the generator, and the manifest entries that
+link them are marked `generated: true`.
 
-Owning a file in the user folder is only safe because it is *generated*: one
-writer, so the several repos declaring servers cannot each deploy their own copy
-and overwrite one another. That is the same reason it is not `claude mcp add -s
-user` (below) — the problem there was never the location, it was N writers and no
-owner.
+Before 2026-09-02 the generator wrote one machine-level `~/.mcp.json`, inherited
+by every directory below it. That did reach every session, including ones outside
+the clone root — and that was the problem: every cloned context's servers, a few
+hundred tool names, loaded into every session regardless of which client's repo
+it was in. The user-folder file is now a removals line. Generation is still the
+reason this is not `claude mcp add -s user` (below): one writer per context, no
+per-machine registry to drift.
 
 Useful invocations:
 
 ```bash
-uv run python src/claude_mcp.py --print   # the merged document, secrets redacted
-uv run python src/claude_mcp.py --check   # non-zero if the file on disk is stale
+uv run python src/claude_mcp.py --print   # every context's document, secrets redacted
+uv run python src/claude_mcp.py --check   # non-zero if any generated file is stale or stray
 uv run python src/deploy_configs.py deploy --no-mcp   # skip regeneration
 ```
 
