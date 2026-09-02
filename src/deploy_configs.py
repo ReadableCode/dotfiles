@@ -316,6 +316,12 @@ def load_removals():
         for entry in parsed:
             if not isinstance(entry, dict) or "name" not in entry or "dest" not in entry:
                 raise ValueError(f"Removal entry must be a mapping with 'name' and 'dest' keys: {entry}")
+            if "link_only" in entry and not isinstance(entry["link_only"], bool):
+                raise ValueError(f"Removal entry {entry['name']} has non-boolean link_only: {entry['link_only']}")
+            _validate_context_repo_keys(entry, path, allow_literal_token=True)
+        # a removals file expands per_context_repo exactly like a manifest, so a
+        # per-repo link that was retired is retired in every checkout it reached
+        for entry in expand_context_repo_entries(parsed, os.path.dirname(path)):
             if entry["name"] in seen:
                 raise ValueError(
                     f"Duplicate removal entry name '{entry['name']}' in {path} "
@@ -539,8 +545,13 @@ def _is_name_list(value):
     return isinstance(value, list) and bool(value) and all(isinstance(item, str) and item.strip() for item in value)
 
 
-def _validate_context_repo_keys(entry, manifest_path):
-    """Schema check for per_context_repo / extra_repos / exclude_repos and the {context_repo} token."""
+def _validate_context_repo_keys(entry, manifest_path, allow_literal_token=False):
+    """
+    Schema check for per_context_repo / extra_repos / exclude_repos and the
+    {context_repo} token. allow_literal_token is for removals files: a removal
+    may name the placeholder literally, because that is the path an older
+    deploy that knew no placeholder actually wrote.
+    """
     spec = entry.get("per_context_repo")
     for key in ("extra_repos", "exclude_repos"):
         value = entry.get(key)
@@ -554,7 +565,9 @@ def _validate_context_repo_keys(entry, manifest_path):
                 f"(must be a non-empty list of repo names): {value}"
             )
     if spec is None:
-        if any(CONTEXT_REPO_TOKEN in str(path) for path in (entry.get("dest") or {}).values()):
+        if not allow_literal_token and any(
+            CONTEXT_REPO_TOKEN in str(path) for path in (entry.get("dest") or {}).values()
+        ):
             raise ValueError(
                 f"Manifest entry {entry['name']} in {manifest_path} uses {CONTEXT_REPO_TOKEN} in its dest "
                 "without per_context_repo"
@@ -1029,6 +1042,11 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assu
         # this machine never cloned has no link to prune.
         if not dest or dest in wanted or not requires_satisfied(entry, {}, hostname, repo_root, assume_requires):
             continue
+        # link_only: the thing retired at this path was a LINK. A real directory
+        # or file there now is something else (typically the real directory that
+        # replaced the link) and is neither removed nor reported as drift.
+        if entry.get("link_only") and os.path.lexists(dest) and not os.path.islink(dest):
+            continue
         candidates.setdefault(dest, (f"removals:{entry['name']}", bool(entry.get("directory"))))
     return sorted((dest, reason, allow_dir) for dest, (reason, allow_dir) in candidates.items())
 
@@ -1168,7 +1186,7 @@ def run_prune(candidates, apply_changes=False):
     """
     Delete the destinations the removals files list, wherever they still exist.
     The standalone prune command dry-runs unless --apply so the list can be
-    previewed; deploy applies it automatically (prune_after_deploy) because the
+    previewed; deploy applies it automatically (prune_before_deploy) because the
     removals files are committed, explicit enumerations - never patterns.
     """
     removed = skipped = absent = 0
@@ -1309,19 +1327,23 @@ def regenerate_mcp(quiet=False):
         return False
 
 
-def prune_after_deploy(candidates):
+def prune_before_deploy(candidates):
     """
     Apply the removals list as part of a normal deploy - the default, so every
     machine converges on the committed removals without anyone remembering a
-    separate `prune --apply`. Only candidates still on disk are reported: a
-    deploy with nothing dead prints nothing, and the standalone prune command
-    remains the place to see the full list including already-absent paths.
+    separate `prune --apply`. It runs BEFORE the links are made: a retired link
+    can sit exactly where a new entry needs a real directory (a directory link
+    at ~/.claude/commands giving way to per-context subfolders inside it), and
+    linking first would follow the stale link into the repo it points at. Only
+    candidates still on disk are reported: a deploy with nothing dead prints
+    nothing, and the standalone prune command remains the place to see the full
+    list including already-absent paths.
     """
     live = [candidate for candidate in candidates if os.path.lexists(candidate[0])]
     if not live:
         return
-    print()
     run_prune(live, apply_changes=True)
+    print()
 
 
 def main(argv=None):
@@ -1356,9 +1378,9 @@ def main(argv=None):
         return run_prune(candidates, apply_changes=args.apply)
     if args.status or args.dry_run or args.command == "status":
         return run_status(plan, platform_key, candidates, problems_only=args.problems)
-    result = run_deploy(plan, platform_key, problems_only=args.problems)
     if not args.manifest and not args.no_prune:
-        prune_after_deploy(candidates)
+        prune_before_deploy(candidates)
+    result = run_deploy(plan, platform_key, problems_only=args.problems)
     if not mcp_ok:
         result = result or 1
     # deploy is the default command and every updater alias runs it bare, so the

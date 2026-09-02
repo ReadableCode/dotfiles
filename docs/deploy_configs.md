@@ -124,19 +124,19 @@ dotfiles root) and skips overlay discovery — a test escape hatch.
 ### One entry per repo of a context
 
 Some links belong in **every checkout of a context** rather than at one path:
-a context's Claude commands (`<repo>/.claude/commands`) and its generated MCP
-registration (`<repo>/.mcp.json`). Writing those by hand means one entry per
-repo per kind, kept in step with the clone list forever. Instead an entry
-names the checkout with the `{context_repo}` placeholder and asks the loader
-to expand it:
+a context's generated MCP registration (`<repo>/.mcp.json`) is the case today.
+Writing those by hand means one entry per repo, kept in step with the clone
+list forever. Instead an entry names the checkout with the `{context_repo}`
+placeholder and asks the loader to expand it:
 
 ```yaml
-- name: acme_repo_claude_commands
-  repo: claude/commands                     # a directory: the whole folder is linked
+- name: acme_repo_mcp
+  repo: ../dotfiles/data/mcp/acme.mcp.json
+  generated: true
   dest:
-    darwin: "{repo_parent}/{context_repo}/.claude/commands"
-    linux: "{repo_parent}/{context_repo}/.claude/commands"
-    windows: "{repo_parent}/{context_repo}/.claude/commands"
+    darwin: "{repo_parent}/{context_repo}/.mcp.json"
+    linux: "{repo_parent}/{context_repo}/.mcp.json"
+    windows: "{repo_parent}/{context_repo}/.mcp.json"
   per_context_repo: true                    # this manifest's own context
   extra_repos: [acme_credentials]           # checkouts no repos file lists
   exclude_repos: [some-repo]                # must name listed repos, or loading fails
@@ -161,17 +161,24 @@ on one path), and an `exclude_repos` name that no context declares is an
 error rather than a silent no-op.
 
 The links are untracked in the target repos: the global git ignore dotfiles
-deploys (`application_configs/git/ignore`) lists `**/.claude/commands` and
-`**/.mcp.json`. A repo that tracks its own `.claude/commands` re-includes the
-directory in its own `.gitignore`, is excluded from the directory entry, and
-gets any shared commands as individual file entries instead.
+deploys (`application_configs/git/ignore`) lists `**/.mcp.json`.
 
-One path stays user-level on purpose: `~/.claude/commands` is linked as a
-whole directory to **one** context's commands per machine (the personal
-overlay everywhere it is cloned, a client overlay host-filtered to that
-client's machines). T3 Code builds its slash menu from a single probe run in
-its server's home directory, so that path is the only one its picker can
-list; Claude Code sessions themselves rely on the per-repo links.
+Removals files accept the same keys, so a retired per-repo link is retired in
+every checkout it reached with one line. Add `link_only: true` to a removal
+when the retired thing was a link and a real file or directory at that path
+now is something else (the real directory that replaced a directory link): it
+is then neither removed nor reported as drift.
+
+Slash commands are deliberately **not** per repo. T3 Code builds its command
+menu from one probe of `claude` run in its server's own working directory
+(`/` for the desktop app, the home folder under systemd), so
+`~/.claude/commands` is the only place its picker can list from. Each context
+therefore links its commands **one file at a time** into that directory, and
+the context prefix in every filename is what keeps N contexts from colliding
+in one path. Two alternatives were tried on 2026-09-02 and retired the same
+day: per-repo directory links (emptied that menu) and per-context subfolders
+under `~/.claude/commands` (Claude Code namespaces those, so `/acme_x` becomes
+`/acme:acme_x`).
 
 Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is
@@ -446,7 +453,9 @@ So the workflow is:
 
 1. Delete the entry from the manifest.
 2. Add its `dest` to the relevant removals file.
-3. `prune` (dry run) to see what would go, then `prune --apply`.
+3. `prune` (dry run) to see what would go, then `prune --apply` — or just
+   deploy, which applies the removals **before** it links anything, so a
+   retired link never sits where a new entry needs a real directory.
 4. Once every machine has pruned, the line can be dropped from the file.
 
 `prune` never touches a real directory, removes a file only if a removals entry

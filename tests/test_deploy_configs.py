@@ -1235,6 +1235,38 @@ def test_prune_is_idempotent_when_targets_are_already_gone(fake_home, capsys):
     assert "already absent 1" in capsys.readouterr().out
 
 
+def test_removals_expand_per_context_repo_like_a_manifest(overlay_tree, monkeypatch):
+    write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["svc-a", "svc-b"])
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_removals.yaml"),
+        [{"name": "removed_repo_commands", "dest": {"darwin": "{repo_parent}/{context_repo}/.claude/commands"},
+          "per_context_repo": True}],
+    )
+
+    entries = deploy_configs.load_removals()
+
+    assert [entry["name"] for entry in entries] == ["removed_repo_commands__svc-a", "removed_repo_commands__svc-b"]
+    assert entries[0]["dest"] == {"darwin": "{repo_parent}/svc-a/.claude/commands"}
+    assert entries[0]["requires"] == ["{repo_parent}/svc-a"]
+
+
+def test_link_only_removal_ignores_a_real_directory_but_removes_a_link(overlay_tree, fake_home, monkeypatch):
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_removals.yaml"),
+        [{"name": "removed_commands_dir_link", "dest": {"darwin": "~/.claude/commands"}, "link_only": True}],
+    )
+    entries, _ = deploy_configs.load_manifests()
+    target = fake_home / ".claude" / "commands"
+    target.mkdir(parents=True)  # the real directory that replaced the link
+
+    assert deploy_configs.build_prune_candidates(entries, "darwin", "ENVY") == []
+
+    target.rmdir()
+    os.symlink(str(fake_home), str(target))
+    candidates = deploy_configs.build_prune_candidates(entries, "darwin", "ENVY")
+    assert [dest for dest, _, _ in candidates] == [str(target)]
+
+
 def test_load_removals_rejects_entry_without_dest(tmp_path, monkeypatch):
     removals_path = os.path.join(str(tmp_path), "x_removals.yaml")
     with open(removals_path, "w", encoding="utf-8") as handle:
@@ -1418,20 +1450,20 @@ def test_payload_exemption_lists_stay_in_step_with_the_files():
 def test_deploy_prunes_live_removals_by_default(tmp_path, capsys):
     dead = tmp_path / "dead_link"
     dead.symlink_to(tmp_path / "gone")
-    deploy_configs.prune_after_deploy([(str(dead), "removals:test_entry", False)])
+    deploy_configs.prune_before_deploy([(str(dead), "removals:test_entry", False)])
     assert not os.path.lexists(dead)
     assert "REMOVED" in capsys.readouterr().out
 
 
 def test_deploy_prune_prints_nothing_when_no_candidate_is_on_disk(tmp_path, capsys):
-    deploy_configs.prune_after_deploy([(str(tmp_path / "absent"), "removals:test_entry", False)])
+    deploy_configs.prune_before_deploy([(str(tmp_path / "absent"), "removals:test_entry", False)])
     assert capsys.readouterr().out == ""
 
 
 def test_deploy_prune_still_skips_what_run_prune_protects(tmp_path, capsys):
     real_dir = tmp_path / "real_dir"
     real_dir.mkdir()
-    deploy_configs.prune_after_deploy([(str(real_dir), "removals:test_entry", False)])
+    deploy_configs.prune_before_deploy([(str(real_dir), "removals:test_entry", False)])
     assert real_dir.is_dir()
     assert "SKIP" in capsys.readouterr().out
 
