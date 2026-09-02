@@ -69,3 +69,19 @@
     windows: "~/.mcp.json"
   note: >-
     Retired 2026-09-02. From 2026-08-27 src/claude_mcp.py wrote one machine-level .mcp.json in the user folder, inherited by every session, so every cloned context's servers loaded everywhere. It now writes one data/mcp/<context>.mcp.json per declaring context and each context's manifest links that file into its own checkouts (per_context_repo entries), so a session registers only its own context's servers. Not a symlink - a regular generated file, which prune removes as a hard link / regular file.
+
+
+- name: removed_literal_context_repo_placeholder_link
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.claude/commands"
+    linux: "{repo_parent}/{context_repo}/.claude/commands"
+    windows: "{repo_parent}/{context_repo}/.claude/commands"
+  note: >-
+    Self-repair for a pull-order accident (seen 2026-09-02 on a machine whose
+    dotfiles pull was blocked by local edits): the credentials repos pulled
+    the new per_context_repo entries while dotfiles still ran the old deploy,
+    which knows no {context_repo} placeholder, took it literally, and linked
+    <clone root>/{context_repo}/.claude/commands. Removals dests expand
+    {repo_parent} only, so this line names that literal path and prune deletes
+    the link plus the empty chain it sits in. Drop once every machine has
+    deployed at least once past 2026-09-02.

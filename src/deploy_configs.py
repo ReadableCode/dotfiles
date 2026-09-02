@@ -1078,6 +1078,24 @@ def inside_linked_directory(path):
     return False
 
 
+def remove_empty_parents(dest):
+    """
+    Remove the directories a pruned path leaves empty behind it, walking up
+    until one is not empty. A skill-style dir holds nothing but its removed
+    file; a placeholder that an older deploy took literally leaves a whole
+    empty chain ({context_repo}/.claude/). Stops at the home folder and at the
+    clone root, which are never removed even when empty.
+    """
+    stop = {os.path.normpath(os.path.expanduser("~")), os.path.normpath(grandparent_dir)}
+    parent = os.path.dirname(os.path.normpath(dest))
+    while parent and parent not in stop:
+        try:
+            os.rmdir(parent)
+        except OSError:
+            return
+        parent = os.path.dirname(parent)
+
+
 def classify_prune_target(dest, allow_directory=False):
     """(removable, description) for a prune candidate that exists on disk."""
     if inside_linked_directory(dest):
@@ -1181,10 +1199,7 @@ def run_prune(candidates, apply_changes=False):
                 print(f"  {paint('FAILED', 'red')}  {dest}  ({exc}; {reason})")
                 skipped += 1
                 continue
-            try:  # a skill-style dir is left empty behind its removed file
-                os.rmdir(os.path.dirname(dest))
-            except OSError:
-                pass
+            remove_empty_parents(dest)
             print(f"  {paint('REMOVED', 'green')}  {dest}  ({description}; {reason})")
         else:
             print(f"  {paint('WOULD REMOVE', 'yellow')}  {dest}  ({description}; {reason})")

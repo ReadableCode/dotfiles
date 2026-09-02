@@ -499,6 +499,35 @@ def test_prune_refuses_a_path_inside_a_linked_directory(fake_home):
     assert deploy_configs.classify_prune_target(str(linked)) == (True, "symlink")
 
 
+def test_prune_removes_the_empty_chain_a_pruned_path_leaves_behind(fake_home, monkeypatch):
+    # a placeholder taken literally by an older deploy leaves {context_repo}/.claude/
+    monkeypatch.setattr(deploy_configs, "grandparent_dir", str(fake_home / "GitHub"))
+    junk = fake_home / "GitHub" / "{context_repo}" / ".claude" / "commands"
+    junk.parent.mkdir(parents=True)
+    junk.write_text("x", encoding="utf-8")
+    junk.unlink()
+
+    deploy_configs.remove_empty_parents(str(junk))
+
+    assert not (fake_home / "GitHub" / "{context_repo}").exists()
+    assert (fake_home / "GitHub").is_dir()  # the clone root is never removed, even empty
+
+
+def test_empty_parent_cleanup_stops_at_a_non_empty_directory_and_at_home(fake_home, monkeypatch):
+    monkeypatch.setattr(deploy_configs, "grandparent_dir", str(fake_home / "GitHub"))
+    skill = fake_home / ".claude" / "skills" / "old-skill" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    (fake_home / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+
+    deploy_configs.remove_empty_parents(str(skill))
+
+    assert not (fake_home / ".claude" / "skills").exists()
+    assert (fake_home / ".claude" / "settings.json").exists()
+    os.remove(str(fake_home / ".claude" / "settings.json"))
+    deploy_configs.remove_empty_parents(str(fake_home / ".claude" / "x"))
+    assert not (fake_home / ".claude").exists() and fake_home.is_dir()
+
+
 # %%
 # Platform / host resolution #
 
