@@ -18,8 +18,69 @@ if ($env:OS -eq 'Windows_NT') {
 ### Terminal Config ###
 
 function cataliases {
+    # CLI-style table of every shortcut the profile loaded: one command per
+    # line with a one-line description, from this file, every
+    # ~\.powershell_local.d shard, then the generated ssh definitions. The
+    # description is the comment sitting directly above the definition, or the
+    # alias target when there is none. Underscore-prefixed names and Verb-Noun
+    # helpers (Test-GitDir, Get-PythonCommand) are plumbing and are skipped.
+    # `cataliases <name>` prints that one definition instead. Same shape as the
+    # bash/zsh cataliases in .shared_aliases.
+    param([string]$Name)
+    if ($Name) {
+        $cmd = Get-Command $Name -ErrorAction SilentlyContinue
+        if ($cmd) { $cmd.Definition } else { Write-Host "cataliases: no alias or function named $Name" }
+        return
+    }
     if (-not (Test-GitDir)) { return }
-    Get-Content $(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
+    $files = @(Join-Path $gitDir 'dotfiles\application_configs\powershell\powershell_aliases.ps1')
+    if (Test-Path "$HOME\.powershell_local.d") {
+        $files += Get-ChildItem "$HOME\.powershell_local.d\*.ps1" | Sort-Object Name | ForEach-Object { $_.FullName }
+    }
+    Write-Host 'Commands:'
+    foreach ($file in $files) { _AliasTable (Get-Content $file) }
+    if ($sshAliasGenerator -and (Test-Path $sshAliasGenerator)) {
+        $pythonCommand = Get-PythonCommand
+        if ($pythonCommand) {
+            Write-Host 'Hosts (generated from the credentials inventories):'
+            & $pythonCommand $sshAliasGenerator --format powershell --root $gitDir 2>$null |
+                Select-String -Pattern "function:global:([\w-]+)' -Value \(\[scriptblock\]::Create\('(.*)'\)\)" |
+                ForEach-Object { '  {0,-24} {1}' -f $_.Matches[0].Groups[1].Value, $_.Matches[0].Groups[2].Value } |
+                Write-Host
+        }
+    }
+}
+
+function _AliasTable {
+    # One row per `function NAME` / `Set-Alias NAME TARGET` in the given lines,
+    # described by the comment directly above it (section headers never count).
+    param([string[]]$Lines)
+    $width = 100
+    try { $w = $Host.UI.RawUI.WindowSize.Width; if ($w -ge 60) { $width = $w } } catch {}
+    $desc = ''
+    $inComment = $false
+    foreach ($line in $Lines) {
+        if ($line -match '^\s*###') { $inComment = $false; continue }
+        if ($line -match '^\s*#\s?(.*)$') {
+            if (-not $inComment) { $desc = $Matches[1] }
+            $inComment = $true
+            continue
+        }
+        $name = ''
+        $body = ''
+        if ($line -match '^\s*function\s+([A-Za-z][\w-]*)') {
+            $name = $Matches[1]
+        } elseif ($line -match '^\s*Set-Alias\s+(?:-Name\s+)?([A-Za-z][\w-]*)\s+(?:-Value\s+)?(\S+)') {
+            $name = $Matches[1]
+            $body = $Matches[2]
+        }
+        if ($name -and $name -notmatch '^_' -and $name -notmatch '^[A-Z][a-z]+-') {
+            $d = if ($inComment) { $desc } else { $body }
+            if ($d.Length -gt ($width - 30)) { $d = $d.Substring(0, $width - 33) + '...' }
+            Write-Host ('  {0,-24} {1}' -f $name, $d)
+        }
+        $inComment = $false
+    }
 }
 
 function editaliases {

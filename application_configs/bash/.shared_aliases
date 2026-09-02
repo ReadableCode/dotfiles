@@ -462,3 +462,72 @@ _load_ssh_aliases() {
 }
 
 _load_ssh_aliases
+
+### Alias inventory ###
+
+# `cataliases` used to cat the rc file, which never showed what the context
+# shards or the ssh generator added to this session. This walks what the shell
+# actually sourced - the rc file, this file, every ~/.shell_local.d shard, then
+# the generated ssh/vnc aliases - and prints a CLI-style table: one command per
+# line with a one-line description. The description is the comment sitting
+# directly above the definition, or the alias body when there is none, so a
+# comment line above an alias is all it takes to label it. `cataliases <name>`
+# prints that one definition instead.
+_alias_table() {
+    # `alias NAME=` at any indent; `NAME() {` and `function NAME` only at column
+    # 0 so helpers nested inside another function stay out. Underscore-prefixed
+    # names are plumbing and are skipped. `### Section ###` headers never count
+    # as a description.
+    local width="${COLUMNS:-$(tput cols 2>/dev/null)}"
+    [[ "$width" =~ ^[0-9]+$ && "$width" -ge 60 ]] || width=100
+    awk -v width="$width" '
+        /^[[:space:]]*###/ { incomment = 0; next }
+        /^[[:space:]]*#/ {
+            if (!incomment) { desc = $0; sub(/^[[:space:]]*#[[:space:]]?/, "", desc) }
+            incomment = 1
+            next
+        }
+        {
+            name = ""; body = ""
+            if (match($0, /^[[:space:]]*alias [A-Za-z][A-Za-z0-9_-]*=/)) {
+                name = substr($0, RSTART, RLENGTH); sub(/^[[:space:]]*alias /, "", name); sub(/=$/, "", name)
+                body = substr($0, RSTART + RLENGTH); sub(/^[\047"]/, "", body); sub(/[\047"][[:space:]]*(#.*)?$/, "", body)
+            } else if (match($0, /^function [A-Za-z][A-Za-z0-9_-]*/)) {
+                name = substr($0, 10, RLENGTH - 9)
+            } else if (match($0, /^[A-Za-z][A-Za-z0-9_-]*[[:space:]]*\(\)/)) {
+                name = substr($0, RSTART, RLENGTH); sub(/[[:space:]]*\(\)/, "", name)
+            }
+            if (name != "" && name !~ /^_/ && name !~ /^(precmd|preexec|chpwd)$/) {
+                d = incomment ? desc : body
+                if (length(d) > width - 30) d = substr(d, 1, width - 33) "..."
+                printf "  %-24s %s\n", name, d
+            }
+            incomment = 0
+        }' "$@" 2>/dev/null
+}
+
+# A session that still has the old `alias cataliases=...` would otherwise
+# alias-expand the name inside this definition and fail to parse on srcaliases.
+unalias cataliases 2>/dev/null
+cataliases() {
+    if [[ -n "$1" ]]; then
+        if [[ -n "$ZSH_VERSION" ]]; then whence -vf "$1"; else type "$1"; fi
+        return
+    fi
+    local rc="$HOME/.bash_aliases"
+    [[ -n "$ZSH_VERSION" ]] && rc="$HOME/.zshrc"
+    local files=("$rc" "$HOME/.shared_aliases")
+    [[ -n "$ZSH_VERSION" && -f "$HOME/.zshrc.local" ]] && files+=("$HOME/.zshrc.local")
+    [[ -n "$ZSH_VERSION" ]] && setopt localoptions nullglob
+    local shard
+    for shard in "$HOME/.shell_local.d"/*.sh; do
+        [[ -f "$shard" ]] && files+=("$shard")
+    done
+    echo "Commands:"
+    _alias_table "${files[@]}"
+    local generator="${gitDir%/}/dotfiles/src/ssh_aliases.py"
+    if [[ -n "$gitDir" && -f "$generator" ]] && command -v python3 >/dev/null 2>&1; then
+        echo "Hosts (generated from the credentials inventories):"
+        python3 "$generator" --format bash --root "${gitDir%/}" 2>/dev/null | _alias_table -
+    fi
+}

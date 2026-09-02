@@ -132,8 +132,6 @@ zstyle ':completion:*:*:-command-:*:*' group-order alias builtins functions comm
 
 alias editaliases='nvim ~/.zshrc'
 
-alias cataliases='cat ~/.zshrc ~/.shared_aliases'
-
 alias srcaliases='source ~/.zshrc'
 
 ### Functions ###
