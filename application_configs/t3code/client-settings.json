@@ -6,14 +6,28 @@
     "_tag": "fill"
   },
   "browserDefaultZoomFactor": 1,
-  "confirmQuit": true,
+  "browserRecordingFrameRate": 30,
+  "confirmQuit": "hold",
   "confirmThreadArchive": false,
   "confirmThreadDelete": true,
   "confirmThreadUnpin": false,
   "diffIgnoreWhitespace": true,
   "dismissedProviderUpdateNotificationKeys": [],
   "environmentIdentificationMode": "artwork",
-  "favorites": [],
+  "favorites": [
+    {
+      "model": "claude-fable-5-1",
+      "provider": "claudeAgent"
+    },
+    {
+      "model": "claude-opus-5",
+      "provider": "claudeAgent"
+    },
+    {
+      "model": "eu.anthropic.claude-opus-5",
+      "provider": "claudeAgent"
+    }
+  ],
   "fontFamilyCode": "",
   "fontFamilyComposer": "",
   "fontFamilySans": "",
@@ -28,8 +42,6 @@
   "planModeEnabled": false,
   "providerModelPreferences": {},
   "showSkillsInSlashMenu": true,
-  "sidebarAutoSettleAfterDays": null,
-  "sidebarAutoSettleOnMerge": false,
   "sidebarProjectGroupingMode": "repository",
   "sidebarProjectGroupingOverrides": {},
   "sidebarProjectSortOrder": "updated_at",
