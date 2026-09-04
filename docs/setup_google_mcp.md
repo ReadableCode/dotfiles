@@ -188,12 +188,18 @@ Only needed for an account the calendar board has never authenticated.
 3. Calendar: `uv run python src/calendar_board.py --auth <source>` on a machine
    with a browser, then paste the printed refresh token into the env file.
 4. Mail: mint a google-auth "authorized user" JSON with a standard
-   `InstalledAppFlow` consent (scope `gmail.modify`) and put it in the env
-   file — or reuse the flow the context's own mail tooling already has, per
-   that credentials repo's notes.
+   `InstalledAppFlow` consent and put it in the env file — or reuse the flow
+   the context's own mail tooling already has, per that credentials repo's
+   notes. The MCP server needs `gmail.modify`; if the same context also runs
+   `src/gmail_filters.py` (see `docs/gmail_filters.md`), mint **one** token
+   with `gmail.modify` **and** `gmail.settings.basic` — a re-mint with
+   `gmail.modify` alone silently breaks filter writes, and a second
+   settings-only token competes in the OAuth client's per-account
+   refresh-token pool with the first.
 
-Calendar consent is `auth/calendar` and mail consent is `gmail.modify` — both
-read/write. No single token covers both; they are separate grants.
+Calendar consent is `auth/calendar` and mail consent is `gmail.modify` (plus
+`gmail.settings.basic` where filters are managed) — both read/write. No single
+token covers calendar and mail; they are separate grants.
 
 ## Tools
 
