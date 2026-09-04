@@ -418,7 +418,7 @@ running T3 Code** (not the browser/phone you control it from). Provider auth is
 required before starting a session with that provider, not before starting T3
 Code itself.
 
-For Claude Code (already in the Brewfile as `cask "claude-code"`):
+For Claude Code (already in the Brewfile as `cask "claude-code@latest"`):
 
 ```bash
 claude auth login

@@ -46,7 +46,10 @@ brew "yq"
 
 cask "bitwarden"
 cask "claude"
-cask "claude-code"
+# @latest follows Claude Code's latest channel. The plain claude-code cask
+# follows stable, which lags far enough behind that new models are rejected
+# outright ("version 2.1.251 or newer is required") and T3 Code sessions fail.
+cask "claude-code@latest"
 cask "discord"
 cask "dockdoor"
 cask "elgato-stream-deck"

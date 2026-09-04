@@ -147,7 +147,7 @@ function claude-dequarantine() {
     local f
     local -i found=0 stripped=0
     for f in "$HOME"/.vscode/extensions/anthropic.claude-code-*/resources/native-binary/claude \
-             /opt/homebrew/Caskroom/claude-code/*/claude; do
+             /opt/homebrew/Caskroom/claude-code@latest/*/claude; do
         [[ -f "$f" ]] || continue
         (( found++ ))
         if ! xattr -p com.apple.quarantine "$f" >/dev/null 2>&1; then
