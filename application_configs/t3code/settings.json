@@ -1,11 +1,9 @@
 {
-  "enableAssistantStreaming": true,
   "providerInstances": {
     "codex": {
       "config": {
         "binaryPath": "codex",
         "customModels": [],
-        "enabled": true,
         "homePath": "",
         "launchArgs": "",
         "shadowHomePath": ""
@@ -16,8 +14,7 @@
     "grok": {
       "config": {
         "binaryPath": "grok",
-        "customModels": [],
-        "enabled": true
+        "customModels": []
       },
       "driver": "grok",
       "enabled": false
@@ -26,7 +23,6 @@
       "config": {
         "binaryPath": "opencode",
         "customModels": [],
-        "enabled": true,
         "serverPassword": "",
         "serverUrl": ""
       },
@@ -34,6 +30,19 @@
       "enabled": false
     }
   },
+  "providers": {
+    "cursor": {
+      "enabled": false
+    },
+    "grok": {
+      "enabled": false
+    },
+    "opencode": {
+      "enabled": false
+    }
+  },
+  "sidebarAutoSettleAfterDays": null,
+  "sidebarAutoSettleOnMerge": false,
   "textGenerationModelSelection": {
     "instanceId": "claudeAgent",
     "model": "claude-opus-5",
