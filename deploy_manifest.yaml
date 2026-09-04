@@ -162,6 +162,27 @@
 # inventory that validates them. Work-context variants are entries in their
 # client overlay manifests, so nothing here can collide with them.
 
+- name: claude_command_init_worktree
+  repo: application_configs/claude/commands/init_worktree.md
+  dest:
+    darwin: ~/.claude/commands/init_worktree.md
+    linux: ~/.claude/commands/init_worktree.md
+    windows: ~/.claude/commands/init_worktree.md
+  note: >-
+    /init_worktree — brings a fresh git worktree (T3 Code makes one per thread
+    under ~/.t3/worktrees/<repo>/) up to parity with its main checkout: the
+    manifest-deployed gitignored links (.env, .mcp.json,
+    .claude/settings.local.json, configuration.json) re-created with absolute
+    targets, a folder entry added to this host's <host>.code-workspace, uv sync.
+    Thin wrapper over src/init_worktree.py (stdlib-only). The first and so far
+    only command dotfiles itself deploys: it is context-free - it reads what the
+    main checkout has and mirrors it, names no client - so it belongs here, not
+    in an overlay, and carries no context prefix (the prefix is what keeps N
+    overlays' commands apart in the one flat ~/.claude/commands folder; dotfiles
+    is not a context). Flat user-level file link for the T3 Code slash-menu
+    reason the overlays document above their own command entries. No hosts
+    filter: it follows every clone. Added 2026-09-04. See docs/init_worktree.md.
+
 - name: claude_mcp_servers
   repo: mcp_servers.yaml
   method: none
