@@ -5,7 +5,7 @@ Stdlib-only on purpose: callable from any repo with a bare ``python3``, no venv 
 installed CLIs required. Credentials come from the calling repo's env file:
 
     python3 ~/GitHub/dotfiles/src/ticket_pr.py --env-file .env create-ticket \
-        --project FFF --type Task --summary "Do the thing"
+        --project ACME --type Task --summary "Do the thing"
 
 Subcommands: create-ticket, get-ticket, create-pr, pr-status, request-review.
 Every subcommand honors the global ``--dry-run`` flag, which prints the HTTP
@@ -732,7 +732,7 @@ def build_parser():
     ticket.set_defaults(func=cmd_create_ticket)
 
     get_ticket = sub.add_parser("get-ticket", help="fetch a Jira ticket's status summary")
-    get_ticket.add_argument("--key", required=True, help="issue key, e.g. FFF-401")
+    get_ticket.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
     get_ticket.set_defaults(func=cmd_get_ticket)
 
     create_pr = sub.add_parser("create-pr", help="open a GitHub PR for the current branch")

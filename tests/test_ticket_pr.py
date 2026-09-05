@@ -227,7 +227,7 @@ def test_create_ticket_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("JIRA_USER", "user@example.com")
     monkeypatch.setenv("JIRA_TOKEN", "token")
     out = _run_cli(
-        ["--dry-run", "create-ticket", "--project", "FFF", "--summary", "Test ticket"],
+        ["--dry-run", "create-ticket", "--project", "ACME", "--summary", "Test ticket"],
         monkeypatch,
         capsys,
     )
@@ -316,9 +316,9 @@ def test_get_ticket_no_comments(monkeypatch, capsys):
 
 def test_create_pr_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "FFF-0-test-branch")
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "ACME-0-test-branch")
     out = _run_cli(
-        ["--dry-run", "create-pr", "--repo", "owner/name", "--title", "FFF-0 Test"],
+        ["--dry-run", "create-pr", "--repo", "owner/name", "--title", "ACME-0 Test"],
         monkeypatch,
         capsys,
     )
