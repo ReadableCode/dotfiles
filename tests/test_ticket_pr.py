@@ -236,6 +236,84 @@ def test_create_ticket_dry_run(monkeypatch, capsys):
     assert result == {"key": "DRY-0", "url": "https://example.atlassian.net/browse/DRY-0"}
 
 
+def test_get_ticket_dry_run_requests_description(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    out = _run_cli(["--dry-run", "get-ticket", "--key", "ACME-401"], monkeypatch, capsys)
+    assert (
+        "[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401"
+        "?fields=summary,status,assignee,issuetype,description"
+    ) in out
+
+
+def test_get_ticket_reports_description(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    issue = {
+        "key": "ACME-401",
+        "fields": {
+            "summary": "Fix the thing",
+            "status": {"name": "In Progress"},
+            "issuetype": {"name": "Bug"},
+            "assignee": {"displayName": "Sam"},
+            "description": "Steps:\n1. run it\n2. watch it break",
+        },
+    }
+    # two pages of one comment each: the walker must follow startAt to total
+    pages = {
+        "startAt=0": {"total": 2, "comments": [
+            {"author": {"displayName": "Alex"}, "created": "2026-09-01T10:00:00.000+0000",
+             "body": "Repro attached"}]},
+        "startAt=1": {"total": 2, "comments": [
+            {"author": {"displayName": "Sam"}, "created": "2026-09-02T10:00:00.000+0000",
+             "body": "On it"}]},
+    }
+    calls = []
+
+    def fake_http(method, url, headers, **kwargs):
+        calls.append(url)
+        if "/comment?" in url:
+            return next(page for marker, page in pages.items() if marker in url)
+        return issue
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["get-ticket", "--key", "ACME-401"])
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "ACME-401 [In Progress] Fix the thing (2 comments)"
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result == {
+        "key": "ACME-401",
+        "summary": "Fix the thing",
+        "status": "In Progress",
+        "type": "Bug",
+        "assignee": "Sam",
+        "description": "Steps:\n1. run it\n2. watch it break",
+        "comments": [
+            {"author": "Alex", "created": "2026-09-01T10:00:00.000+0000", "body": "Repro attached"},
+            {"author": "Sam", "created": "2026-09-02T10:00:00.000+0000", "body": "On it"},
+        ],
+        "url": "https://example.atlassian.net/browse/ACME-401",
+    }
+    assert sum("/comment?" in c for c in calls) == 2
+
+
+def test_get_ticket_no_comments(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    issue = {"key": "ACME-402", "fields": {"summary": "Quiet", "status": {"name": "To Do"}}}
+    monkeypatch.setattr(
+        ticket_pr, "http_json",
+        lambda m, url, *a, **k: {"total": 0, "comments": []} if "/comment?" in url else issue,
+    )
+    ticket_pr.main(["get-ticket", "--key", "ACME-402"])
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "ACME-402 [To Do] Quiet (0 comments)"
+    assert json.loads(out.strip().splitlines()[-1])["comments"] == []
+
+
 def test_create_pr_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "FFF-0-test-branch")

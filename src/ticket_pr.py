@@ -198,21 +198,50 @@ def cmd_create_ticket(args):
 
 def cmd_get_ticket(args):
     base, headers = jira_base(), jira_headers()
-    url = f"{base}/rest/api/2/issue/{args.key}?fields=summary,status,assignee,issuetype"
+    url = f"{base}/rest/api/2/issue/{args.key}?fields=summary,status,assignee,issuetype,description"
     issue = http_json("GET", url, headers, dry_run=args.dry_run)
     if issue is None:  # dry run
         return
     fields = issue.get("fields", {})
     assignee = (fields.get("assignee") or {}).get("displayName")
+    key = issue.get("key", args.key)
     result = {
-        "key": issue.get("key", args.key),
+        "key": key,
         "summary": fields.get("summary"),
         "status": (fields.get("status") or {}).get("name"),
         "type": (fields.get("issuetype") or {}).get("name"),
         "assignee": assignee,
-        "url": f"{base}/browse/{issue.get('key', args.key)}",
+        "description": fields.get("description") or "",
+        "comments": jira_comments(base, headers, key),
+        "url": f"{base}/browse/{key}",
     }
-    emit(f"{result['key']} [{result['status']}] {result['summary']}", result)
+    emit(
+        f"{result['key']} [{result['status']}] {result['summary']} "
+        f"({len(result['comments'])} comments)",
+        result,
+    )
+
+
+def jira_comments(base, headers, key, page_size=100):
+    """
+    Every comment on the issue, oldest first. The comment endpoint is paged
+    (Jira caps a page well below "all of them" on busy tickets), so walk
+    startAt until total is reached rather than trusting one response.
+    """
+    comments, start = [], 0
+    while True:
+        query = urllib.parse.urlencode({"startAt": start, "maxResults": page_size})
+        page = http_json("GET", f"{base}/rest/api/2/issue/{key}/comment?{query}", headers)
+        batch = page.get("comments", [])
+        for comment in batch:
+            comments.append({
+                "author": (comment.get("author") or {}).get("displayName"),
+                "created": comment.get("created"),
+                "body": comment.get("body") or "",
+            })
+        start += len(batch)
+        if not batch or start >= page.get("total", 0):
+            return comments
 
 
 # ---------------------------------------------------------------- github
