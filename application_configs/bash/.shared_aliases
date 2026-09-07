@@ -284,7 +284,7 @@ function _fleet_banner() {
 # machine has to act on them for the list to ever be finished. A dry run here
 # would reprint the same dead links forever and still need a second command
 # by hand. Safe after the deploy because prune only removes a path a removals
-# entry names AND no live manifest entry wants (see docs/deploy_configs.md).
+# entry names AND no live manifest entry wants (see docs/repo_deploy_configs.md).
 function _fleet_refresh_configs() {
     _fleet_banner 'Checking for repos to clone'
     clonerepos
@@ -356,7 +356,7 @@ function ta() {
 # never committed, so it builds itself on first use - including installing the
 # go toolchain when the machine has none, because "install go by hand first" is
 # not something a fleet command may ask for. A release install will replace
-# this shim eventually (docs/unified_cli_tui.md).
+# this shim eventually (docs/plan_unified_cli_tui.md).
 function cmdr() {
     local dir="$gitDir/dotfiles/go_apps/cmdr"
     local bin="$dir/cmdr"
@@ -437,7 +437,7 @@ _ssh_local_hostname() {
 # evals that same script's --format powershell output, so jump-host resolution,
 # port handling, user selection and vnc aliases have a single implementation
 # instead of two twins kept in step by hand. See its module docstring and
-# docs/client_credentials_repos.md for the inventory schema.
+# docs/repo_client_credentials.md for the inventory schema.
 #
 # Stdlib-only, so bare python3 runs it before any venv exists — and it is ONE
 # process for all inventories, where the old loader spawned one per file. No

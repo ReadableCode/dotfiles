@@ -25,7 +25,7 @@ Key files:
 ## Symlinking Zed Config to Git Repo
 
 Zed's settings link is manifest-driven (entry `zed_settings` in
-`deploy_manifest.yaml` — see [deploy_configs.md](./deploy_configs.md)):
+`deploy_manifest.yaml` — see [repo_deploy_configs.md](./deploy_configs.md)):
 
 ```bash
 cd ~/GitHub/dotfiles

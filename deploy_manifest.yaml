@@ -181,7 +181,7 @@
     overlays' commands apart in the one flat ~/.claude/commands folder; dotfiles
     is not a context). Flat user-level file link for the T3 Code slash-menu
     reason the overlays document above their own command entries. No hosts
-    filter: it follows every clone. Added 2026-09-04. See docs/init_worktree.md.
+    filter: it follows every clone. Added 2026-09-04. See docs/repo_init_worktree.md.
 
 - name: claude_mcp_servers
   repo: mcp_servers.yaml

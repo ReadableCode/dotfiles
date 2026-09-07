@@ -16,7 +16,7 @@ CREDENTIALS_ROOT = grandparent_dir
 
 # One generated document per declaring context, in dotfiles' gitignored data/
 # folder. The per-repo manifest entries (per_context_repo, see
-# docs/deploy_configs.md) link <context>.mcp.json into every checkout of that
+# docs/repo_deploy_configs.md) link <context>.mcp.json into every checkout of that
 # context as <repo>/.mcp.json, so a session inside a client repo registers that
 # client's servers and nothing else - no file anywhere names another context's
 # servers. Generated rather than committed because the content is

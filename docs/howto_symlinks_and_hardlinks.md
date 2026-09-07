@@ -1,7 +1,7 @@
 # Sym Linking and Hard Linking
 
 > Dotfiles config deployment is manifest-driven — see
-> [deploy_configs.md](./deploy_configs.md). The commands here are a general
+> [repo_deploy_configs.md](./deploy_configs.md). The commands here are a general
 > reference for one-off links.
 
 ## Why not hard links for git-tracked files

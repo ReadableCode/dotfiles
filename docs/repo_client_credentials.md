@@ -15,8 +15,8 @@ minus the `_credentials` suffix):
 
 | File | Purpose |
 |------|---------|
-| `acme_manifest.yaml` | Optional **overlay deploy manifest** — same entry schema as `deploy_manifest.yaml`, but its `repo:` paths are relative to `acme_credentials/`. Loaded automatically by `src/deploy_configs.py`; see [deploy_configs.md](./deploy_configs.md). |
-| `acme_hosts.json` | Optional **host inventory** — same schema as the personal `hosts.json`. Legacy fallback: a bare `hosts.json` is used when the prefixed file is absent. |
+| `acme_manifest.yaml` | Optional **overlay deploy manifest** — same entry schema as `deploy_manifest.yaml`, but its `repo:` paths are relative to `acme_credentials/`. Loaded automatically by `src/deploy_configs.py`; see [repo_deploy_configs.md](./deploy_configs.md). |
+| `acme_hosts.json` | Optional **host inventory** — same schema in every context (the personal one is `personal_hosts.json`; the bare `hosts.json` fallback was retired 2026-09-07). |
 | `acme_mcp_servers.yaml` | Optional **MCP server declaration** - URL and env var *names* only; the generator resolves values from this repo's env file at deploy time. Stays here even though the links that register it deploy from the dev repo (below). |
 | config payloads | The actual private files the overlay manifest links into place (client `.env` files, `configuration.json`, workspace variants, shell / ssh fragments, ...). Never anything that names an agent: see the next section. |
 | anything else | Credentials, keys, notes — the repo is private, so it can hold whatever that context needs. |

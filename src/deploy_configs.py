@@ -603,7 +603,17 @@ def find_repos_config(context, overlay_root=None):
 
 
 def load_context_repo_names(context, overlay_root=None):
-    """Repo names a context declares, in file order. Returns (names, config_path)."""
+    """
+    Checkout directory names a context declares, in file order. Returns
+    (names, config_path).
+
+    An entry's ``dir`` wins over its ``name`` when set - that is the folder
+    clone_repos.py actually creates under gitDir (a repo cloned under a
+    clearer local name), so it is the only value {context_repo} can usefully
+    expand to. Substituting ``name`` there (the behaviour until 2026-09-07)
+    built destinations under a folder that never exists, so every link for
+    such a repo silently skipped as SKIP_REQUIRES.
+    """
     path = find_repos_config(context, overlay_root)
     with open(path, "r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle) or {}
@@ -611,7 +621,7 @@ def load_context_repo_names(context, overlay_root=None):
     for repo in data.get("repos") or []:
         if not isinstance(repo, dict) or not repo.get("name"):
             raise ValueError(f"Repos entry without a name in {path}: {repo}")
-        names.append(str(repo["name"]))
+        names.append(str(repo.get("dir") or repo["name"]))
     return names, path
 
 
@@ -624,7 +634,8 @@ def expand_context_repo_entries(entries, base_dir, overlay_root=None):
     such as ``acme_dev`` targets ``acme``'s repos that way). ``extra_repos``
     appends checkouts no repos file lists (typically the credentials repo
     itself); ``exclude_repos`` drops names, and must name only repos that were
-    listed, so a typo fails instead of silently excluding nothing.
+    listed, so a typo fails instead of silently excluding nothing. Names here
+    are checkout directories (an entry's ``dir`` when it has one).
 
     Each expansion is named ``<entry>__<repo>``, has {context_repo} replaced in
     dest and requires, and gates on the checkout existing - a repo this machine
@@ -681,8 +692,7 @@ def validate_manifest_hosts(entries, inventory_path=None):
     skipping) the wrong machines.
 
     By default the check runs against the UNION of every sibling
-    ``*_credentials`` repo's inventory (``<context>_hosts.json``, legacy
-    fallback ``hosts.json``); machines with no inventory at all (no
+    ``*_credentials`` repo's inventory (``<context>_hosts.json``); machines with no inventory at all (no
     credentials repos cloned) skip it. Passing inventory_path validates
     against that single file instead (tests).
     """

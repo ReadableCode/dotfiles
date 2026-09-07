@@ -79,7 +79,6 @@ def test_hosts_are_found_across_all_sibling_inventories(tmp_path):
         tmp_path,
         "personal",
         [{"name": "home-box", "updater": {"release_ceiling": {"ubuntu": "26.04"}}}],
-        filename="hosts.json",
     )
     assert lookup(tmp_path, "home-box", "release_ceiling.ubuntu") == "26.04"
     assert lookup(tmp_path, "Workstation-1", "release_ceiling.ubuntu") == "26.04"

@@ -47,7 +47,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # Run a privileged command. A PATH lookup for sudo only - never a probe of
 # whether escalation would succeed, because some hosts mail on every failed
-# sudo (docs/unified_cli_tui.md).
+# sudo (docs/plan_unified_cli_tui.md).
 sudo_run() {
     if [ "$(id -u)" = "0" ]; then
         "$@"

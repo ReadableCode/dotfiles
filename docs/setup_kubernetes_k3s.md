@@ -31,7 +31,7 @@ export K3S_KUBECONFIG_MODE="644"
 curl -sfL https://get.k3s.io | sh -
 ```
 
-- If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/docker_container_registry_local.md)
+- If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/homelab_docker_registry.md)
 
 ### Check K3S status
 
@@ -58,7 +58,7 @@ export K3S_KUBECONFIG_MODE="644"
 curl -sfL https://get.k3s.io | K3S_URL=https://<IP>:6443 K3S_TOKEN=<TOKEN> sh -
 ```
 
-- If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/docker_container_registry_local.md)
+- If you will be using a local or self hosted docker registry, follow this for setup: [Local Registries](../docs/homelab_docker_registry.md)
 
 ## Deploy HelloWorld
 
@@ -79,7 +79,7 @@ curl http://<any-node-ip>:31000
 
 ## Deploy an image to local container registry for K3S to use
 
-- See detailed instructions in [Local Registries](../docs/docker_container_registry_local.md)
+- See detailed instructions in [Local Registries](../docs/homelab_docker_registry.md)
 
 ## Create secrets from an .env file
 

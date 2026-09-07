@@ -26,7 +26,7 @@ agent, in that client's `<client>_dev` repo, and recurring homelab jobs live in
 
 | Path | Purpose |
 |------|---------|
-| `src/` | Python utilities. `deploy_configs.py` deploys configs to machines from `deploy_manifest.yaml` plus overlay manifests (`<context>_manifest.yaml`) discovered in sibling `*_credentials` repos and in any other sibling repo that opts in by declaring one named after its own directory (so config can be gated by a clone narrower than the credentials repo's — see `docs/deploy_configs.md`); an entry marked `per_context_repo` expands at load time into one link per repo in that context's `<context>_repos.yaml`, which is how each context's generated `.mcp.json` reaches every one of its checkouts and no other context's (slash commands stay user-level as flat per-file links in `~/.claude/commands`, because T3 Code builds its command menu from that path alone and subfolders there would namespace the names); manifest `hosts:` names must exist in the union of the `*_credentials` host inventories (`<context>_hosts.json`, legacy fallback `hosts.json`). `deploy_map.py` redraws the fleet-wide deployment map (every entry × every machine, as an interactive page plus a diffable JSON) from those same plans on every deploy, writing `deploy_map.{html,json}` into the personal credentials repo — but only on host `envy` (`MAP_HOST`; any other machine writing these tracked files dirties that checkout and blocks its next pull) — the page template is `templates/deploy_map.html` and both must stay context-agnostic, since the rendered map names every machine and client at once. The status board TUI moved to the sibling `status_board` repo (panels still discovered from `<context>_statusboard.yaml` in sibling `*_credentials` repos — see that repo's README). `calendar_board.py` is a calendar TUI: Google Calendar + Outlook-on-the-web (Microsoft Graph) accounts as side-by-side day columns with attendance badges and cross-source overlap flags, sources discovered from `<context>_calendarboard.yaml` in the same repos (see `docs/setup_calendar_board.md`); its shared secret resolution lives in `src/utils/secret_tools.py`. `google_mcp.py` is a stdio MCP server exposing that same Google Calendar account plus Gmail (mailboxes from `<context>_googlemail.yaml`, same overlay pattern) to Claude Code with read/write scope — it exists because the hosted claude.ai Calendar/Gmail connectors die under `CLAUDE_CODE_USE_BEDROCK=1`, whereas a local stdio server is provider-independent (see `docs/setup_google_mcp.md`); dotfiles holds the code but declares no instance — each context's credentials repo declares its own named one pinned with `--context` (e.g. `acme_google`), so every registered server is labeled by context and reaches only that context's accounts; OAuth token refresh is shared with the calendar board via `src/utils/google_oauth_tools.py`, and nothing in that process may print to stdout or the JSON-RPC protocol breaks. `claude_mcp.py` registers that server (and every other MCP server on the machine) by **generating** one `data/mcp/<context>.mcp.json` per declaring context at the start of each deploy, from every cloned sibling repo's `mcp_servers.yaml` / `<dirname>_mcp_servers.yaml` declaration (same opt-in rule as overlay manifests, so working repos can ship servers too, and `--print` names every repo scanned); each context's manifest then links its file into that context's checkouts as `<repo>/.mcp.json` through a `per_context_repo` entry, so a session registers only its own context's servers and no file anywhere names another context's (the pre-2026-09-02 single `~/.mcp.json` loaded every context everywhere); `{repo_root}`/`{repo_parent}` tokens and `env_secrets` var names are resolved at generate time, which is why no per-host payload exists (see `docs/setup_google_mcp.md`). `gmail_filters.py` makes a Gmail account's filters match `<context>_credentials/<context>_gmail_filters.yaml` (file is the source of truth; `plan`/`apply`/`backfill`; refuses to run unless Gmail's profile matches the yaml's `account:`, never adds SPAM/TRASH, never deletes a label or a message; Gmail allows one user label per filter so multi-label entries expand into several — see `docs/gmail_filters.md`). `ssh_aliases.py` is the **single** ssh/vnc alias generator for every shell: it reads the `*_credentials` host inventories and prints alias definitions in the caller's syntax (`--format bash` / `--format powershell`), which `.shared_aliases` and `powershell_aliases.ps1` eval at startup — stdlib-only so a bare `python3` runs it before any venv exists, and the reason jump/port/user logic no longer exists twice (see `docs/client_credentials_repos.md`). `updater_policy.py` (same stdlib-only contract) resolves the current host's `updater` block from those same inventories for `scripts/my_updater.sh` — release ceiling, upgrade cadence, mapped check scripts; host entry only, no group/context defaults (see `docs/setup_linux_workstation.md`). `init_worktree.py` (same stdlib-only contract) brings a fresh git worktree - T3 Code makes one per thread under `~/.t3/worktrees/<repo>/` - up to parity with its main checkout: re-creates the deploy-managed gitignored links (`.env`, `.mcp.json`, `.claude/settings.local.json`, ...) with absolute targets, adds a folder entry to this host's `<host>.code-workspace`, runs `uv sync`; `/init_worktree` (`application_configs/claude/commands/`, the one command this repo deploys itself) wraps it (see `docs/init_worktree.md`). `chrome_bookmarks.py`, `ssh_devices.py` pull data/configs. Shared helpers come from the **`readable-utils` package** (github.com/ReadableCode/readable_utils), a uv git dependency pinned to a tag — no vendored copies. `src/utils/` holds only dotfiles-specific modules (`inventory_tools`, `secret_tools`, `calendarboard_tools`, `google_oauth_tools`, `googlemcp_tools`, `mcpservers_tools`). Homelab-only jobs (Bitwarden backup, Home Assistant/router config pulls, log rotation) live in the local `~/GitHub/personal-automation` repo, not here. |
+| `src/` | Python utilities: the deploy pipeline (`deploy_configs.py`, `deploy_map.py`, `claude_mcp.py`), the calendar / Gmail tools, the stdlib-only helpers the shells call at startup, and the data pullers. One paragraph per tool in **Tool index** below; shared helpers come from the `readable-utils` package, `src/utils/` holds only dotfiles-specific modules. |
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
@@ -34,6 +34,93 @@ agent, in that client's `<client>_dev` repo, and recurring homelab jobs live in
 | `docs/` | Setup/how-to docs (one per topic). Surfaced via mkdocs. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
 | `pythonista/` | iOS Pythonista scripts. |
+
+## Tool index (`src/`)
+
+Each tool has a doc under `docs/` (the `repo_*` and `setup_*` families); this
+is the one-paragraph orientation so an agent knows which file to open.
+
+- **`deploy_configs.py`** — deploys configs from `deploy_manifest.yaml` plus
+  overlay manifests (`<context>_manifest.yaml`) discovered in sibling
+  `*_credentials` repos and in any sibling repo that opts in by declaring one
+  named after its own directory (`<dirname>_manifest.yaml`), which is how a
+  client's `<client>_dev` repo gates agent tooling by a clone narrower than
+  the credentials repo's. An entry marked `per_context_repo` expands at load
+  time into one link per repo in that context's `<context>_repos.yaml` (the
+  per-repo `.mcp.json`, `.env` and allow-list links). Slash commands stay
+  user-level as flat per-file links in `~/.claude/commands`: T3 Code builds
+  its menu from that path alone and subfolders there namespace the names.
+  Manifest `hosts:` names must exist in the union of the `*_credentials`
+  inventories (`<context>_hosts.json`). Doc:
+  `docs/repo_deploy_configs.md`.
+- **`deploy_map.py`** — redraws the fleet-wide deployment map (every entry x
+  every machine, interactive page plus diffable JSON) from those same plans on
+  every deploy, into `generated/deploy_map.{html,json}` in the personal
+  credentials repo - only on host `envy` (`MAP_HOST`; any other machine
+  writing those tracked files dirties that checkout and blocks its next pull).
+  Template `templates/deploy_map.html`; both must stay context-agnostic
+  because the rendered map names every machine and client at once.
+- **`claude_mcp.py`** — generates one `data/mcp/<context>.mcp.json` per
+  declaring context at the start of each deploy from every cloned sibling
+  repo's `mcp_servers.yaml` / `<dirname>_mcp_servers.yaml` (same opt-in rule
+  as overlay manifests; `--print` names every repo scanned). Each context's
+  overlay then links its file into that context's checkouts as
+  `<repo>/.mcp.json`, so a session registers only its own context's servers
+  (the pre-2026-09-02 single `~/.mcp.json` loaded every context everywhere).
+  `{repo_root}` / `{repo_parent}` tokens and `env_secrets` var names resolve
+  at generate time, which is why no per-host payload exists. Doc:
+  `docs/setup_google_mcp.md`.
+- **`google_mcp.py`** — stdio MCP server exposing one context's Google
+  Calendar plus Gmail (mailboxes from `<context>_googlemail.yaml`) to Claude
+  Code with read/write scope. Exists because the hosted claude.ai connectors
+  die under `CLAUDE_CODE_USE_BEDROCK=1`; a local stdio server is
+  provider-independent. dotfiles holds the code but declares no instance -
+  each context's credentials repo declares its own, pinned with `--context`
+  (e.g. `acme_google`), so every registered server is labeled by context and
+  reaches only that context's accounts. OAuth refresh is shared with the
+  calendar board via `src/utils/google_oauth_tools.py`; nothing in that
+  process may print to stdout or the JSON-RPC protocol breaks.
+- **`calendar_board.py`** — calendar TUI: Google Calendar and Outlook-on-the-web
+  (Microsoft Graph) accounts as side-by-side day columns with attendance
+  badges and cross-source overlap flags; sources from
+  `<context>_calendarboard.yaml` in the same repos. Secret resolution in
+  `src/utils/secret_tools.py`. Doc: `docs/setup_calendar_board.md`.
+- **`gmail_filters.py`** — makes a Gmail account's filters match
+  `<context>_credentials/<context>_gmail_filters.yaml` (file is the source of
+  truth; `plan` / `apply` / `backfill`; refuses to run unless Gmail's profile
+  matches the yaml's `account:`; never adds SPAM/TRASH, never deletes a label
+  or a message; multi-label entries expand into several filters). Doc:
+  `docs/repo_gmail_filters.md`.
+- **`ssh_aliases.py`** — the single ssh/vnc alias generator for every shell:
+  reads the `*_credentials` host inventories and prints alias definitions in
+  the caller's syntax (`--format bash` / `--format powershell`), which
+  `.shared_aliases` and `powershell_aliases.ps1` eval at startup. Stdlib-only
+  so a bare `python3` runs it before any venv exists. Doc:
+  `docs/repo_client_credentials.md`.
+- **`updater_policy.py`** — same stdlib-only contract; resolves the current
+  host's `updater` block (release ceiling, cadence, check scripts) from the
+  inventories for `scripts/my_updater.sh`. Host entry only, no group/context
+  defaults. Doc: `docs/setup_linux_workstation.md`.
+- **`init_worktree.py`** — same contract; brings a fresh git worktree (T3
+  Code makes one per thread under `~/.t3/worktrees/<repo>/`) up to parity
+  with its main checkout: re-creates the deploy-managed gitignored links with
+  absolute targets, adds a folder entry to this host's `<host>.code-workspace`,
+  runs `uv sync`. Wrapped by `/init_worktree`
+  (`application_configs/claude/commands/`, the one command this repo deploys
+  itself). Doc: `docs/repo_init_worktree.md`.
+- **`clone_repos.py`** — offers to clone every repo the cloned contexts'
+  `<context>_repos.yaml` files declare for this machine; run by gitpullall
+  between the pull and the deploy.
+- **`chrome_bookmarks.py`, `ssh_devices.py`** — pull data and configs from
+  browsers and devices.
+- **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,
+  `secret_tools`, `calendarboard_tools`, `google_oauth_tools`,
+  `googlemcp_tools`, `mcpservers_tools`. Shared helpers come from the
+  **`readable-utils`** package (github.com/ReadableCode/readable_utils), a uv
+  git dependency pinned to a tag - no vendored copies. Homelab-only jobs
+  (Bitwarden backup, Home Assistant/router pulls, log rotation) live in the
+  sibling `personal-automation` repo, not here. The status board TUI lives in
+  the sibling `status_board` repo.
 
 Cron is **not** managed here. A host with scheduled jobs declares them in the
 repo that owns that host's deploy, and that repo's deploy script installs the
@@ -90,8 +177,9 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
   matches token `envy`; platform tokens are `darwin`/`mac`, `linux`,
   `windows`). Context tags are never auto-resolved — they are deployed by
   hand or via a host-filtered manifest entry.
-- New docs: add a `docs/<topic>.md` following the existing one-topic-per-file
-  pattern.
+- New docs: add a `docs/<prefix>_<topic>.md`, one topic per file, using one
+  of the existing prefix families (`repo_`, `setup_`, `homelab_`, `howto_`,
+  `plan_`) and add it to `docs/README.md`.
 - Match the style of nearby code; respect the flake8 line length (120) and run
   isort before committing.
 - **Commit messages**: plain lowercase description of the change, matching the

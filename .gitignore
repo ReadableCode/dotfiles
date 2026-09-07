@@ -42,7 +42,7 @@ authorized_keys
 application_configs/github-copilot/
 
 
-# cmdr ships via releases, not committed binaries (docs/unified_cli_tui.md)
+# cmdr ships via releases, not committed binaries (docs/plan_unified_cli_tui.md)
 go_apps/cmdr/cmdr
 go_apps/cmdr/cmdr.exe
 

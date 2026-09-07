@@ -266,7 +266,7 @@ def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
         hostname="ENVY.LOCAL",
     )
     assert [os.path.basename(path) for path in paths] == ["deploy_map.html", "deploy_map.json"]
-    assert all(os.path.dirname(path).endswith("personal_credentials") for path in paths)
+    assert all(os.path.dirname(path).endswith(os.path.join("personal_credentials", "generated")) for path in paths)
 
     with open(paths[0], "r", encoding="utf-8") as file_handle:
         page = file_handle.read()

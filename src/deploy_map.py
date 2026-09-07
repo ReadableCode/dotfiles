@@ -30,6 +30,7 @@ OUTPUT_REPO = f"personal{CREDENTIALS_SUFFIX}"
 # gitpullall aborts on the uncommitted deploy_map.{html,json}.
 MAP_HOST = "envy"
 OUTPUT_BASENAME = "deploy_map"
+OUTPUT_SUBDIR = "generated"
 TEMPLATE_PATH = os.path.join(templates_dir, "deploy_map.html")
 DATA_PLACEHOLDER = "__DATA__"
 
@@ -191,7 +192,7 @@ def map_context(base_dir, repo_root, overlay_dirs):
 
     An opt-in overlay named ``<context>_<gate>`` (the pattern for config that
     must reach a narrower set of clones than the credentials repo itself - see
-    docs/deploy_configs.md) folds into ``<context>`` whenever that credentials
+    docs/repo_deploy_configs.md) folds into ``<context>`` whenever that credentials
     repo is also cloned here, so one context is one cluster on the map.
     """
     if os.path.normpath(base_dir) == os.path.normpath(repo_root):
@@ -512,7 +513,7 @@ def find_output_dir(credentials_root=None):
 def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, template_path=None, hostname=None):
     """
     Write ``deploy_map.html`` (self-contained page) and ``deploy_map.json`` (the
-    same data, diffable) into the personal credentials repo.
+    same data, diffable) into the personal credentials repo's generated/ folder.
 
     Returns the paths written; ``None`` when this machine is not ``MAP_HOST``
     (only that machine may dirty the personal credentials checkout), or an
@@ -527,6 +528,10 @@ def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, t
     output_dir = output_dir or find_output_dir(credentials_root)
     if not output_dir:
         return []
+    # generated/ keeps the two artifacts out of the repo root, next to the
+    # declarations and secrets a human actually edits (moved 2026-09-07).
+    output_dir = os.path.join(output_dir, OUTPUT_SUBDIR)
+    os.makedirs(output_dir, exist_ok=True)
     data = build_map_data(entries, repo_root=repo_root, credentials_root=credentials_root)
     json_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.json")
     html_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.html")

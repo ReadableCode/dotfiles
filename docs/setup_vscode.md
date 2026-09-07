@@ -41,7 +41,7 @@
 
 Settings deployment is manifest-driven (entry `vscode_settings` in
 `deploy_manifest.yaml` — see
-[deploy_configs.md](./deploy_configs.md)):
+[repo_deploy_configs.md](./deploy_configs.md)):
 
 ```bash
 cd ~/GitHub/dotfiles
@@ -68,7 +68,7 @@ Notes:
 Workspace files are manifest-driven too, but they do NOT live in this repo: a
 workspace file names every sibling repo at once — including private client
 repos — so they belong in the credentials overlays (see
-`client_credentials_repos.md`). Personal machines get theirs from the
+`repo_client_credentials.md`). Personal machines get theirs from the
 `vscode_workspace` entry in `personal_credentials/personal_manifest.yaml`
 (one `vscode/workspace.<host>.code-workspace` per host, lowercase hostname);
 client machines get a per-host entry in their own `<context>_manifest.yaml`.

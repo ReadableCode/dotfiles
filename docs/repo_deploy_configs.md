@@ -59,8 +59,7 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
 
 Every name in a `hosts:` filter must exist in the host inventory — the
 **union** of every sibling `*_credentials` repo's inventory file
-(`<context>_hosts.json`, falling back to legacy `hosts.json` when the prefixed
-file is absent) — the single source of truth for machine names. Loading fails
+(`<context>_hosts.json`) — the single source of truth for machine names. Loading fails
 loudly on an unknown name, so a typo or an invented hostname can't silently
 deploy to (or skip) the wrong machines. Machines with no credentials repo (and
 therefore no inventory) skip the check. The unit tests also check the real
@@ -89,7 +88,7 @@ manifest entry — see [Payload coverage](#payload-coverage) below.
 
 Private configs never live in this public repo — they live in sibling
 credentials repos (see
-[client_credentials_repos.md](./client_credentials_repos.md)). On every run,
+[repo_client_credentials.md](./client_credentials_repos.md)). On every run,
 `deploy_configs.py` loads `deploy_manifest.yaml` first and then discovers one
 optional overlay per sibling **overlay repo** (sorted for determinism):
 `<context>_manifest.yaml`. Overlay entries use the exact same schema; the only
@@ -144,7 +143,11 @@ placeholder and asks the loader to expand it:
 
 The repo list is the context's **`<context>_repos.yaml`** — the same file
 `clone_repos.py` offers to clone from, so adding a repo to a context puts the
-links in it on the next deploy with no manifest edit. `true` means the
+links in it on the next deploy with no manifest edit. The value substituted
+is the **checkout directory**: an entry's `dir` when it has one, otherwise
+its `name` (`exclude_repos` names the same thing). Until 2026-09-07 the
+expansion used `name` even for `dir:` entries, so a repo cloned under a
+different local name only ever skipped. `true` means the
 manifest's own context (`acme_credentials` → `acme`; the main manifest →
 `dotfiles`, which has its own `dotfiles_repos.yaml`); a context name or a list
 of names reads those files instead, which is how an opt-in overlay such as
@@ -264,7 +267,7 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   `status` catches that (inode no longer matches → `NOT_A_LINK`) and a
   re-deploy re-links it, so run `status`/deploy after pulling on those
   machines. See
-  [sym_linking_and_hard_linking.md](./sym_linking_and_hard_linking.md).
+  [howto_symlinks_and_hardlinks.md](./sym_linking_and_hard_linking.md).
 
 ## Status classifications
 
@@ -381,7 +384,7 @@ Both files land in the **personal credentials repo**, and only when the deploy
 runs on **envy** (`MAP_HOST` in `src/deploy_map.py`) with that repo cloned:
 
 ```
-~/GitHub/personal_credentials/deploy_map.{html,json}
+~/GitHub/personal_credentials/generated/deploy_map.{html,json}
 ```
 
 Both gates are the point. The map names every machine and every context at

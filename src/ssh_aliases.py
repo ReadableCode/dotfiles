@@ -26,7 +26,7 @@ and every machine that clones the credentials repo gets it. This mirrors what
 ``build_ssh_argv`` in the sibling status_board repo does for its ssh_command
 panels. Raw-IP tools that never see aliases (rsync shelling out to ssh) get the
 same hop from the deployed ~/.ssh/config.d fragments instead - see
-docs/client_credentials_repos.md.
+docs/repo_client_credentials.md.
 
 The hop is dropped when the alias is built ON the jump machine itself - there
 it is already inside the VPN and the target is direct. Needs non-interactive

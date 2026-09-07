@@ -293,15 +293,17 @@ def test_duplicate_entry_names_across_manifests_raise(overlay_tree):
 # Host inventory union across *_credentials repos #
 
 
-def test_find_inventory_paths_prefers_prefixed_name_over_legacy_fallback(tmp_path):
+def test_find_inventory_paths_reads_only_the_prefixed_name(tmp_path):
+    # a bare hosts.json is ignored everywhere: the legacy fallback was retired 2026-09-07
     write_file(str(tmp_path / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
     write_file(str(tmp_path / "acme_credentials" / "hosts.json"), '{"hosts": [{"name": "DECOY"}]}')
-    write_file(str(tmp_path / "personal_credentials" / "hosts.json"), '{"hosts": [{"name": "Envy"}]}')
+    write_file(str(tmp_path / "personal_credentials" / "personal_hosts.json"), '{"hosts": [{"name": "Envy"}]}')
+    write_file(str(tmp_path / "personal_credentials" / "hosts.json"), '{"hosts": [{"name": "DECOY2"}]}')
     os.makedirs(str(tmp_path / "no_inventory_credentials"))
     paths = find_inventory_paths(str(tmp_path))
     assert paths == [
         os.path.join(str(tmp_path), "acme_credentials", "acme_hosts.json"),
-        os.path.join(str(tmp_path), "personal_credentials", "hosts.json"),
+        os.path.join(str(tmp_path), "personal_credentials", "personal_hosts.json"),
     ]
     hostnames, inventory_paths = load_union_inventory_hostnames(str(tmp_path))
     assert hostnames == {"ACMEBOX", "ENVY"}
@@ -310,7 +312,7 @@ def test_find_inventory_paths_prefers_prefixed_name_over_legacy_fallback(tmp_pat
 
 def test_manifest_hosts_validate_against_union_of_inventories(overlay_tree):
     write_file(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
-    write_file(str(overlay_tree / "personal_credentials" / "hosts.json"), '{"hosts": [{"name": "Envy"}]}')
+    write_file(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), '{"hosts": [{"name": "Envy"}]}')
     write_manifest_at(
         str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
         [{"name": "acme_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "ACMEBOX"]}],
@@ -409,6 +411,25 @@ def test_per_context_repo_expands_into_one_entry_per_declared_repo(overlay_tree)
     plan = {row["name"]: row for row in deploy_configs.build_plan(entries, "darwin", "ENVY")}
     assert plan["acme_repo_mcp__svc-a"]["action"] == "apply"
     assert plan["acme_repo_mcp__svc-a"]["dest"] == os.path.join(str(overlay_tree), "svc-a", ".mcp.json")
+
+
+def test_per_context_repo_substitutes_the_checkout_dir_not_the_entry_name(overlay_tree):
+    # a repos entry cloned under a clearer local name (dir:) must expand to that
+    # folder - substituting the name built a path that never exists (fixed 2026-09-07)
+    write_file(
+        str(overlay_tree / "acme_credentials" / "acme_repos.yaml"),
+        "repos:\n  - name: svc-a\n  - name: upstream-site\n    dir: local-site\n",
+    )
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [per_repo_entry(exclude_repos=["local-site"]), per_repo_entry(name="acme_repo_env", repo="acme.env")],
+    )
+    entries, _ = deploy_configs.load_manifests()
+    assert [e["_context_repo"] for e in entries if e.get("_expanded_from") == "acme_repo_mcp"] == ["svc-a"]
+    env = [e for e in entries if e.get("_expanded_from") == "acme_repo_env"]
+    assert [e["_context_repo"] for e in env] == ["svc-a", "local-site"]
+    assert env[1]["dest"]["darwin"] == "{repo_parent}/local-site/.mcp.json"
+    assert env[1]["requires"] == ["{repo_parent}/local-site"]
 
 
 def test_per_context_repo_can_name_other_contexts_and_add_or_drop_repos(overlay_tree):

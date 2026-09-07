@@ -4,6 +4,13 @@ How self-hosted apps are deployed and managed across the homelab. Written
 2026-07-02 after setting up the herdstone media remote and the elitedesk
 auto-deploy pipeline.
 
+This doc is the canonical description of the **process** (which repo deploys
+what, how the auto-deploy loop and cron declarations work). Each repo's own
+README is canonical for its **contents**: `Docker/README.md` for the compose
+files, `server_configs/README.md` for the per-host configs,
+`personal-automation/README.md` for the jobs and their backups. Fix a fact
+in the one that owns it and link from the other, rather than repeating it.
+
 ## Hosts
 
 | Host | IP | OS / access | Role |
@@ -26,7 +33,7 @@ layout must exist on the Mac and on the servers.
 | Repo | Role |
 |------|------|
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
-| `personal_credentials` | `personal.env` (KEY="value" secrets) and `hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is local, so automation must never pull it (listed in `~/GitHub/.skiprepos`). |
+| `personal_credentials` | `personal.env` (KEY="value" secrets) and `personal_hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is this checkout (`receive.denyCurrentBranch=updateInstead`), so a push from any machine lands in the working tree directly. Listed in `~/GitHub/.skiprepos` so nothing tries to fetch it; `git_pull.sh` treats it as a *hub* repo and redeploys its consumers when HEAD moves (since 2026-09-07). |
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. Also owns elitedesk's crontabs — see [Cron](#cron-how-scheduled-jobs-are-declared). |
 | `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`). |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
@@ -44,20 +51,24 @@ run from **root's crontab**:
 
 Key behaviors:
 
-- Runs entirely as root (docker requires it here — keep it that way); git uses
-  jason's key via `GIT_SSH_COMMAND` and auto-adds `safe.directory` per repo.
-  Side effect: `.git` metadata in these repos becomes root-owned; manual pulls
-  there need `sudo git pull`.
+- Runs entirely as root (docker requires it here — keep it that way); every
+  git command is dropped to the repo owner with `sudo -u`, so `.git` stays
+  owner-writable and ssh uses jason's own keys.
 - Only master/main deploys; repos on other branches are skipped.
 - Rebuilds **only** the changed repo's services — image-only containers
   (sonarr, radarr, plex, swag, ...) are never touched.
 - A change to the `Docker` repo itself runs a plain `up -d` (recreates only
   services whose compose config changed).
 - Ignore list: `~/GitHub/.skiprepos` (one repo name per line; shared with the
-  go git_puller). Contains `personal_credentials`.
-- Because `personal_credentials` is never pulled, after editing
-  `personal.env`/`hosts.json` on elitedesk run:
-  `sudo bash ~/GitHub/Docker/scripts/redeploy.sh herdstone-web`
+  go git_puller). Contains `personal_credentials` and
+  `fourteen_foods_credentials`.
+- **Hub repos** (skipped, mapped to services, updated in place by push):
+  `personal_credentials`. The loop compares HEAD with the rev it last
+  deployed, recorded in `~/GitHub/.git_pull_state/<repo>.rev`, and recreates
+  the mapped services (herdstone-web, syncplex-web) when it moved. So a push
+  of `personal.env` or `personal_hosts.json` from any machine is live within
+  5 minutes like everything else; no manual `redeploy.sh` step any more
+  (2026-09-07). Delete the state file to force one redeploy.
 - Manual force-redeploy any service the same way:
   `sudo bash ~/GitHub/Docker/scripts/redeploy.sh <service> [service...]`
 - This replaced the old single-repo `charlie-personal-website/redeploy.sh`
@@ -138,7 +149,7 @@ on change. Do not add it here.
 
 ## Herdstone quick reference
 
-- Inventory: `~/GitHub/personal_credentials/hosts.json` — hosts + the services
+- Inventory: `~/GitHub/personal_credentials/personal_hosts.json` — hosts + the services
   each offers; `api_key_env` names the env var holding each service's key.
   Adding a sonarr/radarr/plex instance is config-only.
 - `herdstone media search|seasons|add`, `herdstone tui`, `herdstone web`.

@@ -11,7 +11,7 @@ curl -fsSL https://raw.githubusercontent.com/ReadableCode/dotfiles/master/script
 
 Add `--dry-run` first to see what it would do without changing anything, and
 `--credentials <ssh-url>` (repeatable) to clone the credentials repos — their URLs are
-not in this public repo, see `cloning_credentials_repos.md` in the personal credentials
+not in this public repo, see `notes/cloning_credentials_repos.md` in the personal credentials
 repo.
 
 Bootstrap installs Homebrew, git and uv if missing, clones dotfiles to `~/GitHub`, runs
@@ -25,7 +25,7 @@ works if you just want a straight install of everything.
 - macOS system settings: hostname, scaling, Finder behaviour, keyboard, Dock, power
 - signing in to iCloud / App Store, and anything installed from the App Store
 - licensed apps and their keys
-- Xcode and the beta toolchain (see `xcode-beta-setup-guide.md`)
+- Xcode and the beta toolchain (see `setup_xcode_beta.md`)
 
 The rest of this page is the reference detail behind those steps.
 
@@ -184,7 +184,7 @@ Finder → View → Show Status Bar
 
 ## GitHub CLI Setup
 
-- Follow instructions in [github-cli.md](./github-cli.md)
+- Follow instructions in [setup_github_cli.md](./github-cli.md)
 
 ## Clone dotfiles
 
@@ -199,7 +199,7 @@ git clone git@github.com:ReadableCode/dotfiles.git
 
 All config links (zshrc, shared aliases, tmux, nvim, zed, VS Code, Hammerspoon,
 Claude settings, ...) are driven by `deploy_manifest.yaml` — see
-[deploy_configs.md](./deploy_configs.md):
+[repo_deploy_configs.md](./deploy_configs.md):
 
 ```bash
 cd ~/GitHub/dotfiles
@@ -328,7 +328,7 @@ brew install --cask hammerspoon
 ```
 
 The dotfiles config is deployed by the manifest (entry `hammerspoon_init` in
-`deploy_manifest.yaml` — see [deploy_configs.md](./deploy_configs.md)):
+`deploy_manifest.yaml` — see [repo_deploy_configs.md](./deploy_configs.md)):
 
 ```bash
 cd ~/GitHub/dotfiles && uv run python src/deploy_configs.py

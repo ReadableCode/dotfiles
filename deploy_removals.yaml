@@ -1,5 +1,5 @@
 # Removals — the committed list of files that must NOT exist any more.
-# Consumed by `src/deploy_configs.py prune` (see docs/deploy_configs.md).
+# Consumed by `src/deploy_configs.py prune` (see docs/repo_deploy_configs.md).
 #
 # Same dest/requires/hosts schema as deploy_manifest.yaml but with NO `repo:`
 # key: a removal names a destination whose source file is gone. Sibling overlay

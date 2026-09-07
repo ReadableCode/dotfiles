@@ -25,7 +25,7 @@ One folder per tool under `%USERPROFILE%\userapps\`:
 | `OpenSSH-Win64\` | portable sshd | [setup_windows_ssh_server.md](./setup_windows_ssh_server.md) |
 
 MSYS2 (`C:\msys64`) sits outside `userapps` because its installer picks its own
-root — see [msys2.md](./msys2.md).
+root — see [setup_msys2.md](./msys2.md).
 
 ## How it gets on PATH
 

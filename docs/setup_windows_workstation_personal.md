@@ -12,7 +12,7 @@ iwr -useb https://raw.githubusercontent.com/ReadableCode/dotfiles/master/scripts
 
 Add `-DryRun` first to see what it would do without changing anything, and
 `-Credentials <ssh-url>` to clone the credentials repos — their URLs are not in this
-public repo, see `cloning_credentials_repos.md` in the personal credentials repo.
+public repo, see `notes/cloning_credentials_repos.md` in the personal credentials repo.
 
 Bootstrap checks elevation and Developer Mode up front and tells you what will be
 skipped rather than failing halfway through. It installs chocolatey, git and uv if
@@ -94,7 +94,7 @@ Add-Content -Path $PROFILE -Value 'path you found earlier'
 ## Deploy Configs
 
 Config deployment (VS Code settings, AutoHotkey startup scripts, ...) is
-manifest-driven — see [deploy_configs.md](./deploy_configs.md):
+manifest-driven — see [repo_deploy_configs.md](./deploy_configs.md):
 
 ```powershell
 cd ~\GitHub\dotfiles
@@ -255,7 +255,7 @@ apps, Claude). Pins whose identity is an AUMID are packaged apps and have no
 
 ## GitHub CLI Setup
 
-- Follow instructions in [github-cli.md](./github-cli.md)
+- Follow instructions in [setup_github_cli.md](./github-cli.md)
 
 ## Install Apps
 
@@ -297,7 +297,7 @@ winget
 
 #### Install MSYS2
 
-- Follow instructions in [msys2.md](./msys2.md) to install MSYS2 with winget and install the POSIX tools (tmux, rsync, etc.) from the package list
+- Follow instructions in [setup_msys2.md](./msys2.md) to install MSYS2 with winget and install the POSIX tools (tmux, rsync, etc.) from the package list
 
 ## Google Chrome
 

@@ -4,7 +4,7 @@ These instructions install everything **inside your user profile**, so no admin 
 
 ## Install MSYS2 (user-space)
 
-Set up MSYS2 and install the package list by following [msys2.md](./msys2.md).
+Set up MSYS2 and install the package list by following [setup_msys2.md](./msys2.md).
 
 ## GTK3 stack inside MSYS2
 

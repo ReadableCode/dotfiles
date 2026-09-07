@@ -39,7 +39,7 @@ That covers:
 
 Each context a machine belongs to — personal, or a client/company — has its
 own private `*_credentials` repo cloned as a sibling of dotfiles (see
-`docs/client_credentials_repos.md`). It supplies the secrets, host
+`docs/repo_client_credentials.md`). It supplies the secrets, host
 inventories, manifests, and company-tagged config variants for that context.
 
 The rule: **everything I need for a job comes from dotfiles plus that
@@ -53,7 +53,7 @@ A client's credentials repo is cloned on the client's own hardware, so it
 carries **no path that names Claude and no bot-guiding markdown**. Each client
 context therefore has a second private repo, `<client>_dev`, that holds the
 agent tooling and declares its own overlay manifest (the opt-in form, see
-`docs/client_credentials_repos.md`). Both clients share the shape
+`docs/repo_client_credentials.md`). Both clients share the shape
 (aligned 2026-09-07):
 
 | Category | Home |
@@ -97,6 +97,13 @@ run a homelab cron.
 Applications with their own lifecycle (deploys, users, data) get their own
 repos. Public ones stay standalone so they can be shared and used by others;
 they are not folded into the private grab-bag repo even when small.
+
+## Naming new repos
+
+New repos are **lowercase kebab-case** (`load-log`, `postgrest-auth`). The
+existing mixed-case names (`Cash_Flow_Commander`, `Book-Bot`, `CrownCentral`)
+stay as they are: renaming one touches every manifest, workspace, clone list
+and deploy script that names it, for no functional gain.
 
 ## Shared `src/utils/`
 

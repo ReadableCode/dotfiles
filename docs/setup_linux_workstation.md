@@ -12,7 +12,7 @@ curl -fsSL https://raw.githubusercontent.com/ReadableCode/dotfiles/master/script
 
 Add `--dry-run` first to see what it would do without changing anything, and
 `--credentials <ssh-url>` (repeatable) to clone the credentials repos — their URLs are
-not in this public repo, see `cloning_credentials_repos.md` in the personal credentials
+not in this public repo, see `notes/cloning_credentials_repos.md` in the personal credentials
 repo.
 
 Bootstrap installs git and uv if missing, clones dotfiles to `~/GitHub`, runs `uv sync`,
@@ -187,7 +187,7 @@ ln -s ~/GitHub/dotfiles/ ~/
 
 The `.bashrc` / `.bash_aliases` links are manifest-driven (entries `bashrc`
 and `bash_aliases` in `deploy_manifest.yaml` — see
-[deploy_configs.md](./deploy_configs.md)). Existing files are backed up to
+[repo_deploy_configs.md](./deploy_configs.md)). Existing files are backed up to
 `data/config_backups/` and replaced by links to the repo versions:
 
 ```bash

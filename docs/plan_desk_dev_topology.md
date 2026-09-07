@@ -99,6 +99,6 @@ persistent-process jobs, built when actually needed.
 2. Join the tailnet.
 3. Clone dotfiles + credentials repos; run `deploy_configs.py`.
 4. Generate a keypair, register it across the accounts, clone repos.
-5. Add the host to the inventory (`hosts.json`) and ssh fragment/aliases so
+5. Add the host to the inventory (`personal_hosts.json`) and ssh fragment/aliases so
    it is one hop from Envy and the MacBook.
 6. Adopt tmux-on-target so sessions survive console switches.

@@ -134,10 +134,11 @@ def test_userless_host_still_gets_its_vnc_alias(tmp_path):
 # ---------------------------------------------------------------- discovery
 
 
-def test_legacy_bare_hosts_json_is_still_read(tmp_path):
+def test_bare_hosts_json_is_ignored(tmp_path):
+    # the legacy fallback name was retired 2026-09-07; only <context>_hosts.json counts
     host = {"name": "box", "user": "jason", "aliases": ["sshbox"]}
     write_inventory(tmp_path, "personal", [host], filename="hosts.json")
-    assert aliases(tmp_path) == {"sshbox": "ssh jason@box"}
+    assert aliases(tmp_path) == {}
 
 
 def test_every_credentials_repo_contributes(tmp_path):

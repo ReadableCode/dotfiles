@@ -7,7 +7,7 @@ documented here:
   image gen) run via Docker Compose. This is the primary setup.
 - **Ollama + OpenWebUI** — lighter-weight model runner + chat UI.
 
-See also: [`stable_diffusion.md`](stable_diffusion.md),
+See also: [`setup_stable_diffusion.md`](setup_stable_diffusion.md),
 [`setup_docker.md`](setup_docker.md),
 [`setup_windows_ssh_server.md`](setup_windows_ssh_server.md).
 

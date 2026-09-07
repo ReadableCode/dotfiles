@@ -162,7 +162,7 @@ repos_clone_check() {
 configs_prune() {
     # --apply on purpose: the removals files are a committed list of paths
     # that must not exist, so every machine has to act on them (see the
-    # gitpullall comments and docs/deploy_configs.md).
+    # gitpullall comments and docs/repo_deploy_configs.md).
     (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py prune --apply)
 }
 

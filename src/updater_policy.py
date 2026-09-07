@@ -10,7 +10,7 @@ check scripts mapped to it - instead of parsing anything in bash:
     python3 ~/GitHub/dotfiles/src/updater_policy.py --where
 
 The key is a dotted path inside the host's ``updater`` block in its inventory
-(``<context>_hosts.json``, legacy ``hosts.json``), e.g.:
+(``<context>_hosts.json``), e.g.:
 
     {
       "name": "Workstation-1",

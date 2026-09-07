@@ -20,7 +20,7 @@ the servers it owns and `src/claude_mcp.py` renders every declaration into
 **one `data/mcp/<context>.mcp.json` per declaring context** at the start of
 every `deploy_configs.py deploy`; each context's manifest then links its file
 into every checkout of that context as `<repo>/.mcp.json` (a `per_context_repo`
-entry, see [deploy_configs.md](./deploy_configs.md)). Declarations come from:
+entry, see [repo_deploy_configs.md](./deploy_configs.md)). Declarations come from:
 
 * `dotfiles/mcp_servers.yaml` — this repo's servers (none today; see below)
 * `<context>_credentials/<context>_mcp_servers.yaml` — that context's servers
@@ -191,7 +191,7 @@ Only needed for an account the calendar board has never authenticated.
    `InstalledAppFlow` consent and put it in the env file — or reuse the flow
    the context's own mail tooling already has, per that credentials repo's
    notes. The MCP server needs `gmail.modify`; if the same context also runs
-   `src/gmail_filters.py` (see `docs/gmail_filters.md`), mint **one** token
+   `src/gmail_filters.py` (see `docs/repo_gmail_filters.md`), mint **one** token
    with `gmail.modify` **and** `gmail.settings.basic` — a re-mint with
    `gmail.modify` alone silently breaks filter writes, and a second
    settings-only token competes in the OAuth client's per-account

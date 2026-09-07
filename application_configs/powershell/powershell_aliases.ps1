@@ -425,7 +425,7 @@ function updatepackages {
 # list to ever be finished. A dry run here would reprint the same dead links
 # forever and still need a second command by hand. Safe after the deploy
 # because prune only removes a path a removals entry names AND no live
-# manifest entry wants (see docs/deploy_configs.md). The slow AutoHotkey
+# manifest entry wants (see docs/repo_deploy_configs.md). The slow AutoHotkey
 # probes (registry scan, choco list) ride along last - too expensive for
 # shell startup, cheap here where seconds do not matter. Silent on a correct
 # machine.
@@ -489,7 +489,7 @@ if ($global:IsInteractiveShell -and $gitDir) {
 # never committed, so it builds itself on first use - including installing the
 # go toolchain when the machine has none, because "install go by hand first" is
 # not something a fleet command may ask for. A release install will replace
-# this shim eventually (docs/unified_cli_tui.md).
+# this shim eventually (docs/plan_unified_cli_tui.md).
 function cmdr {
     if (-not (Test-GitDir)) { return }
     $dir = Join-Path $gitDir 'dotfiles\go_apps\cmdr'
@@ -810,7 +810,7 @@ function Get-PythonCommand {
 # that same script's --format bash output, so jump-host resolution, port
 # handling and user selection have a single implementation instead of two twins
 # kept in step by hand. See its module docstring and
-# docs/client_credentials_repos.md for the inventory schema.
+# docs/repo_client_credentials.md for the inventory schema.
 #
 # The generated definitions are `Set-Item function:global:<alias>` statements —
 # functions, not Set-Alias, because a PowerShell alias is a bare command name

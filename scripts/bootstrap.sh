@@ -13,7 +13,7 @@
 # Options:
 #   --credentials URL   clone this credentials repo (repeatable). These are ssh
 #                       working repos on specific machines, so the URLs are not
-#                       stored here - see cloning_credentials_repos.md in the
+#                       stored here - see notes/cloning_credentials_repos.md in the
 #                       personal credentials repo for the list.
 #   --root DIR          repos root (default: $HOME/GitHub, or $HOME/GitHubWSL if
 #                       that already exists and $HOME/GitHub does not)
@@ -230,7 +230,7 @@ done
 
 if [ -z "$found_any" ] && [ -z "$CREDENTIALS_URLS" ]; then
     warn "no credentials repo cloned - configs and repo lists that ride them will be missing"
-    note_manual "clone your credentials repo(s): bootstrap.sh --credentials <ssh-url> (see cloning_credentials_repos.md)"
+    note_manual "clone your credentials repo(s): bootstrap.sh --credentials <ssh-url> (see notes/cloning_credentials_repos.md)"
 fi
 
 # %%

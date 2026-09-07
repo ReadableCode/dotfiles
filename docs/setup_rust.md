@@ -62,7 +62,7 @@ under `C:\Users\<you>\userapps\rust` (the layout in
 use the **GNU toolchain** (which links against MinGW gcc) so we don't need MSVC
 at all.
 
-Prerequisite: MSYS2 (set it up by following [msys2.md](./msys2.md)) with the
+Prerequisite: MSYS2 (set it up by following [setup_msys2.md](./msys2.md)) with the
 `mingw-w64-x86_64-gcc` package from
 [app_lists/msys2_packages.txt](../app_lists/msys2_packages.txt) installed:
 

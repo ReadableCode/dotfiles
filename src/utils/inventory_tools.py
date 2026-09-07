@@ -70,18 +70,16 @@ def find_overlay_dirs(overlay_root):
 def find_inventory_paths(credentials_root):
     """
     Locate the host inventory file of every ``*_credentials`` repo under
-    credentials_root. Each repo may declare ``<context>_hosts.json``, falling
-    back to legacy ``hosts.json`` when the prefixed file is absent; repos with
-    neither contribute nothing.
+    credentials_root. Each repo may declare ``<context>_hosts.json``; repos
+    without one contribute nothing. (A bare ``hosts.json`` was accepted as a
+    legacy fallback until 2026-09-07, when the last one was renamed.)
     """
     paths = []
     for credentials_dir in find_credentials_dirs(credentials_root):
         context = credentials_context(credentials_dir)
-        for filename in (f"{context}_hosts.json", "hosts.json"):
-            path = os.path.join(credentials_dir, filename)
-            if os.path.exists(path):
-                paths.append(path)
-                break
+        path = os.path.join(credentials_dir, f"{context}_hosts.json")
+        if os.path.exists(path):
+            paths.append(path)
     return paths
 
 
