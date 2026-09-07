@@ -1125,6 +1125,14 @@ a doc/automation task in this repo.
   synced normally (seen 2026-08-05 on a Tailscale-paired environment). Fix:
   resubscribe/refresh thread lists when the app foregrounds instead of only
   at launch.
+- **iPad app auto-settles threads after 3 days and can't be told not to
+  (upstream)**: the iPad app settles any thread untouched for about three
+  days on its own. Only the iPad app does this - the desktop app leaves
+  threads alone - and the iPad app has no settings file or setting to
+  turn it off, so there is nothing to deploy for it (noted 2026-09-07). A
+  thread you come back to on the iPad after a few days is in the settled
+  list, not the active one. Fix: make it a setting, or drop the timer to
+  match desktop.
 - **Slash commands don't auto-suggest on mobile (upstream)**: typing `/` in
   the composer on the phone apps shows no suggestion popup and no
   autocompletion — the full command name must be typed from memory, unlike
