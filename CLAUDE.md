@@ -16,8 +16,10 @@ scripts under `src/` and `scripts/`.
 This repo is cloned onto **every** machine, including work machines, so
 anything needed at any job must live here (portable tooling like
 `ticket_pr.py` is here on purpose); anything
-context-specific lives in that context's sibling `*_credentials` repo, and
-recurring homelab jobs live in `personal-automation`. See
+context-specific lives in that context's sibling `*_credentials` repo (secrets,
+inventory, declarations, client payloads) or, if it names Claude or guides an
+agent, in that client's `<client>_dev` repo, and recurring homelab jobs live in
+`personal-automation`. See
 `docs/repo_philosophy.md` before proposing to move something out.
 
 ## Repository layout

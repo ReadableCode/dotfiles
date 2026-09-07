@@ -47,6 +47,42 @@ context's own repo layers.** Dotfiles stays context-free — nothing
 client-specific is committed here, ever; company-tagged config variants live
 in the client's `*_credentials` repo.
 
+## Client dev repos: anything agent-shaped
+
+A client's credentials repo is cloned on the client's own hardware, so it
+carries **no path that names Claude and no bot-guiding markdown**. Each client
+context therefore has a second private repo, `<client>_dev`, that holds the
+agent tooling and declares its own overlay manifest (the opt-in form, see
+`docs/client_credentials_repos.md`). Both clients share the shape
+(aligned 2026-09-07):
+
+| Category | Home |
+|---|---|
+| Secrets: `.env`, tokens, keys, certs, OAuth tokens, gmail filters | `<context>_credentials` |
+| Context declarations: `<context>_hosts.json`, `_repos.yaml`, `_mcp_servers.yaml`, `_statusboard.yaml`, `_calendarboard.yaml`, `_googlemail.yaml` | `<context>_credentials` |
+| Client app payloads: `configuration.json`, workspaces, shell / PowerShell / ssh fragments, editor settings, git hooks that name no agent | `<context>_credentials` |
+| Working notes that become a repo's `CLAUDE.md` | `<context>_credentials` under a **neutral filename**; the dev overlay supplies the destination name |
+| Agent tooling: slash commands, skills, project allow lists, memory dirs, user-level Claude settings and `CLAUDE.md`, T3 Code settings, the per-repo `.mcp.json` manifest entry | `<client>_dev` |
+| App-owned commands (a personal app's `.claude/commands/`) | the app repo; the context overlay links them |
+| Context-free payloads (`init_worktree`, user `settings.json`, statusline, themes) and the generated `data/mcp/*.mcp.json` | `dotfiles` |
+| Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal-automation` for the homelab |
+
+The MCP server *declaration* stays in the credentials repo on purpose: it
+holds a URL and env var names, the env file it points at lives there, and the
+two clients are meant to work identically.
+
+The two dev repos are listed in different `*_repos.yaml` files because their
+clone sets differ - one must be on its client's laptop for that machine's
+crontab, the other must never touch client hardware - but their role is the
+same.
+
+**The personal context has no dev repo.** Dev repos exist because of a
+two-owner situation: the client owns the work repos and requires approval to
+change them, and the credentials repo sits on the client's hardware. Personally
+there is one owner, no approval gate and no foreign hardware, so
+`personal_credentials/claude/` plays both roles and is cloned on every
+personal machine.
+
 ## personal-automation: recurring homelab jobs
 
 Things I do on a frequent basis to keep the homelab running — cron- or
