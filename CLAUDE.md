@@ -125,7 +125,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   `docs/repo_client_credentials.md`, "Context leak check".
 - **`clone_repos.py`** — offers to clone every repo the cloned contexts'
   `<context>_repos.yaml` files declare for this machine; run by gitpullall
-  between the pull and the deploy.
+  between the pull and the deploy, and on elitedesk by its declared
+  crontab (`--yes`, no prompt) since nobody runs gitpullall there.
 - **`chrome_bookmarks.py`, `ssh_devices.py`** — pull data and configs from
   browsers and devices.
 - **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,

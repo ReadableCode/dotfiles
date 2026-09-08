@@ -69,6 +69,14 @@ Key behaviors:
   of `personal.env` or `personal_hosts.json` from any machine is live within
   5 minutes like everything else; no manual `redeploy.sh` step any more
   (2026-09-07). Delete the state file to force one redeploy.
+- **dotfiles on this box** (2026-09-08): root's loop pulls every repo but
+  never clones a newly declared one or links anything, so jason's crontab
+  (`jason.cron`, minute 5 of every quarter hour) runs the two steps
+  `gitpullall` runs after its pull: `clone_repos.py --yes` (whatever
+  `personal_repos.yaml` declares for this host and is missing) and
+  `deploy_configs.py deploy`. Logs in `dotfiles/logs/cron_*.log`. The
+  inventory record gates the contexts: elitedesk lists none of the clients,
+  so a credentials hub on disk clones and links nothing of theirs.
 - Manual force-redeploy any service the same way:
   `sudo bash ~/GitHub/Docker/scripts/redeploy.sh <service> [service...]`
 - This replaced the old single-repo `charlie-personal-website/redeploy.sh`
