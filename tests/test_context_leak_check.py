@@ -75,6 +75,16 @@ def test_rules_depend_on_which_repo_is_scanned(constellation):
     assert set(leak.forbidden_for(os.path.join(constellation, "acme-app"), contexts)) == {"bravo"}
 
 
+def test_a_worktree_is_named_after_the_checkout_it_belongs_to(constellation, tmp_path_factory):
+    contexts = leak.derive_contexts(constellation)
+    main = os.path.join(constellation, "acme-app")
+    git_repo(main, {"README.md": "acme app\n"})
+    worktree = str(tmp_path_factory.mktemp("worktrees") / "t3code-abc123")
+    subprocess.run(["git", "-C", main, "worktree", "add", "-q", worktree], check=True)
+    assert leak.checkout_name(worktree) == "acme-app"
+    assert set(leak.forbidden_for(worktree, contexts)) == {"bravo"}
+
+
 def test_scan_flags_the_other_context_and_the_public_repo_but_not_the_owner(constellation):
     contexts = leak.derive_contexts(constellation)
     # acme's own dev repo naming acme is fine

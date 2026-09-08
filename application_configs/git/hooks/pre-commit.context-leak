@@ -20,11 +20,18 @@ TOP="$(git rev-parse --show-toplevel)"
 "$PY" "$CHECK" --staged --repo "$TOP" || exit 1
 # A repo that uses the pre-commit framework keeps its own checks: this file
 # replaced the hook `pre-commit install` wrote, so run the framework on the
-# staged files exactly as that hook would have. No config, nothing more to do.
+# staged files exactly as that hook would have. The framework is a dev
+# dependency, so it lives in the repo's own venv, not on PATH; look there
+# first (a worktree has its own .venv beside its own .pre-commit-config.yaml),
+# then on PATH. Fails closed like the hook it replaced: no framework, no
+# commit, so a missing linter is red rather than silently skipped.
 if [ -f "$TOP/.pre-commit-config.yaml" ]; then
-    if command -v pre-commit >/dev/null 2>&1; then
-        cd "$TOP" && exec pre-commit run
-    fi
-    echo "pre-commit: $TOP has a .pre-commit-config.yaml but pre-commit is not installed; its own checks did not run" >&2
+    for PRE_COMMIT in "$TOP/.venv/bin/pre-commit" "$TOP/.venv/Scripts/pre-commit.exe" "$(command -v pre-commit 2>/dev/null)"; do
+        if [ -n "$PRE_COMMIT" ] && [ -x "$PRE_COMMIT" ]; then
+            cd "$TOP" && exec "$PRE_COMMIT" run
+        fi
+    done
+    echo "pre-commit: $TOP has a .pre-commit-config.yaml but pre-commit is not installed (looked in $TOP/.venv and on PATH); run 'uv sync' so its own checks can run" >&2
+    exit 1
 fi
 exit 0

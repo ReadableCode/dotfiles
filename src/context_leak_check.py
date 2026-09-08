@@ -254,17 +254,33 @@ def _pattern(identifier):
     return re.compile(r"(?<![A-Za-z0-9])" + escaped + r"(?![A-Za-z0-9])", re.IGNORECASE)
 
 
+def _git(repo_dir, *args):
+    return subprocess.run(["git", "-C", repo_dir] + list(args), capture_output=True, text=True, errors="replace")
+
+
+def checkout_name(repo_dir):
+    """The directory name the context rules know this checkout by.
+
+    A git worktree lives under any path (T3 Code cuts them into ``~/.t3/worktrees/<repo>/<id>``),
+    so its own folder name identifies nothing; the checkout it belongs to is the parent of the
+    common git dir. A plain checkout is its own name.
+    """
+    result = _git(repo_dir, "rev-parse", "--git-common-dir")
+    common = result.stdout.strip()
+    if result.returncode == 0 and common:
+        if not os.path.isabs(common):
+            common = os.path.join(repo_dir, common)
+        return os.path.basename(os.path.dirname(os.path.normpath(common)))
+    return os.path.basename(os.path.normpath(repo_dir))
+
+
 def forbidden_for(repo_dir, contexts):
     """Which contexts' identifiers may not appear in this repo (None = no rule)."""
-    name = os.path.basename(os.path.normpath(repo_dir))
+    name = checkout_name(repo_dir)
     if name == PERSONAL_CONTEXT or name.startswith(PERSONAL_CONTEXT + "_"):
         return {}
     owner = next((c for c, info in contexts.items() if name in info["owned"]), None)
     return {c: info for c, info in contexts.items() if c != owner}
-
-
-def _git(repo_dir, *args):
-    return subprocess.run(["git", "-C", repo_dir] + list(args), capture_output=True, text=True, errors="replace")
 
 
 def tracked_files(repo_dir):

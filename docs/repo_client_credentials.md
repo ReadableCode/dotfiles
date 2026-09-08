@@ -200,6 +200,9 @@ client context, the client's own repos included (`.git/hooks/pre-commit`,
 untracked by git). It scans only the staged content and fails closed, then
 runs the repo's own pre-commit framework checks when it has a
 `.pre-commit-config.yaml`, so replacing the hook `pre-commit install` wrote
-loses nothing. Nothing else guards this: before
+loses nothing. The framework is looked up in the repo's own `.venv` first
+(each worktree carries one) and on `PATH` second, and a repo that declares a
+config but has no framework installed refuses the commit rather than
+skipping its linters. Nothing else guards this: before
 2026-09-07 the rule lived in an agent memory file and two leaks reached
 commits anyway.
