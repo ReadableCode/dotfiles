@@ -59,7 +59,7 @@ python3 "$(dirname "$MAIN")/dotfiles/src/init_worktree.py" --label "<label>"
 
 Add `--dry-run` first if anything about the worktree looks unusual (files
 already present, unexpected main checkout). Flags: `--no-workspace`,
-`--no-sync`, `--remove` (see Step 5).
+`--no-sync`, `--remove` (leaving, see Step 5).
 
 What it does, in order (every step is idempotent, so re-running after the
 ticket is created only relabels the workspace entry):
@@ -96,6 +96,33 @@ it by hand first.
 
 - Never commit the workspace-file change. It is Jason's credentials repo; the
   entry is meant to be dropped again when the worktree goes.
-- When a thread is done: `python3 .../init_worktree.py --remove` from inside the
-  worktree removes its workspace entry, then `git worktree remove <path>` as
-  usual. Nothing else was created outside the worktree directory.
+- When a thread is done, the teardown is **one command the thread runs on
+  itself, from inside its worktree, as the last command of the turn**:
+
+  ```bash
+  python3 ~/GitHub/dotfiles/src/init_worktree.py --remove
+  ```
+
+  Make it the last tool call: the directory is gone when it returns, so run
+  nothing after it in that turn. Settling has nothing to do with it (settling
+  never deletes a directory). T3 Code re-creates a missing worktree as a
+  fresh, empty checkout of the same branch when a **new turn** starts in the
+  thread, so if the thread is spoken to again after cleaning up, run the same
+  command again at the end of that turn; nothing accumulates in between. A
+  directory left behind by a thread that never cleaned up is removed the
+  same way from the main checkout:
+  `python3 ~/GitHub/dotfiles/src/init_worktree.py --remove --worktree ~/.t3/worktrees/<repo>/<id>`.
+
+  It drops this worktree's workspace entry, then runs
+  `git worktree remove --force` on this exact path from the main checkout,
+  which deletes the directory and everything that accumulated in it (`.venv`,
+  links, caches, anything placed by hand). Nothing outside the directory needs
+  cleaning, so there is no list to remember. It **refuses** when the worktree
+  holds work that exists nowhere else: uncommitted tracked changes, untracked
+  non-ignored files, a detached HEAD, or commits that are neither on the
+  upstream nor already on master — fix that (commit, push) and re-run; never
+  work around the refusal. A ticket branch stays (it is pushed; it goes when
+  its remote does); a `t3code/` placeholder branch whose tip is already on
+  master is deleted with its worktree. Other worktrees are never listed or
+  touched by the script, whatever state they are in. `--dry-run` shows the
+  plan first.

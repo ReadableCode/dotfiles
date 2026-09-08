@@ -10,7 +10,7 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
 
     python3 ~/GitHub/dotfiles/src/init_worktree.py                 # from inside the worktree
     python3 ~/GitHub/dotfiles/src/init_worktree.py --label ACME-1234
-    python3 ~/GitHub/dotfiles/src/init_worktree.py --remove        # leaving: drop the workspace entry
+    python3 ~/GitHub/dotfiles/src/init_worktree.py --remove        # leaving: tear this worktree down
 
 1. **Local-only links.** Every symlink at the top level and under ``.claude/`` of
    the MAIN checkout that git ignores is re-created in the worktree, pointing
@@ -34,6 +34,29 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
    usual sequence is init now, re-run once the ticket exists.
 3. **``uv sync``** when the worktree has a ``uv.lock`` and ``uv`` is on PATH -
    a worktree gets its own ``.venv`` (``--no-sync`` to skip).
+
+**Leaving** (``--remove``) is the whole teardown in one command, and it only
+ever touches the one worktree it is run from (or pointed at with
+``--worktree``). A thread runs it on itself as its LAST command: the script
+steps out of the directory before deleting it. Settling has nothing to do with
+it - settling never deletes a directory. T3 Code does re-create a missing
+worktree as a fresh, empty checkout of the same branch when a NEW turn starts
+in that thread, so a thread that is spoken to again after cleaning up simply
+runs the same command again at the end; nothing accumulates in between.
+it drops that worktree's workspace entry, then ``git worktree remove --force``
+on that exact path from the main checkout, which deletes the directory and
+everything that accumulated in it - the ``.venv``, the links above, caches,
+and any file placed there by hand. There is no list of files to keep current:
+the directory is the only place a worktree accumulates anything, and the
+directory goes. Before touching anything it refuses when the worktree holds
+work that exists nowhere else: uncommitted tracked changes, untracked files
+git does not ignore, a detached HEAD, or commits that are neither on the
+branch's upstream nor already on the default branch. A ticket branch is left
+alone (it is pushed; it goes when its remote does); a ``t3code/`` placeholder
+branch whose tip is already on the default branch is deleted with its
+worktree, since the name is throwaway and must never be pushed. Other
+worktrees are never listed, inspected or changed - the script never operates
+on a path it was not given.
 
 Stdlib-only on purpose (like ``ticket_pr.py``): it runs with a bare
 ``python3`` from any repo in any context before that repo's venv exists.
@@ -88,6 +111,87 @@ def is_ignored(repo, relpath):
         stderr=subprocess.DEVNULL,
     )
     return result.returncode == 0
+
+
+def unpushed_work(worktree):
+    """Reasons this worktree must not be deleted yet: every way `worktree remove --force` could lose work.
+
+    Returns a list of human-readable reasons; empty means the worktree is fully saved elsewhere.
+    """
+    reasons = []
+    changed = git(["status", "--porcelain", "--untracked-files=all"], worktree)
+    tracked = [line for line in changed.splitlines() if not line.startswith("??")]
+    untracked = [line[3:] for line in changed.splitlines() if line.startswith("??")]
+    if tracked:
+        reasons.append(f"{len(tracked)} uncommitted change(s) to tracked files:\n    " + "\n    ".join(tracked))
+    if untracked:
+        reasons.append(f"{len(untracked)} untracked file(s) git does not ignore:\n    " + "\n    ".join(untracked))
+    try:
+        branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
+    except subprocess.CalledProcessError:
+        reasons.append("HEAD is detached - check out or create a branch and push it first")
+        return reasons
+    base = default_branch(worktree)
+    if base and is_ancestor("HEAD", base, worktree):
+        return reasons  # every commit is already on the default branch; nothing here is unique
+    try:
+        upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], worktree)
+    except subprocess.CalledProcessError:
+        reasons.append(f"branch {branch} has commits not on {base or 'the default branch'} and no upstream - "
+                       f"push it first (git push -u origin {branch})")
+        return reasons
+    ahead = git(["rev-list", "--count", f"{upstream}..HEAD"], worktree)
+    if ahead != "0":
+        reasons.append(f"branch {branch} has {ahead} commit(s) that {upstream} does not - push first")
+    return reasons
+
+
+def is_ancestor(commit, branch, repo):
+    """True when every commit reachable from `commit` is also reachable from `branch`."""
+    probe = subprocess.run(["git", "merge-base", "--is-ancestor", commit, branch], cwd=repo,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return probe.returncode == 0
+
+
+def retire_placeholder_branch(main, branch, dry_run=False):
+    """Delete a `t3code/` placeholder branch once its worktree is gone and its tip is on the default branch.
+
+    A ticket branch is never touched here; it is pushed and goes when its remote does.
+    """
+    if not branch.startswith("t3code/"):
+        return f"{branch} left in place (pushed; it goes when its remote does)"
+    base = default_branch(main)
+    if not base or not is_ancestor(branch, base, main):
+        return f"{branch} left in place (placeholder with commits not on {base or 'the default branch'})"
+    if dry_run:
+        return f"{branch} would be deleted (placeholder, fully on {base})"
+    git(["branch", "-D", branch], main)
+    return f"{branch} deleted (placeholder, fully on {base})"
+
+
+def registered_worktrees(main):
+    """Every worktree path the main checkout knows, realpath'd, main included."""
+    paths = []
+    for line in git(["worktree", "list", "--porcelain"], main).splitlines():
+        if line.startswith("worktree "):
+            paths.append(os.path.realpath(line[len("worktree "):]))
+    return paths
+
+
+def remove_worktree(main, worktree, dry_run=False):
+    """`git worktree remove --force` on exactly this worktree, from the main checkout.
+
+    Refuses anything that is not a registered non-main worktree of `main`. Never enumerates or
+    touches any other worktree: the one path given is the only path acted on.
+    """
+    if worktree == main:
+        raise RuntimeError(f"{worktree} is the main checkout; refusing")
+    if worktree not in registered_worktrees(main):
+        raise RuntimeError(f"{worktree} is not a worktree of {main}; refusing")
+    if dry_run:
+        return "would remove"
+    subprocess.check_call(["git", "worktree", "remove", "--force", worktree], cwd=main)
+    return "removed" if not os.path.exists(worktree) else "removed from git, directory still present"
 
 
 def default_branch(repo):
@@ -310,7 +414,8 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--worktree", default=os.getcwd(), help="path inside the worktree (default: cwd)")
     parser.add_argument("--label", help="workspace folder label suffix (default: ticket key from the branch)")
-    parser.add_argument("--remove", action="store_true", help="only remove the workspace folder entry")
+    parser.add_argument("--remove", action="store_true",
+                        help="leaving: drop the workspace entry and delete this one worktree (refuses unpushed work)")
     parser.add_argument("--no-workspace", action="store_true", help="do not touch the VS Code workspace file")
     parser.add_argument("--no-sync", action="store_true", help="do not run uv sync")
     parser.add_argument("--dry-run", action="store_true", help="report what would happen, change nothing")
@@ -328,8 +433,18 @@ def main(argv=None):
     print(f"worktree: {worktree}\nmain:     {main}")
 
     if args.remove:
+        reasons = unpushed_work(worktree)
+        if reasons:
+            print("refusing to remove: this worktree holds work that exists nowhere else")
+            for reason in reasons:
+                print("  -", reason)
+            return 1
+        branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
         status = update_workspace(main, worktree, None, remove=True, dry_run=args.dry_run, hostname=args.hostname)
         print("workspace:", status)
+        os.chdir(main)  # the cwd is about to be deleted
+        print("worktree: ", remove_worktree(main, worktree, dry_run=args.dry_run))
+        print("branch:   ", retire_placeholder_branch(main, branch, dry_run=args.dry_run))
         return 0
 
     conflicts = 0
