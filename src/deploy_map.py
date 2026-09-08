@@ -7,7 +7,6 @@ import os
 import sys
 
 import yaml
-
 from config import grandparent_dir, parent_dir, templates_dir
 from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
@@ -16,6 +15,7 @@ from utils.inventory_tools import (
     find_inventory_paths,
     find_overlay_dirs,
     overlay_context,
+    record_contexts,
 )
 
 # %%
@@ -277,8 +277,7 @@ def load_hosts(credentials_root=None):
                     "os": platform_key,
                     "inventory": inventory_repo,
                     "groups": host.get("groups", []),
-                    # extra contexts whose credentials repo this machine holds by hand
-                    # (a dev box that also clones a client's repos, a hub box)
+                    # the other contexts this machine works in (inventory_tools.record_contexts)
                     "extraContexts": [str(c) for c in host.get("contexts") or []],
                     "deployable": platform_key in DEPLOY_PLATFORMS,
                 }
@@ -333,37 +332,22 @@ def load_repo_declarations(repo_root, credentials_root):
     return declarations
 
 
-def host_contexts(host, declarations=(), mapped=()):
+def host_contexts(host):
     """
-    The contexts a machine is in: the shared one, the one whose inventory lists
-    it, any the inventory record adds under ``contexts`` (a machine that also
-    holds another context's credentials repo by hand), and any context whose
-    repos file or manifest ``hosts:`` filter names the machine - a declaration
-    that names it is proof the context expects to be cloned there.
+    The contexts a machine is in: the shared one plus what its inventory
+    record declares (inventory_tools.record_contexts) - the same rule the
+    deploy and clone_repos gate on, so the map never claims more than lands.
+    A repos file or manifest ``hosts:`` filter naming the machine is not
+    membership; such an entry stays skipped until the record lists the context.
     """
     inventory = host.get("inventory") or ""
     own = inventory[: -len(CREDENTIALS_SUFFIX)] if inventory.endswith(CREDENTIALS_SUFFIX) else None
-    short = host["name"].split(".")[0].upper()
-    found = [SHARED_CONTEXT] + ([own] if own else []) + list(host.get("extraContexts") or [])
-    for declaration in declarations:
-        if any(h.split(".")[0].upper() == short for h in declaration["hosts"]):
-            found.append(declaration["ctx"])
-    # an opt-in overlay repo that the map could not fold (its name does not
-    # start with its context's token) is a cluster of its own on the map, but
-    # for membership it belongs to the context whose repos file declares it
-    declared_ctx = {d["dir"]: d["ctx"] for d in declarations}
-    for entry in mapped:
-        if any(str(h).split(".")[0].upper() == short for h in entry.get("hostsFilter") or []):
-            found.append(declared_ctx.get(entry["ctx"], entry["ctx"]))
-    ordered = []
-    for context in found:
-        if context not in ordered:
-            ordered.append(context)
-    return ordered
+    declared = record_contexts(own, {"contexts": host.get("extraContexts")})
+    return [SHARED_CONTEXT] + [context for context in declared if context and context != SHARED_CONTEXT]
 
 
 def repo_state(declaration, host, contexts):
-    """One of REPO_STATES for this declaration on this machine (``contexts`` = host_contexts(host, ...))."""
+    """One of REPO_STATES for this declaration on this machine (``contexts`` = host_contexts(host))."""
     if declaration["ctx"] not in contexts:
         return "other_context"
     if declaration["implicit"]:
@@ -397,7 +381,7 @@ def _add_clone_sets(mapped, hosts, repo_root, credentials_root):
     """
     declarations = load_repo_declarations(repo_root, credentials_root)
     for host in hosts:
-        contexts = host_contexts(host, declarations, mapped)
+        contexts = host_contexts(host)
         states = [{"name": d["dir"], "ctx": d["ctx"], "state": repo_state(d, host, contexts)} for d in declarations]
         host["repos"] = states
         host["contexts"] = contexts

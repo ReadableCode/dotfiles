@@ -75,6 +75,23 @@ overlay to move the entry to; an entry whose *file* lives in dotfiles can
 still deploy host-filtered from an overlay by pointing `repo:` back across,
 e.g. `repo: ../dotfiles/application_configs/claude/settings.json`.
 
+### Which overlays load
+
+Cloning a credentials repo puts its overlay on the machine, but the overlay
+only loads where the machine's inventory record is in that context: the
+context whose `<context>_hosts.json` lists it, plus any the record names
+under `contexts: [...]` (a personal dev box that also works in a client's
+context). An opt-in overlay named after a credentials context cloned here
+belongs to it (`acme_dev` to `acme`, the fold the map draws); any other
+follows the context whose repos file declares it. The same record gates `clone_repos.py`'s
+offers and the map's Machine view, so one declaration answers "what lands
+on this box" everywhere. The deploy prints every overlay it left out and
+why. The reason this exists: elitedesk holds a client's credentials repo
+only as its git hub, and until 2026-09-08 that checkout alone was enough to
+deploy the context's shell shard there. A machine no inventory lists is not
+gated (every cloned overlay loads), and neither is an opt-in overlay no
+repos file declares.
+
 Entries with `method: none` are inventory-only: they document apps that
 intentionally do **not** use links (e.g. nvim on Windows via
 `XDG_CONFIG_HOME`, the PowerShell profile via dot-sourcing), so the manifest
@@ -380,10 +397,12 @@ contexts declare, with the ones `clone_repos.py` would not put there dimmed
 `exclude_hosts`, or declared by a context the machine is not in), and that
 machine's deployments with `requires:` evaluated against that clone set. It
 is the one view where an absent checkout is a real skip; the fleet views
-assume every checkout exists. A machine is in its own inventory's context,
-in any context its inventory record lists under `contexts` (a dev box that
-also holds a client's credentials repo by hand, a hub box), and in any
-context whose repos file or manifest `hosts:` filter names it.
+assume every checkout exists. A machine is in its own inventory's context
+and in any context its inventory record lists under `contexts`, the same
+rule the deploy and `clone_repos.py` gate on (see "Which overlays load"), so
+the Machine view never shows more than would land. A `hosts:` filter naming
+a machine is not membership; the entry stays skipped until the record lists
+the context.
 
 The four views answer different questions:
 

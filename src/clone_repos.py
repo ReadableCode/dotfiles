@@ -10,7 +10,9 @@ import yaml
 from config import grandparent_dir
 from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
+    CREDENTIALS_SUFFIX,
     find_overlay_dirs,
+    host_member_contexts,
     load_union_inventory_hostnames,
     overlay_context,
 )
@@ -233,13 +235,30 @@ def prompt_yes_no_quit(question):
     return "n"
 
 
+def member_entries(entries, hostname):
+    """
+    Drop the entries of every credentials repo whose context this machine is
+    not in (inventory_tools.record_contexts), announcing each dropped context:
+    a box that holds a credentials repo only as its git hub is offered
+    nothing from it. A machine no inventory lists keeps everything.
+    """
+    member = host_member_contexts(hostname, GIT_DIR)
+    skipped_contexts = sorted({
+        entry["_context"] for entry in entries
+        if member is not None and entry["_context"] not in member
+        and os.path.basename(os.path.dirname(entry["_config"])).endswith(CREDENTIALS_SUFFIX)
+    })
+    for context in skipped_contexts:
+        print(paint(f"skipping {context} repos: this machine's inventory record is not in that context", "dim"))
+    return [entry for entry in entries if entry["_context"] not in skipped_contexts]
+
+
 def run(list_only=False, assume_yes=False):
     hostname = get_uppercase_hostname()
-    entries = load_repo_entries()
+    entries = member_entries(load_repo_entries(), hostname)
     if not entries:
-        print(paint("No <context>_repos.yaml found in any sibling overlay repo; nothing to clone.", "dim"))
+        print(paint("No repos declared for this machine's contexts; nothing to clone.", "dim"))
         return 0
-
     missing = []
     for entry in entries:
         if not entry_matches_host(entry, hostname):

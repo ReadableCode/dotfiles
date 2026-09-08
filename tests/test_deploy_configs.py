@@ -267,6 +267,55 @@ def test_hosts_filter_in_overlay_validates_against_the_only_inventory_present(ov
     assert [entry["name"] for entry in entries] == ["main_conf", "acme_conf"]
 
 
+def write_records_at(path, records):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as file_handle:
+        json.dump({"hosts": records}, file_handle)
+
+
+def test_overlay_of_a_context_the_host_record_is_not_in_is_not_loaded(overlay_tree, monkeypatch):
+    # the hub case: a personal box holds acme_credentials only because it is
+    # that repo's git origin - the overlay must contribute nothing there
+    write_records_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), [{"name": "ACMEBOX"}])
+    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub"}])
+    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "HUB")
+    entries, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml"]
+    assert [entry["name"] for entry in entries] == ["main_conf"]
+    loaded, skipped = deploy_configs.member_overlay_dirs()
+    assert [os.path.basename(d) for d in loaded] == ["personal_credentials"]
+    assert [(os.path.basename(d), context) for d, context in skipped] == [("acme_credentials", "acme")]
+    # the record naming the context is the one thing that lets the overlay in
+    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
+                     [{"name": "Hub", "contexts": ["acme"]}])
+    _, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
+    assert deploy_configs.member_overlay_dirs()[1] == []
+
+
+def test_a_host_no_inventory_lists_loads_every_cloned_overlay(overlay_tree, monkeypatch):
+    write_records_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), [{"name": "ACMEBOX"}])
+    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "STRANGER")
+    _, manifest_paths = deploy_configs.load_manifests()
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
+
+
+def test_opt_in_overlay_is_gated_by_the_context_whose_repos_file_declares_it(overlay_tree, monkeypatch):
+    write_records_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), [{"name": "ACMEBOX"}])
+    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub"}])
+    write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["acme_dev"])
+    write_manifest_at(str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
+                      [{"name": "acme_tool", "repo": "tool.md", "dest": {"darwin": "~/.tool"}}])
+    write_manifest_at(str(overlay_tree / "stray_dev" / "stray_dev_manifest.yaml"),
+                      [{"name": "stray_tool", "repo": "tool.md", "dest": {"darwin": "~/.stray"}}])
+    monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "HUB")
+    assert deploy_configs.overlay_owner_context(str(overlay_tree / "acme_dev")) == "acme"
+    assert deploy_configs.overlay_owner_context(str(overlay_tree / "stray_dev")) is None
+    _, manifest_paths = deploy_configs.load_manifests()
+    # acme_dev follows acme out; the undeclared stray_dev has no context to gate on and loads
+    assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "stray_dev_manifest.yaml"]
+
+
 def test_explicit_manifest_flag_still_allows_hosts_filters(overlay_tree, tmp_path):
     write_inventory_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), ["ENVY"])
     manifest_path = write_manifest_at(
@@ -312,7 +361,8 @@ def test_find_inventory_paths_reads_only_the_prefixed_name(tmp_path):
 
 def test_manifest_hosts_validate_against_union_of_inventories(overlay_tree):
     write_file(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
-    write_file(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), '{"hosts": [{"name": "Envy"}]}')
+    write_file(str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
+               '{"hosts": [{"name": "Envy", "contexts": ["acme"]}]}')
     write_manifest_at(
         str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
         [{"name": "acme_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "ACMEBOX"]}],

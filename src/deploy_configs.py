@@ -17,7 +17,11 @@ import yaml
 from config import grandparent_dir, parent_dir
 from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
+    CREDENTIALS_SUFFIX,
+    credentials_context,
+    find_credentials_dirs,
     find_overlay_dirs,
+    host_member_contexts,
     load_inventory_hostnames,
     load_union_inventory_hostnames,
     overlay_context,
@@ -297,7 +301,7 @@ def discover_removals():
     base = os.path.join(REPO_ROOT, "deploy_removals.yaml")
     if os.path.exists(base):
         files.append(base)
-    for overlay_dir in find_overlay_dirs(grandparent_dir):
+    for overlay_dir in member_overlay_dirs()[0]:
         overlay = os.path.join(overlay_dir, f"{overlay_context(overlay_dir)}_removals.yaml")
         if os.path.exists(overlay):
             files.append(overlay)
@@ -430,18 +434,68 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
 # Manifest #
 
 
+def overlay_owner_context(overlay_dir, overlay_root=None):
+    """
+    The context an overlay repo belongs to: a ``*_credentials`` repo is its
+    own context; an opt-in overlay named ``<context>_<gate>`` after a
+    credentials context cloned here belongs to that context (the fold the
+    map draws, ``acme_dev`` -> ``acme``); any other opt-in overlay belongs to
+    the context whose repos file declares it. ``None`` when nothing here
+    claims it, which leaves that overlay ungated.
+    """
+    root = overlay_root or grandparent_dir
+    dirname = os.path.basename(os.path.normpath(overlay_dir))
+    if dirname.endswith(CREDENTIALS_SUFFIX):
+        return credentials_context(overlay_dir)
+    contexts = [credentials_context(path) for path in find_credentials_dirs(root)]
+    for context in sorted(contexts, key=len, reverse=True):
+        if dirname.startswith(f"{context}_"):
+            return context
+    for credentials_dir in find_credentials_dirs(root):
+        context = credentials_context(credentials_dir)
+        if not os.path.exists(os.path.join(credentials_dir, f"{context}_repos.yaml")):
+            continue
+        names, _ = load_context_repo_names(context, root)
+        if dirname in names:
+            return context
+    return None
+
+
+def member_overlay_dirs(hostname=None, overlay_root=None):
+    """
+    Split the cloned overlay repos into ``(loaded, skipped)``: the ones whose
+    context this machine is in, and ``[(overlay_dir, context), ...]`` for the
+    ones it is not. Membership is the machine's inventory record
+    (inventory_tools.record_contexts), so a checkout that is on the box for
+    another reason - elitedesk holds a client's credentials repo only as its
+    git hub - contributes nothing. A machine no inventory lists loads every
+    overlay it has cloned; an opt-in overlay no repos file declares does too.
+    """
+    root = overlay_root or grandparent_dir
+    member = host_member_contexts(hostname or get_uppercase_hostname(), root)
+    loaded, skipped = [], []
+    for overlay_dir in find_overlay_dirs(root):
+        owner = overlay_owner_context(overlay_dir, root)
+        if member is not None and owner is not None and owner not in member:
+            skipped.append((overlay_dir, owner))
+        else:
+            loaded.append(overlay_dir)
+    return loaded, skipped
+
+
 def discover_manifests():
     """
     Locate every manifest to load: the main deploy_manifest.yaml (repo paths
-    relative to REPO_ROOT) plus, for each sibling overlay repo, an optional
-    overlay manifest named ``<context>_manifest.yaml`` whose repo paths are
-    relative to that overlay repo's root. Overlay repos are every
-    ``*_credentials`` repo plus any sibling that opts in by declaring such a
-    file (see find_overlay_dirs). Returns a list of (manifest_path, base_dir)
-    pairs, overlays sorted for determinism.
+    relative to REPO_ROOT) plus, for each sibling overlay repo this machine is
+    a member of (member_overlay_dirs), an optional overlay manifest named
+    ``<context>_manifest.yaml`` whose repo paths are relative to that overlay
+    repo's root. Overlay repos are every ``*_credentials`` repo plus any
+    sibling that opts in by declaring such a file (see find_overlay_dirs).
+    Returns a list of (manifest_path, base_dir) pairs, overlays sorted for
+    determinism.
     """
     manifests = [(os.path.join(REPO_ROOT, "deploy_manifest.yaml"), REPO_ROOT)]
-    for overlay_dir in find_overlay_dirs(grandparent_dir):
+    for overlay_dir in member_overlay_dirs()[0]:
         overlay = os.path.join(overlay_dir, f"{overlay_context(overlay_dir)}_manifest.yaml")
         if os.path.exists(overlay):
             manifests.append((overlay, overlay_dir))
@@ -1386,6 +1440,9 @@ def main(argv=None):
         overlays = ", ".join(os.path.basename(path) for path in manifest_paths[1:])
         manifests_label += f" + {len(manifest_paths) - 1} overlays ({overlays})"
     print(f"manifests: {manifests_label}")
+    for overlay_dir, context in ([] if args.manifest else member_overlay_dirs()[1]):
+        print(f"overlay not loaded: {os.path.basename(overlay_dir)} (this machine's inventory record "
+              f"is not in context {context})")
     print()
     # The per-context MCP files are generated by the deploy and LINKED by it (the
     # per-repo .mcp.json entries point at data/mcp/), so generation has to run

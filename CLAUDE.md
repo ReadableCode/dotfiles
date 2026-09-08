@@ -52,7 +52,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   user-level as flat per-file links in `~/.claude/commands`: T3 Code builds
   its menu from that path alone and subfolders there namespace the names.
   Manifest `hosts:` names must exist in the union of the `*_credentials`
-  inventories (`<context>_hosts.json`). Doc:
+  inventories (`<context>_hosts.json`). An overlay loads only where the
+  machine's inventory record is in its context (its own inventory or the
+  record's `contexts:` list); a checkout held for another reason, such as
+  elitedesk hosting a client's git hub, deploys nothing. Doc:
   `docs/repo_deploy_configs.md`.
 - **`deploy_map.py`** — redraws the fleet-wide deployment map (every entry x
   every machine, interactive page plus diffable JSON) from those same plans on

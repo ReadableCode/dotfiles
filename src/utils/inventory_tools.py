@@ -112,4 +112,47 @@ def load_union_inventory_hostnames(credentials_root):
     return hostnames, inventory_paths
 
 
+def find_host_record(hostname, credentials_root):
+    """
+    The inventory record for hostname: ``(context, record)`` from the first
+    ``*_credentials`` inventory under credentials_root that lists it (short
+    name, case-insensitive), or ``(None, None)`` when none does.
+    """
+    short = str(hostname).split(".")[0].upper()
+    for path in find_inventory_paths(credentials_root):
+        with open(path, "r", encoding="utf-8") as file_handle:
+            inventory = json.load(file_handle)
+        for host in inventory.get("hosts", []):
+            if str(host["name"]).split(".")[0].upper() == short:
+                return credentials_context(os.path.dirname(path)), host
+    return None, None
+
+
+def record_contexts(context, record):
+    """
+    The contexts a machine is in, read from its inventory record alone: the
+    context whose inventory lists it plus any it names under ``contexts`` (a
+    dev box that also works in a client's context). This is the single
+    membership declaration - the deploy loads a context's overlays, the clone
+    offers its repos and the map draws them on a machine only when its record
+    says so. A checkout that sits on a box for another reason (the git hub of
+    a credentials repo) does not make that box a member.
+    """
+    ordered = []
+    for found in [context] + [str(extra) for extra in (record or {}).get("contexts") or []]:
+        if found not in ordered:
+            ordered.append(found)
+    return ordered
+
+
+def host_member_contexts(hostname, credentials_root):
+    """
+    record_contexts for hostname, or ``None`` when no inventory under
+    credentials_root lists it: nothing to gate on, so every cloned overlay
+    loads there.
+    """
+    context, record = find_host_record(hostname, credentials_root)
+    return None if context is None else record_contexts(context, record)
+
+
 # %%
