@@ -200,7 +200,11 @@ client context, the client's own repos included (`.git/hooks/pre-commit`,
 untracked by git). It scans only the staged content and fails closed, then
 runs the repo's own pre-commit framework checks when it has a
 `.pre-commit-config.yaml`, so replacing the hook `pre-commit install` wrote
-loses nothing. The framework is looked up in the repo's own `.venv` first
+loses nothing. The checker runs on the interpreter in dotfiles' own `.venv`
+(deploy is `uv run` there, so every machine with the hook has it); it never
+takes `python3` from `PATH`, which on Windows is the Microsoft Store alias
+that only prints an install prompt and killed every commit made from VS Code.
+The framework is looked up in the repo's own `.venv` first
 (each worktree carries one) and on `PATH` second, and a repo that declares a
 config but has no framework installed refuses the commit rather than
 skipping its linters. Nothing else guards this: before

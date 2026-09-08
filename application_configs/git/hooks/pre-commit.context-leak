@@ -11,9 +11,18 @@ if [ ! -f "$CHECK" ]; then
     echo "pre-commit: context leak checker not found at $CHECK (dotfiles must be cloned beside this repo)" >&2
     exit 1
 fi
-PY="$(command -v python3 || command -v python)"
+# The interpreter is dotfiles' own venv, never PATH: deploy itself is
+# `uv run` inside dotfiles, so every machine carrying this hook has that venv,
+# whereas on Windows the first `python3` on PATH is the Microsoft Store alias,
+# a stub that only prints an install prompt (VS Code shows it as a modal
+# "Git: Python was not found" dialog and the commit dies). The checker is
+# stdlib-only; the venv is used for its interpreter, not its packages.
+PY=""
+for CANDIDATE in "$DOTFILES/.venv/bin/python" "$DOTFILES/.venv/Scripts/python.exe"; do
+    if [ -x "$CANDIDATE" ]; then PY="$CANDIDATE"; break; fi
+done
 if [ -z "$PY" ]; then
-    echo "pre-commit: python3 not found; cannot run the context leak check" >&2
+    echo "pre-commit: no python in $DOTFILES/.venv; run 'uv sync' in dotfiles so the context leak check can run" >&2
     exit 1
 fi
 TOP="$(git rev-parse --show-toplevel)"
