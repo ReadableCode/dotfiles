@@ -15,7 +15,11 @@ carry over is every gitignored file, and those are exactly the ones
 | `configuration.json`   | a per-host variant in a sibling working repo  |
 
 `src/init_worktree.py` mirrors them into a worktree, and `/init_worktree`
-(deployed to `~/.claude/commands` by `deploy_manifest.yaml`) wraps it:
+(deployed to `~/.claude/commands` by the personal and dev overlays, never by
+the main manifest, so a client machine that must carry no Claude-named path
+never receives it; a machine that already had the link from the old
+unfiltered entry cleans it up by hand, since a removals line may not name a
+dest that is live elsewhere) wraps it:
 
 ```bash
 cd ~/.t3/worktrees/acme-app/<id>

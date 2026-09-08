@@ -1344,6 +1344,7 @@ MANIFEST_FREE_PAYLOADS = {
 # entry really covers the file, so a stale line here fails on Jason's machines.
 OVERLAY_OWNED_PAYLOADS = {
     "autostart/start_x0vncserver.desktop": "personal_credentials",
+    "claude/commands/init_worktree.md": "personal_credentials",
     "claude/settings.json": "personal_credentials",
     "claude/statusline.sh": "personal_credentials",
     "claude/themes/dark-high-contrast.json": "personal_credentials",
@@ -1453,7 +1454,20 @@ def test_regenerate_mcp_passes_quiet_through_and_reports_success(monkeypatch):
     monkeypatch.setattr(claude_mcp, "write", lambda **kwargs: seen.update(kwargs))
 
     assert deploy_configs.regenerate_mcp(quiet=True) is True
-    assert seen == {"quiet": True}
+    assert seen == {"quiet": True, "contexts": None}
+
+
+def test_consumed_mcp_contexts_are_the_generated_sources_some_entry_links():
+    entries = [
+        {"name": "a", "repo": "../dotfiles/data/mcp/acme.mcp.json", "generated": True},
+        {"name": "b", "repo": "data/mcp/dotfiles.mcp.json", "generated": True},
+        {"name": "c", "repo": "../other_credentials/other.mcp.json"},  # a real file, not generated
+        {"name": "d", "repo": "claude/commands/x.md"},
+    ]
+    # only the contexts a loaded entry actually links get generated on this
+    # machine - a client's declaration cloned on its own laptop, with the
+    # linking overlay absent, produces no file there
+    assert deploy_configs.consumed_mcp_contexts(entries) == {"acme", "dotfiles"}
 
 
 def test_payload_exemption_lists_stay_in_step_with_the_files():

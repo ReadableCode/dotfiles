@@ -389,6 +389,22 @@ def test_a_context_that_declares_nothing_gets_no_document(clones):
     assert "quiet" not in documents
 
 
+def test_write_skips_contexts_no_loaded_manifest_links_and_removes_their_files(clones, capsys):
+    out = str(clones / "out")
+    claude_mcp.write(output_dir=out)  # both contexts exist from an earlier, unfiltered run
+
+    outcomes = claude_mcp.write(output_dir=out, contexts={"dotfiles"})
+
+    # acme is declared by a cloned repo but nothing here links its file: no
+    # document, and the earlier file is removed like a stale one
+    assert outcomes == {
+        os.path.join(out, "dotfiles.mcp.json"): "unchanged",
+        os.path.join(out, "acme.mcp.json"): "removed",
+    }
+    assert sorted(os.listdir(out)) == ["dotfiles.mcp.json"]
+    assert "skipped acme" in capsys.readouterr().out
+
+
 def test_write_creates_one_file_per_context_and_reports_each(clones, capsys):
     out = str(clones / "out")
 

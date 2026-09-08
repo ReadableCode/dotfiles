@@ -187,7 +187,13 @@ Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is
 built — so they are absent in a fresh clone until the first deploy; `status`
 reports them as `REPO_MISSING` until then, and the manifest tests do not
-require them to exist.
+require them to exist. Generation is limited to the contexts some loaded
+entry actually links (since 2026-09-07): a machine that clones a context's
+declaring credentials repo but not the dev overlay holding its `*_repo_mcp`
+entry gets no file for that context, and a previously generated one is
+removed. That keeps a client's resolved secrets out of this checkout on the
+client's own machines, where the declaration is cloned but nothing consumes
+it.
 
 ### Host / platform variant files
 

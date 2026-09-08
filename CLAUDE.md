@@ -67,6 +67,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   overlay then links its file into that context's checkouts as
   `<repo>/.mcp.json`, so a session registers only its own context's servers
   (the pre-2026-09-02 single `~/.mcp.json` loaded every context everywhere).
+  Only contexts some loaded entry links get a file: a machine holding a
+  context's declaration but not the overlay that consumes it generates
+  nothing for it.
   `{repo_root}` / `{repo_parent}` tokens and `env_secrets` var names resolve
   at generate time, which is why no per-host payload exists. Doc:
   `docs/setup_google_mcp.md`.
@@ -106,8 +109,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   with its main checkout: re-creates the deploy-managed gitignored links with
   absolute targets, adds a folder entry to this host's `<host>.code-workspace`,
   runs `uv sync`. Wrapped by `/init_worktree`
-  (`application_configs/claude/commands/`, the one command this repo deploys
-  itself). Doc: `docs/repo_init_worktree.md`.
+  (`application_configs/claude/commands/`, deployed by the personal and dev
+  overlays like every other user-level Claude file, so a client machine that
+  must carry no Claude-named path never gets it). Doc:
+  `docs/repo_init_worktree.md`.
 - **`clone_repos.py`** — offers to clone every repo the cloned contexts'
   `<context>_repos.yaml` files declare for this machine; run by gitpullall
   between the pull and the deploy.

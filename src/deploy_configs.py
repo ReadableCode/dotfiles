@@ -1317,10 +1317,29 @@ def regenerate_map(entries, quiet=False):
         print(paint(f"map: could not regenerate ({type(error).__name__}: {error})", "yellow"))
 
 
-def regenerate_mcp(quiet=False):
+def consumed_mcp_contexts(entries):
+    """
+    The contexts whose generated MCP file some loaded manifest entry links:
+    every ``generated: true`` entry whose source is ``<context>.mcp.json``.
+    Passed to the generator so it writes only those - a machine that clones a
+    context's declaring repo but not the overlay that links the file gets no
+    file for it (see claude_mcp.write).
+    """
+    contexts = set()
+    for entry in entries:
+        if not entry.get("generated"):
+            continue
+        name = os.path.basename(str(entry.get("repo", "")))
+        if name.endswith(".mcp.json"):
+            contexts.add(name[: -len(".mcp.json")])
+    return contexts
+
+
+def regenerate_mcp(quiet=False, contexts=None):
     """
     Rewrite the per-context MCP files (data/mcp/<context>.mcp.json) from every
-    cloned repo's server declarations. Returns True on success.
+    cloned repo's server declarations, restricted to ``contexts`` when given
+    (the set some loaded manifest links). Returns True on success.
 
     NOT best-effort, unlike the map: these files are what give a Claude session
     its calendar, mail and jira tools, so a silent failure looks exactly like the
@@ -1330,7 +1349,7 @@ def regenerate_mcp(quiet=False):
     import claude_mcp
 
     try:
-        claude_mcp.write(quiet=quiet)
+        claude_mcp.write(quiet=quiet, contexts=contexts)
         return True
     except Exception as error:  # noqa: BLE001 - report, don't mask the deploy
         print(paint(f"mcp: FAILED to regenerate the MCP files ({type(error).__name__}: {error})", "red"))
@@ -1374,7 +1393,7 @@ def main(argv=None):
     # missing. Read-only commands leave the files alone.
     mcp_ok = True
     if args.command == "deploy" and not (args.status or args.dry_run or args.manifest or args.no_mcp):
-        mcp_ok = regenerate_mcp()
+        mcp_ok = regenerate_mcp(contexts=consumed_mcp_contexts(entries))
         print()
     plan = build_plan(entries, platform_key, hostname)
     # --manifest is the single-file test escape hatch: it skips overlay discovery,

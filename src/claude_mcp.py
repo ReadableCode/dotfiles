@@ -44,10 +44,20 @@ def target_path(output_dir, context):
     return os.path.join(output_dir, mtools.generated_filename(context))
 
 
-def write(quiet=False, output_dir=None):
+def write(quiet=False, output_dir=None, contexts=None):
     """
     Regenerate every context's file and delete the ones no cloned repo declares
     any more. Returns {path: outcome}.
+
+    ``contexts`` (a set of context names) restricts generation to the contexts
+    some loaded manifest entry actually links on this machine; documents for
+    any other declaring context are dropped and their files removed like stale
+    ones. The case it exists for: a client's credentials repo declares that
+    client's servers and is cloned on the client's own machines, while the
+    entry that links the generated file lives in a repo those machines never
+    clone - without the filter the deploy still wrote a file holding the
+    resolved secrets into this checkout on hardware that must carry nothing of
+    the kind (2026-09-07). ``None`` means no filter (the manual CLI).
 
     Called by deploy_configs before it builds its plan, so each file is a product
     of what is cloned right now and exists before the per-repo entries that link
@@ -55,6 +65,12 @@ def write(quiet=False, output_dir=None):
     or removes its servers with no per-machine file to edit.
     """
     documents, target_dir, config_paths = generate(output_dir=output_dir)
+    if contexts is not None:
+        unlinked = sorted(context for context in documents if context not in contexts)
+        for context in unlinked:
+            documents.pop(context)
+            if not quiet:
+                print(f"mcp: skipped {context} (declared here, but no loaded manifest links its file on this machine)")
     outcomes = {}
     for context, document in documents.items():
         target = target_path(target_dir, context)
@@ -66,7 +82,7 @@ def write(quiet=False, output_dir=None):
         os.remove(stale)
         outcomes[stale] = "removed"
         if not quiet:
-            print(f"mcp: removed {stale} (no cloned repo declares that context any more)")
+            print(f"mcp: removed {stale} (no cloned repo declares it, or no loaded manifest links it here)")
     if not quiet and not documents:
         print("mcp: no servers declared by any cloned repo; nothing generated")
     # never quiet: a declaring repo out of sync with its upstream means these
