@@ -55,7 +55,7 @@ ln -s /path/to/src/file
 For example, linking a VS Code settings file out of the repo:
 
 ```bash
-ln -s /home/jason/Work/GDrive/Projects/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
+ln -s /home/jason/GitHub/dotfiles/application_configs/vscode/settings.json /home/jason/.config/Code/User/settings.json
 ```
 
 ### Hard linking on Linux

@@ -74,7 +74,7 @@ Key behaviors:
 - This replaced the old single-repo `charlie-personal-website/redeploy.sh`
   root cron entry (2026-07).
 - A client's server runs the same pattern separately (its backend
-  repo's `scripts/git_pull.sh`, user `svc_linux`).
+  repo's `scripts/git_pull.sh`, under its own service user).
 
 ## Cron: how scheduled jobs are declared
 

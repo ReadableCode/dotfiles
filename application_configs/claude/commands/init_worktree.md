@@ -40,7 +40,7 @@ inside the worktree later (the context's create-ticket command). So:
   then in the subjects of commits this branch adds on top of master (never
   master's own tip — that is whichever ticket merged last, not ours).
 - No ticket anywhere → pass a **two-to-four-word description of the task** from
-  the thread's opening message as `--label` (e.g. `highjump snapshot compare`).
+  the thread's opening message as `--label` (e.g. `snapshot compare tool`).
   Only if the thread has not said what it is for yet, ask. Do not fall back to
   the bare directory name; `t3code-ff3b06a8` in the sidebar helps nobody.
 

@@ -9,8 +9,11 @@ sibling ``<context>_credentials`` repo, so this public file names no client:
 - the context token and its spelling variants (``acme_co`` -> ``acme-co``,
   ``acme co``, ``acmeco``)
 - every ``name``, ``dir`` and non-personal ``org`` in ``<context>_repos.yaml``
-- every host ``name`` and ``hostname`` in ``<context>_hosts.json``
-- ``JIRA_PROJECT=`` values in that repo's ``*.env`` files (ticket prefixes)
+- every host ``name``, ``hostname`` and ssh alias in ``<context>_hosts.json``
+- every ``Host`` name in the repo's ``ssh/*.conf`` fragments
+- ``JIRA_PROJECT=`` values in that repo's ``*.env`` files (ticket prefixes),
+  and the hostname of every URL-shaped value in them (never the values
+  themselves: an env file is mostly secrets)
 - the name of any sibling dev repo whose ``<dirname>_manifest.yaml`` targets
   the context with ``per_context_repo``
 - one identifier per line from an optional ``<context>_identifiers.txt``
@@ -96,7 +99,59 @@ def _read_hosts(path):
             value = host.get(key)
             if isinstance(value, str) and value.strip():
                 out.append(value.strip())
+        for alias in host.get("aliases") or []:
+            if isinstance(alias, str) and alias.strip():
+                out.append(alias.strip())
     return out
+
+
+def _read_ssh_hosts(credentials_dir):
+    """Every ``Host`` name in the repo's ssh fragments (addresses are already in the inventory)."""
+    names = []
+    ssh_dir = os.path.join(credentials_dir, "ssh")
+    if not os.path.isdir(ssh_dir):
+        return names
+    for entry in sorted(os.listdir(ssh_dir)):
+        try:
+            with open(os.path.join(ssh_dir, entry), "r", encoding="utf-8", errors="ignore") as handle:
+                for line in handle:
+                    match = re.match(r"\s*Host\s+(.+)$", line)
+                    if match:
+                        names.extend(token for token in match.group(1).split() if not re.fullmatch(r"[\d.]+", token))
+        except OSError:
+            continue
+    return names
+
+
+# Hostnames under these domains are third-party services every context uses
+# (Google APIs, GitHub, AWS, ...); a URL to one identifies nobody.
+GENERIC_URL_DOMAINS = (
+    "google.com", "googleapis.com", "googleusercontent.com", "github.com", "githubusercontent.com",
+    "amazonaws.com", "microsoft.com", "microsoftonline.com", "office.com", "graph.microsoft.com",
+    "slack.com", "ntfy.sh", "openai.com", "anthropic.com", "cloudflare.com", "bitbucket.org",
+)
+
+
+def _generic_host(host):
+    return any(host == domain or host.endswith("." + domain) for domain in GENERIC_URL_DOMAINS)
+
+
+def _read_env_url_hosts(credentials_dir):
+    """Hostnames of URL-shaped env values (a Jira site, a vault, a hub); nothing else from an env file."""
+    hosts = []
+    for entry in sorted(os.listdir(credentials_dir)):
+        if not entry.endswith(".env"):
+            continue
+        try:
+            with open(os.path.join(credentials_dir, entry), "r", encoding="utf-8", errors="ignore") as handle:
+                for line in handle:
+                    for match in re.finditer(r"https?://([A-Za-z0-9.-]+)", line):
+                        host = match.group(1).lower()
+                        if "." in host and not re.fullmatch(r"[\d.]+", host) and host != "localhost" and not _generic_host(host):
+                            hosts.append(host)
+        except OSError:
+            continue
+    return hosts
 
 
 def _read_ticket_prefixes(credentials_dir):
@@ -172,6 +227,8 @@ def derive_contexts(parent=None):
         identifiers |= {o for o in orgs if o.lower() not in personal_orgs}
         identifiers |= set(_read_hosts(os.path.join(cdir, f"{context}_hosts.json")))
         identifiers |= set(_read_ticket_prefixes(cdir))
+        identifiers |= set(_read_ssh_hosts(cdir))
+        identifiers |= set(_read_env_url_hosts(cdir))
         identifiers |= set(_read_identifier_file(os.path.join(cdir, f"{context}_identifiers.txt")))
         dev_repos = _dev_repos_for(context, parent)
         for dev in dev_repos:

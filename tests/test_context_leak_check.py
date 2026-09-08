@@ -33,8 +33,10 @@ def constellation(tmp_path):
     write(os.path.join(parent, "acme_credentials", "acme_repos.yaml"),
           "defaults:\n  org: acmeorg\nrepos:\n  - name: acme-app\n  - name: shared-tool\n    org: mine\n")
     write(os.path.join(parent, "acme_credentials", "acme_hosts.json"),
-          json.dumps({"hosts": [{"name": "ACME-LAP-01", "hostname": "10.9.9.9"}]}))
-    write(os.path.join(parent, "acme_credentials", "acme.env"), "JIRA_PROJECT=ACM\n")
+          json.dumps({"hosts": [{"name": "ACME-LAP-01", "hostname": "10.9.9.9", "aliases": ["sshacme"]}]}))
+    write(os.path.join(parent, "acme_credentials", "acme.env"),
+          "JIRA_PROJECT=ACM\nJIRA_BASE_URL=https://acmeco.atlassian.net\nSECRET_ACCOUNT=abc123secret\nGOOGLE_TOKEN_URL=https://oauth2.googleapis.com/token\n")
+    write(os.path.join(parent, "acme_credentials", "ssh", "acme.conf"), "Host acmegw 10.9.9.1\n    User svc\n")
     write(os.path.join(parent, "acme_credentials", "acme_identifiers.txt"), "Acme Widgets\n")
     git_repo(os.path.join(parent, "acme_credentials"), {"README.md": "acme only"})
     write(os.path.join(parent, "acme_dev", "acme_dev_manifest.yaml"), "- name: x\n  per_context_repo: acme\n")
@@ -50,8 +52,11 @@ def test_identifiers_come_from_each_context_s_own_repo(constellation):
     assert set(contexts) == {"acme", "bravo"}
     acme = contexts["acme"]["identifiers"]
     # token variants, repo names, non-personal orgs, hosts, ticket prefix, the identifier file, the dev repo
-    for expected in ["acme", "acme_credentials", "acme-app", "acmeorg", "ACME-LAP-01", "10.9.9.9", "ACM-", "Acme Widgets", "acme_dev", "acme-dev"]:
+    for expected in ["acme", "acme_credentials", "acme-app", "acmeorg", "ACME-LAP-01", "10.9.9.9", "ACM-", "Acme Widgets", "acme_dev", "acme-dev",
+                     "sshacme", "acmegw", "acmeco.atlassian.net"]:
         assert expected in acme, expected
+    assert "abc123secret" not in acme  # env VALUES are never identifiers, only URL hostnames
+    assert "oauth2.googleapis.com" not in acme  # third-party service hosts identify nobody
     assert "mine" not in acme  # the personal org appears in client repos files and is not a client identifier
     assert "shared-tool" in acme
     assert contexts["acme"]["repos"] == ["acme_credentials", "acme_dev"]
