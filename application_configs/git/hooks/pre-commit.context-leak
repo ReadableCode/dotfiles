@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# pre-commit: refuse a commit that stages another context's identifiers.
+# Deployed into <repo>/.git/hooks/pre-commit by the context overlays (see
+# dotfiles/docs/repo_client_credentials.md, "Context leak check"). Hooks live in
+# the main checkout's .git even for worktrees, so the dotfiles sibling is two
+# levels up from this file. Fails closed: no checker, no commit.
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+DOTFILES="$(cd "$HOOK_DIR/../.." && pwd)/../dotfiles"
+CHECK="$DOTFILES/src/context_leak_check.py"
+if [ ! -f "$CHECK" ]; then
+    echo "pre-commit: context leak checker not found at $CHECK (dotfiles must be cloned beside this repo)" >&2
+    exit 1
+fi
+PY="$(command -v python3 || command -v python)"
+if [ -z "$PY" ]; then
+    echo "pre-commit: python3 not found; cannot run the context leak check" >&2
+    exit 1
+fi
+exec "$PY" "$CHECK" --staged --repo "$(git rev-parse --show-toplevel)"
