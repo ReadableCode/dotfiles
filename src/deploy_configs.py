@@ -1080,9 +1080,35 @@ def run_deploy(plan, platform_key, problems_only=False):
 # Prune #
 
 
+def unloaded_overlay_entries(hostname):
+    """
+    The entries of every cloned overlay this machine is not a member of
+    (member_overlay_dirs), stamped the way load_manifests stamps entries.
+    Nothing deploys from them; build_prune_candidates uses them to take back
+    the links such an overlay made before the membership gate existed.
+    """
+    entries = []
+    for overlay_dir, _ in member_overlay_dirs(hostname)[1]:
+        overlay = os.path.join(overlay_dir, f"{overlay_context(overlay_dir)}_manifest.yaml")
+        if not os.path.exists(overlay):
+            continue
+        for entry in expand_context_repo_entries(_parse_manifest_file(overlay), overlay_dir):
+            entry["_base_dir"] = overlay_dir
+            entry["_manifest"] = overlay
+            entries.append(entry)
+    return entries
+
+
+def link_points_into(path, root):
+    """Whether the symlink at path resolves to somewhere under root (dangling links included)."""
+    target = os.path.realpath(path)
+    return target.startswith(os.path.realpath(root) + os.sep)
+
+
 def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assume_requires=False):
     """
-    Every destination the removals files say must not exist, as sorted
+    Every destination the removals files say must not exist, plus every
+    symlink an overlay this machine is not a member of left behind, as sorted
     (dest, reason, allow_directory). allow_directory reflects the entry's
     opt-in ``directory: true`` key - without it a real directory is never
     touched.
@@ -1112,6 +1138,18 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assu
         if entry.get("link_only") and os.path.lexists(dest) and not os.path.islink(dest):
             continue
         candidates.setdefault(dest, (f"removals:{entry['name']}", bool(entry.get("directory"))))
+    # An overlay this machine is not in may have linked its entries here before
+    # the membership gate existed (a client's shell shard on the box that hosts
+    # that credentials repo's git hub). A symlink at one of its destinations that
+    # points into a checkout under gitDir is the deploy's own work and is taken
+    # back; a real file or directory there is something else and is left alone.
+    for row in build_plan(unloaded_overlay_entries(hostname), platform_key, hostname, repo_root, assume_requires):
+        dest = row["dest"]
+        if row["action"] != "apply" or not dest or dest in wanted or not os.path.islink(dest):
+            continue
+        if not link_points_into(dest, grandparent_dir):
+            continue
+        candidates.setdefault(dest, (f"unloaded overlay:{row['name']}", False))
     return sorted((dest, reason, allow_dir) for dest, (reason, allow_dir) in candidates.items())
 
 

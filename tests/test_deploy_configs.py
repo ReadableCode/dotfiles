@@ -1263,6 +1263,34 @@ def test_prune_candidates_respect_requires_and_hosts(monkeypatch, fake_home):
     assert deploy_configs.build_prune_candidates([], "darwin", "ENVY") == []
 
 
+def test_prune_takes_back_the_links_of_an_overlay_this_machine_is_not_in(overlay_tree, fake_home, monkeypatch):
+    # the hub case again: acme_credentials sits on the box as its git origin and
+    # its overlay linked ~/.acme.sh there before overlays were gated by membership
+    _removals(monkeypatch, [])
+    write_records_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), [{"name": "ACMEBOX"}])
+    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub"}])
+    write_manifest_at(
+        str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
+        [{"name": "acme_shard", "repo": "shell/acme.sh", "dest": {"darwin": "~/.acme.sh"}},
+         {"name": "acme_note", "repo": "shell/note.md", "dest": {"darwin": "~/.acme_note.md"}},
+         {"name": "acme_dir", "repo": "shell/dir", "dest": {"darwin": "~/.acme_dir"}}],
+    )
+    shard = write_file(str(overlay_tree / "acme_credentials" / "shell" / "acme.sh"), "x")
+    write_file(str(overlay_tree / "acme_credentials" / "shell" / "note.md"), "x")
+    os.makedirs(str(overlay_tree / "acme_credentials" / "shell" / "dir"))
+    link = os.path.join(str(fake_home), ".acme.sh")
+    os.symlink(shard, link)
+    foreign = os.path.join(str(fake_home), ".acme_note.md")
+    os.symlink(write_file(os.path.join(str(fake_home), "elsewhere.md"), "mine"), foreign)  # not into gitDir
+    os.makedirs(os.path.join(str(fake_home), ".acme_dir"))  # a real directory, never a link
+    candidates = deploy_configs.build_prune_candidates([], "darwin", "HUB")
+    assert candidates == [(link, "unloaded overlay:acme_shard", False)]
+    # the record listing the context ends the take-back
+    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
+                     [{"name": "Hub", "contexts": ["acme"]}])
+    assert deploy_configs.build_prune_candidates([], "darwin", "HUB") == []
+
+
 def test_prune_removes_orphaned_symlink_only_with_apply(tmp_path, fake_home):
     source = write_file(os.path.join(str(tmp_path), "src.md"), "x")
     dest = os.path.join(str(fake_home), "skills", "old", "SKILL.md")

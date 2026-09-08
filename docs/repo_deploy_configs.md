@@ -86,7 +86,9 @@ belongs to it (`acme_dev` to `acme`, the fold the map draws); any other
 follows the context whose repos file declares it. The same record gates `clone_repos.py`'s
 offers and the map's Machine view, so one declaration answers "what lands
 on this box" everywhere. The deploy prints every overlay it left out and
-why. The reason this exists: elitedesk holds a client's credentials repo
+why, and takes back what such an overlay linked before the gate existed: a
+symlink at one of its destinations that points into a checkout under gitDir
+is pruned with the removals; a real file or directory there is left alone. The reason this exists: elitedesk holds a client's credentials repo
 only as its git hub, and until 2026-09-08 that checkout alone was enough to
 deploy the context's shell shard there. A machine no inventory lists is not
 gated (every cloned overlay loads), and neither is an opt-in overlay no
