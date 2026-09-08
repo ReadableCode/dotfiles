@@ -222,6 +222,32 @@
   .zone li .p b{color:#e3edf9;font-weight:500}
   .zone li .n{color:var(--ink-faint);font-size:10px;white-space:nowrap}
   .zone li.mute{opacity:.2}
+
+  /* ---------- machine ---------- */
+  #view-machine{display:none;flex-direction:column}
+  #view-machine.on{display:flex}
+  #view-machine .sky{flex:1;min-height:0}
+  .machinebar{
+    display:flex;flex-direction:column;gap:8px;padding:10px 22px 6px;border-bottom:1px solid var(--line);
+    background:rgba(8,13,21,.55)
+  }
+  .machinebar .pick{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .machinebar select{
+    background:rgba(12,19,30,.9);border:1px solid #223047;border-radius:8px;color:var(--ink);
+    font-family:inherit;font-size:12px;padding:5px 10px;outline:none;min-width:220px
+  }
+  .machinebar select:focus{border-color:#3a5f95}
+  .machinebar .meta{color:var(--ink-faint);font-size:11px;letter-spacing:.04em}
+  .machinebar .meta b{color:var(--ink-dim);font-weight:500}
+  .machinebar .repos{display:flex;flex-wrap:wrap;gap:4px 5px;align-items:center}
+  .machinebar .repos .grp{color:var(--ink-faint);font-size:10px;letter-spacing:.12em;text-transform:uppercase;margin:0 4px 0 8px}
+  .machinebar .repos .grp:first-child{margin-left:0}
+  .rchip{
+    display:inline-flex;align-items:center;gap:5px;padding:1px 7px;border-radius:999px;border:1px solid #223047;
+    background:rgba(20,30,45,.5);color:var(--ink-dim);font-size:10.5px;letter-spacing:.02em;cursor:default
+  }
+  .rchip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
+  .rchip.dim{opacity:.25}
 </style>
 </style>
 </head>
@@ -235,6 +261,7 @@
       <button class="tab" data-view="fleet">Fleet</button>
       <button class="tab" data-view="matrix">Matrix</button>
       <button class="tab" data-view="paths">Destinations</button>
+      <button class="tab" data-view="machine">Machine</button>
     </div>
     <div class="stats" id="stats"></div>
   </div>
@@ -278,6 +305,17 @@
 
   <div class="view" id="view-matrix"><div class="scroll"><div class="mxwrap" id="mx"></div></div></div>
   <div class="view" id="view-paths"><div class="scroll"><div class="zones" id="zones"></div></div></div>
+  <div class="view" id="view-machine">
+    <div class="machinebar">
+      <div class="pick"><select id="hostpick"></select><span class="meta" id="hostmeta"></span></div>
+      <div class="repos" id="hostrepos"></div>
+    </div>
+    <svg class="sky" viewBox="0 0 1780 960" preserveAspectRatio="xMidYMid meet">
+      <g class="g-stars"></g><g class="g-clusters"></g><g class="g-ghost"></g>
+      <g class="g-edges"></g><g class="g-nodes"></g>
+    </svg>
+    <div class="legend"></div>
+  </div>
 </div>
 <div class="card" id="card"></div>
 <div class="tip" id="tip"></div>
@@ -395,6 +433,7 @@ function createGraph(cfg){
   };
   const byId = Object.fromEntries(cfg.nodes.map(node => [node.id, node]));
   const adj = cfg.adjacency;
+  const dimmed = cfg.dimmed || (() => false);   // machine view: a node that would not land on the chosen box
   const local = {hover:null, pinned:null, isolate:null};
   const nodeEls = {};
 
@@ -457,18 +496,26 @@ function createGraph(cfg){
     });
   });
 
-  /* the faint web of every link, drawn once */
-  const buckets = {};
-  Object.entries(adj).forEach(([id, others]) => {
-    const from = byId[id];
-    if (!from || from.derived) return;   // draw each pair once, from the source side
-    others.forEach(otherId => {
-      const to = byId[otherId];
-      if (to) (buckets[from.color] = buckets[from.color] || []).push(linkPath(from, to));
+  /* the faint web of every link, drawn once (the machine view redraws it per box) */
+  function drawGhost(){
+    layers.ghost.textContent = '';
+    const bright = {}, faint = {};
+    Object.entries(adj).forEach(([id, others]) => {
+      const from = byId[id];
+      if (!from || from.derived) return;   // draw each pair once, from the source side
+      others.forEach(otherId => {
+        const to = byId[otherId];
+        if (!to) return;
+        const bucket = (dimmed(from) || dimmed(to)) ? faint : bright;
+        (bucket[from.color] = bucket[from.color] || []).push(linkPath(from, to));
+      });
     });
-  });
-  Object.entries(buckets).forEach(([color, list]) =>
-    el('path', {d:list.join(' '), stroke:color, opacity:'.042'}, layers.ghost));
+    Object.entries(faint).forEach(([color, list]) =>
+      el('path', {d:list.join(' '), stroke:color, opacity:'.012'}, layers.ghost));
+    Object.entries(bright).forEach(([color, list]) =>
+      el('path', {d:list.join(' '), stroke:color, opacity:cfg.dimmed ? '.11' : '.042'}, layers.ghost));
+  }
+  drawGhost();
 
   svg.addEventListener('click', () => { local.pinned = null; refresh(); });
 
@@ -507,7 +554,7 @@ function createGraph(cfg){
       const isNear = near.has(node.id);
       element.classList.toggle('on', node.id === activeId);
       element.classList.toggle('near', isNear);
-      element.classList.toggle('mute', !shown || (!!activeId && node.id !== activeId && !isNear));
+      element.classList.toggle('mute', !shown || dimmed(node) || (!!activeId && node.id !== activeId && !isNear));
       element.classList.toggle('lab', node.id === activeId || isNear || (shown && (!!state.q ||
         (!!local.isolate && (node.cl === local.isolate)))));
     });
@@ -523,7 +570,7 @@ function createGraph(cfg){
         : cfg.hint;
   }
   layers.ghost.style.display = state.ghost ? '' : 'none';
-  return {key:cfg.key, refresh, ghost:layers.ghost, hint};
+  return {key:cfg.key, refresh, ghost:layers.ghost, hint, drawGhost};
 }
 
 /* ---------------- the floating detail card ---------------- */
@@ -548,7 +595,7 @@ function drawCard(node, cfg, nodeEls, pinned){
    node instead of one per machine. */
 const DISK_KIND = node => node.data.isDir ? 'folder link' : 'file link';
 
-function buildDiskGraph(){
+function diskModel(){
   // keyed by the file itself, so one file referenced by two manifests is one node
   const repoCtx = {};
   DATA.contexts.forEach(c => c.repos.forEach(repo => repoCtx[repo] = c.key));
@@ -600,6 +647,11 @@ function buildDiskGraph(){
     key:a.key, kind:'dst', color:DISK, label:a.label, sub:a.sub,
   })));
 
+  return {clusters, nodes, adjacency};
+}
+
+function buildDiskGraph(){
+  const {clusters, nodes, adjacency} = diskModel();
   return createGraph({
     key:'disk', clusters, nodes, adjacency, card:diskCard,
     hint:'hover a file · click to pin · click a cluster label to isolate',
@@ -748,7 +800,109 @@ function fleetCard(node){
     `</div><span class="tag" style="background:#cfe0f51a;color:#cfe0f5">${osMeta(h.os).sub}</span>`;
 }
 
-const GRAPHS = [buildDiskGraph(), buildFleetGraph()];
+/* ---------------- page 5: one machine ----------------
+   The disk constellation again, filtered to one box: sources and places that a
+   real deploy there would link stay lit, everything else is dimmed in place.
+   requires: is evaluated against what clone_repos.py would offer on that box. */
+const REPO_STATE = meta.repoStates || {};
+const repoCtxColor = ctx => (CTX[ctx] || {}).color || '#8fa3bf';
+const machine = {host:null};
+
+function entryLandsOn(e, h){
+  const cell = matrix[e.i][h.i];
+  if (ACT[cell[0]] !== 'apply') return {ok:false, why:cellStyle(cell[0], e.ctx).label, dest:null};
+  const missing = (h.reqMissing || {})[e.id];
+  if (missing) return {ok:false, why:'would skip: ' + missing.join(', ') + ' not cloned here', dest:null};
+  return {ok:true, why:'deployed', dest:cell[1] >= 0 ? dests[cell[1]] : null};
+}
+function nodeLandsOn(node, h){
+  if (!h) return true;
+  if (node.derived){
+    const place = node.data;
+    if (!place.platforms.includes(h.os)) return false;
+    return place.owners.some(e => entryLandsOn(e, h).ok);
+  }
+  return node.data.entries.some(e => entryLandsOn(e, h).ok);
+}
+
+function buildMachineGraph(){
+  const {clusters, nodes, adjacency} = diskModel();
+  return createGraph({
+    key:'machine', clusters, nodes, adjacency, card:machineCard,
+    dimmed: node => !nodeLandsOn(node, machine.host),
+    hint:'pick a machine — lit nodes are what a real deploy there links; dimmed ones never reach it',
+  });
+}
+
+function machineCard(node){
+  const h = machine.host;
+  let html = diskCard(node);
+  if (!h) return html;
+  const list = node.derived ? node.data.owners : node.data.entries;
+  const lines = list.map(e => {
+    const r = entryLandsOn(e, h);
+    return `<div><span style="color:${r.ok ? CTX[e.ctx].color : '#8fa3bb'}">${r.ok ? '●' : '○'}</span> ` +
+      `${esc(e.id)} <span style="color:${r.ok ? '#9db2c9' : '#8fa3bb'}">— ${esc(r.why)}</span>` +
+      (r.ok && r.dest && node.derived ? `<div class="p" style="padding-left:14px">${esc(r.dest)}</div>` : '') + `</div>`;
+  }).join('');
+  return html + `<div class="rule"></div><div class="paths"><div style="color:#4d5f76;margin-bottom:3px">on ${esc(h.id)}</div>${lines}</div>`;
+}
+
+(function hostPicker(){
+  const sel = document.getElementById('hostpick');
+  Object.entries(byOs).forEach(([os, list]) => {
+    const group = document.createElement('optgroup');
+    group.label = osMeta(os).label;
+    list.forEach(h => {
+      const o = document.createElement('option');
+      o.value = h.id; o.textContent = h.id;
+      group.appendChild(o);
+    });
+    sel.appendChild(group);
+  });
+  const wanted = (location.hash.match(/machine=([^&]+)/) || [])[1];
+  const first = hosts.find(h => h.id.toLowerCase() === (wanted || 'envy').toLowerCase()) || hosts[0];
+  if (first) sel.value = first.id;
+  machine.host = first || null;
+  sel.onchange = () => { machine.host = H[sel.value]; location.hash = 'machine=' + sel.value; buildMachine(); };
+})();
+
+function buildMachine(){
+  const h = machine.host;
+  if (!h) return;
+  const ctxs = h.contexts || [];
+  const states = h.repos || [];
+  const cloned = states.filter(r => r.state === 'cloned' || r.state === 'credentials');
+  let linked = 0;
+  entries.forEach(e => { if (entryLandsOn(e, h).ok) linked++; });
+  document.getElementById('hostmeta').innerHTML =
+    `<b>${esc(h.name)}</b> · ${osMeta(h.os).label} · from ${esc(h.inventory)} · contexts: ` +
+    ctxs.map(c => `<span style="color:${repoCtxColor(c)}">${esc(c.replace(/_/g, ' '))}</span>`).join(', ') +
+    ` · <b>${cloned.length}</b> of ${states.length} repos cloned · <b>${linked}</b> entries linked`;
+  const box = document.getElementById('hostrepos');
+  box.textContent = '';
+  const groups = {};
+  states.forEach(r => (groups[r.ctx] = groups[r.ctx] || []).push(r));
+  Object.entries(groups).forEach(([ctx, list]) => {
+    const label = document.createElement('span');
+    label.className = 'grp'; label.style.color = repoCtxColor(ctx);
+    label.textContent = ctx.replace(/_/g, ' ');
+    box.appendChild(label);
+    list.forEach(r => {
+      const on = r.state === 'cloned' || r.state === 'credentials';
+      const chip = document.createElement('span');
+      chip.className = 'rchip' + (on ? '' : ' dim');
+      chip.style.color = on ? repoCtxColor(ctx) : '#8fa3bb';
+      chip.innerHTML = `<span class="dot"></span>${esc(r.name)}`;
+      chip.title = `${r.name}: ${REPO_STATE[r.state] || r.state}`;
+      box.appendChild(chip);
+    });
+  });
+  const graph = graphFor('machine');
+  if (graph){ graph.drawGhost(); graph.refresh(); }
+}
+
+const GRAPHS = [buildDiskGraph(), buildFleetGraph(), buildMachineGraph()];
 const graphFor = key => GRAPHS.find(g => g.key === key);
 
 /* ---------------- chrome: stats, chips, tabs, legend ---------------- */
@@ -763,7 +917,7 @@ document.getElementById('stats').innerHTML = [
   [meta.manifests.length, 'manifests'],
 ].map(([n, l]) => `<span><b>${n}</b> ${l}</span>`).join('');
 
-const redraw = () => { GRAPHS.forEach(g => g.refresh()); buildMatrix(); buildPaths(); };
+const redraw = () => { GRAPHS.forEach(g => g.refresh()); buildMatrix(); buildPaths(); buildMachine(); };
 
 (function chips(){
   const ctxBox = document.getElementById('ctxchips');
@@ -811,6 +965,10 @@ document.querySelector('#view-disk .legend').innerHTML =
   `<span><i class="sq" style="background:${DISK}"></i>place on disk — squares take the colour of the context feeding them</span>` +
   `<span><i class="sq dash"></i>folder link — card lists what is inside</span>` +
   `<span style="color:#3d4d61">{host} stays symbolic · dot size = places a source feeds</span>`;
+document.querySelector('#view-machine .legend').innerHTML =
+  DATA.contexts.map(c => `<span><i style="background:${c.color}"></i>${c.key.replace(/_/g, ' ')} source</span>`).join('') +
+  `<span><i class="sq" style="background:${DISK}"></i>place on disk</span>` +
+  `<span style="color:#3d4d61">lit = a real deploy on this machine links it · dimmed = never reaches it (platform, hosts filter, variant, or the required checkout is not cloned there)</span>`;
 document.querySelector('#view-fleet .legend').innerHTML =
   DATA.contexts.map(c => `<span><i style="background:${c.color}"></i>${c.key.replace(/_/g, ' ')} configs</span>`).join('') +
   `<span><i class="sq" style="background:${MACHINE}"></i>machine</span>` +
@@ -846,6 +1004,7 @@ function cellStyle(code, ctx){
     case 'skip_host':     return {bg:'#2b2033', op:1, label:'excluded by hosts filter'};
     case 'skip_variant':  return {bg:'#33301c', op:1, label:'no matching variant file'};
     case 'skip_requires': return {bg:'#3a2222', op:1, label:'requires path absent'};
+    case 'skip_overlay':  return {bg:'#1a1f2a', op:1, label:'manifest repo not cloned there'};
     default:              return {bg:'#141c28', op:1, label:'no link by design'};
   }
 }
@@ -925,8 +1084,8 @@ function buildMatrix(){
   const key = document.createElement('div');
   key.style.cssText = 'display:flex;gap:16px;padding:0 22px 14px;color:#4d5f76;font-size:10.5px;letter-spacing:.05em';
   key.innerHTML = ['deployed', 'no dest for this platform', 'excluded by hosts filter', 'no matching variant',
-    'no link by design'].map((label, i) => {
-      const bg = [DATA.contexts[0].color, '#1d2836', '#2b2033', '#33301c', '#141c28'][i];
+    'manifest repo not cloned there', 'no link by design'].map((label, i) => {
+      const bg = [DATA.contexts[0].color, '#1d2836', '#2b2033', '#33301c', '#1a1f2a', '#141c28'][i];
       return `<span style="display:inline-flex;align-items:center;gap:6px">
         <i style="width:10px;height:10px;border-radius:2.5px;background:${bg};display:inline-block"></i>${label}</span>`;
     }).join('');
@@ -972,7 +1131,9 @@ function buildPaths(){
       ${meta.manifests.map(m => `<li><code>${m}</code></li>`).join('')}
     </ul>
     <b>What is exact:</b> platform dest blocks, <code>hosts:</code> filters and per-host variant files are
-    evaluated for real, per machine. <b>What is assumed:</b> <code>requires:</code> preconditions are treated as
+    evaluated for real, per machine, and so is the clone gate: an overlay manifest only loads on a machine that
+    clones its repo, so a machine outside a context shows none of that context's entries even though every
+    manifest is loaded on the machine that draws the map. <b>What is assumed:</b> <code>requires:</code> preconditions are treated as
     met, so the map does not change shape depending on which repos the machine that regenerated it happens to
     have cloned — a machine actually missing a checkout would report <code>skip_requires</code> for those
     entries. Paths are shown home-relative for the same reason.
@@ -990,7 +1151,12 @@ function buildPaths(){
     what is inside the directory right now.
     <b>Fleet</b> is the same constellation wired to machines instead: which machine receives which entry.
     <b>Matrix</b> is the full entry × machine grid including why a cell is empty; <b>Destinations</b> is the
-    filesystem tree the links actually land in, as deployed.`;
+    filesystem tree the links actually land in, as deployed. <b>Machine</b> is the disk constellation for one
+    box: the bar lists every repo the contexts declare with the ones <code>clone_repos.py</code> would not put
+    there dimmed (reason on hover), and in the map only the sources and places a real deploy there would link
+    stay lit - <code>requires:</code> is evaluated against that clone set, so an absent checkout is a real skip
+    here and nowhere else. A machine is in its own inventory's context, in any the
+    inventory record adds under <code>contexts</code>, and in any context whose repos file or manifest names it.`;
   const toggle = () => box.classList.toggle('show');
   document.getElementById('aboutbtn').onclick = toggle;
   box.addEventListener('click', ev => { if (ev.target.id === 'aboutclose') box.classList.remove('show'); });
@@ -998,6 +1164,7 @@ function buildPaths(){
 
 buildMatrix();
 buildPaths();
+buildMachine();
 GRAPHS.forEach(graph => graph.refresh());
 graphFor('disk').hint();
 </script>

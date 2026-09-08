@@ -16,7 +16,7 @@ minus the `_credentials` suffix):
 | File | Purpose |
 |------|---------|
 | `acme_manifest.yaml` | Optional **overlay deploy manifest** — same entry schema as `deploy_manifest.yaml`, but its `repo:` paths are relative to `acme_credentials/`. Loaded automatically by `src/deploy_configs.py`; see [repo_deploy_configs.md](./deploy_configs.md). |
-| `acme_hosts.json` | Optional **host inventory** — same schema in every context (the personal one is `personal_hosts.json`; the bare `hosts.json` fallback was retired 2026-09-07). |
+| `acme_hosts.json` | Optional **host inventory** — same schema in every context. A host record may carry `contexts: [...]` naming other contexts whose credentials repo that machine holds by hand (a dev box that also clones a client's repos, a hub box); the deployment map's Machine view uses it to know what `clone_repos.py` would offer there (the personal one is `personal_hosts.json`; the bare `hosts.json` fallback was retired 2026-09-07). |
 | `acme_mcp_servers.yaml` | Optional **MCP server declaration** - URL and env var *names* only; the generator resolves values from this repo's env file at deploy time. Stays here even though the links that register it deploy from the dev repo (below). |
 | config payloads | The actual private files the overlay manifest links into place (client `.env` files, `configuration.json`, workspace variants, shell / ssh fragments, ...). Never anything that names an agent: see the next section. |
 | anything else | Credentials, keys, notes — the repo is private, so it can hold whatever that context needs. |
@@ -38,8 +38,7 @@ matching `requires:`.
 This is the **standard shape for every client context**, not an exception
 (aligned 2026-09-07): the credentials repo carries no path that names Claude
 and no bot-guiding markdown, and each client's `<client>_dev` repo holds the
-slash commands, project allow lists, memory dirs, user-level Claude and T3
-settings, and the per-repo `.mcp.json` entry, whether or not that client
+slash commands, project allow lists, user-level Claude and T3 settings, and the per-repo `.mcp.json` entry, whether or not that client
 allows agents on its machines. Working notes that become a repo's `CLAUDE.md`
 live in the credentials repo under a neutral filename
 (`<repo>_working_notes.md`); the dev overlay supplies the destination name.
@@ -102,8 +101,8 @@ it:
 ```json
 {
   "name": "acme-vm-01",
-  "hostname": "172.20.10.101",
-  "user": "svc_linux",
+  "hostname": "10.99.0.101",
+  "user": "svc",
   "aliases": ["sshacmevm"],
   "jump": "sshacme"
 }
@@ -175,3 +174,32 @@ When the origin is a **laptop** that is often asleep or off-network, that only
 blocks `git pull`/`push` against it — existing clones keep working fully
 offline, since every clone has the complete history. Sync when the laptop is
 reachable; nothing else degrades.
+
+## Context leak check
+
+Two contexts must never reference each other, and no client may be named in
+any repo outside its own two. `src/context_leak_check.py` enforces it without
+this public repo naming anyone: each client's identifiers are derived from
+its own credentials repo (the context token and its spellings, every repo and
+org in `<context>_repos.yaml`, every host name and address in
+`<context>_hosts.json`, `JIRA_PROJECT=` ticket prefixes from its env files,
+the dev repo whose manifest targets it, and an optional
+`<context>_identifiers.txt` for display names). Then:
+
+- the personal context's own repos (`personal_credentials`, `personal_dev`) may name anything;
+- a client's credentials or dev repo may not contain the other clients'
+  identifiers;
+- every other repo, this one included, may not contain any client's.
+
+Run `uv run python src/context_leak_check.py` for the default sweep (dotfiles
+plus every credentials and dev repo), `--all` to also report on every other
+sibling, `--list` to see what it derived. The same script is the
+**pre-commit hook** `application_configs/git/hooks/pre-commit.context-leak`,
+deployed by the overlays into dotfiles and into every checkout of each
+client context, the client's own repos included (`.git/hooks/pre-commit`,
+untracked by git). It scans only the staged content and fails closed, then
+runs the repo's own pre-commit framework checks when it has a
+`.pre-commit-config.yaml`, so replacing the hook `pre-commit install` wrote
+loses nothing. Nothing else guards this: before
+2026-09-07 the rule lived in an agent memory file and two leaks reached
+commits anyway.

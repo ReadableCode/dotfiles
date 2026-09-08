@@ -18,7 +18,8 @@ anything needed at any job must live here (portable tooling like
 `ticket_pr.py` is here on purpose); anything
 context-specific lives in that context's sibling `*_credentials` repo (secrets,
 inventory, declarations, client payloads) or, if it names Claude or guides an
-agent, in that client's `<client>_dev` repo, and recurring homelab jobs live in
+agent, in that context's `<context>_dev` repo (`personal_dev` for the
+personal context; each client has its own), and recurring homelab jobs live in
 `personal-automation`. See
 `docs/repo_philosophy.md` before proposing to move something out.
 
@@ -113,6 +114,12 @@ is the one-paragraph orientation so an agent knows which file to open.
   overlays like every other user-level Claude file, so a client machine that
   must carry no Claude-named path never gets it). Doc:
   `docs/repo_init_worktree.md`.
+- **`context_leak_check.py`** — refuses one context's identifiers inside
+  another: derives each client's identifiers from its own credentials repo
+  (so this file names none), forbids them in every other repo, and forbids
+  the other clients' in a client's own two repos. Also the pre-commit hook
+  the overlays deploy into those checkouts. Doc:
+  `docs/repo_client_credentials.md`, "Context leak check".
 - **`clone_repos.py`** — offers to clone every repo the cloned contexts'
   `<context>_repos.yaml` files declare for this machine; run by gitpullall
   between the pull and the deploy.

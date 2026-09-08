@@ -1344,15 +1344,17 @@ MANIFEST_FREE_PAYLOADS = {
 # entry really covers the file, so a stale line here fails on Jason's machines.
 OVERLAY_OWNED_PAYLOADS = {
     "autostart/start_x0vncserver.desktop": "personal_credentials",
-    "claude/commands/init_worktree.md": "personal_credentials",
-    "claude/settings.json": "personal_credentials",
-    "claude/statusline.sh": "personal_credentials",
-    "claude/themes/dark-high-contrast.json": "personal_credentials",
+    "git/hooks/pre-commit.context-leak": "personal_dev",
+    "claude/commands/init_worktree.md": "personal_dev",
+    "claude/rules/working_rules.md": "personal_dev",
+    "claude/settings.json": "personal_dev",
+    "claude/statusline.sh": "personal_dev",
+    "claude/themes/dark-high-contrast.json": "personal_dev",
     "ssh/config": "personal_credentials",
     "ssh/config.mac": "personal_credentials",
-    "t3code/service.d/10-path.jasonzephyrus.conf": "personal_credentials",
-    "t3code/service.d/20-tailscale-serve.jasonzephyrus.conf": "personal_credentials",
-    "t3code/settings.json": "personal_credentials",
+    "t3code/service.d/10-path.jasonzephyrus.conf": "personal_dev",
+    "t3code/service.d/20-tailscale-serve.jasonzephyrus.conf": "personal_dev",
+    "t3code/settings.json": "personal_dev",
 }
 
 APPLICATION_CONFIGS_DIR = os.path.join(deploy_configs.REPO_ROOT, "application_configs")

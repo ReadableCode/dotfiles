@@ -1142,6 +1142,32 @@ a doc/automation task in this repo.
   reading a thread's history, an incoming message auto-scrolls the view to
   the bottom. Fix: only auto-scroll when already at (or near) the bottom;
   otherwise keep the reading position and show a "new messages" jump pill.
+- **T3 Connect 502s after a reboot when the tunnel ingress port drifts**: the
+  cloudflared ingress (`curl 127.0.0.1:20241/config`) was registered against
+  port 3774 while a stale instance held 3773; after a clean reboot the server
+  binds 3773 (`~/.t3/userdata/server-runtime.json`) and the app does not
+  re-register the ingress, so every tunnel request 502s while local use works.
+  Diagnose by comparing those two; `cloudflared_tunnel_request_errors ==
+  total_requests` in `/metrics` confirms it. Fix: toggle server exposure off
+  and on in T3 settings, then wait for `readyConnections: 4` in `/ready`
+  (several minutes) before judging.
+- **"OAuth session expired" in T3 while other Claude sessions work**: two
+  credential stores exist on a Mac, the keychain item and a leftover
+  `~/.claude/.credentials.json` with a rotated-out refresh token, and the
+  T3-spawned CLI picks the stale file. Fix both halves: run one headless auth
+  as the user (`env -i HOME="$HOME" PATH="$PATH" claude -p "ok"`, which
+  cleans the stale file) and kill any T3-spawned `claude --output-format
+  stream-json` process started before the cleanup (it caches the dead
+  credential; T3 respawns on the next message). Second variant: no file at
+  all but the keychain item itself is corrupt (empty tokens, `expiresAt` 0);
+  only `/login` fixes that.
+- **Duplicate servers on the same state db**: a T3 client on another machine
+  in managed SSH-remote mode spawns its own `t3 serve` here
+  (`~/.t3/ssh-launch/<hash>/` with `managed`, `pid`, `port`), orphaned to PID 1
+  and restarted within seconds if killed, registering the same relay tunnel
+  as `t3code.service`. Fix on the client (switch it to T3 Connect or delete
+  the connection), never by killing servers; enumerate with
+  `pgrep -af '(\.bin/t3|dist/bin\.mjs) serve'` and identify by cgroup.
 - **Local Network permission is never requested (upstream)**: the app doesn't
   trigger macOS's Local Network prompt, so LAN connections just fail with
   "Transport error" and no hint that the OS permission is the cause. Fix:

@@ -200,3 +200,23 @@ netstat -ano | findstr :2222
 ```bash
 ssh -p 2222 <you>@<laptop-ip>
 ```
+
+## Running commands non-interactively (PowerShell default shell)
+
+The personal Windows machines run OpenSSH Server with PowerShell as the
+default shell and the profile dot-sourcing `powershell_aliases.ps1`.
+
+- Nested quoting through `ssh host "powershell -Command ..."` mangles `$`
+  expansion, embedded quotes and paths with spaces. Reliable form: build the
+  script, base64-encode it as UTF-16LE
+  (`python3 -c "import base64,sys; print(base64.b64encode(sys.stdin.read().encode('utf-16-le')).decode())"`),
+  and run `ssh host "powershell -NoProfile -EncodedCommand <b64>"`. The
+  command line caps around 32k characters.
+- `-NoProfile` leaves the shell functions and aliases undefined. To use one
+  (`gitpullall`, an ssh alias), run it bare: `ssh host "gitpullall"`.
+- The profile's "Sourced:" banner is guarded to interactive sessions. An
+  unguarded banner lands in the binary stream and breaks scp and sftp with
+  "Received message too long"; if that error reappears, suspect a profile
+  printing on a non-interactive shell, not the network.
+- Output still carries `#< CLIXML` and a trailing `<Objs ...>` progress blob;
+  filter them, they are noise.

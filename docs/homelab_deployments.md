@@ -60,8 +60,8 @@ Key behaviors:
 - A change to the `Docker` repo itself runs a plain `up -d` (recreates only
   services whose compose config changed).
 - Ignore list: `~/GitHub/.skiprepos` (one repo name per line; shared with the
-  go git_puller). Contains `personal_credentials` and
-  `fourteen_foods_credentials`.
+  go git_puller). Contains `personal_credentials` and every other
+  credentials repo whose git hub lives on this box.
 - **Hub repos** (skipped, mapped to services, updated in place by push):
   `personal_credentials`. The loop compares HEAD with the rev it last
   deployed, recorded in `~/GitHub/.git_pull_state/<repo>.rev`, and recreates

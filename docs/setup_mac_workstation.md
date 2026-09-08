@@ -303,6 +303,11 @@ mv ~/Library/Application\ Support/Claude /Volumes/EnvyExtSSD/Claude
 ln -s /Volumes/EnvyExtSSD/Claude ~/Library/Application\ Support/Claude
 ```
 
+### Telemetry stays on
+
+`DISABLE_TELEMETRY=1` silently disables `/remote-control`, which is how the
+mobile app reaches a session. Leave telemetry on in the Claude settings.
+
 ## Install Binary Installler Apps
 
 - Install Logi Options
@@ -535,6 +540,31 @@ Desktop / None), readable and pressable without ever being rendered:
   assignment. It merges rather than replaces, so apps that happen to be closed
   keep whatever they had.
 
+### Switching desktops programmatically
+
+With "Displays have separate Spaces" off, the only reliable way to switch
+desktops from Hammerspoon is `hs.eventtap.keyStroke({"ctrl"}, "<n>", 0)`, the
+system "Switch to Desktop N" hotkey. ctrl+arrow keystrokes are not honored and
+`hs.spaces.gotoSpace` fails with "no display with specified id found" because
+the Dock's Mission Control AX element is empty on this macOS. The `hs.spaces`
+read APIs work. AX cannot see windows on inactive spaces, so each desktop must
+be visible when its layout is applied; that is why init.lua walks desktops
+with ctrl+N. Hammerspoon has `hs.ipc` on and a `wl` global, so the running
+instance can be driven from a shell (`hs -c "wl.applyAll()"`); reload with
+`killall Hammerspoon && open -g -a Hammerspoon`. Stream Deck's Website action
+drops custom URL schemes; its "GET request in background" mode is what reaches
+the loopback trigger server.
+
+## Chrome web apps: one shim per site
+
+Chrome on macOS creates exactly one app shim per web-app id, shared by every
+profile, so two Dock icons for one site are impossible. To get a profile
+switcher inside the app: in that profile open chrome://apps, right-click the
+app, "Create shortcuts...", then fully quit the app and relaunch it from the
+Dock (the shim rebuilds its profile menu at launch). "Open in <app>" alone
+does not register the profile. The in-page Google avatar only lists that
+profile's accounts. Diagnostics: chrome://web-app-internals.
+
 ## Enable SSH Server
 
 - System Settings -> General -> Sharing -> Remote Management
@@ -594,6 +624,12 @@ allowlist the home subnet system-wide instead of relying on per-app toggles:
 sudo defaults write com.apple.network.local-network AllowedWiFiLocalNetworkAddresses -array "192.168.86.0/24"
 sudo defaults write com.apple.network.local-network AllowedEthernetLocalNetworkAddresses -array "192.168.86.0/24"
 ```
+
+The denial is per binary and inconsistent: in one session `/usr/bin/ssh` and
+`nc -z` reached LAN hosts while venv Python sockets to the same host got
+errno 65 "No route to host". A Python LAN failure next to a working ssh does
+not rule this permission out; check from your own terminal before concluding a
+host is down.
 
 ## Disable auto punctuation
 

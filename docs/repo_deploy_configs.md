@@ -367,6 +367,24 @@ Two files are written, side by side:
 | `deploy_map.html` | One self-contained page (no network, no build step), four views: **Disk** (default), **Fleet**, **Matrix** and **Destinations** — see below. Open it straight from the repo. |
 | `deploy_map.json` | The same dataset, indented — the diffable half, so a pull request shows *which* link changed rather than one 350 KB blob. |
 
+Since 2026-09-07 the map also applies the **clone gate**: an entry from an
+overlay manifest counts on a machine only if that overlay's repo would be
+cloned there, so a client laptop shows none of the other contexts' entries
+even though every manifest is loaded on the machine that draws the map
+(before this, the map showed personal and other-client commands landing on
+client machines that never clone those repos).
+
+The page has a **Machine** tab: pick one host and it shows every repo the
+contexts declare, with the ones `clone_repos.py` would not put there dimmed
+(the reason is the hover text: not in the repos file's `hosts`, named in
+`exclude_hosts`, or declared by a context the machine is not in), and that
+machine's deployments with `requires:` evaluated against that clone set. It
+is the one view where an absent checkout is a real skip; the fleet views
+assume every checkout exists. A machine is in its own inventory's context,
+in any context its inventory record lists under `contexts` (a dev box that
+also holds a client's credentials repo by hand, a hub box), and in any
+context whose repos file or manifest `hosts:` filter names it.
+
 The four views answer different questions:
 
 - **Disk** — *where does this file on disk come from?* Source files on the

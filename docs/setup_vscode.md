@@ -198,6 +198,6 @@ so it always uses the same directory across reconnects:
 
 ```json
 "remote.SSH.serverInstallPath": {
-  "192.168.86.126": "%USERPROFILE%\\\\.vscode-server"
+  "<windows-host-ip>": "%USERPROFILE%\\\\.vscode-server"
 }
 ```

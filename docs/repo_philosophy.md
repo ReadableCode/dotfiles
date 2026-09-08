@@ -35,6 +35,10 @@ That covers:
   and PRs, panels discovered from sibling `*_credentials` repos) now lives
   in the sibling `status_board` repo (github.com/ReadableCode/status_board).
 
+Machines clone dotfiles and nothing else to get their runtime tooling: the
+repo puller, the deploy pipeline and the shell helpers never split into
+separate repos, and committed Go binaries are the accepted cost of that.
+
 ## Context overlays: sibling `*_credentials` repos
 
 Each context a machine belongs to — personal, or a client/company — has its
@@ -46,6 +50,18 @@ The rule: **everything I need for a job comes from dotfiles plus that
 context's own repo layers.** Dotfiles stays context-free — nothing
 client-specific is committed here, ever; company-tagged config variants live
 in the client's `*_credentials` repo.
+
+Contexts also never reference each other. A client's name, repo, ticket key
+or hostname never appears in another client's repos, docs, configs or
+commands, not even as an example, and nothing a client's overlay deploys into
+a checkout may carry another context's identifiers. The personal context is
+the one place that knows every context by name, and its files deploy only to
+personal machines. The rule itself lives in the user-level working rules this
+repo deploys (`application_configs/claude/rules/working_rules.md`), so it
+reaches every session without any client repo carrying it.
+It is enforced, not just stated: `src/context_leak_check.py` and the
+pre-commit hook built on it (`docs/repo_client_credentials.md`, "Context leak
+check") refuse a commit that stages another context's identifiers.
 
 ## Client dev repos: anything agent-shaped
 
@@ -62,10 +78,17 @@ agent tooling and declares its own overlay manifest (the opt-in form, see
 | Context declarations: `<context>_hosts.json`, `_repos.yaml`, `_mcp_servers.yaml`, `_statusboard.yaml`, `_calendarboard.yaml`, `_googlemail.yaml` | `<context>_credentials` |
 | Client app payloads: `configuration.json`, workspaces, shell / PowerShell / ssh fragments, editor settings, git hooks that name no agent | `<context>_credentials` |
 | Working notes that become a repo's `CLAUDE.md` | `<context>_credentials` under a **neutral filename**; the dev overlay supplies the destination name |
-| Agent tooling: slash commands, skills, project allow lists, memory dirs, user-level Claude settings and `CLAUDE.md`, T3 Code settings, the per-repo `.mcp.json` manifest entry | `<client>_dev` |
+| Agent tooling: slash commands, skills, project allow lists, user-level Claude settings and `CLAUDE.md`, T3 Code settings, the per-repo `.mcp.json` manifest entry | `<context>_dev` (`personal_dev`; each client has its own) |
 | App-owned commands (a personal app's `.claude/commands/`) | the app repo; the context overlay links them |
+| Agent notes for a personal repo that does not advertise agent use | `personal_dev/claude/repo_notes/<repo>.md`, deployed as a gitignored `CLAUDE.md` link |
 | Context-free payloads (`init_worktree`, user `settings.json`, statusline, themes) and the generated `data/mcp/*.mcp.json` | `dotfiles` |
 | Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal-automation` for the homelab |
+
+Claude's auto-memory directories are **not** synced (retired 2026-09-07):
+they are machine-local by design, written by the agent without review, and
+were accumulating rules and facts that belong in tracked docs. Durable rules go in the user-level files (`application_configs/claude/rules/working_rules.md`
+here for the context-free ones, each context's `CLAUDE.<context>.md` in its
+dev repo for the rest) and durable facts in the doc that owns the topic.
 
 The MCP server *declaration* stays in the credentials repo on purpose: it
 holds a URL and env var names, the env file it points at lives there, and the
@@ -76,12 +99,11 @@ clone sets differ - one must be on its client's laptop for that machine's
 crontab, the other must never touch client hardware - but their role is the
 same.
 
-**The personal context has no dev repo.** Dev repos exist because of a
-two-owner situation: the client owns the work repos and requires approval to
-change them, and the credentials repo sits on the client's hardware. Personally
-there is one owner, no approval gate and no foreign hardware, so
-`personal_credentials/claude/` plays both roles and is cloned on every
-personal machine.
+**The personal context has the same split** (`personal_dev`, added
+2026-09-07 after a morning where the credentials repo played both roles): the
+secrets repo stays a secrets repo, and the agent tooling lives in a
+GitHub-private repo that cloud and web sessions can read, which the LAN-hosted
+credentials repo never can. It is cloned wherever the credentials repo is.
 
 ## personal-automation: recurring homelab jobs
 

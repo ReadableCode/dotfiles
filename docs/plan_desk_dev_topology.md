@@ -93,6 +93,22 @@ persistent-process jobs, built when actually needed.
 - Replacing Envy: declined; it is adequate once dev moves off.
 - Any remote-desktop-based workflow: rejected on latency.
 
+## Decisions (August 2026)
+
+- Envy (16 GB Mac mini) stays as the console; it is not being replaced. Its
+  irreducible local load is meetings, Chrome, screen sharing, VNC/KVM
+  software and audio. Real work runs on remote targets over VS Code Remote
+  and ssh, and Claude Code sessions run on the targets, not on Envy. Remote
+  desktop is not an option for real work.
+- The MacBook's display problem is only the Thunderbolt-dock-through-KVM path
+  (macOS rejects MST fan-out and KVM EDID re-training): dock video goes direct
+  to spare monitor inputs, the KVM carries keyboard and mouse only.
+- Personal dev target: Option B, RyzenWhite on native Windows, not WSL2 (the
+  code shares storage with Windows tools and the WSL boundary always ends up
+  a mess). Claude Code over ssh does the heavy lifting; dotfiles is already
+  provisioned there. Container projects and persistent-process jobs still go
+  to a behemoth Ubuntu VM when one is built.
+
 ## Provisioning checklist (when a target is chosen)
 
 1. Stand up the OS (VM define + Ubuntu install, or WSL2 distro).

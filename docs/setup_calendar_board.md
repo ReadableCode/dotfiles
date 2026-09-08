@@ -191,3 +191,22 @@ tmux new-session -s boards 'uv run --project ~/GitHub/status_board python ~/GitH
 
 or as separate tmux windows (`c` / `n` to flip), or two terminal tabs — the
 calendar board never causes the status board to redraw, and vice versa.
+
+## Auth facts per context (settled 2026-07-25)
+
+- A client tenant that blocks all app consent (no app registrations, even
+  first-party device-code flows want admin approval) cannot be reached by
+  Graph. That calendar reaches the board through the Outlook ICS share
+  subscribed in the personal Google account (an `@import.calendar.google.com`
+  calendar, refreshed only every 12 to 24 hours, no attendance badges),
+  defined as a split column in `personal_calendarboard.yaml`. Do not
+  re-suggest Graph access for it.
+- A Workspace that allows the user's own OAuth app signs in through that app
+  and keeps only its own refresh token in its context's env file.
+- The personal Google app is published to production (Testing mode capped
+  tokens at 7 days, the original trap) and consent was minted with the full
+  read/write calendar scope, so write features need no re-auth. The GCP
+  verification nag can be ignored.
+- One OAuth app across contexts is the rclone model: the client id and secret
+  are app configuration, copied into each context's env file; each account
+  mints its own token into its own repo. Account tokens never cross contexts.

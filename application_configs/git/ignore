@@ -2,3 +2,7 @@
 # deploy_configs links each context's generated MCP registration into every
 # checkout of that context (per_context_repo entries); never tracked
 **/.mcp.json
+# per-repo agent notes deploy into personal checkouts as CLAUDE.md links from
+# personal_credentials (claude/repo_notes/); a repo that tracks its own
+# CLAUDE.md is unaffected - ignore rules never touch tracked files
+**/CLAUDE.md

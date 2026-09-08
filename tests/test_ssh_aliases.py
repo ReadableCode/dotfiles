@@ -61,44 +61,44 @@ def test_every_alias_of_a_host_gets_its_own_definition(tmp_path):
 
 JUMP_INVENTORY = [
     {"name": "gateway", "hostname": "192.168.1.9", "user": "jason", "port": 2222, "aliases": ["sshgw"]},
-    {"name": "vm", "hostname": "172.20.10.101", "user": "svc", "aliases": ["sshvm"], "jump": "gateway"},
+    {"name": "vm", "hostname": "10.99.0.101", "user": "svc", "aliases": ["sshvm"], "jump": "gateway"},
 ]
 
 
 def test_jump_hop_is_baked_into_the_alias(tmp_path):
     write_inventory(tmp_path, "acme", JUMP_INVENTORY)
-    assert aliases(tmp_path)["sshvm"] == "ssh -J jason@192.168.1.9:2222 svc@172.20.10.101"
+    assert aliases(tmp_path)["sshvm"] == "ssh -J jason@192.168.1.9:2222 svc@10.99.0.101"
 
 
 def test_jump_can_name_the_hop_by_alias_instead_of_name(tmp_path):
     hosts = [dict(JUMP_INVENTORY[0]), dict(JUMP_INVENTORY[1], jump="SSHGW")]
     write_inventory(tmp_path, "acme", hosts)
-    assert aliases(tmp_path)["sshvm"] == "ssh -J jason@192.168.1.9:2222 svc@172.20.10.101"
+    assert aliases(tmp_path)["sshvm"] == "ssh -J jason@192.168.1.9:2222 svc@10.99.0.101"
 
 
 def test_jump_hop_is_dropped_when_generated_on_the_jump_machine(tmp_path):
     write_inventory(tmp_path, "acme", JUMP_INVENTORY)
     # The jump host holds the VPN, so from there the target is direct. The
     # local name is matched on its short, case-insensitive form.
-    assert aliases(tmp_path, local_hostname="GATEWAY.corp.example")["sshvm"] == "ssh svc@172.20.10.101"
+    assert aliases(tmp_path, local_hostname="GATEWAY.corp.example")["sshvm"] == "ssh svc@10.99.0.101"
 
 
 def test_portless_jump_host_yields_a_hop_without_a_port(tmp_path):
     hosts = [{"name": "gateway", "hostname": "192.168.1.9", "user": "jason", "aliases": ["sshgw"]}, JUMP_INVENTORY[1]]
     write_inventory(tmp_path, "acme", hosts)
-    assert aliases(tmp_path)["sshvm"] == "ssh -J jason@192.168.1.9 svc@172.20.10.101"
+    assert aliases(tmp_path)["sshvm"] == "ssh -J jason@192.168.1.9 svc@10.99.0.101"
 
 
 def test_unresolvable_jump_token_is_ignored(tmp_path):
     write_inventory(tmp_path, "acme", [dict(JUMP_INVENTORY[1], jump="nowhere")])
-    assert aliases(tmp_path)["sshvm"] == "ssh svc@172.20.10.101"
+    assert aliases(tmp_path)["sshvm"] == "ssh svc@10.99.0.101"
 
 
 def test_jump_is_resolved_within_one_inventory_only(tmp_path):
     write_inventory(tmp_path, "acme", [JUMP_INVENTORY[1]])
     write_inventory(tmp_path, "personal", [JUMP_INVENTORY[0]])
     # The gateway lives in the OTHER context's inventory, so there is no hop to make.
-    assert aliases(tmp_path)["sshvm"] == "ssh svc@172.20.10.101"
+    assert aliases(tmp_path)["sshvm"] == "ssh svc@10.99.0.101"
 
 
 # ---------------------------------------------------------------- vnc aliases

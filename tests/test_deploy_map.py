@@ -109,6 +109,15 @@ def fleet(tmp_path, monkeypatch):
         },
     )
     os.makedirs(str(github / "personal_credentials"))
+    # repos files: what clone_repos.py would offer on each machine
+    write_yaml(str(repo_root / "dotfiles_repos.yaml"), {"defaults": {"provider": "github", "org": "me"},
+                                                       "repos": [{"name": "dotfiles"}, {"name": "status_board"}]})
+    write_yaml(
+        str(github / "acme_credentials" / "acme_repos.yaml"),
+        {"defaults": {"provider": "github", "org": "acme"},
+         "repos": [{"name": "acme-app", "hosts": ["Envy"]}, {"name": "acme-lib", "exclude_hosts": ["Tower"]},
+                   {"name": "upstream-site", "dir": "local-site"}]},
+    )
     return github
 
 
@@ -315,3 +324,69 @@ def test_render_map_html_rejects_a_template_without_the_placeholder(fleet):
 
 
 # %%
+
+
+# %%
+# Machine view: clone set per host and requires evaluated against it #
+
+
+def test_machine_view_lists_every_declared_repo_with_its_clone_state(fleet):
+    data = build(fleet)
+    envy = next(h for h in data["hosts"] if h["id"] == "Envy")
+    tower = next(h for h in data["hosts"] if h["id"] == "Tower")
+    state = lambda host, name: next(r["state"] for r in host["repos"] if r["name"] == name)
+    # 2 dotfiles + 3 acme + one implicit entry per credentials repo (acme, personal)
+    assert data["meta"]["repoCount"] == len(envy["repos"]) == 7
+    assert envy["contexts"] == ["dotfiles", "acme"]
+    assert state(envy, "personal_credentials") == "other_context"  # Envy is in acme's inventory here, not personal's
+    assert state(envy, "acme_credentials") == "credentials"
+    assert state(envy, "acme-app") == "cloned"          # hosts allow list names it
+    assert state(tower, "acme-app") == "not_listed"     # and not Tower
+    assert state(tower, "acme-lib") == "excluded"       # exclude_hosts wins
+    assert state(envy, "local-site") == "cloned"        # the checkout dir, not the upstream name
+    assert state(envy, "status_board") == "cloned"      # dotfiles' own repos file applies everywhere
+
+
+def test_machine_view_reports_requires_the_clone_set_cannot_meet(fleet):
+    data = build(fleet)
+    envy = next(h for h in data["hosts"] if h["id"] == "Envy")
+    pi = next(h for h in data["hosts"] if h["id"] == "Pi")
+    # acme_env requires {repo_parent}/acme-app: cloned on Envy, never offered to Pi
+    assert "acme_env" not in envy["reqMissing"]
+    assert pi["reqMissing"] == {"acme_env": ["acme-app"]}
+
+
+def test_a_host_joins_extra_contexts_through_its_inventory_record(fleet):
+    hosts_path = str(fleet / "acme_credentials" / "acme_hosts.json")
+    with open(hosts_path, "r", encoding="utf-8") as file_handle:
+        inventory = json.load(file_handle)
+    inventory["hosts"][1]["contexts"] = ["bravo"]  # Pi also holds bravo's credentials repo by hand
+    write_json(hosts_path, inventory)
+    write_yaml(str(fleet / "bravo_credentials" / "bravo_repos.yaml"),
+               {"defaults": {"provider": "github", "org": "bravo"}, "repos": [{"name": "bravo-tool"}]})
+    data = build(fleet)
+    pi = next(h for h in data["hosts"] if h["id"] == "Pi")
+    envy = next(h for h in data["hosts"] if h["id"] == "Envy")
+    assert "bravo" in pi["contexts"] and "bravo" not in envy["contexts"]
+    assert next(r["state"] for r in pi["repos"] if r["name"] == "bravo-tool") == "cloned"
+    assert next(r["state"] for r in envy["repos"] if r["name"] == "bravo-tool") == "other_context"
+
+
+def test_an_overlay_entry_only_applies_where_its_repo_is_cloned(fleet):
+    # acme_dev opts in with its own manifest and is offered to Envy only; its
+    # hosts-less entry must not show up on Pi or Tower even though this machine
+    # (which draws the map) has the manifest loaded
+    write_yaml(str(fleet / "acme_credentials" / "acme_repos.yaml"),
+               {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme_dev", "hosts": ["Envy"]}]})
+    touch(str(fleet / "acme_dev" / "tool.md"))
+    write_yaml(str(fleet / "acme_dev" / "acme_dev_manifest.yaml"),
+               [{"name": "acme_tool", "repo": "tool.md", "dest": {"darwin": "~/.tool", "linux": "~/.tool", "windows": "~/.tool"}}])
+    data = build(fleet)
+    tool = next(e for e in data["entries"] if e["id"] == "acme_tool")
+    assert tool["hosts"] == ["Envy"]
+    code = lambda host_id: data["meta"]["actions"][data["matrix"][data["entries"].index(tool)][next(i for i, h in enumerate(data["hosts"]) if h["id"] == host_id)][0]]
+    assert code("Envy") == "apply"
+    assert code("Pi") == "skip_overlay" and code("Tower") == "skip_overlay"
+    # the credentials repo's own entries still reach every machine in its inventory
+    shared = next(e for e in data["entries"] if e["id"] == "acme_env")
+    assert shared["hosts"] == ["Envy", "Pi", "Tower"]

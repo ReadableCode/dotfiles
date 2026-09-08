@@ -6,6 +6,8 @@ import json
 import os
 import sys
 
+import yaml
+
 from config import grandparent_dir, parent_dir, templates_dir
 from readable_utils.host_tools import get_uppercase_hostname
 from utils.inventory_tools import (
@@ -68,7 +70,23 @@ DISK_AREAS = [
 # per machine.
 HOST_PLACEHOLDER = "{host}"
 
-ACTIONS = ["apply", "none", "skip_host", "skip_platform", "skip_variant", "skip_requires"]
+# The planner's outcomes plus one the map alone can know: "skip_overlay" means the
+# manifest that holds the entry lives in a repo the machine never clones, so the
+# deploy there never loads it. Evaluated from the clone sets (see the Machine
+# section), which is what makes a client laptop show none of the other
+# contexts' entries even though every manifest is loaded on the machine that
+# draws the map.
+ACTIONS = ["apply", "none", "skip_host", "skip_platform", "skip_variant", "skip_requires", "skip_overlay"]
+
+# Clone states on the Machine view. "cloned" and "credentials" are what the
+# machine really holds; the rest are dimmed with the reason.
+REPO_STATES = {
+    "cloned": "offered by clone_repos.py on this machine",
+    "credentials": "the context's own credentials repo, cloned by hand when the machine joined the context",
+    "not_listed": "the repos file lists other machines for it",
+    "excluded": "exclude_hosts names this machine",
+    "other_context": "declared by a context this machine is not in",
+}
 ACTION_CODE = {name: index for index, name in enumerate(ACTIONS)}
 
 CATEGORY_LABELS = {
@@ -259,11 +277,152 @@ def load_hosts(credentials_root=None):
                     "os": platform_key,
                     "inventory": inventory_repo,
                     "groups": host.get("groups", []),
+                    # extra contexts whose credentials repo this machine holds by hand
+                    # (a dev box that also clones a client's repos, a hub box)
+                    "extraContexts": [str(c) for c in host.get("contexts") or []],
                     "deployable": platform_key in DEPLOY_PLATFORMS,
                 }
             )
     hosts.sort(key=lambda host: (PLATFORM_ORDER.get(host["os"], 9), host["id"].lower()))
     return hosts
+
+
+# %%
+# Repos: what clone_repos.py would put on each machine #
+
+
+def load_repo_declarations(repo_root, credentials_root):
+    """
+    Every repo the contexts declare, from ``dotfiles_repos.yaml`` and each
+    sibling ``<context>_repos.yaml`` (defaults merged in), plus one implicit
+    entry per credentials repo: it is never in a repos file - cloning it is
+    how a machine joins the context - but it is on disk wherever the context's
+    inventory lists the machine.
+    """
+    declarations = []
+    sources = [(SHARED_CONTEXT, os.path.join(repo_root, "dotfiles_repos.yaml"))]
+    for path in sorted(find_credentials_dirs(credentials_root)):
+        context = overlay_context(path)
+        declarations.append(
+            {"ctx": context, "name": os.path.basename(path), "dir": os.path.basename(path),
+             "org": "", "provider": "", "hosts": [], "excludeHosts": [], "implicit": True}
+        )
+        sources.append((context, os.path.join(path, f"{context}_repos.yaml")))
+    for context, path in sources:
+        if not os.path.exists(path):
+            continue
+        with open(path, "r", encoding="utf-8") as file_handle:
+            data = yaml.safe_load(file_handle) or {}
+        defaults = data.get("defaults") or {}
+        for raw in data.get("repos") or []:
+            if not isinstance(raw, dict) or not raw.get("name"):
+                continue
+            entry = {**defaults, **raw}
+            declarations.append(
+                {
+                    "ctx": context,
+                    "name": str(entry["name"]),
+                    "dir": str(entry.get("dir") or entry["name"]),
+                    "org": str(entry.get("org") or ""),
+                    "provider": str(entry.get("provider") or ""),
+                    "hosts": [str(h) for h in entry.get("hosts") or []],
+                    "excludeHosts": [str(h) for h in entry.get("exclude_hosts") or []],
+                    "implicit": False,
+                }
+            )
+    return declarations
+
+
+def host_contexts(host, declarations=(), mapped=()):
+    """
+    The contexts a machine is in: the shared one, the one whose inventory lists
+    it, any the inventory record adds under ``contexts`` (a machine that also
+    holds another context's credentials repo by hand), and any context whose
+    repos file or manifest ``hosts:`` filter names the machine - a declaration
+    that names it is proof the context expects to be cloned there.
+    """
+    inventory = host.get("inventory") or ""
+    own = inventory[: -len(CREDENTIALS_SUFFIX)] if inventory.endswith(CREDENTIALS_SUFFIX) else None
+    short = host["name"].split(".")[0].upper()
+    found = [SHARED_CONTEXT] + ([own] if own else []) + list(host.get("extraContexts") or [])
+    for declaration in declarations:
+        if any(h.split(".")[0].upper() == short for h in declaration["hosts"]):
+            found.append(declaration["ctx"])
+    # an opt-in overlay repo that the map could not fold (its name does not
+    # start with its context's token) is a cluster of its own on the map, but
+    # for membership it belongs to the context whose repos file declares it
+    declared_ctx = {d["dir"]: d["ctx"] for d in declarations}
+    for entry in mapped:
+        if any(str(h).split(".")[0].upper() == short for h in entry.get("hostsFilter") or []):
+            found.append(declared_ctx.get(entry["ctx"], entry["ctx"]))
+    ordered = []
+    for context in found:
+        if context not in ordered:
+            ordered.append(context)
+    return ordered
+
+
+def repo_state(declaration, host, contexts):
+    """One of REPO_STATES for this declaration on this machine (``contexts`` = host_contexts(host, ...))."""
+    if declaration["ctx"] not in contexts:
+        return "other_context"
+    if declaration["implicit"]:
+        return "credentials"
+    short = host["name"].split(".")[0].upper()
+    if any(h.split(".")[0].upper() == short for h in declaration["excludeHosts"]):
+        return "excluded"
+    if declaration["hosts"] and not any(h.split(".")[0].upper() == short for h in declaration["hosts"]):
+        return "not_listed"
+    return "cloned"
+
+
+def required_checkouts(entry, repo_parent):
+    """Checkout directory names an entry's ``requires`` names under the repo parent; other paths are ignored."""
+    requires = entry.get("requires")
+    requires = [requires] if isinstance(requires, str) else list(requires or [])
+    names = []
+    for raw in requires:
+        path = portable_path(str(raw).replace("{repo_parent}", repo_parent))
+        prefix = repo_parent.rstrip("/") + "/"
+        if path.startswith(prefix):
+            names.append(path[len(prefix):].split("/")[0])
+    return names
+
+
+def _add_clone_sets(mapped, hosts, repo_root, credentials_root):
+    """
+    Per machine: every declared repo with its clone state, and the resulting
+    clone set. Runs before the matrix, because the clone set decides which
+    overlay manifests even load on that machine.
+    """
+    declarations = load_repo_declarations(repo_root, credentials_root)
+    for host in hosts:
+        contexts = host_contexts(host, declarations, mapped)
+        states = [{"name": d["dir"], "ctx": d["ctx"], "state": repo_state(d, host, contexts)} for d in declarations]
+        host["repos"] = states
+        host["contexts"] = contexts
+        host["_cloned"] = {"dotfiles"} | {s["name"] for s in states if s["state"] in ("cloned", "credentials")}
+    return declarations
+
+
+def _add_machine_view(mapped, entries, hosts, matrix, repo_parent):
+    """
+    For the entries the matrix shows as applied on a machine, which required
+    checkouts its clone set would NOT provide - so the Machine view can show
+    what a real deploy on that box does rather than the fleet's assume-requires
+    picture.
+    """
+    raw = {entry["name"]: entry for entry in entries}
+    for column, host in enumerate(hosts):
+        cloned = host.pop("_cloned")
+        missing = {}
+        for index, entry in enumerate(mapped):
+            if matrix[index][column][0] != ACTION_CODE["apply"]:
+                continue
+            absent = [name for name in required_checkouts(raw[entry["id"]], repo_parent) if name not in cloned]
+            if absent:
+                missing[entry["id"]] = absent
+        host["reqMissing"] = missing
 
 
 # %%
@@ -309,6 +468,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             dest_table.append(path)
         return dest_lookup[path]
 
+    declarations = _add_clone_sets(mapped, hosts, repo_root, credentials_root)
     matrix = [[[ACTION_CODE["none"], -1] for _ in hosts] for _ in mapped]
     variants = [["" for _ in hosts] for _ in mapped]
     for column, host in enumerate(hosts):
@@ -317,6 +477,11 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
         )
         for row in plan:
             index = entry_index[row["name"]]
+            # an overlay manifest only loads where its repo is cloned; the planner
+            # cannot see that from the machine drawing the map, so gate it here
+            if mapped[index]["repo"] not in host["_cloned"]:
+                matrix[index][column] = [ACTION_CODE["skip_overlay"], -1]
+                continue
             matrix[index][column] = [ACTION_CODE[row["action"]], dest_id(portable_path(row["dest"]))]
             variants[index][column] = os.path.basename(row["repo"])
         host["prune"] = [
@@ -329,6 +494,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
     _roll_up_entries(mapped, hosts, matrix, variants, dest_table)
     _roll_up_hosts(mapped, hosts, matrix, dest_table, repo_parent)
     _add_disk_view(mapped, entries, repo_root, credentials_root, repo_parent)
+    _add_machine_view(mapped, entries, hosts, matrix, repo_parent)
 
     return {
         "meta": {
@@ -342,7 +508,10 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             "linkCount": sum(1 for row in matrix for cell in row if cell[0] == ACTION_CODE["apply"]),
             "destCount": len(dest_table),
             "nonTargets": sorted(non_targets, key=lambda device: device["name"].lower()),
+            "repoStates": REPO_STATES,
+            "repoCount": len(declarations),
         },
+        "repos": declarations,
         "contexts": build_contexts(mapped),
         "areas": [{"key": key, "label": label, "sub": sub} for key, label, sub in DISK_AREAS],
         "hosts": hosts,

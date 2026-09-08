@@ -60,7 +60,7 @@ tailscale funnel 18501
 - Windows: on a new admin terminal on the machine with tailscale
 
 ```bash
-netsh interface portproxy add v4tov4 listenport=18501 listenaddress=127.0.0.1 connectport=8501 connectaddress=192.168.86.126
+netsh interface portproxy add v4tov4 listenport=18501 listenaddress=127.0.0.1 connectport=8501 connectaddress=<remote-host-ip>
 ```
 
 To list the current portproxy settings, run:

@@ -16,4 +16,15 @@ if [ -z "$PY" ]; then
     echo "pre-commit: python3 not found; cannot run the context leak check" >&2
     exit 1
 fi
-exec "$PY" "$CHECK" --staged --repo "$(git rev-parse --show-toplevel)"
+TOP="$(git rev-parse --show-toplevel)"
+"$PY" "$CHECK" --staged --repo "$TOP" || exit 1
+# A repo that uses the pre-commit framework keeps its own checks: this file
+# replaced the hook `pre-commit install` wrote, so run the framework on the
+# staged files exactly as that hook would have. No config, nothing more to do.
+if [ -f "$TOP/.pre-commit-config.yaml" ]; then
+    if command -v pre-commit >/dev/null 2>&1; then
+        cd "$TOP" && exec pre-commit run
+    fi
+    echo "pre-commit: $TOP has a .pre-commit-config.yaml but pre-commit is not installed; its own checks did not run" >&2
+fi
+exit 0

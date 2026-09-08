@@ -61,6 +61,7 @@ prefixes; nothing lives unprefixed.
 
 - [homelab_deployments.md](homelab_deployments.md) - Homelab Deployments
 - [homelab_docker_registry.md](homelab_docker_registry.md) - Using a Local Docker Registry
+- [homelab_hosts_access.md](homelab_hosts_access.md) - Homelab hosts: access facts an agent needs
 - [homelab_postgres_app_conventions.md](homelab_postgres_app_conventions.md) - Shared Postgres / PostgREST App Conventions
 - [homelab_unraid_drives.md](homelab_unraid_drives.md) - homelab_unraid_drives
 - [homelab_unraid_mem_logging.md](homelab_unraid_mem_logging.md) - Loop logging Unraid from powershell ssh client
@@ -70,6 +71,7 @@ prefixes; nothing lives unprefixed.
 - [howto_finding_files.md](howto_finding_files.md) - Find Artifacts of Syncing Issues
 - [howto_finding_strings_vscode.md](howto_finding_strings_vscode.md) - String Replacement with VSCode
 - [howto_formatting.md](howto_formatting.md) - Formatting
+- [howto_nicegui_quasar_layers.md](howto_nicegui_quasar_layers.md) - NiceGUI 3.x and Quasar cascade layers
 - [howto_rsync.md](howto_rsync.md) - Rsync Info
 - [howto_searching_replacing.md](howto_searching_replacing.md) - Replacements
 - [howto_symlinks_and_hardlinks.md](howto_symlinks_and_hardlinks.md) - Sym Linking and Hard Linking
