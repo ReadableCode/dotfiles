@@ -244,7 +244,10 @@
 # replaces the deployed link with a plain file - so all three entries set
 # on_drift: adopt: the next deploy copies the in-app edit INTO the repo
 # working tree (git diff to review, commit or revert - VS Code-style) and
-# re-links, instead of clobbering it with the repo copy. The machine file is
+# re-links, instead of clobbering it with the repo copy - on WORKTREE_HOST
+# (envy) only; every other machine deploys these as replace, because T3
+# rewrites them after each app update and adopting on two machines left the
+# second one unable to pull (2026-09-09). The machine file is
 # still backed up to data/config_backups first, and a repo copy that is the
 # newer side (orphaned hard link after git pull) still wins as usual. Adopted
 # json is re-serialized to the canonical repo form (2-space indent, sorted

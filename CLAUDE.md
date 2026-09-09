@@ -60,8 +60,10 @@ is the one-paragraph orientation so an agent knows which file to open.
 - **`deploy_map.py`** — redraws the fleet-wide deployment map (every entry x
   every machine, interactive page plus diffable JSON) from those same plans on
   every deploy, into `generated/deploy_map.{html,json}` in the personal
-  credentials repo - only on host `envy` (`MAP_HOST`; any other machine
-  writing those tracked files dirties that checkout and blocks its next pull).
+  credentials repo - only on host `envy` (`MAP_HOST`, which is
+  `deploy_configs.WORKTREE_HOST`, the one machine a deploy may leave with a
+  dirty checkout; `on_drift: adopt` acts there only for the same reason - any
+  other machine writing tracked files blocks its own next pull).
   Template `templates/deploy_map.html`; both must stay context-agnostic
   because the rendered map names every machine and client at once.
 - **`claude_mcp.py`** — generates one `data/mcp/<context>.mcp.json` per

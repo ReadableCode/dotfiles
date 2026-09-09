@@ -27,6 +27,17 @@ from utils.inventory_tools import (
     overlay_context,
 )
 
+# The ONE machine whose repo working tree a deploy may dirty: deploy_map.py
+# regenerates the fleet map there (its MAP_HOST is this constant), and
+# on_drift: adopt copies an app's rewrite into the worktree only there. Every
+# other machine treats the repo copy as the truth and never gets a dirty
+# checkout from a deploy. Adopting everywhere deadlocked pulls (2026-09-09):
+# T3 Code rewrites its settings on every update, each machine adopted its own
+# copy, envy's adoption got committed, and git then refused to pull the same
+# file over the uncommitted adoption on every other machine - forever, until
+# a human reverted it by hand.
+WORKTREE_HOST = "envy"
+
 # %%
 # Variables #
 
@@ -362,7 +373,9 @@ def deploy_config(
     NEWER diverging side, its content is first copied over the repo file -
     dirtying the working tree for the user to git diff / commit / revert -
     before re-linking. The repo copy still wins when IT is the newer side
-    (an orphaned hard link after git pull).
+    (an orphaned hard link after git pull). build_plan only passes "adopt"
+    through on WORKTREE_HOST; everywhere else the entry arrives here as
+    "replace".
 
     Idempotent: a destination that is already a correct symlink - or an
     existing hard link sharing the repo file's inode - is a no-op.
@@ -843,6 +856,11 @@ def resolve_dest(entry, platform_key, hostname="", repo_root=None):
     return expand_path(raw_dest, hostname, repo_root)
 
 
+def adopts_here(hostname):
+    """True on the one machine whose worktree a deploy may dirty (WORKTREE_HOST)."""
+    return short_host_token(hostname) == WORKTREE_HOST
+
+
 def host_allowed(entry, hostname):
     """Apply the optional hosts filter, matching full or short (pre-dot) hostname."""
     hosts = entry.get("hosts")
@@ -873,7 +891,10 @@ def build_plan(entries, platform_key, hostname, repo_root=None, assume_requires=
             # os.path.join leaves untouched inside the joined segment.
             "repo": os.path.normpath(os.path.join(entry.get("_base_dir") or repo_root, entry["repo"])),
             "method": entry.get("method", "symlink"),
-            "on_drift": entry.get("on_drift", "replace"),
+            # adopt only ever happens on WORKTREE_HOST; elsewhere the entry
+            # deploys as replace and status says where adoption lives.
+            "on_drift": entry.get("on_drift", "replace") if adopts_here(hostname) else "replace",
+            "adopt_elsewhere": entry.get("on_drift", "replace") == "adopt" and not adopts_here(hostname),
             "note": entry.get("note", ""),
             "requires": None,
             "dest": None,
@@ -963,6 +984,16 @@ def planned_action(status, on_drift="replace"):
     return descriptions.get(status, "unknown")
 
 
+def print_unhealthy_row(status, row, detail, name_width):
+    """One needs-attention entry: status line, detail, what deploy would do, and where adoption lives."""
+    print("  " + status_line(status, row["name"], row["dest"], name_width))
+    print(paint(f"      {detail}", "dim"))
+    print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'))}", "dim"))
+    if status == "NOT_A_LINK" and row.get("adopt_elsewhere"):
+        print(paint(f"         (on_drift: adopt entries adopt only on {WORKTREE_HOST}; here the repo copy "
+                    "wins and the app's rewrite lives on in the backup)", "dim"))
+
+
 def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
     """
     Combined health report + dry run, grouped into sections (least interesting
@@ -995,9 +1026,7 @@ def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
     if unhealthy:
         print_section("Needs attention", len(unhealthy), "red")
         for status, row, detail in unhealthy:
-            print("  " + status_line(status, row["name"], row["dest"], name_width))
-            print(paint(f"      {detail}", "dim"))
-            print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'))}", "dim"))
+            print_unhealthy_row(status, row, detail, name_width)
         print()
 
     orphans = [(dest, reason) for dest, reason, _ in (prune_candidates or []) if os.path.lexists(dest)]

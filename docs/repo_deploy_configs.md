@@ -47,7 +47,8 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
                                           # (overlay manifests only, see below)
   method: symlink | none                  # default symlink
-  on_drift: replace | adopt               # default replace; see below
+  on_drift: replace | adopt               # default replace; adopt acts on
+                                          # WORKTREE_HOST only, see below
   generated: true                         # optional: the deploy itself produces the
                                           # source (data/mcp/*.mcp.json); may be absent
                                           # in a fresh clone until the first deploy
@@ -270,6 +271,19 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   copy is the newer side (an orphaned hard link after `git pull` on a
   no-symlink machine still holding pre-pull content) it wins as usual, so
   `adopt` cannot resurrect stale content over a pulled update.
+
+  **Adoption happens on one machine only**: `WORKTREE_HOST` in
+  `src/deploy_configs.py` (envy, the same host that regenerates the deploy
+  map, for the same reason - it is the one checkout a deploy may dirty).
+  Everywhere else an `adopt` entry deploys as `replace`: the app's rewrite is
+  backed up and the repo copy re-linked, and `status` says so under the
+  entry. Adopting on every machine deadlocked pulls (2026-09-09): T3 Code
+  rewrites its settings after every app update, each machine adopted its own
+  copy, envy's adoption was committed, and git then refused to pull that file
+  over the uncommitted adoption on every other machine until someone reverted
+  it by hand. So in-app settings changes are made on envy (or in the repo
+  file); a change made in the app elsewhere lasts until that machine's next
+  deploy.
 
   Adopted `.json` payloads land in a **canonical form** — 2-space indent,
   sorted keys, trailing newline (array order untouched) — produced by reading

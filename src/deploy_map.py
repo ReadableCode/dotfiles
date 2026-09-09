@@ -9,6 +9,7 @@ import sys
 import yaml
 from config import grandparent_dir, parent_dir, templates_dir
 from readable_utils.host_tools import get_uppercase_hostname
+from deploy_configs import WORKTREE_HOST
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
     find_credentials_dirs,
@@ -29,8 +30,9 @@ REPO_ROOT = parent_dir
 OUTPUT_REPO = f"personal{CREDENTIALS_SUFFIX}"
 # Only one machine may regenerate the map: every other clone of the personal
 # credentials repo writing these files leaves that checkout dirty, and the next
-# gitpullall aborts on the uncommitted deploy_map.{html,json}.
-MAP_HOST = "envy"
+# gitpullall aborts on the uncommitted deploy_map.{html,json}. It is the same
+# machine whose worktree on_drift: adopt may dirty, for the same reason.
+MAP_HOST = WORKTREE_HOST
 OUTPUT_BASENAME = "deploy_map"
 OUTPUT_SUBDIR = "generated"
 TEMPLATE_PATH = os.path.join(templates_dir, "deploy_map.html")

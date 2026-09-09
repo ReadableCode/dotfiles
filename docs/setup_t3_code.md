@@ -774,6 +774,16 @@ copy (hosts filters are overlay-manifest-only). Work machines get their
 forced the split. Adding a personal T3 machine means adding it to that entry's
 hosts list. The split:
 
+All three carry `on_drift: adopt`, and adoption acts on **envy only**
+(`WORKTREE_HOST` in `src/deploy_configs.py`): T3 rewrites these files after
+every app update, not just on a settings change, so when every machine
+adopted its own copy the ones that do not commit could never pull the file
+again (the MacBook sat five commits behind on 2026-09-09 with two "modified"
+t3code files git refused to merge over). Elsewhere the repo copy wins on
+deploy and the app's rewrite goes to the backup, so make settings changes
+on envy or in the repo file; a change made in the app on another machine
+lasts until that machine's next deploy.
+
 | File | Manifest-worthy? | Why |
 |------|------------------|-----|
 | `settings.json` | yes | Provider instances, default model/effort. Has an `opencode.serverPassword` field — must stay empty in a public repo. |

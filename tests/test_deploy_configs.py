@@ -1081,6 +1081,28 @@ def test_build_plan_carries_on_drift(fake_home):
     ]
     plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root="/repo")
     assert [row["on_drift"] for row in plan] == ["adopt", "replace"]
+    assert [row["adopt_elsewhere"] for row in plan] == [False, False]
+
+
+def test_build_plan_adopts_only_on_the_worktree_host(fake_home):
+    # Adopting on two machines deadlocks the pull on the one that does not
+    # commit (2026-09-09): everywhere but WORKTREE_HOST the entry is replace.
+    entries = [
+        {"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "on_drift": "adopt"},
+        {"name": "b", "repo": "f2", "dest": {"darwin": "~/.f2"}},
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "MacBookProM5.local", repo_root="/repo")
+    assert [row["on_drift"] for row in plan] == ["replace", "replace"]
+    assert [row["adopt_elsewhere"] for row in plan] == [True, False]
+    assert deploy_configs.adopts_here("ENVY.local")
+    assert deploy_configs.adopts_here(deploy_configs.WORKTREE_HOST.upper())
+    assert not deploy_configs.adopts_here("elitedesk")
+
+
+def test_map_host_is_the_worktree_host():
+    import deploy_map
+
+    assert deploy_map.MAP_HOST == deploy_configs.WORKTREE_HOST
 
 
 def test_case2_ingest_moves_system_file_into_repo(tmp_path):
