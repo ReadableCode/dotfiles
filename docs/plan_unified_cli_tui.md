@@ -2,7 +2,7 @@
 
 One entry point for machine operations, replacing the scattered aliases,
 functions, and remembered script invocations. Built as `go_apps/cmdr`; this
-is the design it follows.
+is the design it follows, and `repo_cmdr.md` is the reference for using it.
 
 Scope is deliberately narrow. This covers the fleet-operations layer
 (`gitpullall`, `myupdater`, config deploys, repo cloning, setup scripts). It

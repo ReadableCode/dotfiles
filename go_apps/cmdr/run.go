@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 type Mode int
@@ -16,6 +18,13 @@ const (
 	ModeCheck Mode = iota
 	ModeApply
 )
+
+func (m Mode) String() string {
+	if m == ModeCheck {
+		return "check"
+	}
+	return "apply"
+}
 
 // libFor returns the platform lib the runner sources. darwin and linux share
 // lib.sh (a function body branches internally if it must); windows gets
@@ -82,12 +91,16 @@ func declaredFuncs(lib string) (map[string]bool, error) {
 // stepCmd builds the subprocess for one step function: source the lib, call
 // the function. The core never knows what the function does.
 func stepCmd(lib, fn string) *exec.Cmd {
+	var cmd *exec.Cmd
 	if strings.HasSuffix(lib, ".ps1") {
 		shell := firstOnPath("pwsh", "powershell")
 		script := fmt.Sprintf(". '%s'; %s; exit $LASTEXITCODE", lib, fn)
-		return exec.Command(shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+		cmd = exec.Command(shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script)
+	} else {
+		cmd = exec.Command("bash", "-c", `source "$1"; "$2"`, "cmdr", lib, fn)
 	}
-	return exec.Command("bash", "-c", `source "$1"; "$2"`, "cmdr", lib, fn)
+	setProcessGroup(cmd)
+	return cmd
 }
 
 // --- output decoration ---
@@ -140,15 +153,86 @@ func missingRequires(s Step) string {
 	return ""
 }
 
+// A runner is one command's execution: the step subprocess currently
+// running (so a quit can kill it, children included), whether it was killed,
+// and the log file the run is being written to.
+type runner struct {
+	mu      sync.Mutex
+	current *exec.Cmd
+	killed  bool
+	LogPath string
+}
+
+func (r *runner) kill() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.killed = true
+	if r.current != nil {
+		killProcess(r.current)
+	}
+}
+
+func (r *runner) setCurrent(cmd *exec.Cmd) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.current = cmd
+}
+
+func (r *runner) wasKilled() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.killed
+}
+
+// argsEnv hands positional arguments to the steps as CMDR_ARGC and
+// CMDR_ARG1..N: one variable per argument, so a path with spaces survives.
+func argsEnv(args []string) []string {
+	env := []string{fmt.Sprintf("CMDR_ARGC=%d", len(args))}
+	for i, a := range args {
+		env = append(env, fmt.Sprintf("CMDR_ARG%d=%s", i+1, a))
+	}
+	return env
+}
+
+// openRunLog starts the log every run is written to, under ~/logs/cmdr, so a
+// failure noticed later is still inspectable (cmdr logs). A log that cannot
+// be opened is reported once and the run goes on without one.
+func openRunLog(name string, mode Mode, errw io.Writer) (*os.File, string) {
+	dir := logsDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		fmt.Fprintf(errw, "cmdr: no run log: %v\n", err)
+		return nil, ""
+	}
+	path := filepath.Join(dir, fmt.Sprintf("%s-%s-%s.log", name, mode, time.Now().Format("20060102-150405")))
+	f, err := os.Create(path)
+	if err != nil {
+		fmt.Fprintf(errw, "cmdr: no run log: %v\n", err)
+		return nil, ""
+	}
+	return f, path
+}
+
 // runSteps executes a command's steps in order. Check mode runs <fn>_check
 // where one exists, keeps going, and reports drift; apply mode runs <fn> and
 // stops at the first failure. stdin may be nil (the TUI) - steps that prompt
-// (sudo) only work from the CLI path.
-func runSteps(c Command, mode Mode, out, errw io.Writer, stdin io.Reader) (drift bool, err error) {
+// only work from the CLI path. Everything cmdr prints and every non-terminal
+// step's output also goes to the run log; a terminal step keeps the real
+// screen (a TUI cannot draw into a pipe), so the log only notes it ran.
+func runSteps(c Command, mode Mode, out, errw io.Writer, stdin io.Reader, args []string, r *runner) (drift bool, err error) {
 	lib := libFor(c.Dir, currentPlatform())
 	funcs, err := declaredFuncs(lib)
 	if err != nil {
 		return false, err
+	}
+	logf, logPath := openRunLog(c.Name, mode, errw)
+	if logf != nil {
+		defer logf.Close()
+		r.LogPath = logPath
+		fmt.Fprintf(logf, "cmdr %s %s %s on %s at %s\n", version, c.Name, mode, shortHostname(), time.Now().Format(time.RFC3339))
+	}
+	all := out
+	if logf != nil {
+		all = io.MultiWriter(out, logf)
 	}
 	self, _ := os.Executable()
 	env := append(os.Environ(),
@@ -157,54 +241,84 @@ func runSteps(c Command, mode Mode, out, errw io.Writer, stdin io.Reader) (drift
 		// So steps can call back into built-ins (e.g. repos ensure --check)
 		// without guessing where the binary lives.
 		"CMDR_BIN="+self,
+		"CMDR_LOG="+logPath,
 		// Streaming is the core's whole promise, and Python block-buffers
 		// stdout when it's a pipe (the TUI viewport): long-running python
 		// steps would look silent until exit. Unbuffer every python child.
 		"PYTHONUNBUFFERED=1",
 	)
+	env = append(env, argsEnv(args)...)
 	sty := newStyler(out)
+	result := "ok"
+	defer func() {
+		if logf != nil {
+			fmt.Fprintf(logf, "result: %s\n", result)
+		}
+	}()
 	for i, s := range c.Steps {
 		if i > 0 {
-			fmt.Fprintln(out)
+			fmt.Fprintln(all)
 		}
 		if bin := missingRequires(s); bin != "" {
-			fmt.Fprintln(out, sty.rule(s.Name))
-			fmt.Fprintln(out, sty.warn("   skipped: "+bin+" not on PATH"))
+			fmt.Fprintln(all, sty.rule(s.Name))
+			fmt.Fprintln(all, sty.warn("   skipped: "+bin+" not on PATH"))
 			continue
 		}
 		fn := strings.ToLower(s.Name)
 		if !funcs[fn] {
 			msg := fmt.Sprintf("step %s is not defined in %s", s.Name, filepath.Base(lib))
 			if mode == ModeCheck {
-				fmt.Fprintln(out, sty.rule(s.Name))
-				fmt.Fprintln(out, sty.warn("   DRIFT: "+msg))
+				fmt.Fprintln(all, sty.rule(s.Name))
+				fmt.Fprintln(all, sty.warn("   DRIFT: "+msg))
 				drift = true
 				continue
 			}
+			result = "failed"
 			return drift, fmt.Errorf("%s", msg)
 		}
 		if mode == ModeCheck {
 			if !funcs[fn+"_check"] {
-				fmt.Fprintln(out, sty.rule(s.Name))
-				fmt.Fprintln(out, sty.dim("   no check implemented, would run on apply"))
+				fmt.Fprintln(all, sty.rule(s.Name))
+				fmt.Fprintln(all, sty.dim("   no check implemented, would run on apply"))
 				continue
 			}
 			fn += "_check"
 		}
-		fmt.Fprintln(out, sty.rule(fn))
+		fmt.Fprintln(all, sty.rule(fn))
+		stepOut, stepErr := all, errw
+		if s.Terminal {
+			stepOut = out
+			if logf != nil {
+				fmt.Fprintln(logf, "   (terminal step: its output went to the screen)")
+			}
+		} else if logf != nil {
+			stepErr = io.MultiWriter(errw, logf)
+		}
 		cmd := stepCmd(lib, fn)
-		cmd.Stdout, cmd.Stderr, cmd.Stdin = out, errw, stdin
+		cmd.Stdout, cmd.Stderr, cmd.Stdin = stepOut, stepErr, stdin
 		cmd.Env = env
-		if runErr := cmd.Run(); runErr != nil {
+		r.setCurrent(cmd)
+		runErr := cmd.Run()
+		r.setCurrent(nil)
+		if r.wasKilled() {
+			fmt.Fprintln(all, sty.bad("   KILLED: "+s.Name))
+			result = "killed"
+			return drift, fmt.Errorf("step %s killed", s.Name)
+		}
+		if runErr != nil {
 			if mode == ModeCheck {
 				drift = true
-				fmt.Fprintln(out, sty.warn("   ^ drift: "+s.Name+" needs attention"))
+				fmt.Fprintln(all, sty.warn("   ^ drift: "+s.Name+" needs attention"))
 				continue
 			}
-			fmt.Fprintln(out, sty.bad("   FAILED: "+s.Name+" ("+runErr.Error()+")"))
+			fmt.Fprintln(all, sty.bad("   FAILED: "+s.Name+" ("+runErr.Error()+")"))
+			result = "failed"
 			return drift, fmt.Errorf("step %s failed: %w", s.Name, runErr)
 		}
-		fmt.Fprintln(out, sty.good("   ok: "+s.Name))
+		fmt.Fprintln(all, sty.good("   ok: "+s.Name))
+	}
+	if drift {
+		result = "drift"
 	}
 	return drift, nil
 }

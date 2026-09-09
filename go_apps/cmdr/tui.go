@@ -31,9 +31,11 @@ const (
 type lineMsg string
 
 type doneMsg struct {
-	drift bool
-	err   error
-	mode  Mode
+	drift  bool
+	err    error
+	mode   Mode
+	killed bool
+	log    string
 }
 
 type binding struct {
@@ -59,6 +61,7 @@ type model struct {
 	events    chan tea.Msg
 	result    doneMsg
 	running   *Command
+	run       *runner // the step subprocess of the run on screen, for kill
 	width     int
 	height    int
 }
@@ -107,7 +110,10 @@ func (m model) bindings() []binding {
 			{"q", "Quit", "quit"},
 		}
 	case stRunning:
-		return []binding{{"ctrl+c", "Quit", "quit"}}
+		return []binding{
+			{"x", "Kill", "kill"},
+			{"ctrl+c", "Kill and quit", "quit"},
+		}
 	default: // stDone
 		if m.result.mode == ModeCheck {
 			// A check is a dry run of exactly this command: offer the real
@@ -232,10 +238,12 @@ func (m model) startRun(c *Command, mode Mode) (model, tea.Cmd) {
 	pr, pw := io.Pipe()
 	res := make(chan doneMsg, 1)
 	cmd := *c
+	r := &runner{}
+	m.run = r
 	go func() {
-		drift, err := runSteps(cmd, mode, pw, pw, nil)
+		drift, err := runSteps(cmd, mode, pw, pw, nil, nil, r)
 		pw.Close()
-		res <- doneMsg{drift: drift, err: err, mode: mode}
+		res <- doneMsg{drift: drift, err: err, mode: mode, killed: r.wasKilled(), log: r.LogPath}
 	}()
 	events := m.events
 	go func() {
@@ -318,7 +326,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) act(action string) (tea.Model, tea.Cmd) {
 	switch action {
 	case "quit":
+		if m.state == stRunning && m.run != nil {
+			m.run.kill() // the step and its children, not just the TUI
+		}
 		return m, tea.Quit
+	case "kill":
+		if m.state == stRunning && m.run != nil {
+			m.run.kill()
+		}
+		return m, nil
 	case "run":
 		nm, cmd := m.startRun(m.selected(), ModeApply)
 		return nm, cmd
@@ -349,9 +365,7 @@ func (m model) act(action string) (tea.Model, tea.Cmd) {
 func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	if key == "ctrl+c" {
-		// Note: quitting mid-run abandons the TUI but the step subprocess
-		// keeps running to completion; there is no kill in v0.
-		return m, tea.Quit
+		return m.act("quit")
 	}
 	if m.state == stList && m.filtering {
 		switch msg.Type {
@@ -393,6 +407,9 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m.act("quit")
 		}
 	case stRunning:
+		if key == "x" {
+			return m.act("kill")
+		}
 		var cmd tea.Cmd
 		m.vp, cmd = m.vp.Update(msg)
 		return m, cmd
@@ -550,6 +567,8 @@ func (m model) View() string {
 		status := warnStyle.Render("running…")
 		if m.state == stDone {
 			switch {
+			case m.result.killed:
+				status = badStyle.Render("KILLED: " + m.result.err.Error())
 			case m.result.err != nil:
 				status = badStyle.Render("FAILED: " + m.result.err.Error())
 			case m.result.mode == ModeCheck && m.result.drift:
@@ -559,6 +578,9 @@ func (m model) View() string {
 			default:
 				status = okStyle.Render("done")
 			}
+		}
+		if m.state == stDone && m.result.log != "" {
+			status += dimStyle.Render("  log: " + m.result.log)
 		}
 		b.WriteString(m.headerView(c.Name) + "\n")
 		b.WriteString(" " + status + "\n")

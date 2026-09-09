@@ -201,6 +201,32 @@ def collect_aliases(root, local_short, include_vnc):
     return sorted(deduped.items())
 
 
+# ---------------------------------------------------------------- hosts (for cmdr fleet)
+
+
+def collect_hosts(root, local_short):
+    """
+    One record per ssh-reachable host across every inventory under ``root``:
+    ``{"host", "os", "command"}`` with the same ``ssh ...`` line its aliases
+    get. What ``cmdr fleet`` runs its checks over, so the inventory's ssh
+    rules (jumps, ports, users) stay implemented here alone. Later
+    inventories win a name collision, like aliases do.
+    """
+    records = {}
+    for inventory_path in find_inventory_paths(root):
+        hosts = load_hosts(inventory_path)
+        for host in hosts:
+            name = host.get("name", "")
+            if not name or not host_user(host):
+                continue
+            records[short_name(name)] = {
+                "host": name,
+                "os": host.get("os", ""),
+                "command": ssh_command(host, hosts, local_short),
+            }
+    return [records[key] for key in sorted(records)]
+
+
 # ---------------------------------------------------------------- rendering
 
 
@@ -229,6 +255,7 @@ def render_json(definitions):
 
 
 RENDERERS = {"bash": render_bash, "powershell": render_powershell, "json": render_json}
+HOSTS_FORMAT = "hosts"  # json, one record per host rather than per alias
 
 
 # ---------------------------------------------------------------- entrypoint
@@ -236,7 +263,9 @@ RENDERERS = {"bash": render_bash, "powershell": render_powershell, "json": rende
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--format", choices=sorted(RENDERERS), required=True, help="output syntax")
+    parser.add_argument(
+        "--format", choices=sorted(RENDERERS) + [HOSTS_FORMAT], required=True, help="output syntax"
+    )
     parser.add_argument(
         "--root",
         default=DEFAULT_ROOT,
@@ -258,6 +287,9 @@ def parse_args(argv):
 def main(argv=None):
     args = parse_args(argv)
     local_short = short_name(args.local_hostname if args.local_hostname is not None else socket.gethostname())
+    if args.format == HOSTS_FORMAT:
+        print(json.dumps(collect_hosts(args.root, local_short), indent=2))
+        return 0
     definitions = collect_aliases(args.root, local_short, args.platform.startswith("darwin"))
     rendered = RENDERERS[args.format](definitions)
     if rendered:

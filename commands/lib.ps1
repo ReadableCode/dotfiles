@@ -112,3 +112,75 @@ function configs_prune_check {
     uv run python src/deploy_configs.py prune
     exit $LASTEXITCODE
 }
+
+# --- calendar ---
+
+function calendar_board {
+    Set-Location $env:CMDR_REPO_DIR
+    uv run python src/calendar_board.py
+    exit $LASTEXITCODE
+}
+
+function calendar_board_check {
+    Set-Location $env:CMDR_REPO_DIR
+    uv run python src/calendar_board.py --once --days 1
+    exit $LASTEXITCODE
+}
+
+# --- bookmarks ---
+
+function bookmarks_export {
+    if (-not (Test-Path (Join-Path $env:CMDR_GIT_DIR 'personal_credentials'))) {
+        Write-Host "personal_credentials is not cloned here, nothing to export into"
+        exit 0
+    }
+    Set-Location $env:CMDR_REPO_DIR
+    uv run python src/chrome_bookmarks.py
+    exit $LASTEXITCODE
+}
+
+function bookmarks_export_check {
+    $repoCopy = Join-Path $env:CMDR_GIT_DIR 'personal_credentials\bookmarks\personal_bookmarks.json'
+    if (-not (Test-Path $repoCopy)) {
+        Write-Host "no repo copy at $repoCopy (personal_credentials not cloned, or never exported)"
+        exit 0
+    }
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("cmdr-bookmarks-" + [System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Path $tmp | Out-Null
+    Set-Location $env:CMDR_REPO_DIR
+    uv run python src/chrome_bookmarks.py --output-dir $tmp | Out-Null
+    if ($LASTEXITCODE -ne 0) { Remove-Item -Recurse -Force $tmp; exit 1 }
+    $same = (Get-FileHash (Join-Path $tmp 'personal_bookmarks.json')).Hash -eq (Get-FileHash $repoCopy).Hash
+    Remove-Item -Recurse -Force $tmp
+    if ($same) { Write-Host "chrome bookmarks match the repo copy"; exit 0 }
+    Write-Host "chrome has bookmark changes the repo copy lacks"
+    exit 1
+}
+
+# --- branchdiffs ---
+
+function Get-BranchChangedFiles {
+    $root = git rev-parse --show-toplevel 2>$null
+    if (-not $root) { Write-Host "not in a git repository: $PWD"; return $null }
+    Set-Location $root
+    git fetch -q
+    $base = git symbolic-ref --short refs/remotes/origin/HEAD 2>$null
+    if (-not $base) { $base = 'origin/master' }
+    return @(git diff --name-only --diff-filter=d "$base...HEAD" | Where-Object { Test-Path $_ })
+}
+
+function branch_diffs {
+    $files = Get-BranchChangedFiles
+    if ($null -eq $files) { exit 1 }
+    if ($files.Count -eq 0) { Write-Host "no files changed on this branch"; exit 0 }
+    code @files
+    exit $LASTEXITCODE
+}
+
+function branch_diffs_check {
+    $files = Get-BranchChangedFiles
+    if ($null -eq $files) { exit 1 }
+    if ($files.Count -eq 0) { Write-Host "no files changed on this branch"; exit 0 }
+    $files | ForEach-Object { Write-Host $_ }
+    exit 1
+}

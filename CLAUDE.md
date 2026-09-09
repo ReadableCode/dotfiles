@@ -31,7 +31,7 @@ personal context; each client has its own), and recurring homelab jobs live in
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
-| `go_apps/` | Small Go tools (`git_puller`, syncthing cleanup). Prebuilt binaries are committed. The ping/command client-server moved to its own repo (`ReadableCode/go-client-server`). |
+| `go_apps/` | Small Go tools: `cmdr` (the fleet CLI/TUI, built per machine by its shell shim, never committed; doc `docs/repo_cmdr.md`), `git_puller`, syncthing cleanup. The latter two commit prebuilt binaries. The ping/command client-server moved to its own repo (`ReadableCode/go-client-server`). |
 | `docs/` | Setup/how-to docs (one per topic). Surfaced via mkdocs. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
 | `pythonista/` | iOS Pythonista scripts. |

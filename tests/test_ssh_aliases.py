@@ -294,3 +294,20 @@ def test_vnc_gating_follows_the_platform_flag(tmp_path, capsys):
     assert "vncenvy" in capsys.readouterr().out
     ssh_aliases.main(common + ["--platform", "win32"])
     assert "vncenvy" not in capsys.readouterr().out
+
+
+def test_hosts_format_lists_one_record_per_host_with_its_ssh_line(tmp_path, capsys):
+    write_inventory(
+        tmp_path,
+        "personal",
+        [
+            {"name": "box", "os": "linux", "user": "jason", "aliases": ["sshbox", "sshb"], "port": 2222},
+            {"name": "Phone", "os": "android", "user": "u", "aliases": ["sshphone"]},
+            {"name": "camera", "aliases": []},
+        ],
+    )
+    ssh_aliases.main(["--format", "hosts", "--root", str(tmp_path), "--local-hostname", "elsewhere"])
+    assert json.loads(capsys.readouterr().out) == [
+        {"host": "box", "os": "linux", "command": "ssh -p 2222 jason@box"},
+        {"host": "Phone", "os": "android", "command": "ssh u@Phone"},
+    ]

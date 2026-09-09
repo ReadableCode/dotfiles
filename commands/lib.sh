@@ -170,3 +170,85 @@ configs_prune_check() {
     # Bare prune is the dry run.
     (cd "$CMDR_REPO_DIR" && uv run python src/deploy_configs.py prune)
 }
+
+# --- calendar ---
+
+calendar_board() {
+    (cd "$CMDR_REPO_DIR" && uv run python src/calendar_board.py)
+}
+
+calendar_board_check() {
+    # A static render of today: every source must still authenticate.
+    (cd "$CMDR_REPO_DIR" && uv run python src/calendar_board.py --once --days 1)
+}
+
+# --- bookmarks ---
+
+_bookmarks_repo_copy() {
+    echo "$CMDR_GIT_DIR/personal_credentials/bookmarks/personal_bookmarks.json"
+}
+
+bookmarks_export() {
+    if [ ! -d "$CMDR_GIT_DIR/personal_credentials" ]; then
+        echo "personal_credentials is not cloned here, nothing to export into"
+        return 0
+    fi
+    (cd "$CMDR_REPO_DIR" && uv run python src/chrome_bookmarks.py)
+}
+
+bookmarks_export_check() {
+    # Export into scratch and compare with the repo copy: read-only for the repo.
+    local repo_copy tmp
+    repo_copy=$(_bookmarks_repo_copy)
+    if [ ! -f "$repo_copy" ]; then
+        echo "no repo copy at $repo_copy (personal_credentials not cloned, or never exported)"
+        return 0
+    fi
+    tmp=$(mktemp -d) || return 1
+    (cd "$CMDR_REPO_DIR" && uv run python src/chrome_bookmarks.py --output-dir "$tmp" >/dev/null) || { rm -rf "$tmp"; return 1; }
+    if diff -q "$tmp/personal_bookmarks.json" "$repo_copy" >/dev/null; then
+        echo "chrome bookmarks match the repo copy"
+        rm -rf "$tmp"
+        return 0
+    fi
+    echo "chrome has bookmark changes the repo copy lacks:"
+    diff "$repo_copy" "$tmp/personal_bookmarks.json" | head -20
+    rm -rf "$tmp"
+    return 1
+}
+
+# --- branchdiffs ---
+
+_branch_changed_files() {
+    # base...HEAD diffs from the merge-base, so only this branch's own commits
+    # count; --diff-filter=d drops files deleted on this branch.
+    local root base
+    root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "not in a git repository: $PWD" >&2; return 1; }
+    cd "$root" || return 1
+    git fetch -q
+    base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master)
+    git diff --name-only --diff-filter=d "$base"...HEAD | while IFS= read -r f; do
+        [ -e "$f" ] && printf '%s\n' "$f"
+    done
+}
+
+branch_diffs() {
+    local files
+    files=$(_branch_changed_files) || return 1
+    if [ -z "$files" ]; then
+        echo "no files changed on this branch"
+        return 0
+    fi
+    printf '%s\n' "$files" | xargs code
+}
+
+branch_diffs_check() {
+    local files
+    files=$(_branch_changed_files) || return 1
+    if [ -z "$files" ]; then
+        echo "no files changed on this branch"
+        return 0
+    fi
+    printf '%s\n' "$files"
+    return 1
+}
