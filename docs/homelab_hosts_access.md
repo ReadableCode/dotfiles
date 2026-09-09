@@ -36,9 +36,16 @@ the things that silently fail a plausible remote workflow.
 
 ## behemoth (192.168.86.31, Unraid)
 
-- `root@behemoth.local` via `/usr/bin/ssh`. Docker is managed through the
-  Unraid UI, not the Docker repo. Syslog is RAM-only, so pre-reboot evidence
-  is gone after a restart.
+- `root@192.168.86.31` via `/usr/bin/ssh` (behemoth.local only resolves while
+  avahi is alive). Docker is managed through the Unraid UI, not the Docker
+  repo. Syslog is RAM-only and forwarded to nukbuntu; the kernel ring buffer
+  is forwarded separately by a RAM-resident script
+  (`server_configs/system_configs/behemoth`), so a dropped boot flash leaves
+  its kernel lines in `docker_app_data/syslog/remote/Behemoth/kernel.*.log`
+  on nukbuntu even though every binary under /usr, rsyslogd included, dies
+  with the stick. There is no console when that happens: ssh accepts and
+  resets, the web UI dies within the hour, containers keep running. Power
+  cycle; the evidence is already on nukbuntu (2026-09-08).
 - UPS: CyberPower PR1500LCDRT2U on USB, monitored by the desertwitch NUT
   plugin (`nut-dw`), not apcupsd. CyberPower's USB interrupt pipe goes silent
   and usbhid-ups marks data stale; the fix is `pollonly` on line 9 of
