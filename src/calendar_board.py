@@ -864,7 +864,7 @@ def build_app(sources, start_date):
             margin: 0 1 1 1;
             padding: 0 1;
         }
-        SourceColumn.error { border: round red; }
+        SourceColumn.error { border: round $error; }
         .column-output { height: 1fr; overflow-y: auto; }
         .column-footer { height: 1; margin-top: 1; }
         .column-footer ProgressBar { width: 1fr; }
@@ -885,6 +885,11 @@ def build_app(sources, start_date):
 
         def __init__(self):
             super().__init__()
+            # The terminal-navy design system, from the one definition every TUI shares.
+            from readable_utils.design_tokens import terminal_navy_textual_theme
+
+            self.register_theme(terminal_navy_textual_theme())
+            self.theme = "terminal-navy"
             self.view_date = start_date
             self.view_mode = "grid"
             self.slot_minutes = GRID_SLOT_CHOICES[0]

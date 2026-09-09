@@ -199,6 +199,15 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
   matches token `envy`; platform tokens are `darwin`/`mac`, `linux`,
   `windows`). Context tags are never auto-resolved — they are deployed by
   hand or via a host-filtered manifest entry.
+- **Every UI, TUI or web, follows the readablecode "terminal navy" design
+  system** (sibling repo `style-terminal-navy`, `STYLE.md` is the spec):
+  navy surfaces (bg `#0d1420`, cards `#121b2a`), monospace, lowercase
+  labels, `//` section headers with the slashes in `#56d364`, green accent
+  `#2ea043` / bright `#56d364`, amber highlights `#b8860b` / `#e3b341`,
+  hairline borders, no shadows. Python TUIs take the tokens and the Textual
+  theme from `readable_utils.design_tokens`; `go_apps/cmdr/theme.go` carries
+  the same values for Go. Never a terminal-palette colour number: those are
+  whatever the user's terminal profile says.
 - New docs: add a `docs/<prefix>_<topic>.md`, one topic per file, using one
   of the existing prefix families (`repo_`, `setup_`, `homelab_`, `howto_`,
   `plan_`) and add it to `docs/README.md`.

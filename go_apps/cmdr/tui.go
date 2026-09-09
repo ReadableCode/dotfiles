@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // The TUI renders the same registry as the CLI and does nothing bespoke per
@@ -65,20 +64,6 @@ type model struct {
 	width     int
 	height    int
 }
-
-var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("24"))
-	colHdrStyle = lipgloss.NewStyle().Faint(true).Underline(true)
-	zebraStyle  = lipgloss.NewStyle().Background(lipgloss.Color("235"))
-	cursorStyle = lipgloss.NewStyle().Reverse(true)
-	dimStyle    = lipgloss.NewStyle().Faint(true)
-	badStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
-	warnStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("3"))
-	okStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	keyStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(lipgloss.Color("238"))
-	labelStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("250")).Background(lipgloss.Color("236"))
-	footerPad   = lipgloss.NewStyle().Background(lipgloss.Color("236"))
-)
 
 func runTUI() error {
 	m := model{
@@ -505,14 +490,18 @@ func pad(s string, w int) string {
 	return s
 }
 
+// headerView is the prompt brand from the style guide: a bright-green ❯,
+// the app name, then the subtitle in secondary ink, the host at the right.
 func (m model) headerView(subtitle string) string {
-	left := " cmdr " + version + "  " + subtitle
+	brand := " ❯ cmdr "
+	left := version + "  " + subtitle
 	right := shortHostname() + " "
-	gap := m.width - len([]rune(left)) - len([]rune(right))
+	width := m.width - len([]rune(brand))
+	gap := width - len([]rune(left)) - len([]rune(right))
 	if gap < 1 {
 		gap = 1
 	}
-	return headerStyle.Render(pad(left+strings.Repeat(" ", gap)+right, m.width))
+	return promptStyle.Render(brand) + headerStyle.Render(pad(left+strings.Repeat(" ", gap)+right, width))
 }
 
 func (m model) View() string {
@@ -531,7 +520,7 @@ func (m model) View() string {
 			b.WriteString(line + "\n")
 		}
 		nameW, srcW, statW := 14, 14, 26
-		b.WriteString(colHdrStyle.Render(pad(" COMMAND", nameW)+pad(" SOURCE", srcW)+pad(" STATUS", statW)+" DESCRIPTION") + "\n")
+		b.WriteString(colHdrStyle.Render(pad(" command", nameW)+pad(" source", srcW)+pad(" status", statW)+" description") + "\n")
 		vis := m.visible()
 		if len(vis) == 0 {
 			b.WriteString(dimStyle.Render("  no commands discovered (no sibling repos with a commands/ dir)") + "\n")

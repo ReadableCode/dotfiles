@@ -103,10 +103,12 @@ func stepCmd(lib, fn string) *exec.Cmd {
 }
 
 // --- output decoration ---
-// ANSI directly, no lipgloss: this writes into arbitrary io.Writers. ASCII
-// rule characters on purpose (same reason as deploy_configs.py): old Windows
-// consoles choke on box drawing. Color is on for the TUI pipe and for a real
-// terminal, off when piped to a file/grep or NO_COLOR is set.
+// ANSI directly, no lipgloss: this writes into arbitrary io.Writers. The
+// colours are the terminal-navy tokens as 24-bit sequences (theme.go), and
+// a step's rule is the style guide's "// section" header. ASCII otherwise
+// (same reason as deploy_configs.py): old Windows consoles choke on box
+// drawing. Color is on for the TUI pipe and for a real terminal, off when
+// piped to a file/grep or NO_COLOR is set.
 
 type styler struct{ on bool }
 
@@ -121,25 +123,34 @@ func newStyler(w io.Writer) styler {
 	return styler{on: true} // io.Pipe into the TUI viewport: color wanted
 }
 
-func (s styler) paint(code, text string) string {
+// paint wraps text in a 24-bit foreground from a hex token, bold optional.
+func (s styler) paint(hex string, bold bool, text string) string {
 	if !s.on {
 		return text
 	}
-	return "\033[" + code + "m" + text + "\033[0m"
-}
-
-func (s styler) rule(title string) string {
-	line := "-- " + title + " "
-	if n := 56 - len(line); n > 0 {
-		line += strings.Repeat("-", n)
+	r, g, b := hexRGB(hex)
+	prefix := fmt.Sprintf("\033[38;2;%d;%d;%dm", r, g, b)
+	if bold {
+		prefix += "\033[1m"
 	}
-	return s.paint("1;36", line) // bold cyan, like gitpullall's dividers
+	return prefix + text + "\033[0m"
 }
 
-func (s styler) dim(text string) string  { return s.paint("2", text) }
-func (s styler) warn(text string) string { return s.paint("1;33", text) }
-func (s styler) good(text string) string { return s.paint("1;32", text) }
-func (s styler) bad(text string) string  { return s.paint("1;31", text) }
+func hexRGB(hex string) (int, int, int) {
+	var r, g, b int
+	fmt.Sscanf(strings.TrimPrefix(hex, "#"), "%02x%02x%02x", &r, &g, &b)
+	return r, g, b
+}
+
+// rule is a "// title" section header: slashes in bright green, title in ink.
+func (s styler) rule(title string) string {
+	return s.paint(tokenGreenBright, true, "//") + " " + s.paint(tokenInk, true, title)
+}
+
+func (s styler) dim(text string) string  { return s.paint(tokenMuted, false, text) }
+func (s styler) warn(text string) string { return s.paint(tokenAmberBright, true, text) }
+func (s styler) good(text string) string { return s.paint(tokenGreenBright, true, text) }
+func (s styler) bad(text string) string  { return s.paint(tokenRed, true, text) }
 
 // missingRequires is a PATH lookup ONLY, by design: some fleet hosts alert
 // on every failed sudo, so the core never tests whether it could escalate.

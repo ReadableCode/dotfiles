@@ -48,7 +48,7 @@ ignore_missing_imports = true
 show_error_codes = true
 
 [tool.uv.sources]
-readable-utils = { git = "https://github.com/ReadableCode/readable_utils.git", tag = "v0.2.1" }
+readable-utils = { git = "https://github.com/ReadableCode/readable_utils.git", tag = "v0.3.3" }
 
 [dependency-groups]
 dev = [

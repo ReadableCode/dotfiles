@@ -24,6 +24,10 @@ cmdr fleet <command>          # the command's check on every inventory host
 cmdr repos ensure [--check]   # built in: clone what this machine is entitled to
 ```
 
+Appearance follows the readablecode terminal-navy design system
+(`style-terminal-navy`): `theme.go` holds the tokens for the TUI and the
+run output, whose step rules are the style's `// section` headers.
+
 ## Where commands come from
 
 cmdr globs `<gitdir>/*/commands/*.cmd` on every start. Any sibling repo
