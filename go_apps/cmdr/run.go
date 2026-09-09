@@ -99,7 +99,6 @@ func stepCmd(lib, fn string) *exec.Cmd {
 	} else {
 		cmd = exec.Command("bash", "-c", `source "$1"; "$2"`, "cmdr", lib, fn)
 	}
-	setProcessGroup(cmd)
 	return cmd
 }
 
@@ -297,6 +296,13 @@ func runSteps(c Command, mode Mode, out, errw io.Writer, stdin io.Reader, args [
 		cmd := stepCmd(lib, fn)
 		cmd.Stdout, cmd.Stderr, cmd.Stdin = stepOut, stepErr, stdin
 		cmd.Env = env
+		// Own process group only for a TUI-piped run (no stdin), so a kill
+		// reaches the step's children. A step that has the terminal must stay
+		// in the foreground group: outside it, the first read of the terminal
+		// stops the process (SIGTTIN) and the run just sits there.
+		if stdin == nil {
+			setProcessGroup(cmd)
+		}
 		r.setCurrent(cmd)
 		runErr := cmd.Run()
 		r.setCurrent(nil)
