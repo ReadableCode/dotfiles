@@ -136,6 +136,9 @@ func showPlan(c Command) {
 		if len(s.Requires) > 0 {
 			line += "  (requires " + strings.Join(s.Requires, ", ") + " on PATH)"
 		}
+		if s.Terminal {
+			line += "  (needs the terminal)"
+		}
 		fmt.Println(line)
 	}
 }

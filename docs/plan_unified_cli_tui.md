@@ -1,16 +1,12 @@
 # Unified CLI and TUI (design plan)
 
 One entry point for machine operations, replacing the scattered aliases,
-functions, and remembered script invocations. Not built yet: this is the
-agreed design, written down before any code exists.
+functions, and remembered script invocations. Built as `go_apps/cmdr`; this
+is the design it follows.
 
 Scope is deliberately narrow. This covers the fleet-operations layer
 (`gitpullall`, `myupdater`, config deploys, repo cloning, setup scripts). It
 does not touch the web apps, Streamlit sites, or portfolio sites.
-
-**Building this is a teaching exercise, not a delivery.** Read
-[How I want to build this](#how-i-want-to-build-this-working-agreement)
-before writing any code.
 
 ## The problem
 
@@ -237,57 +233,13 @@ which is the part a program cannot hold.
 
 It lists commands, runs one, and streams stdout in a pane. It never renders
 bespoke UI per command. Anything needing rich UI *is* its own TUI and the
-core just launches it.
-
-## How I want to build this (working agreement)
-
-This changes how the work happens, not what gets built.
-
-**Teach me Go while we build it. I do the typing.** Treat it like a recorded
-tutorial where you set the step up and I perform it. I am fluent in Python
-and shell and new to Go, so skip programming fundamentals and explain
-Go-specific things as they come up: modules, packages, errors as values,
-interfaces, methods on structs, goroutines and channels when we reach them.
-
-Rules for every step:
-
-1. **One step at a time.** Say what we are about to do and why it comes now.
-2. **Set the step up, then stop.** Give me the exact command to run or the
-   specific function to write, then wait.
-3. **Wait for me to confirm.** Never continue on the assumption that it
-   worked. I will say I did it, or paste the error.
-4. **Every step ends in something runnable.** I want to execute it and see
-   output before moving on. No step whose payoff arrives three steps later.
-5. **Keep steps small.** More than roughly 30 lines of new code means split
-   it.
-6. **I write the meat, you write the boilerplate.** Import blocks, struct
-   scaffolding, and repetitive cases are fine to hand me. The logic that
-   teaches me something is mine to type.
-7. **If it fails, fix it with me before moving on.** Do not paper over a
-   broken step by rewriting the file.
-
-Explanations go inline and short: a sentence or two on why Go does it this
-way, at the moment it matters. Not a lecture up front.
-
-### Arc, simple to complex
-
-Each of these runs on its own.
-
-1. `go mod init` in the new app dir, `main.go` printing a version string, run
-   it.
-2. Argument parsing: one real subcommand that does nothing yet.
-3. Exec a subprocess and stream its stdout live. This is the core's whole
-   job, so it comes early.
-4. Read a command definition from a file and run it by name.
-5. Discovery: glob sibling repos for definitions, list what was found.
-6. Gating: filter by host and platform using the existing vocabulary.
-7. The check / apply / `--yes` convention on one real command.
-8. Wrap one existing script (`deploy_configs.py`) end to end.
-9. The TUI, last, over a registry that already works.
+core just launches it: a step marked `terminal` in its `.cmd` line (its own
+TUI, a prompt) gets the real terminal. The TUI suspends, runs that command
+through the CLI path, and resumes when it exits; only the exit status comes
+back, the output was on the screen.
 
 ## Open questions
 
-- The command name. `hq` is short and unclaimed; `rig` and `cmdr` also work.
 - Which shell aliases genuinely cannot move: anything mutating the calling
   shell (`githubdir`, `venvdeactivate`, `ll`, the conditional `claude` shim)
   stays a shell function.

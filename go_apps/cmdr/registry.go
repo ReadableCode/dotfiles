@@ -10,10 +10,13 @@ import (
 
 // A Step is a function name plus optional PATH-lookup preconditions.
 // requires= is a PATH lookup ONLY - the core never probes for privileges
-// (some fleet hosts alert on every failed sudo).
+// (some fleet hosts alert on every failed sudo). terminal marks a step that
+// needs the real terminal (its own TUI, a prompt): the cmdr TUI hands the
+// terminal over for such a command instead of piping its output.
 type Step struct {
 	Name     string
 	Requires []string
+	Terminal bool
 }
 
 // A Command is the core's whole view of a unit of work: where it came from,
@@ -82,10 +85,14 @@ func parseCmdFile(path string) (Command, error) {
 		step := Step{Name: fields[0]}
 		for _, opt := range fields[1:] {
 			k, v, _ := strings.Cut(opt, "=")
-			if k != "requires" {
+			switch k {
+			case "requires":
+				step.Requires = append(step.Requires, splitList(v)...)
+			case "terminal":
+				step.Terminal = true
+			default:
 				return c, fmt.Errorf("%s:%d: unknown step option %q", path, i+1, opt)
 			}
-			step.Requires = append(step.Requires, splitList(v)...)
 		}
 		c.Steps = append(c.Steps, step)
 	}
@@ -93,6 +100,16 @@ func parseCmdFile(path string) (Command, error) {
 		return c, fmt.Errorf("%s: no steps", path)
 	}
 	return c, nil
+}
+
+// needsTerminal is true when any step asked for the real terminal.
+func (c Command) needsTerminal() bool {
+	for _, s := range c.Steps {
+		if s.Terminal {
+			return true
+		}
+	}
+	return false
 }
 
 func splitList(s string) []string {

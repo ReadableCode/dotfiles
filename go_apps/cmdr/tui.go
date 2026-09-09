@@ -2,7 +2,10 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"io"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -222,6 +225,9 @@ func (m model) startRun(c *Command, mode Mode) (model, tea.Cmd) {
 	m.vp.Width = m.width
 	m.vp.Height = m.height - 3
 	m.vp.SetContent("")
+	if c.needsTerminal() {
+		return m.handOff(*c, mode)
+	}
 	m.events = make(chan tea.Msg, 64)
 	pr, pw := io.Pipe()
 	res := make(chan doneMsg, 1)
@@ -244,6 +250,35 @@ func (m model) startRun(c *Command, mode Mode) (model, tea.Cmd) {
 	// the terminal sends drags to us and native select/copy is impossible.
 	// Clicking only matters on the list; copying only matters here.
 	return m, tea.Batch(tea.DisableMouse, waitEvent(m.events))
+}
+
+// handOff runs a command whose steps need the real terminal (their own TUI,
+// a prompt). The TUI suspends, the command runs through the CLI path of this
+// same binary in the foreground, and the TUI resumes when it exits. Nothing
+// is reimplemented: plan, prompts and streaming are the CLI's. Only the exit
+// status comes back; the output was on the screen, so the done view says so.
+func (m model) handOff(c Command, mode Mode) (model, tea.Cmd) {
+	self, err := os.Executable()
+	if err != nil {
+		m.result = doneMsg{err: err, mode: mode}
+		m.state = stDone
+		return m, nil
+	}
+	flag := "--yes" // the TUI is click-to-run; the step's own prompts still ask
+	if mode == ModeCheck {
+		flag = "--check"
+	}
+	proc := exec.Command(self, c.Name, flag)
+	m.lines = []string{"ran in the terminal; its output was shown there"}
+	m.vp.SetContent(strings.Join(m.lines, "\n"))
+	return m, tea.Sequence(tea.DisableMouse, tea.ExecProcess(proc, func(err error) tea.Msg {
+		// A check exits 1 to mean drift, not failure - same as dispatch().
+		var exitErr *exec.ExitError
+		if mode == ModeCheck && errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return doneMsg{drift: true, mode: mode}
+		}
+		return doneMsg{err: err, mode: mode}
+	}))
 }
 
 func waitEvent(ch chan tea.Msg) tea.Cmd {
