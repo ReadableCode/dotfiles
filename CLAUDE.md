@@ -127,8 +127,12 @@ is the one-paragraph orientation so an agent knows which file to open.
   `<context>_repos.yaml` files declare for this machine; run by gitpullall
   between the pull and the deploy, and on elitedesk by its declared
   crontab (`--yes`, no prompt) since nobody runs gitpullall there.
-- **`chrome_bookmarks.py`, `ssh_devices.py`** — pull data and configs from
-  browsers and devices.
+- **`chrome_bookmarks.py`** — saves the personal Chrome profile's bookmarks
+  into `personal_credentials/bookmarks/` as an editable JSON plus the HTML to
+  re-import through the Bookmark Manager, collapsing the duplicate folders
+  Chrome Sync leaves when a device reconnects. Doc:
+  `docs/repo_chrome_bookmarks.md`.
+- **`ssh_devices.py`** — pulls configs from devices over ssh.
 - **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,
   `secret_tools`, `calendarboard_tools`, `google_oauth_tools`,
   `googlemcp_tools`, `mcpservers_tools`. Shared helpers come from the

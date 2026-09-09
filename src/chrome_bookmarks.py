@@ -2,20 +2,22 @@
 # Imports #
 
 import argparse
-import html
 import json
 import os
 import sys
 import time
 
-from config import data_dir
-from readable_utils.host_tools import get_uppercase_hostname
-
 # %%
 # Variables #
 
-HOSTNAME = get_uppercase_hostname()
-HOSTNAME_LOWER = HOSTNAME.lower()
+BASE_NAME = "personal_bookmarks"
+# The repo copy keeps only what describes the tree. Chrome's guid, id,
+# date_modified, date_last_used and meta_info change on every sync and differ
+# between the duplicate copies, so keeping them makes every diff unreadable.
+URL_KEYS = ("date_added", "name", "type", "url")
+FOLDER_KEYS = ("children", "date_added", "name", "type")
+ATTR_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ('"', "&quot;"))
+TEXT_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
 
 
 # %%
@@ -38,43 +40,83 @@ def get_default_bookmarks_file_path(profile="Default"):
         raise OSError("Unsupported operating system")
 
 
-def get_personal_credentials_dir():
+def get_bookmarks_dir():
     # personal_credentials is a sibling repo of dotfiles on every personal machine
     repo_parent = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
-    personal_credentials_dir = os.path.join(repo_parent, "personal_credentials")
-    if os.path.isdir(personal_credentials_dir):
-        return personal_credentials_dir
-    print(
-        f"personal_credentials not found at {personal_credentials_dir}, "
-        f"falling back to data_dir"
-    )
-    return data_dir
+    bookmarks_dir = os.path.join(repo_parent, "personal_credentials", "bookmarks")
+    if not os.path.isdir(bookmarks_dir):
+        raise FileNotFoundError(f"bookmarks folder not found at {bookmarks_dir}")
+    return bookmarks_dir
 
 
-def get_chrome_bookmarks_as_json(profile="Default"):
-    bookmarks_file_path = get_default_bookmarks_file_path(profile)
-
-    if not os.path.exists(bookmarks_file_path):
-        print(f"Chrome bookmarks file not found at: {bookmarks_file_path}")
-        return None
-
-    with open(bookmarks_file_path, "r", encoding="utf-8") as f:
-        bookmarks = json.load(f)
-
-    return bookmarks
+def read_bookmarks(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
-def export_bookmarks_as_json(output_file_path, profile="Default"):
-    bookmarks = get_chrome_bookmarks_as_json(profile)
-    if bookmarks is None:
-        return False
+def merge_children(children, path="", report=None):
+    """Collapse the duplication Chrome Sync leaves behind.
 
-    with open(output_file_path, "w", encoding="utf-8") as f:
-        json.dump(bookmarks, f, ensure_ascii=False, indent=4)
-    print(f"Exported raw bookmarks JSON to: {output_file_path}")
-    return True
+    Same-name sibling folders become one folder holding both children lists (the
+    additions made to either copy survive); a url already present in the same
+    folder is dropped. First-seen order is kept, then the merge recurses. ``report``
+    collects one line per merge or drop so the run can show what it did.
+    """
+    merged = []
+    folders_by_name = {}
+    seen_urls = set()
+    for child in children:
+        if child.get("type") == "folder":
+            name = child.get("name", "")
+            if name in folders_by_name:
+                folders_by_name[name]["children"].extend(child.get("children", []))
+                if report is not None:
+                    report.append(f"merged folder {path}/{name}")
+                continue
+            folder = dict(child)
+            folder["children"] = list(child.get("children", []))
+            folders_by_name[name] = folder
+            merged.append(folder)
+        else:
+            url = child.get("url", "")
+            if url in seen_urls:
+                if report is not None:
+                    report.append(f"dropped duplicate {path}/{child.get('name', '')}")
+                continue
+            seen_urls.add(url)
+            merged.append(child)
+    for folder in folders_by_name.values():
+        folder["children"] = merge_children(
+            folder["children"], f"{path}/{folder.get('name', '')}", report
+        )
+    return merged
+
+
+def normalize_node(node):
+    """Keep only the tree-describing keys, recursively, in a fixed key order."""
+    if node.get("type") == "url":
+        return {key: node.get(key, "") for key in URL_KEYS}
+    normalized = {key: node.get(key, "") for key in FOLDER_KEYS if key != "children"}
+    normalized["children"] = [normalize_node(child) for child in node.get("children", [])]
+    return normalized
+
+
+def dedupe_bookmarks(bookmarks, report=None):
+    """Return a roots+version document with every root deduped and normalized.
+
+    Chrome's checksum and sync_metadata are dropped: they describe the live
+    file, not the tree. Bookmark order is Chrome's own order, never sorted.
+    """
+    roots = {}
+    for root_name, root in bookmarks["roots"].items():
+        if not isinstance(root, dict):
+            continue
+        deduped = dict(root)
+        deduped["children"] = merge_children(root.get("children", []), root_name, report)
+        roots[root_name] = normalize_node(deduped)
+    return {"roots": roots, "version": bookmarks.get("version", 1)}
 
 
 def _chrome_time_to_unix(chrome_timestamp):
@@ -85,21 +127,28 @@ def _chrome_time_to_unix(chrome_timestamp):
         return str(int(time.time()))
 
 
-def _emit_netscape_node(node, depth, lines):
+def _escape(value, escapes):
+    # html.escape(quote=True) turns ' into &#x27;, which Chrome's importer does
+    # not decode - the 2026-08 import left names reading "Charlie&#x27;s Site".
+    for raw, escaped in escapes:
+        value = value.replace(raw, escaped)
+    return value
+
+
+def _emit_netscape_node(node, depth, lines, toolbar=False):
     indent = "    " * depth
+    add_date = _chrome_time_to_unix(node.get("date_added", "0"))
+    name = _escape(node.get("name", ""), TEXT_ESCAPES)
     if node.get("type") == "url":
-        href = html.escape(node["url"], quote=True)
-        add_date = _chrome_time_to_unix(node.get("date_added", "0"))
-        name = html.escape(node.get("name", ""))
+        href = _escape(node["url"], ATTR_ESCAPES)
         lines.append(f'{indent}<DT><A HREF="{href}" ADD_DATE="{add_date}">{name}</A>')
-    else:
-        add_date = _chrome_time_to_unix(node.get("date_added", "0"))
-        name = html.escape(node.get("name", ""))
-        lines.append(f'{indent}<DT><H3 ADD_DATE="{add_date}">{name}</H3>')
-        lines.append(f"{indent}<DL><p>")
-        for child in node.get("children", []):
-            _emit_netscape_node(child, depth + 1, lines)
-        lines.append(f"{indent}</DL><p>")
+        return
+    toolbar_attr = ' PERSONAL_TOOLBAR_FOLDER="true"' if toolbar else ""
+    lines.append(f'{indent}<DT><H3 ADD_DATE="{add_date}"{toolbar_attr}>{name}</H3>')
+    lines.append(f"{indent}<DL><p>")
+    for child in node.get("children", []):
+        _emit_netscape_node(child, depth + 1, lines)
+    lines.append(f"{indent}</DL><p>")
 
 
 def export_bookmarks_as_html(bookmarks, output_file_path):
@@ -109,6 +158,10 @@ def export_bookmarks_as_html(bookmarks, output_file_path):
     so the changes are real sync operations that propagate to all devices.
     Swapping the Bookmarks file on disk does NOT survive Chrome Sync - the
     server state wins on next launch. Always deploy via import, never file swap.
+
+    Layout matches Chrome's own export: the bookmark bar is the folder flagged
+    PERSONAL_TOOLBAR_FOLDER, everything from the other roots sits beside it and
+    lands in Other Bookmarks.
     """
     lines = [
         "<!DOCTYPE NETSCAPE-Bookmark-file-1>",
@@ -117,13 +170,43 @@ def export_bookmarks_as_html(bookmarks, output_file_path):
         "<H1>Bookmarks</H1>",
         "<DL><p>",
     ]
-    for child in bookmarks["roots"]["bookmark_bar"]["children"]:
-        _emit_netscape_node(child, 1, lines)
+    roots = bookmarks["roots"]
+    _emit_netscape_node(roots["bookmark_bar"], 1, lines, toolbar=True)
+    for root_name in ("other", "synced"):
+        for child in roots.get(root_name, {}).get("children", []):
+            _emit_netscape_node(child, 1, lines)
     lines.append("</DL><p>")
 
     with open(output_file_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     print(f"Exported importable HTML to: {output_file_path}")
+
+
+def count_urls(children):
+    total = 0
+    for child in children:
+        if child.get("type") == "folder":
+            total += count_urls(child.get("children", []))
+        else:
+            total += 1
+    return total
+
+
+def write_outputs(bookmarks, output_dir):
+    report = []
+    before = sum(count_urls(r.get("children", [])) for r in bookmarks["roots"].values() if isinstance(r, dict))
+    deduped = dedupe_bookmarks(bookmarks, report)
+    after = sum(count_urls(r.get("children", [])) for r in deduped["roots"].values())
+    for line in report:
+        print(line)
+    print(f"{before} bookmarks in, {after} out")
+
+    json_path = os.path.join(output_dir, f"{BASE_NAME}.json")
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(deduped, f, ensure_ascii=False, indent=3, sort_keys=True)
+        f.write("\n")
+    print(f"Exported deduped bookmarks JSON to: {json_path}")
+    export_bookmarks_as_html(deduped, os.path.join(output_dir, f"{BASE_NAME}.html"))
 
 
 # %%
@@ -132,50 +215,31 @@ def export_bookmarks_as_html(bookmarks, output_file_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
-            "Back up Chrome bookmarks to the personal_credentials repo. "
-            "Default action exports the raw Bookmarks JSON; --html additionally "
-            "writes a Netscape HTML file for sync-safe re-import through the "
-            "Bookmark Manager."
+            "Save Chrome bookmarks to the personal_credentials repo, collapsing the "
+            "duplicate folders Chrome Sync creates when a device reconnects. Writes "
+            f"{BASE_NAME}.json (the editable copy) and {BASE_NAME}.html (for re-import "
+            "through the Bookmark Manager). See docs/repo_chrome_bookmarks.md."
         )
     )
     parser.add_argument(
         "--profile",
         default="Default",
-        help='Chrome profile directory name (e.g. "Default", "Profile 3")',
-    )
-    parser.add_argument(
-        "--html",
-        action="store_true",
-        help="also write a Netscape-format HTML import file next to the JSON",
+        help='Chrome profile directory name (default "Default", the personal profile)',
     )
     parser.add_argument(
         "--input",
-        help=(
-            "convert an existing bookmarks JSON (e.g. one edited in the repo) "
-            "instead of reading the live Chrome file; implies --html"
-        ),
+        help="read this bookmarks JSON (e.g. the repo copy after editing) instead of the live Chrome file",
     )
     parser.add_argument(
         "--output-dir",
-        help="override output directory (default: personal_credentials repo)",
+        help="override output directory (default: personal_credentials/bookmarks)",
     )
     args = parser.parse_args()
 
-    output_dir = args.output_dir or get_personal_credentials_dir()
-    base_name = f"chrome_bookmarks_{HOSTNAME_LOWER}"
-
-    if args.input:
-        with open(args.input, "r", encoding="utf-8") as f:
-            bookmarks = json.load(f)
-        html_path = os.path.splitext(args.input)[0] + ".html"
-        export_bookmarks_as_html(bookmarks, html_path)
-    else:
-        json_path = os.path.join(output_dir, f"{base_name}.json")
-        if export_bookmarks_as_json(json_path, args.profile) and args.html:
-            bookmarks = get_chrome_bookmarks_as_json(args.profile)
-            export_bookmarks_as_html(
-                bookmarks, os.path.join(output_dir, f"{base_name}.html")
-            )
+    source = args.input or get_default_bookmarks_file_path(args.profile)
+    if not os.path.exists(source):
+        sys.exit(f"bookmarks file not found: {source}")
+    write_outputs(read_bookmarks(source), args.output_dir or get_bookmarks_dir())
 
 
 # %%
