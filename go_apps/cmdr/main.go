@@ -77,8 +77,27 @@ func main() {
 		}
 		os.Exit(reposEnsure(check, yes))
 	default:
-		os.Exit(dispatch(args[0], args[1:]))
+		code := dispatch(args[0], args[1:])
+		if os.Getenv("CMDR_HANDOFF") != "" {
+			waitForReturn(code)
+		}
+		os.Exit(code)
 	}
+}
+
+// waitForReturn holds the screen after a command the TUI handed the terminal
+// to. The TUI's alternate screen comes back the instant this process exits
+// and wipes everything the command printed - a check's plan, a failure's
+// traceback - so a handed-off run ends by waiting for enter instead.
+func waitForReturn(code int) {
+	sty := newStyler(os.Stdout)
+	fmt.Println()
+	if code == 0 {
+		fmt.Println(sty.good("-- done") + sty.dim("  press enter to return to cmdr"))
+	} else {
+		fmt.Println(sty.bad(fmt.Sprintf("-- exited with status %d", code)) + sty.dim("  press enter to return to cmdr"))
+	}
+	bufio.NewScanner(os.Stdin).Scan()
 }
 
 func dispatch(name string, rest []string) int {

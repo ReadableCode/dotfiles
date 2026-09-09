@@ -269,6 +269,9 @@ func (m model) handOff(c Command, mode Mode) (model, tea.Cmd) {
 		flag = "--check"
 	}
 	proc := exec.Command(self, c.Name, flag)
+	// The child holds its last screen until enter (see waitForReturn), so
+	// its output is readable before this alternate screen comes back.
+	proc.Env = append(os.Environ(), "CMDR_HANDOFF=1")
 	m.lines = []string{"ran in the terminal; its output was shown there"}
 	m.vp.SetContent(strings.Join(m.lines, "\n"))
 	return m, tea.Sequence(tea.DisableMouse, tea.ExecProcess(proc, func(err error) tea.Msg {
