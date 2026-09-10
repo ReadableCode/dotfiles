@@ -1,0 +1,8 @@
+# User-level uv settings, deployed by dotfiles (deploy_manifest.yaml entry uv_config).
+#
+# Fedora's packaged uv ships /etc/uv/uv.toml with python-downloads = "manual", so a
+# repo that pins a Python the machine lacks fails `uv sync` instead of fetching it.
+# This restores uv's default, fetch the pinned version on first use, which the
+# installer build already does on macOS and Windows. User-level settings take
+# precedence over the system file.
+python-downloads = "automatic"

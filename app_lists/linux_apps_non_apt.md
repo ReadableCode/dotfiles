@@ -23,6 +23,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 `scripts/bootstrap.sh` runs this for you if `uv` is missing.
 
+If `uv` came from dnf instead (`/usr/bin/uv`), that package ships `/etc/uv/uv.toml`
+with `python-downloads = "manual"`, so a repo pinning a Python the machine lacks fails
+`uv sync` with "No interpreter found". The `uv_config` entry in `deploy_manifest.yaml`
+deploys `~/.config/uv/uv.toml` with `python-downloads = "automatic"`, which takes
+precedence, so pinned versions download on first use the same way they do on macOS.
+
 On Fedora, uv needs `libxcrypt-compat` (in `linux_apps_dnf.txt`) or it fails to start.
 Then, in a repo:
 

@@ -166,6 +166,23 @@
     Windows machines - the deployed symlinks showed up as untracked changes in
     every repo and VS Code offered to commit them.
 
+# --- Python (uv) ---
+
+- name: uv_config
+  repo: application_configs/uv/uv.toml
+  dest:
+    darwin: ~/.config/uv/uv.toml
+    linux: ~/.config/uv/uv.toml
+    windows: ~/AppData/Roaming/uv/uv.toml
+  note: >-
+    User-level uv settings, here for python-downloads. Fedora's RPM uv ships
+    /etc/uv/uv.toml with python-downloads = "manual", so a repo pinning a Python
+    the machine lacks fails uv sync instead of fetching it the way the installer
+    build does on macOS and Windows. User-level config takes precedence over
+    that system file (its own comment says so), so this restores the default
+    everywhere. python-preference is left as the system file sets it: "system"
+    still lets a pinned version download once downloads are allowed.
+
 # --- Claude ---
 
 # claude_settings (application_configs/claude/settings.json -> ~/.claude/
