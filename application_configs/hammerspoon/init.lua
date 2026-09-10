@@ -8,17 +8,17 @@ require("hs.ipc")
 ----------Hotkey Reference----------
 -- Update this table whenever you add or remove a binding
 local hotkeyRef = {
-    {"Ctrl+Shift+C",  "Open selected ID as Google Sheet"},
-    {"Ctrl+Shift+F",  "Open selected ID as Google Drive folder"},
+    {"Cmd+Shift+C",   "Open selected ID as Google Sheet"},
+    {"Cmd+Shift+F",   "Open selected ID as Google Drive folder"},
     {"Cmd+Shift+V",   "Paste as plain text (strips formatting)"},
     {"Ctrl+Shift+T",  "Open front Finder window in Terminal"},
     {"Ctrl+Shift+L",  "Apply saved layouts to every desktop in sequence"},
-    {"Ctrl+Shift+A",  "Apply saved layout to THIS desktop only"},
-    {"Ctrl+Shift+S",  "Recapture ALL windows on this desktop"},
-    {"Ctrl+Shift+W",  "Recapture only the focused app's window(s)"},
-    {"Ctrl+Shift+E",  "Open the visual layout editor in a browser"},
-    {"Ctrl+Shift+P",  "Enforce every app's desktop assignment"},
-    {"Ctrl+Shift+G",  "Send visible windows to the desktop they belong on"},
+    -- {"Ctrl+Shift+A",  "Apply saved layout to THIS desktop only"},
+    -- {"Ctrl+Shift+S",  "Recapture ALL windows on this desktop"},
+    -- {"Ctrl+Shift+W",  "Recapture only the focused app's window(s)"},
+    -- {"Ctrl+Shift+E",  "Open the visual layout editor in a browser"},
+    -- {"Ctrl+Shift+P",  "Enforce every app's desktop assignment"},
+    -- {"Ctrl+Shift+G",  "Send visible windows to the desktop they belong on"},
     {"Ctrl+Shift+H",  "Show this hotkey cheatsheet"},
 }
 
@@ -31,8 +31,9 @@ hs.hotkey.bind({"ctrl", "shift"}, "h", function()
 end)
 
 ----------Go To Selected Sheet ID----------
--- Ctrl+Shift+C: copy selection, open as Google Sheet
-hs.hotkey.bind({"ctrl", "shift"}, "c", function()
+-- Cmd+Shift+C: copy selection, open as Google Sheet. Cmd because it is a
+-- modified copy, the Mac form of the AutoHotkey Ctrl+Shift+C.
+hs.hotkey.bind({"cmd", "shift"}, "c", function()
     hs.eventtap.keyStroke({"cmd"}, "c", 200000)
     hs.timer.doAfter(0.15, function()
         local id = hs.pasteboard.getContents()
@@ -43,8 +44,8 @@ hs.hotkey.bind({"ctrl", "shift"}, "c", function()
 end)
 
 ----------Go To Selected GDrive Folder ID----------
--- Ctrl+Shift+F: copy selection, open as Google Drive folder
-hs.hotkey.bind({"ctrl", "shift"}, "f", function()
+-- Cmd+Shift+F: copy selection, open as Google Drive folder
+hs.hotkey.bind({"cmd", "shift"}, "f", function()
     hs.eventtap.keyStroke({"cmd"}, "c", 200000)
     hs.timer.doAfter(0.15, function()
         local id = hs.pasteboard.getContents()
@@ -144,8 +145,9 @@ end)
 -- un-configuring an app means dropping it from both.
 --
 -- Three ways to drive it:
---   Hotkeys     Ctrl+Shift+H lists them all.
---   Editor      Ctrl+Shift+E opens a drag-and-drop editor in the browser.
+--   Hotkeys     Ctrl+Shift+L applies every desktop; the rest sit commented
+--               out under Bindings.
+--   Editor      http://localhost:21212/editor, drag-and-drop in the browser.
 --   HTTP        http://localhost:21212/... (Stream Deck keys, shell, whatever).
 wl = {}  -- global so hs -c / the console can reach it
 
@@ -358,7 +360,7 @@ end
 -- and one window on the next - `#app:allWindows()` flips between 0 and 1 with
 -- no change on screen. A gather that samples at the wrong instant skips the
 -- app, which is how Slack sat on desktop 1 with a desktop-2 rectangle and
--- Ctrl+Shift+G kept reporting nothing to move. AXMainWindow keeps answering
+-- gather kept reporting nothing to move. AXMainWindow keeps answering
 -- while AXWindows is empty, so also ask every app for its main/focused window
 -- and take the union - held to this desktop so the fallback can't pull in a
 -- window that lives elsewhere (orderedWindows is already on-screen only).
@@ -1049,8 +1051,9 @@ end
 --   quiet   skip the "nothing to do" alert
 --   force   act on every assignment, not just the drifted ones
 --   dock    also write the Dock's numbered "This Desktop" assignments, which
---           means walking the desktops (Ctrl+Shift+P does this; the automatic
---           post-KVM pass does not, so it never steals your desktop)
+--           means walking the desktops (/fixAssign?force=1&dock=1 does this;
+--           the automatic post-KVM pass does not, so it never steals your
+--           desktop)
 --   then_   run this when the repair finishes
 function wl.log(fmt, ...)
     hs.printf("[wl] " .. fmt, ...)
@@ -1291,10 +1294,13 @@ wl.server:start()
 -- its "GET request in background" mode does a real HTTP GET — so point keys at
 -- http://localhost:21212/<action> with Open with: "GET request in background".
 hs.hotkey.bind({"ctrl", "shift"}, "l", wl.applyAll)
-hs.hotkey.bind({"ctrl", "shift"}, "a", wl.applyHere)
-hs.hotkey.bind({"ctrl", "shift"}, "s", function() wl.snapshot() end)
-hs.hotkey.bind({"ctrl", "shift"}, "w", function() wl.snapshotApp() end)
-hs.hotkey.bind({"ctrl", "shift"}, "e", wl.openEditor)
-hs.hotkey.bind({"ctrl", "shift"}, "p", function() wl.fixAssign({ force = true, dock = true }) end)
-hs.hotkey.bind({"ctrl", "shift"}, "g", wl.gatherHere)
+-- Only applying everything gets a key. The rest stay reachable through the
+-- editor, the HTTP endpoints above and hs -c; uncomment a line to put one back
+-- (and its row in hotkeyRef).
+-- hs.hotkey.bind({"ctrl", "shift"}, "a", wl.applyHere)
+-- hs.hotkey.bind({"ctrl", "shift"}, "s", function() wl.snapshot() end)
+-- hs.hotkey.bind({"ctrl", "shift"}, "w", function() wl.snapshotApp() end)
+-- hs.hotkey.bind({"ctrl", "shift"}, "e", wl.openEditor)
+-- hs.hotkey.bind({"ctrl", "shift"}, "p", function() wl.fixAssign({ force = true, dock = true }) end)
+-- hs.hotkey.bind({"ctrl", "shift"}, "g", wl.gatherHere)
 hs.urlevent.bind("applyLayouts", wl.applyAll)

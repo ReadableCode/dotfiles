@@ -397,18 +397,30 @@ Current hotkeys defined in `application_configs/hammerspoon/init.lua`:
 
 | Hotkey | Action |
 | -------- | -------- |
-| `Ctrl+Shift+C` | Copy selection, open as Google Sheets URL |
-| `Ctrl+Shift+F` | Copy selection, open as Google Drive folder URL |
+| `Cmd+Shift+C` | Copy selection, open as Google Sheets URL |
+| `Cmd+Shift+F` | Copy selection, open as Google Drive folder URL |
 | `Cmd+Shift+V` | Paste as plain text (strips formatting) |
 | `Ctrl+Shift+T` | Open front Finder window in Terminal |
 | `Ctrl+Shift+L` | Apply saved layouts to every desktop in sequence |
-| `Ctrl+Shift+A` | Apply the saved layout to this desktop only |
-| `Ctrl+Shift+S` | Recapture **all** windows on this desktop |
-| `Ctrl+Shift+W` | Recapture **only the focused app's** window(s) |
-| `Ctrl+Shift+E` | Open the visual layout editor in a browser |
-| `Ctrl+Shift+P` | Enforce every app's desktop assignment |
-| `Ctrl+Shift+G` | Send visible windows to the desktop they belong on |
 | `Ctrl+Shift+H` | Show the hotkey cheatsheet |
+
+The open-by-ID keys use Cmd because they are a modified copy (`Cmd+C`), the Mac
+form of the AutoHotkey `Ctrl+Shift+C` / `Ctrl+Shift+F`. As global hotkeys they
+take `Cmd+Shift+F` (VS Code find in files) and `Cmd+Shift+C` (Chrome inspect,
+Maccy's default) away from every app.
+
+Only applying everything has a window-layout key. The rest are commented out in
+the Bindings section of `init.lua` (uncomment the line and its `hotkeyRef` row to
+put one back) and stay reachable another way:
+
+| Former hotkey | Action | Route now |
+| -------- | -------- | -------- |
+| `Ctrl+Shift+A` | Apply the saved layout to this desktop only | `hs -c "wl.applyHere()"` |
+| `Ctrl+Shift+S` | Recapture **all** windows on this desktop | `/snapshot`, editor button |
+| `Ctrl+Shift+W` | Recapture **only the focused app's** window(s) | `/snapshotApp`, editor button |
+| `Ctrl+Shift+E` | Open the visual layout editor | <http://localhost:21212/editor> |
+| `Ctrl+Shift+P` | Enforce every app's desktop assignment | `/fixAssign?force=1&dock=1` |
+| `Ctrl+Shift+G` | Send visible windows to the desktop they belong on | `/gather` |
 
 ### Window layouts (per desktop)
 
@@ -483,8 +495,8 @@ that is the case nothing can resolve.
 **Capture is split in two**, because recapturing everything after nudging one
 window is how a half-arranged desktop overwrites good entries:
 
-- `Ctrl+Shift+S` — recapture every window on this desktop.
-- `Ctrl+Shift+W` — recapture only the focused app, leaving the rest of that
+- `/snapshot` — recapture every window on this desktop.
+- `/snapshotApp` — recapture only the focused app, leaving the rest of that
   desktop's saved entries untouched. This is the one to use after moving a
   single window. An app with two saved windows (GLKVM) keeps both slots, matched
   in order.
@@ -495,12 +507,12 @@ rebuilding the list from the screen would silently delete them. Merging also
 means closing an app does not delete its layout. Windows on screen with no entry
 are still added.
 
-**Apply** with `Ctrl+Shift+L` (walks every desktop in turn) or `Ctrl+Shift+A`
-(this desktop only). Both gather first — see below.
+**Apply** with `Ctrl+Shift+L`, which walks every desktop in turn and gathers
+first (see below). `wl.applyHere()` does the same for this desktop only.
 
 #### Getting windows onto the right desktop after a restart
 
-VS Code reopens every window on one desktop at login. `Ctrl+Shift+G` (**gather**)
+VS Code reopens every window on one desktop at login. **Gather** (`/gather`)
 sends each window visible from here to the desktop the config names, working it
 out from the app's assignment, then from a rectangle whose title match fits the
 window, then — if the app has rectangles on exactly one desktop — that one.
@@ -519,9 +531,8 @@ title bar.
 
 #### Visual editor
 
-`Ctrl+Shift+E` opens `window_layout_editor.html` at
-<http://localhost:21212/editor>, served by Hammerspoon's own local HTTP server.
-It draws both monitors at their true proportions and lets you drag and resize
+`window_layout_editor.html` lives at <http://localhost:21212/editor>, served by
+Hammerspoon's own local HTTP server. It draws both monitors at their true proportions and lets you drag and resize
 the saved rectangles instead of editing fractions by hand:
 
 - Solid blue outlines are this desktop's windows; dashed purple ones marked `∀`
@@ -561,7 +572,8 @@ one window's worth of git diff rather than reshuffling the whole file.
 
 The same server backs the Stream Deck keys (Website action, "GET request in
 background"): `/applyLayouts`, `/apply?space=N`, `/snapshot`, `/snapshotApp`,
-`/fixSticky`, `/learnSticky`, `/reload`. It binds to localhost only.
+`/gather`, `/fixAssign` (`?force=1&dock=1` for enforce all), `/learnAssign`,
+`/reload`. It binds to localhost only.
 
 #### Enforcing assignments
 
@@ -582,9 +594,9 @@ Desktop / None), readable and pressable without ever being rendered:
   un-assign / re-assign cycle on any stale All Desktops app. No desktop
   switching, so this is what runs automatically five seconds after a display
   change and again before `Ctrl+Shift+L`.
-- **Enforce all** (`Ctrl+Shift+P`) also writes the numbered assignments. macOS
-  resolves "This Desktop" against wherever you are standing, so this visits each
-  desktop in turn and comes back. Every step is traced to the Hammerspoon console
+- **Enforce all** (`/fixAssign?force=1&dock=1`) also writes the numbered
+  assignments. macOS resolves "This Desktop" against wherever you are standing,
+  so this visits each desktop in turn and comes back. Every step is traced to the Hammerspoon console
   with a `[wl]` prefix.
 - **Learn** records where each open app currently lives as its intended
   assignment. It merges rather than replaces, so apps that happen to be closed
