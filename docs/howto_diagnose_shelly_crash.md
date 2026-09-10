@@ -199,9 +199,18 @@ ssh "$SHELLY" "powershell -NoProfile -Command \"Get-WinEvent -FilterHashtable @{
 ```
 
 "No events were found" is the answer, not an error: as of 2026-09-10 there has
-never been a WHEA event and Windows Memory Diagnostic has never run. Any WHEA
-event points at hardware (CPU, memory, PCIe). MemTest86 results stay on its USB
-stick, so ask for them.
+never been a WHEA event. Any WHEA event points at hardware (CPU, memory, PCIe).
+Windows Memory Diagnostic (standard) ran on 2026-09-10 and found no errors
+(events 1101 and 1201 at 14:28). To run it again, queue it and restart when
+nobody is on the machine; the result is logged about ten minutes after Windows
+is back:
+
+```bash
+ssh "$SHELLY" "bcdedit /bootsequence '{memdiag}'"
+ssh "$SHELLY" "shutdown /r /t 60 /c \"Windows Memory Diagnostic runs after this restart\""
+```
+
+MemTest86 results stay on its USB stick, so ask for them.
 
 ## 6. Is the monitoring and cooling setup still in place
 
@@ -249,7 +258,8 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
 
 ## 9. Planned after 2026-09-10
 
-- A memory test (Windows Memory Diagnostic or MemTest86).
+- Done 2026-09-10: Windows Memory Diagnostic, standard, no errors. MemTest86
+  only if another blue screen is not the anti-cheat unload.
 - Reseating the GPU power cables and the 24-pin and CPU 8-pin.
 - Repairing Easy Anti-Cheat with
   `C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe`.
