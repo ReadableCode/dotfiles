@@ -2,9 +2,9 @@
 
 # OS package updates for macOS/Linux — the `updatepackages` step, nothing more.
 # Repo pulls and config deploys live in the shell functions (.shared_aliases):
-# `myupdater` runs pullrepos → clonerepos → updatepackages → deployconfigs →
-# prune, deploying AFTER the package updates in case an upgrade clobbers a
-# linked config.
+# `myupdater` runs pullrepos → updatepackages → clonerepos → syncpythonenvs →
+# deployconfigs → prune, deploying AFTER the package updates in case an upgrade
+# clobbers a linked config.
 #
 # On Linux, on top of the package upgrade, three things are re-checked EVERY run
 # and repaired in place after a [y/N] — each one is a state a release upgrade or

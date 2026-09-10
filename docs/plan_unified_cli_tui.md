@@ -20,9 +20,9 @@ deployed configs after package updates while the PowerShell `myupdater`
 deployed before them; worse, both myupdaters pulled **only dotfiles** before
 deploying, even though the deploy reads manifests and payloads from every
 sibling `*_credentials` repo. That was hand-aligned in 2026-08 (both shells
-now compose the same `pullrepos` → `clonerepos` → `updatepackages` →
-`deployconfigs` → prune steps), but nothing stops the next drift — the same
-sequence still exists twice, once per language.
+now compose the same `pullrepos` → `updatepackages` → `clonerepos` →
+`syncpythonenvs` → `deployconfigs` → prune steps), but nothing stops the next
+drift — the same sequence still exists twice, once per language.
 
 One more gap from the same cause: neither implementation can report what is
 outdated without also upgrading it.

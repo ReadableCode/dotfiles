@@ -329,9 +329,12 @@ everything is `OK`.
 `powershell_aliases.ps1`, same shape on both) are compositions of individually
 callable steps: `pullrepos` (git_puller over every sibling repo — **all** of
 them, since the deploy reads overlay manifests, host inventories and payload
-files from the `*_credentials` repos, not just dotfiles), `clonerepos`,
-`updatepackages` (myupdater only; packages run before the deploy so anything
-an upgrade clobbers gets re-linked), `deployconfigs`, then
+files from the `*_credentials` repos, not just dotfiles), `updatepackages`
+(myupdater only; packages run before the deploy so anything an upgrade clobbers
+gets re-linked), `clonerepos`, `syncpythonenvs` (`uv sync --frozen` in every
+repo root or immediate subdirectory holding a `uv.lock`, so each repo's own
+pinned tools are installed; a project that fails to sync is reported and never
+stops the rest), `deployconfigs`, then
 `deployconfigs prune --apply`. A repo that cannot be pulled (local WIP,
 auth) is warned about but never blocks the run — the deploy proceeds from
 that repo's current, possibly stale, checkout.

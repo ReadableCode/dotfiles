@@ -260,6 +260,18 @@ function clonerepos() {
     uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/clone_repos.py"
 }
 
+# syncpythonenvs: `uv sync --frozen` in every uv project under $gitDir (repo
+# roots and their immediate subdirectories holding a uv.lock), so each repo's
+# own pinned tools are installed here. Runs from anywhere via --project, like
+# clonerepos.
+function syncpythonenvs() {
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "syncpythonenvs: uv is not installed (wanted to run src/sync_python_envs.py)"
+        return 1
+    fi
+    uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/sync_python_envs.py" "$@"
+}
+
 # updatepackages: OS updates only (softwareupdate/brew on macOS, dnf/apt on
 # Linux) - no repo pulls, no config deploy, and no per-package handling: it
 # upgrades whatever is installed and prints fastfetch at the end. On Linux it
@@ -277,7 +289,9 @@ function _fleet_banner() {
 }
 
 # _fleet_refresh_configs: the shared tail of gitpullall and myupdater.
-# Clone check first (a fresh clone may be a deploy target), then deploy
+# Clone check first (a fresh clone may be a deploy target), then sync every
+# uv project's environment so each repo's own tools are installed (fresh
+# clones included), then deploy
 # (idempotent, and re-links the hard links the pulls just orphaned on
 # no-symlink machines like work laptops), then prune with --apply: the
 # removals files are a committed list of paths that must not exist, so every
@@ -288,6 +302,9 @@ function _fleet_banner() {
 function _fleet_refresh_configs() {
     _fleet_banner 'Checking for repos to clone'
     clonerepos
+    echo ""
+    _fleet_banner 'Syncing Python environments'
+    syncpythonenvs
     echo ""
     _fleet_banner 'Deploying configs'
     deployconfigs

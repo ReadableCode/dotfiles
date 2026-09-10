@@ -404,6 +404,20 @@ function clonerepos {
     uv run --project $repo python (Join-Path $repo 'src\clone_repos.py')
 }
 
+# syncpythonenvs: `uv sync --frozen` in every uv project under $gitDir (repo
+# roots and their immediate subdirectories holding a uv.lock), so each repo's
+# own pinned tools are installed here. Runs from anywhere via --project, like
+# clonerepos.
+function syncpythonenvs {
+    if (-not (Test-GitDir)) { return }
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Host "syncpythonenvs: uv is not installed (wanted to run src/sync_python_envs.py)"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    uv run --project $repo python (Join-Path $repo 'src\sync_python_envs.py') @args
+}
+
 # updatepackages: OS package updates only (winget, then choco) - no repo
 # pulls, no config deploy.
 function updatepackages {
@@ -418,20 +432,24 @@ function updatepackages {
 }
 
 # The shared tail of gitpullall and myupdater. Clone check first (a fresh
-# clone may be a deploy target), then deploy (idempotent, and re-links the
-# hard links the pulls just orphaned on no-symlink machines like work
-# laptops), then prune with --apply: the removals files are a committed list
-# of paths that must not exist, so every machine has to act on them for the
-# list to ever be finished. A dry run here would reprint the same dead links
-# forever and still need a second command by hand. Safe after the deploy
-# because prune only removes a path a removals entry names AND no live
-# manifest entry wants (see docs/repo_deploy_configs.md). The slow AutoHotkey
-# probes (registry scan, choco list) ride along last - too expensive for
-# shell startup, cheap here where seconds do not matter. Silent on a correct
-# machine.
+# clone may be a deploy target), then sync every uv project's environment so
+# each repo's own tools are installed (fresh clones included), then deploy
+# (idempotent, and re-links the hard links the pulls just orphaned on
+# no-symlink machines like work laptops), then prune with --apply: the
+# removals files are a committed list of paths that must not exist, so every
+# machine has to act on them for the list to ever be finished. A dry run here
+# would reprint the same dead links forever and still need a second command by
+# hand. Safe after the deploy because prune only removes a path a removals
+# entry names AND no live manifest entry wants (see
+# docs/repo_deploy_configs.md). The slow AutoHotkey probes (registry scan,
+# choco list) ride along last - too expensive for shell startup, cheap here
+# where seconds do not matter. Silent on a correct machine.
 function _FleetRefreshConfigs {
     Write-Host "==============  Checking for repos to clone  ==============" -ForegroundColor Cyan
     clonerepos
+    Write-Host ""
+    Write-Host "==============  Syncing Python environments  ==============" -ForegroundColor Cyan
+    syncpythonenvs
     Write-Host ""
     Write-Host "==============  Deploying configs  ==============" -ForegroundColor Cyan
     deployconfigs

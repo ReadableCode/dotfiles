@@ -205,6 +205,18 @@ if (Test-UvReady) {
     Pop-Location
 }
 
+Write-Step "Python environments"
+if (Test-UvReady) {
+    Push-Location $DotfilesDir
+    if ($DryRun) { uv run python src/sync_python_envs.py --list }
+    else { uv run python src/sync_python_envs.py }
+    if ($LASTEXITCODE -ne 0) {
+        if ($DryRun) { Write-Warn "could not list uv projects (are dependencies synced?)" }
+        else { Write-Fail "some uv projects did not sync (listed above)" }
+    }
+    Pop-Location
+}
+
 Write-Step "Deploy configs"
 if (Test-UvReady) {
     Push-Location $DotfilesDir

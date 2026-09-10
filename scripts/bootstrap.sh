@@ -270,6 +270,15 @@ if uv_ready; then
     fi
 fi
 
+step "Python environments"
+if uv_ready; then
+    if [ -n "$DRY_RUN" ]; then
+        ( cd "$DOTFILES_DIR" && uv run python src/sync_python_envs.py --list ) || warn "could not list uv projects (are deps synced?)"
+    elif ! ( cd "$DOTFILES_DIR" && uv run python src/sync_python_envs.py ); then
+        fail "some uv projects did not sync (listed above)"
+    fi
+fi
+
 step "Deploy configs"
 if uv_ready; then
     if [ -n "$DRY_RUN" ]; then
