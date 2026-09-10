@@ -110,6 +110,20 @@ def remove(path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
+def on_home_volume(path: Path) -> bool:
+    """True if freeing this path gives space back to the disk the bars measure.
+
+    A redirected cache lives on another volume (Envy sends uv/brew/go to an
+    external SSD), so its size must not be added to a total printed against
+    the internal disk - that is the same class of lie as measuring one
+    directory and pruning another.
+    """
+    try:
+        return path.stat().st_dev == HOME.stat().st_dev
+    except OSError:
+        return False
+
+
 def process_running(name: str) -> bool:
     """True if a process with exactly this name is running."""
     result = subprocess.run(["pgrep", "-x", name], capture_output=True, text=True, check=False)
@@ -328,13 +342,34 @@ def cleanup_app_logs(delete: bool) -> int:
 # %%
 # Cleanup 6: package manager caches, pruned by their own tooling #
 
-# (label, cache dir, prune command) — never rm these by hand; only the tool
-# knows which entries are still linked into an installed environment.
+# (label, cache-dir query, prune command) — never rm these by hand; only the
+# tool knows which entries are still linked into an installed environment.
+#
+# The directory is asked of the tool rather than hardcoded because the prune
+# command follows the tool's own configuration, and on a host that redirects
+# its caches (Envy points UV_CACHE_DIR/HOMEBREW_CACHE at an external SSD) that
+# is not the default path under ~. Hardcoding measured one directory and
+# pruned another: the 2026-09-09 dry run claimed 4.63 GB of package cache on
+# the internal disk that `uv cache prune` would never have touched.
+#
+# The query runs through a login shell because the redirect is an export, and
+# a plain subprocess inherits whatever this script was started from.
 PACKAGE_CACHES = [
-    ("uv", HOME / ".cache" / "uv", ["uv", "cache", "prune"]),
-    ("npm", HOME / ".npm" / "_cacache", ["npm", "cache", "clean", "--force"]),
-    ("homebrew", HOME / "Library" / "Caches" / "Homebrew", ["brew", "cleanup", "-s", "--prune=all"]),
+    ("uv", ["uv", "cache", "dir"], ["uv", "cache", "prune"]),
+    ("npm", ["npm", "config", "get", "cache"], ["npm", "cache", "clean", "--force"]),
+    ("homebrew", ["brew", "--cache"], ["brew", "cleanup", "-s", "--prune=all"]),
 ]
+
+
+def tool_cache_dir(query: list[str]) -> Path | None:
+    """Where the tool itself says its cache is, or None if it cannot say."""
+    result = subprocess.run(
+        ["zsh", "-lic", " ".join(query)], capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        return None
+    path = result.stdout.strip().splitlines()[-1].strip() if result.stdout.strip() else ""
+    return Path(path) if path else None
 
 
 def cleanup_package_caches(delete: bool) -> int:
@@ -351,22 +386,25 @@ def cleanup_package_caches(delete: bool) -> int:
         return 0
 
     total = 0
-    for label, path, command in PACKAGE_CACHES:
-        if not path.exists():
+    for label, query, command in PACKAGE_CACHES:
+        if shutil.which(command[0]) is None:
+            print(f"skipping {label}: {command[0]} not on PATH")
+            continue
+        path = tool_cache_dir(query)
+        if path is None or not path.exists():
             continue
         before = dir_size(path)
-        if shutil.which(command[0]) is None:
-            print(f"skipping {label}: {command[0]} not on PATH ({human(before)} cached)")
-            continue
+        counts = on_home_volume(path)
+        where = f" at {path}" + ("" if counts else " — other volume, not in the total")
         if not delete:
-            total += before
-            print(f"would run: {' '.join(command)} — {label} cache is {human(before)} (upper bound)")
+            total += before if counts else 0
+            print(f"would run: {' '.join(command)} — {label} cache is {human(before)}{where} (upper bound)")
             continue
 
-        print(f"running: {' '.join(command)} — {label} cache is {human(before)}")
+        print(f"running: {' '.join(command)} — {label} cache is {human(before)}{where}")
         subprocess.run(command, capture_output=True, check=False)
         freed = before - (dir_size(path) if path.exists() else 0)
-        total += freed
+        total += freed if counts else 0
         print(f"  freed {human(freed)} of {human(before)}")
     if not total:
         print("no package caches present")

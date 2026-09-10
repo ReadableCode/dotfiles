@@ -54,16 +54,28 @@
   dest:
     darwin: ~/.zshrc
 
-- name: zshrc_local
-  repo: application_configs/bash/zshrc_local
+- name: zshenv
+  repo: application_configs/bash/.zshenv
   dest:
-    darwin: ~/.zshrc.local
+    darwin: ~/.zshenv
   note: >-
-    Machine-local exports sourced by .zshrc. Only per-host zshrc_local.<host>
+    Sourced by every zsh, not just interactive ones, which is the whole point:
+    it is the only file a script, launchd job or agent tool call reads. Silent
+    on stdout - a stdio MCP server is launched through a shell and a banner
+    there breaks the JSON-RPC framing. Sources ~/.zshenv.local.
+
+- name: zshenv_local
+  repo: application_configs/bash/zshenv_local
+  dest:
+    darwin: ~/.zshenv.local
+  note: >-
+    Machine-local exports sourced by .zshenv. Only per-host zshenv_local.<host>
     variants exist (no bare default), so hosts without one skip this entry
     (SKIP_VARIANT) - intentional: the only variant is Envy redirecting its
     caches to the external SSD because its internal disk is small, which is a
     fact about that machine and nothing to mirror onto the rest of the fleet.
+    Was zshrc_local until 2026-09-09; .zshrc is interactive-only, so every
+    non-interactive uv/brew/go run rebuilt its cache on the internal disk.
 
 - name: bashrc
   repo: application_configs/bash/.bashrc

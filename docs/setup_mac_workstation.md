@@ -304,8 +304,12 @@ export ODBCSYSINI=/opt/homebrew/etc
 
 ```bash
 brew cleanup --prune=all
-rm -rf ~/Library/Caches/Homebrew
 ```
+
+Do not `rm -rf ~/Library/Caches/Homebrew` on a host that redirects its cache —
+that path is the abandoned pre-redirect copy, not the live one. `brew --cache`
+says where the live cache actually is; `scripts/mac_cleanup_all.py` asks the
+tool for the same reason.
 
 ### Moving Homebrew Cache
 
@@ -318,20 +322,35 @@ mkdir -p /Volumes/EnvyExtSSD/HomebrewCache
 sudo chown -R $(whoami) /Volumes/EnvyExtSSD/HomebrewCache
 ```
 
-Persist it in the machine-local zsh config. `~/.zshrc.local` is a symlink
+Persist it in the machine-local zsh config. `~/.zshenv.local` is a symlink
 deployed by `deploy_configs.py`, so edit the repo file, not the link:
 
 ```bash
-$EDITOR ~/GitHub/dotfiles/application_configs/bash/zshrc_local.envy
+$EDITOR ~/GitHub/dotfiles/application_configs/bash/zshenv_local.envy
 ```
 
-The exports there are unconditional on purpose. If the SSD is not mounted,
-brew/uv/go fail instead of rebuilding the caches on the internal disk the
-redirect exists to protect — the shell prints a warning at startup saying the
-volume is missing, so a failing `brew install` is easy to explain.
+It must be `.zshenv`, not `.zshrc`. `.zshrc` is read by interactive shells
+only, so exports placed there are invisible to every script, launchd job, cron
+entry and agent tool call — and each of those then rebuilds its cache under
+`~`, on the disk the redirect exists to protect. That is exactly what happened
+here: the exports lived in `~/.zshrc.local` until 2026-09-09 and had quietly
+grown 4.7 GB of duplicate `uv`, `Homebrew` and `go-build` caches on the
+internal disk. Check both kinds of shell agree after any change:
 
-A machine with no `zshrc_local.<host>` variant has no `~/.zshrc.local` at all
-(there is no bare default); `.zshrc` skips it and the manifest entry reports
+```bash
+zsh -c 'echo $UV_CACHE_DIR'      # non-interactive - the one that regressed
+zsh -lic 'echo $UV_CACHE_DIR'    # interactive
+```
+
+The exports are unconditional on purpose. If the SSD is not mounted,
+brew/uv/go fail instead of rebuilding the caches on the internal disk the
+redirect exists to protect — the shell prints a warning to stderr saying the
+volume is missing, so a failing `brew install` is easy to explain. Nothing in
+`.zshenv` may print to *stdout*: a stdio MCP server is started through a shell
+and a banner there breaks the JSON-RPC framing.
+
+A machine with no `zshenv_local.<host>` variant has no `~/.zshenv.local` at all
+(there is no bare default); `.zshenv` skips it and the manifest entry reports
 `SKIP_VARIANT`.
 
 ## Claude Setup

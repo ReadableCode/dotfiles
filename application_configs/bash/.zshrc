@@ -166,6 +166,7 @@ function claude-dequarantine() {
     echo "claude-dequarantine: stripped $stripped of $found binaries"
 }
 
-### Machine-local overrides (not synced) ###
+### Machine-local overrides ###
 
-[[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
+# Moved to ~/.zshenv (repo: application_configs/bash/.zshenv). Exports set from
+# .zshrc reach interactive shells only; scripts and launchd jobs never saw them.

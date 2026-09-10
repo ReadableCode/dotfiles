@@ -1,8 +1,13 @@
 # Envy only. The internal disk is small, so the big rebuildable caches live on
 # the external SSD. This is a hardware fact about this one machine, not a fleet
-# policy: other hosts have no zshrc_local variant and there is no bare default,
-# so `.zshrc` simply skips sourcing ~/.zshrc.local there and the manifest entry
-# reports SKIP_VARIANT. That is intentional.
+# policy: other hosts have no zshenv_local variant and there is no bare default,
+# so `.zshenv` simply skips sourcing ~/.zshenv.local there and the manifest
+# entry reports SKIP_VARIANT. That is intentional.
+#
+# Sourced from .zshenv, not .zshrc, so that scripts, launchd jobs and agent
+# tool calls get the redirect too. While these lived in ~/.zshrc.local only
+# interactive shells saw them, and every non-interactive `uv`/`brew`/`go`
+# invocation rebuilt its cache under ~ instead - 4.7 GB of it by 2026-09-09.
 #
 # These exports are deliberately unconditional. With the SSD unmounted the
 # paths are invalid and brew/uv/go fail loudly, which is the point - falling

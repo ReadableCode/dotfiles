@@ -73,6 +73,7 @@ prefixes; nothing lives unprefixed.
 - [howto_finding_files.md](howto_finding_files.md) - Find Artifacts of Syncing Issues
 - [howto_finding_strings_vscode.md](howto_finding_strings_vscode.md) - String Replacement with VSCode
 - [howto_formatting.md](howto_formatting.md) - Formatting
+- [howto_mac_disk_cleanup.md](howto_mac_disk_cleanup.md) - Mac Disk Cleanup
 - [howto_nicegui_quasar_layers.md](howto_nicegui_quasar_layers.md) - NiceGUI 3.x and Quasar cascade layers
 - [howto_rsync.md](howto_rsync.md) - Rsync Info
 - [howto_searching_replacing.md](howto_searching_replacing.md) - Replacements
