@@ -187,13 +187,12 @@
     linux: ~/.config/uv/uv.toml
     windows: ~/AppData/Roaming/uv/uv.toml
   note: >-
-    User-level uv settings, here for python-downloads. Fedora's RPM uv ships
-    /etc/uv/uv.toml with python-downloads = "manual", so a repo pinning a Python
-    the machine lacks fails uv sync instead of fetching it the way the installer
-    build does on macOS and Windows. User-level config takes precedence over
-    that system file (its own comment says so), so this restores the default
-    everywhere. python-preference is left as the system file sets it: "system"
-    still lets a pinned version download once downloads are allowed.
+    User-level uv settings. Fedora's RPM uv ships /etc/uv/uv.toml with
+    python-downloads = "manual" and python-preference = "system", and uv merges
+    that file under this one, so both are set back to uv's defaults here to match
+    the installer build on macOS and Windows: a pinned Python downloads on first
+    use, and a repo without a .python-version gets a uv-installed Python rather
+    than the dnf one, which has no headers to build a package lacking a wheel.
 
 # --- Claude ---
 
