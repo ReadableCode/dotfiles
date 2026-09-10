@@ -287,7 +287,8 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
 - `winget` from an ssh session cannot reach its source (step Access).
 - `EasyAntiCheat_EOS_Setup.exe repair` deletes the 45 MB kernel driver, and
   `install prod-fn` only re-registers the game (it finishes in milliseconds;
-  the setup program is under 1 MB). The driver returns when the game starts.
+  the setup program is under 1 MB). The driver returns when the game starts
+  (confirmed 2026-09-10).
   Do not run `repair` unless the game can be started afterwards.
 - `%APPDATA%\EasyAntiCheat\service.log` is rewritten by every setup run, so it
   holds no history.
@@ -316,9 +317,10 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
   `C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe`.
   The `EasyAntiCheat_EOS` service is registered again, but `repair` deleted the
   kernel driver file and its driver service and `install` did not bring them
-  back. The driver is expected back the next time Fortnite starts (step 4). If
-  Fortnite reports that Easy Anti-Cheat is not installed, run Verify on
-  Fortnite in the Epic Games Launcher.
+  back. It returned when Fortnite next started, at 17:11:55 the same day: the
+  same 44666520 byte build, Epic signature valid, `EasyAntiCheat_EOSSys`
+  running. If Fortnite ever reports that Easy Anti-Cheat is not installed, run
+  Verify on Fortnite in the Epic Games Launcher.
 
 Record what was done and when in the matching backlog entry before judging a
 new crash against them.
