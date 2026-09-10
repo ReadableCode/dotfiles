@@ -1,4 +1,5 @@
 {
+  "continueThreadsAfterServerUpdate": true,
   "providerInstances": {
     "codex": {
       "config": {
