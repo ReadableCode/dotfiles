@@ -243,11 +243,12 @@ def test_get_ticket_dry_run_requests_description(monkeypatch, capsys):
     out = _run_cli(["--dry-run", "get-ticket", "--key", "ACME-401"], monkeypatch, capsys)
     assert (
         "[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401"
-        "?fields=summary,status,assignee,issuetype,description"
+        "?fields=summary,status,issuetype,priority,assignee,reporter,labels,"
+        "created,updated,parent,description,attachment"
     ) in out
 
 
-def test_get_ticket_reports_description(monkeypatch, capsys):
+def test_get_ticket_reports_everything(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
     monkeypatch.setenv("JIRA_USER", "user@example.com")
     monkeypatch.setenv("JIRA_TOKEN", "token")
@@ -257,8 +258,18 @@ def test_get_ticket_reports_description(monkeypatch, capsys):
             "summary": "Fix the thing",
             "status": {"name": "In Progress"},
             "issuetype": {"name": "Bug"},
+            "priority": {"name": "High"},
             "assignee": {"displayName": "Sam"},
+            "reporter": {"displayName": "Alex"},
+            "labels": ["mec"],
+            "created": "2026-08-30T09:00:00.000+0000",
+            "updated": "2026-09-02T10:00:00.000+0000",
+            "parent": {"key": "ACME-400"},
             "description": "Steps:\n1. run it\n2. watch it break",
+            "attachment": [{
+                "filename": "layout.png", "mimeType": "image/png", "size": 3,
+                "created": "2026-09-02T10:00:00.000+0000", "author": {"displayName": "Sam"},
+                "content": "https://example.atlassian.net/rest/api/3/attachment/content/1"}],
         },
     }
     # two pages of one comment each: the walker must follow startAt to total
@@ -279,24 +290,87 @@ def test_get_ticket_reports_description(monkeypatch, capsys):
         return issue
 
     monkeypatch.setattr(ticket_pr, "http_json", fake_http)
-    ticket_pr.main(["get-ticket", "--key", "ACME-401"])
+    monkeypatch.setattr(ticket_pr, "http_bytes", lambda url, headers: b"png")
+    ticket_pr.main(["get-ticket", "--key", "ACME-401", "--attachments-dir", str(tmp_path)])
     out = capsys.readouterr().out
-    assert out.splitlines()[0] == "ACME-401 [In Progress] Fix the thing (2 comments)"
+    assert out.splitlines()[0] == (
+        f"ACME-401 [In Progress] Fix the thing (2 comments, 1 attachments in {tmp_path})"
+    )
     result = json.loads(out.strip().splitlines()[-1])
+    saved = tmp_path / "layout.png"
+    assert saved.read_bytes() == b"png"
     assert result == {
         "key": "ACME-401",
         "summary": "Fix the thing",
         "status": "In Progress",
         "type": "Bug",
+        "priority": "High",
         "assignee": "Sam",
+        "reporter": "Alex",
+        "labels": ["mec"],
+        "created": "2026-08-30T09:00:00.000+0000",
+        "updated": "2026-09-02T10:00:00.000+0000",
+        "parent": "ACME-400",
         "description": "Steps:\n1. run it\n2. watch it break",
         "comments": [
             {"author": "Alex", "created": "2026-09-01T10:00:00.000+0000", "body": "Repro attached"},
             {"author": "Sam", "created": "2026-09-02T10:00:00.000+0000", "body": "On it"},
         ],
+        "attachments": [{
+            "filename": "layout.png", "author": "Sam", "created": "2026-09-02T10:00:00.000+0000",
+            "mime_type": "image/png", "size": 3, "path": str(saved)}],
         "url": "https://example.atlassian.net/browse/ACME-401",
     }
     assert sum("/comment?" in c for c in calls) == 2
+
+
+def test_add_comment_dry_run(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    out = _run_cli(
+        ["--dry-run", "add-comment", "--key", "ACME-401", "--body", "Sheet built, see link"],
+        monkeypatch,
+        capsys,
+    )
+    assert "[dry-run] POST https://example.atlassian.net/rest/api/2/issue/ACME-401/comment" in out
+    assert '"body": "Sheet built, see link"' in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result == {
+        "key": "ACME-401", "id": "0",
+        "url": "https://example.atlassian.net/browse/ACME-401?focusedCommentId=0",
+    }
+
+
+def test_add_comment_posts_body_file(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    body_file = tmp_path / "comment.txt"
+    body_file.write_text("Found so far:\n* the missing company is 057\n", encoding="utf-8")
+    posted = {}
+
+    def fake_http(method, url, headers, payload=None, **kwargs):
+        posted.update(method=method, url=url, payload=payload)
+        return {"id": "5235601"}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["add-comment", "--key", "ACME-401", "--body-file", str(body_file)])
+    out = capsys.readouterr().out
+    assert posted == {
+        "method": "POST",
+        "url": "https://example.atlassian.net/rest/api/2/issue/ACME-401/comment",
+        "payload": {"body": "Found so far:\n* the missing company is 057\n"},
+    }
+    assert json.loads(out.strip().splitlines()[-1])["id"] == "5235601"
+
+
+def test_add_comment_rejects_empty_body(monkeypatch):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    with pytest.raises(SystemExit, match="empty comment"):
+        ticket_pr.main(["add-comment", "--key", "ACME-401", "--body", "  "])
 
 
 def test_get_ticket_no_comments(monkeypatch, capsys):

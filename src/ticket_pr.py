@@ -7,10 +7,14 @@ installed CLIs required. Credentials come from the calling repo's env file:
     python3 ~/GitHub/dotfiles/src/ticket_pr.py --env-file .env create-ticket \
         --project ACME --type Task --summary "Do the thing"
 
-Subcommands: create-ticket, get-ticket, create-pr, pr-status, request-review.
-Every subcommand honors the global ``--dry-run`` flag, which prints the HTTP
-request(s) it would make and returns canned identifiers instead of touching the
-network - use it to exercise calling workflows without creating real tickets/PRs.
+Subcommands: create-ticket, get-ticket, add-comment, create-pr, pr-status,
+update-branch, request-review. get-ticket returns everything on the ticket in one
+call (fields, description, every comment, every attachment downloaded to disk),
+so a caller never has to go to the Jira API on its own; add-comment is the way
+to keep a ticket up to date. Every subcommand honors the global ``--dry-run``
+flag, which prints the HTTP request(s) it would make and returns canned
+identifiers instead of touching the network - use it to exercise calling
+workflows without creating real tickets/PRs.
 
 Env keys used (values win in the order: real environment, then --env-file files):
 
@@ -44,6 +48,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -127,6 +132,26 @@ def http_json(method, url, headers, payload=None, dry_run=False, timeout=60, tol
     return json.loads(raw) if raw.strip() else {}
 
 
+def http_bytes(url, headers, timeout=120):
+    """Raw GET for a file (an attachment); Jira redirects to its file store."""
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.read()
+    except urllib.error.HTTPError as err:
+        raise SystemExit(f"GET {url} failed: HTTP {err.code}")
+    except urllib.error.URLError as err:
+        raise SystemExit(f"GET {url} failed: {err.reason}")
+
+
+def body_text(args):
+    """The --body-file contents when given, else the --body text."""
+    if args.body_file:
+        with open(args.body_file, encoding="utf-8") as handle:
+            return handle.read()
+    return args.body or ""
+
+
 def emit(human, result):
     """Print a human-readable line, then the machine-readable JSON result last."""
     print(human)
@@ -196,30 +221,83 @@ def cmd_create_ticket(args):
     emit(f"Created {key}: {url}", {"key": key, "url": url})
 
 
+JIRA_TICKET_FIELDS = ("summary,status,issuetype,priority,assignee,reporter,labels,"
+                      "created,updated,parent,description,attachment")
+
+
 def cmd_get_ticket(args):
+    """
+    Everything on the ticket in one call: the fields, the description, every
+    comment and every attachment (downloaded, local paths in the result).
+    Comment images are issue attachments that the comment body only names, so
+    the attachment list is how a caller sees what a comment shows.
+    """
     base, headers = jira_base(), jira_headers()
-    url = f"{base}/rest/api/2/issue/{args.key}?fields=summary,status,assignee,issuetype,description"
+    url = f"{base}/rest/api/2/issue/{args.key}?fields={JIRA_TICKET_FIELDS}"
     issue = http_json("GET", url, headers, dry_run=args.dry_run)
     if issue is None:  # dry run
         return
     fields = issue.get("fields", {})
-    assignee = (fields.get("assignee") or {}).get("displayName")
     key = issue.get("key", args.key)
+    directory = args.attachments_dir or os.path.join(tempfile.gettempdir(), "ticket_pr", key)
     result = {
         "key": key,
         "summary": fields.get("summary"),
         "status": (fields.get("status") or {}).get("name"),
         "type": (fields.get("issuetype") or {}).get("name"),
-        "assignee": assignee,
+        "priority": (fields.get("priority") or {}).get("name"),
+        "assignee": (fields.get("assignee") or {}).get("displayName"),
+        "reporter": (fields.get("reporter") or {}).get("displayName"),
+        "labels": fields.get("labels") or [],
+        "created": fields.get("created"),
+        "updated": fields.get("updated"),
+        "parent": (fields.get("parent") or {}).get("key"),
         "description": fields.get("description") or "",
         "comments": jira_comments(base, headers, key),
+        "attachments": jira_attachments(headers, fields.get("attachment") or [], directory),
         "url": f"{base}/browse/{key}",
     }
+    saved = ""
+    if result["attachments"]:
+        saved = f", {len(result['attachments'])} attachments in {directory}"
     emit(
         f"{result['key']} [{result['status']}] {result['summary']} "
-        f"({len(result['comments'])} comments)",
+        f"({len(result['comments'])} comments{saved})",
         result,
     )
+
+
+def jira_attachments(headers, attachments, directory):
+    """Download every attachment into ``directory`` and describe each with its local path."""
+    saved = []
+    if attachments:
+        os.makedirs(directory, exist_ok=True)
+    for attachment in attachments:
+        path = os.path.join(directory, attachment["filename"])
+        with open(path, "wb") as handle:
+            handle.write(http_bytes(attachment["content"], headers))
+        saved.append({
+            "filename": attachment["filename"],
+            "author": (attachment.get("author") or {}).get("displayName"),
+            "created": attachment.get("created"),
+            "mime_type": attachment.get("mimeType"),
+            "size": attachment.get("size"),
+            "path": path,
+        })
+    return saved
+
+
+def cmd_add_comment(args):
+    """Post a comment (Jira wiki markup) so the ticket stays current from the thread."""
+    base, headers = jira_base(), jira_headers()
+    body = body_text(args)
+    if not body.strip():
+        raise SystemExit("empty comment: pass --body or --body-file")
+    response = http_json("POST", f"{base}/rest/api/2/issue/{args.key}/comment", headers,
+                         payload={"body": body}, dry_run=args.dry_run)
+    comment_id = response["id"] if response else "0"
+    url = f"{base}/browse/{args.key}?focusedCommentId={comment_id}"
+    emit(f"Commented on {args.key}: {url}", {"key": args.key, "id": comment_id, "url": url})
 
 
 def jira_comments(base, headers, key, page_size=100):
@@ -393,10 +471,7 @@ def bucket_bitbucket_status(status):
 def cmd_create_pr(args):
     repo = resolve_repo(args.repo)
     head = args.head or git_output("rev-parse", "--abbrev-ref", "HEAD")
-    body = args.body or ""
-    if args.body_file:
-        with open(args.body_file, encoding="utf-8") as handle:
-            body = handle.read()
+    body = body_text(args)
 
     if resolve_provider(args.repo) == "bitbucket":
         if args.label:
@@ -731,9 +806,19 @@ def build_parser():
     ticket.add_argument("--label", action="append", default=[], help="label; repeatable")
     ticket.set_defaults(func=cmd_create_ticket)
 
-    get_ticket = sub.add_parser("get-ticket", help="fetch a Jira ticket's status summary")
+    get_ticket = sub.add_parser(
+        "get-ticket",
+        help="fetch everything on a Jira ticket: fields, description, comments, attachments")
     get_ticket.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
+    get_ticket.add_argument("--attachments-dir",
+                            help="where attachments are saved (default: <tmp>/ticket_pr/<KEY>)")
     get_ticket.set_defaults(func=cmd_get_ticket)
+
+    comment = sub.add_parser("add-comment", help="post a comment on a Jira ticket")
+    comment.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
+    comment.add_argument("--body", help="comment text (Jira wiki markup)")
+    comment.add_argument("--body-file", help="file containing the comment text")
+    comment.set_defaults(func=cmd_add_comment)
 
     create_pr = sub.add_parser("create-pr", help="open a GitHub PR for the current branch")
     create_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")

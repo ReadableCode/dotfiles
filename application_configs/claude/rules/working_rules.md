@@ -79,8 +79,11 @@ context's own user-level CLAUDE.md.
 - An app never names, imports from, or bind-mounts another of my apps; shared
   identity and data go through shared infrastructure.
 - Credentials, not sign-ins: no `gh` CLI or signed-in machine state in
-  scripts. Use the token pinned by the repo's `.env` through `ticket_pr.py`
-  or raw REST.
+  scripts. Use the token pinned by the repo's `.env` through `ticket_pr.py`.
+  Reading a ticket means `get-ticket`, which returns every field, comment and
+  attachment at once; updating one means `add-comment`. When the harness
+  lacks a capability, add it there with a test instead of calling the API
+  directly.
 - Nothing client-specific in a public repo: no client names, repo slugs,
   ticket prefixes or hostnames. Use the `acme` placeholder.
 - Contexts never reference each other: a client's name, repo, ticket key or
