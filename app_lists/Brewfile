@@ -1,3 +1,11 @@
+# macOS Homebrew formulae and casks.
+#
+# Installed by scripts/install_mac_apps.sh, or straight with
+# `brew bundle --file=app_lists/Brewfile`.
+#
+# Installs needing more than a plain entry (a tap that must be trusted first,
+# vendor installers, App Store apps) stay in mac_apps_non_brew.md - they cannot
+# be installed from a plain list.
 brew "bat"
 brew "bitwarden-cli"
 brew "black"

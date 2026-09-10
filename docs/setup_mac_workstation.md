@@ -22,8 +22,10 @@ works if you just want a straight install of everything.
 
 **What bootstrap does not do**, and you still need from the rest of this document:
 
+- `app_lists/mac_apps_non_brew.md`: the SQL Server ODBC driver tap, the Logitech
+  vendor installers, and App Store apps (WireGuard, GLKVM)
 - macOS system settings: hostname, scaling, Finder behaviour, keyboard, Dock, power
-- signing in to iCloud / App Store, and anything installed from the App Store
+- signing in to iCloud / App Store
 - licensed apps and their keys
 - Xcode and the beta toolchain (see `setup_xcode_beta.md`)
 
@@ -280,25 +282,7 @@ rest (this is what bootstrap runs):
 bash ~/GitHub/dotfiles/scripts/install_mac_apps.sh
 ```
 
-### SQL Server ODBC driver (msodbcsql17)
-
-Needed only on machines that run pyodbc code against SQL Server (connection
-strings name "ODBC Driver 17 for SQL Server", so install 17, not 18). Not in
-the Brewfile on purpose: the tap needs an explicit `brew trust` first, which
-would fail a fresh machine's unattended `brew bundle` run.
-
-```bash
-brew tap microsoft/mssql-release https://github.com/Microsoft/homebrew-mssql-release
-brew trust microsoft/mssql-release
-HOMEBREW_ACCEPT_EULA=Y brew install msodbcsql17
-```
-
-If pyodbc still reports the driver missing, the pip wheel is ignoring
-Homebrew's config; point it there explicitly:
-
-```bash
-export ODBCSYSINI=/opt/homebrew/etc
-```
+- See [mac_apps_non_brew.md](../app_lists/mac_apps_non_brew.md) for tools not in the Brewfile
 
 ### Cleaning up brew to get disk space back
 
@@ -368,11 +352,6 @@ ln -s /Volumes/EnvyExtSSD/Claude ~/Library/Application\ Support/Claude
 
 `DISABLE_TELEMETRY=1` silently disables `/remote-control`, which is how the
 mobile app reaches a session. Leave telemetry on in the Claude settings.
-
-## Install Binary Installler Apps
-
-- Install Logi Options
-- Install Logitech G Hub
 
 ## Clipboard History (Maccy)
 
@@ -695,14 +674,6 @@ host is down.
 ## Disable auto punctuation
 
 System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule space to period and other auto punctuation features
-
-## Install Wireguard
-
-- install from the App Store
-
-## Install GLKVM app
-
-- install from the App Store
 
 ## Python Setup
 

@@ -349,8 +349,11 @@ fi
 
 step "Still manual"
 case "$PLATFORM" in
+    mac)
+        note_manual "app_lists/mac_apps_non_brew.md: SQL Server ODBC driver tap, Logitech vendor installers, App Store apps"
+        ;;
     linux|wsl)
-        note_manual "app_lists/linux_apps_non_apt.md: uv script, VS Code dnf repo, flatpak apps, gsconnect enable step"
+        note_manual "app_lists/linux_apps_non_apt.md: uv script, VS Code dnf repo, SQL Server ODBC driver repo, flatpak apps, gsconnect enable step"
         ;;
 esac
 note_manual "OS settings (keyboard, display, power) are not managed - see the docs/setup_*_workstation.md guide for this platform"

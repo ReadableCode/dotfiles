@@ -45,6 +45,34 @@ sudo dnf install code
 
 The yum repo can lag the current release by up to three hours.
 
+## SQL Server ODBC driver on Fedora (msodbcsql17)
+
+Needed only on machines that run pyodbc code against SQL Server. Connection
+strings name "ODBC Driver 17 for SQL Server", so install 17, not 18.
+
+Not in `linux_apps_dnf.txt` on purpose: Microsoft publishes no Fedora repo, so
+its RHEL 10 repo has to be added first, which a plain package list cannot
+express. The repo file is written by hand rather than downloaded so it can carry
+`includepkgs`: Microsoft's production repo holds many other packages, and
+without that pin a routine `dnf upgrade` could replace a Fedora build with a
+RHEL one.
+
+```bash
+sudo rpm --import https://packages.microsoft.com/keys/microsoft-2025.asc
+printf '%s\n' '[packages-microsoft-com-prod]' 'name=Microsoft Production (SQL Server ODBC driver only)' \
+  'baseurl=https://packages.microsoft.com/rhel/10/prod/' 'enabled=1' 'gpgcheck=1' 'repo_gpgcheck=1' \
+  'gpgkey=https://packages.microsoft.com/keys/microsoft-2025.asc' 'includepkgs=msodbcsql17' \
+  | sudo tee /etc/yum.repos.d/mssql-release.repo > /dev/null
+sudo ACCEPT_EULA=Y dnf install -y msodbcsql17
+odbcinst -q -d    # the list should include [ODBC Driver 17 for SQL Server]
+```
+
+If dnf reports no match for msodbcsql17 after "repomd.xml GPG signature
+verification error: Signing key not found", the repo was set up with the older
+`microsoft.asc`; the RHEL 10 repo is signed with `microsoft-2025.asc`. With the
+right key a first install still prints that message once, then dnf imports the
+key named in `gpgkey` (0xF748182B) and carries on. Verified on Fedora 43.
+
 ## KDE Connect (gsconnect)
 
 The package is in `linux_apps_dnf.txt` and `linux_apps.txt`, but the extension has to be
