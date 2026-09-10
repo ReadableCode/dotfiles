@@ -342,7 +342,7 @@ def cleanup_app_logs(delete: bool) -> int:
 # %%
 # Cleanup 6: package manager caches, pruned by their own tooling #
 
-# (label, cache-dir query, prune command) — never rm these by hand; only the
+# (label, cache-dir query, prune command): never rm these by hand; only the
 # tool knows which entries are still linked into an installed environment.
 #
 # The directory is asked of the tool rather than hardcoded because the prune
@@ -395,7 +395,7 @@ def cleanup_package_caches(delete: bool) -> int:
             continue
         before = dir_size(path)
         counts = on_home_volume(path)
-        where = f" at {path}" + ("" if counts else " — other volume, not in the total")
+        where = f" at {path}" + ("" if counts else "; other volume, not in the total")
         if not delete:
             total += before if counts else 0
             print(f"would run: {' '.join(command)} — {label} cache is {human(before)}{where} (upper bound)")

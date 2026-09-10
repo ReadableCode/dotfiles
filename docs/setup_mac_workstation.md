@@ -306,7 +306,7 @@ export ODBCSYSINI=/opt/homebrew/etc
 brew cleanup --prune=all
 ```
 
-Do not `rm -rf ~/Library/Caches/Homebrew` on a host that redirects its cache —
+Do not `rm -rf ~/Library/Caches/Homebrew` on a host that redirects its cache:
 that path is the abandoned pre-redirect copy, not the live one. `brew --cache`
 says where the live cache actually is; `scripts/mac_cleanup_all.py` asks the
 tool for the same reason.
@@ -331,7 +331,7 @@ $EDITOR ~/GitHub/dotfiles/application_configs/bash/zshenv_local.envy
 
 It must be `.zshenv`, not `.zshrc`. `.zshrc` is read by interactive shells
 only, so exports placed there are invisible to every script, launchd job, cron
-entry and agent tool call — and each of those then rebuilds its cache under
+entry and agent tool call, and each of those then rebuilds its cache under
 `~`, on the disk the redirect exists to protect. That is exactly what happened
 here: the exports lived in `~/.zshrc.local` until 2026-09-09 and had quietly
 grown 4.7 GB of duplicate `uv`, `Homebrew` and `go-build` caches on the
@@ -344,7 +344,7 @@ zsh -lic 'echo $UV_CACHE_DIR'    # interactive
 
 The exports are unconditional on purpose. If the SSD is not mounted,
 brew/uv/go fail instead of rebuilding the caches on the internal disk the
-redirect exists to protect — the shell prints a warning to stderr saying the
+redirect exists to protect; the shell prints a warning to stderr saying the
 volume is missing, so a failing `brew install` is easy to explain. Nothing in
 `.zshenv` may print to *stdout*: a stdio MCP server is started through a shell
 and a banner there breaks the JSON-RPC framing.
