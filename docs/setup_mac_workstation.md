@@ -145,6 +145,48 @@ System Settings → Menu Bar → Weather
 2. Click on the Weather item in Menu Bar
 3. Click open weather to select your preferred city and settings
 
+## Thunderbolt dock (Corsair TBT100)
+
+The dock's HDMI ports sit behind an ITE DisplayPort-to-HDMI bridge. When the
+monitor on that cable is off or switched to another input it returns no EDID,
+and the bridge presents its own fallback identity instead: a display named
+"DP2HDMI 18200", preferred mode 1024x768, 60Hz only, 8-bit. macOS treats that
+as a real monitor, restores the saved mirror config, and locks the built-in
+panel into a hardware-mirror set with a sink that has no receiver behind it.
+
+Symptom (2026-09-09): the built-in screen flashes only while docked. Apple
+power and battery never bring that video path up, so they are clean. Power
+delivery and hotplug were ruled out from `pmset -g log` and the unified log;
+the only display reconfiguration is the dock attach itself.
+
+Diagnosis: `system_profiler SPDisplaysDataType` shows a "DP2HDMI" display
+with Mirror: On next to Color LCD. Disabling that display in software stopped
+the flashing immediately.
+
+Fix: pull the HDMI cable out of the dock unless the monitor is actually on
+that input, or switch the monitor to the dock input before docking so it
+answers EDID. To disable the phantom display without unplugging (reversible;
+a replug or reboot brings it back), compile and run this Swift probe, which
+is the same private CoreGraphics call displayplacer uses:
+
+```swift
+import CoreGraphics
+@_silgen_name("CGSConfigureDisplayEnabled")
+func CGSConfigureDisplayEnabled(_ c: CGDisplayConfigRef, _ d: CGDirectDisplayID, _ on: Bool) -> CGError
+var n: UInt32 = 0
+var ids = [CGDirectDisplayID](repeating: 0, count: 8)
+CGGetOnlineDisplayList(8, &ids, &n)
+var cfg: CGDisplayConfigRef?
+CGBeginDisplayConfiguration(&cfg)
+for d in ids.prefix(Int(n)) where CGDisplayIsBuiltin(d) == 0 {
+    _ = CGSConfigureDisplayEnabled(cfg!, d, false)
+}
+CGCompleteDisplayConfiguration(cfg, .permanently)
+```
+
+Note for any log work on this machine: inside a non-interactive zsh a bare
+`log` is the zsh builtin and returns nothing; use `/usr/bin/log show`.
+
 ## HID Configuration
 
 1. **System Settings → Trackpad → Point & Click**  
