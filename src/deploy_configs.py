@@ -1053,37 +1053,23 @@ def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
     return 1 if (unhealthy or orphans) else 0
 
 
-def run_deploy(plan, platform_key, problems_only=False):
+def run_deploy(plan):
     """
     Deploy every applicable manifest entry; correct deployments are no-ops.
 
-    Output is grouped into sections ordered least interesting first, so what
-    changed is still on screen when done: not applicable -> already deployed
-    -> changes. Already-correct entries (classify_entry "OK" - the same check
-    deploy_config no-ops on) are listed without redundant per-entry chatter;
-    everything else deploys last, printing what it does as it goes.
-    problems_only skips the two inventory sections and shows changes only.
+    Only the entries that need work are printed, each with what deploy_config
+    does to it. Already-correct entries (classify_entry "OK" - the same check
+    deploy_config no-ops on) and entries not applicable on this machine are only
+    counted in the summary line: gitpullall and myupdater run this on every
+    pull, and a full census there buries the changes. The status command is
+    where every entry is listed.
     """
-    name_width = max([len(row["name"]) for row in plan] + [4])
     info = [row for row in plan if row["action"] != "apply"]
     apply_rows = [row for row in plan if row["action"] == "apply"]
     healthy = [row for row in apply_rows if classify_entry(row["repo"], row["dest"])[0] == "OK"]
     work = [row for row in apply_rows if row not in healthy]
     counts = {"changed": 0, "noop": len(healthy), "skipped": 0}
 
-    if info and not problems_only:
-        detail_width = _term_width() - 18 - name_width
-        print_section("Not applicable on this machine", len(info), "dim")
-        for row in info:
-            detail = fit_text(_info_detail(row, platform_key), detail_width)
-            print("  " + status_line(row["action"].upper(), row["name"], detail, name_width))
-        print()
-    if healthy and not problems_only:
-        print_section("Already deployed - nothing to do", len(healthy), "green")
-        for row in healthy:
-            name = paint(f"{row['name']:<{name_width}}", "green")
-            print(f"  {name}  {row['dest']}")
-        print()
     if work:
         print_section("Changes", len(work), "cyan")
         for row in work:
@@ -1099,7 +1085,7 @@ def run_deploy(plan, platform_key, problems_only=False):
 
     print(paint(
         f"Deploy complete: {counts['changed']} changed, {counts['noop']} already deployed, "
-        f"{counts['skipped']} skipped",
+        f"{counts['skipped']} skipped, {len(info)} not applicable here",
         "green" if not counts["skipped"] else "yellow",
     ))
     return 0
@@ -1395,9 +1381,9 @@ def parse_args(argv=None):
     parser.add_argument(
         "--problems",
         action="store_true",
-        help="status and deploy: print only the sections that need action "
+        help="status only: print only the sections that need action "
         "(skip the not-applicable and healthy inventories; the summary line "
-        "still prints)",
+        "still prints). deploy always prints only its changes plus the counts",
     )
     parser.add_argument(
         "--manifest",
@@ -1533,7 +1519,7 @@ def main(argv=None):
         return run_status(plan, platform_key, candidates, problems_only=args.problems)
     if not args.manifest and not args.no_prune:
         prune_before_deploy(candidates)
-    result = run_deploy(plan, platform_key, problems_only=args.problems)
+    result = run_deploy(plan)
     if not mcp_ok:
         result = result or 1
     # deploy is the default command and every updater alias runs it bare, so the

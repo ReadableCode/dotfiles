@@ -723,7 +723,8 @@ def test_deploy_never_creates_folder_for_uncloned_repo(tmp_path, fake_home, monk
     )
     assert deploy_configs.main(["--manifest", manifest_path]) == 0
     output = capsys.readouterr().out
-    assert "SKIP_REQUIRES" in output
+    # deploy only counts entries that do not apply here; status below names the reason
+    assert "0 changed, 0 already deployed, 0 skipped, 1 not applicable here" in output
     # the whole point: the uncloned repo's folder must NOT be created
     assert not os.path.exists(str(tmp_path / "GitHub" / "some-repo"))
 
