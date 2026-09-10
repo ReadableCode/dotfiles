@@ -1,0 +1,2 @@
+LibreHardwareMonitor.LibreHardwareMonitor
+Microsoft.WinDbg

@@ -51,8 +51,10 @@ prefixes; nothing lives unprefixed.
 - [setup_vnc_server.md](setup_vnc_server.md) - Setup Tiger VNC
 - [setup_vscode.md](setup_vscode.md) - Setting up Visual Studio Code
 - [setup_windows_chocolatey.md](setup_windows_chocolatey.md) - Setting Up Chocolatey on Windows
+- [setup_windows_fancontrol.md](setup_windows_fancontrol.md) - FanControl curves and its config format
 - [setup_windows_msys64_weasyprint.md](setup_windows_msys64_weasyprint.md) - WeasyPrint + GTK3 + MSYS2 on Windows (No Admin Rights)
 - [setup_windows_portable_userapps.md](setup_windows_portable_userapps.md) - Windows Portable Toolchain (userapps)
+- [setup_windows_sensor_logging.md](setup_windows_sensor_logging.md) - Windows sensor logging with LibreHardwareMonitor
 - [setup_windows_ssh_server.md](setup_windows_ssh_server.md) - Setting Up SSH Server
 - [setup_windows_workstation_personal.md](setup_windows_workstation_personal.md) - Setup Windows Workstation
 - [setup_xcode_beta.md](setup_xcode_beta.md) - Xcode Setup Guide (Beta Workflow)
@@ -70,6 +72,7 @@ prefixes; nothing lives unprefixed.
 
 ## `howto_*` - Techniques and reference notes
 
+- [howto_diagnose_shelly_crash.md](howto_diagnose_shelly_crash.md) - Diagnosing a Shelly crash
 - [howto_finding_files.md](howto_finding_files.md) - Find Artifacts of Syncing Issues
 - [howto_finding_strings_vscode.md](howto_finding_strings_vscode.md) - String Replacement with VSCode
 - [howto_formatting.md](howto_formatting.md) - Formatting

@@ -25,6 +25,7 @@ missing, clones dotfiles to `%USERPROFILE%\GitHub`, runs `uv sync`, `clone_repos
 | `app_lists\windows_apps_base_choco.txt` | same, via `-ChocoList` |
 | `app_lists\windows_apps_aws_choco.txt` | same, via `-ChocoList` |
 | `app_lists\windows_apps_personal_winget.txt` | `scripts\install_windows_apps_with_winget.ps1` |
+| `app_lists\windows_apps_personal_winget.shelly.txt` (Shelly) | same, via `-AppList` |
 
 Each reports what is already installed and prompts once for the rest. Pass
 `-ChocoList <path>` to bootstrap to pick a different choco profile.
