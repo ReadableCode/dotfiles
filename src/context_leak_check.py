@@ -147,7 +147,12 @@ def _read_env_url_hosts(credentials_dir):
                 for line in handle:
                     for match in re.finditer(r"https?://([A-Za-z0-9.-]+)", line):
                         host = match.group(1).lower()
-                        if "." in host and not re.fullmatch(r"[\d.]+", host) and host != "localhost" and not _generic_host(host):
+                        if (
+                            "." in host
+                            and not re.fullmatch(r"[\d.]+", host)
+                            and host != "localhost"
+                            and not _generic_host(host)
+                        ):
                             hosts.append(host)
         except OSError:
             continue
@@ -239,7 +244,11 @@ def derive_contexts(parent=None):
         # the client's own repositories, which naturally carry their own
         # identifiers and are never scanned by default (they are the client's).
         owned = set(names)
-        contexts[context] = {"identifiers": identifiers, "repos": [entry] + dev_repos, "owned": owned | {entry} | set(dev_repos)}
+        contexts[context] = {
+            "identifiers": identifiers,
+            "repos": [entry] + dev_repos,
+            "owned": owned | {entry} | set(dev_repos),
+        }
     return contexts
 
 
@@ -315,7 +324,11 @@ def scan_repo(repo_dir, contexts, staged=False):
     rules = forbidden_for(repo_dir, contexts)
     if not rules:
         return []
-    patterns = [(context, ident, _pattern(ident)) for context, info in rules.items() for ident in sorted(info["identifiers"])]
+    patterns = [
+        (context, ident, _pattern(ident))
+        for context, info in rules.items()
+        for ident in sorted(info["identifiers"])
+    ]
     hits = []
     for path in staged_files(repo_dir) if staged else tracked_files(repo_dir):
         content = read_content(repo_dir, path, staged)
@@ -391,8 +404,11 @@ def main(argv=None):
             if hits:
                 print(f"-- {os.path.basename(repo)} (report only):")
                 report(hits, repo)
-    print("context-leak: " + ("FAILED" if failed else "clean") + f" across {len(default_scan_set(parent, contexts))} repos, "
-          f"{sum(len(i['identifiers']) for i in contexts.values())} identifiers from {len(contexts)} contexts")
+    outcome = "FAILED" if failed else "clean"
+    repo_count = len(default_scan_set(parent, contexts))
+    ident_count = sum(len(i["identifiers"]) for i in contexts.values())
+    print(f"context-leak: {outcome} across {repo_count} repos, "
+          f"{ident_count} identifiers from {len(contexts)} contexts")
     return 1 if failed else 0
 
 

@@ -110,8 +110,13 @@ def fleet(tmp_path, monkeypatch):
     )
     os.makedirs(str(github / "personal_credentials"))
     # repos files: what clone_repos.py would offer on each machine
-    write_yaml(str(repo_root / "dotfiles_repos.yaml"), {"defaults": {"provider": "github", "org": "me"},
-                                                       "repos": [{"name": "dotfiles"}, {"name": "status_board"}]})
+    write_yaml(
+        str(repo_root / "dotfiles_repos.yaml"),
+        {
+            "defaults": {"provider": "github", "org": "me"},
+            "repos": [{"name": "dotfiles"}, {"name": "status_board"}],
+        },
+    )
     write_yaml(
         str(github / "acme_credentials" / "acme_repos.yaml"),
         {"defaults": {"provider": "github", "org": "acme"},
@@ -334,7 +339,10 @@ def test_machine_view_lists_every_declared_repo_with_its_clone_state(fleet):
     data = build(fleet)
     envy = next(h for h in data["hosts"] if h["id"] == "Envy")
     tower = next(h for h in data["hosts"] if h["id"] == "Tower")
-    state = lambda host, name: next(r["state"] for r in host["repos"] if r["name"] == name)
+
+    def state(host, name):
+        return next(r["state"] for r in host["repos"] if r["name"] == name)
+
     # 2 dotfiles + 3 acme + one implicit entry per credentials repo (acme, personal)
     assert data["meta"]["repoCount"] == len(envy["repos"]) == 7
     assert envy["contexts"] == ["dotfiles", "acme"]
@@ -379,12 +387,23 @@ def test_an_overlay_entry_only_applies_where_its_repo_is_cloned(fleet):
     write_yaml(str(fleet / "acme_credentials" / "acme_repos.yaml"),
                {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme_dev", "hosts": ["Envy"]}]})
     touch(str(fleet / "acme_dev" / "tool.md"))
-    write_yaml(str(fleet / "acme_dev" / "acme_dev_manifest.yaml"),
-               [{"name": "acme_tool", "repo": "tool.md", "dest": {"darwin": "~/.tool", "linux": "~/.tool", "windows": "~/.tool"}}])
+    write_yaml(
+        str(fleet / "acme_dev" / "acme_dev_manifest.yaml"),
+        [{
+            "name": "acme_tool",
+            "repo": "tool.md",
+            "dest": {"darwin": "~/.tool", "linux": "~/.tool", "windows": "~/.tool"},
+        }],
+    )
     data = build(fleet)
     tool = next(e for e in data["entries"] if e["id"] == "acme_tool")
     assert tool["hosts"] == ["Envy"]
-    code = lambda host_id: data["meta"]["actions"][data["matrix"][data["entries"].index(tool)][next(i for i, h in enumerate(data["hosts"]) if h["id"] == host_id)][0]]
+
+    def code(host_id):
+        row = data["matrix"][data["entries"].index(tool)]
+        column = next(i for i, h in enumerate(data["hosts"]) if h["id"] == host_id)
+        return data["meta"]["actions"][row[column][0]]
+
     assert code("Envy") == "apply"
     assert code("Pi") == "skip_overlay" and code("Tower") == "skip_overlay"
     # the credentials repo's own entries still reach every machine in its inventory

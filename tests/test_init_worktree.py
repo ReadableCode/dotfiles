@@ -287,7 +287,8 @@ def test_remove_deletes_only_this_worktree_and_its_workspace_entry(repos, tmp_pa
     with_remote(main, worktree, tmp_path)
     write(os.path.join(repo_parent, "envy.code-workspace"), WORKSPACE)
     assert init_worktree.main(["--worktree", worktree, "--no-sync", "--hostname", "envy"]) == 0
-    write(os.path.join(worktree, ".venv", "lib", "x.py"), "")  # ignored build output, the kind of thing that accumulates
+    # ignored build output, the kind of thing that accumulates
+    write(os.path.join(worktree, ".venv", "lib", "x.py"), "")
     with open(os.path.join(worktree, ".gitignore"), "a", encoding="utf-8") as file_handle:
         file_handle.write(".venv/\n")
     git(["add", ".gitignore"], worktree)
@@ -299,7 +300,9 @@ def test_remove_deletes_only_this_worktree_and_its_workspace_entry(repos, tmp_pa
     capsys.readouterr()
     assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 0
     out = capsys.readouterr().out
-    assert "workspace: removed" in out and "worktree:  removed" in out and "feature/ACME-2482-thing left in place" in out
+    assert "workspace: removed" in out
+    assert "worktree:  removed" in out
+    assert "feature/ACME-2482-thing left in place" in out
     assert not os.path.exists(worktree)
     assert os.path.isfile(os.path.join(other, "dirty.txt"))
     registered = subprocess.check_output(["git", "worktree", "list", "--porcelain"], cwd=main, text=True)
