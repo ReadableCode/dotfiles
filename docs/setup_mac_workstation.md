@@ -15,9 +15,9 @@ not in this public repo, see `notes/cloning_credentials_repos.md` in the persona
 repo.
 
 Bootstrap installs Homebrew, git and uv if missing, clones dotfiles to `~/GitHub`, runs
-`uv sync`, `clone_repos.py` and `deploy_configs.py`, then installs everything in
-`app_lists/Brewfile` via `scripts/install_mac_apps.sh` (which reports what is already
-installed and prompts once for the rest). `brew bundle --file=app_lists/Brewfile` still
+`uv sync`, `clone_repos.py`, `sync_python_envs.py` and `deploy_configs.py`, then installs
+everything in `app_lists/Brewfile` via `scripts/install_mac_apps.sh` (which reports what is
+already installed and prompts once for the rest). `brew bundle --file=app_lists/Brewfile` still
 works if you just want a straight install of everything.
 
 **What bootstrap does not do**, and you still need from the rest of this document:
@@ -318,20 +318,30 @@ only, so exports placed there are invisible to every script, launchd job, cron
 entry and agent tool call, and each of those then rebuilds its cache under
 `~`, on the disk the redirect exists to protect. That is exactly what happened
 here: the exports lived in `~/.zshrc.local` until 2026-09-09 and had quietly
-grown 4.7 GB of duplicate `uv`, `Homebrew` and `go-build` caches on the
+grown 4.7 GB of duplicate `Homebrew`, `go-build` and `uv` caches on the
 internal disk. Check both kinds of shell agree after any change:
 
 ```bash
-zsh -c 'echo $UV_CACHE_DIR'      # non-interactive - the one that regressed
-zsh -lic 'echo $UV_CACHE_DIR'    # interactive
+zsh -c 'echo $HOMEBREW_CACHE'      # non-interactive - the one that regressed
+zsh -lic 'echo $HOMEBREW_CACHE'    # interactive
 ```
 
 The exports are unconditional on purpose. If the SSD is not mounted,
-brew/uv/go fail instead of rebuilding the caches on the internal disk the
+brew/go fail instead of rebuilding the caches on the internal disk the
 redirect exists to protect; the shell prints a warning to stderr saying the
 volume is missing, so a failing `brew install` is easy to explain. Nothing in
 `.zshenv` may print to *stdout*: a stdio MCP server is started through a shell
 and a banner there breaks the JSON-RPC framing.
+
+The uv cache stays on the internal disk, and `UV_CACHE_DIR` must not be set.
+Only caches a tool consumes itself belong on the SSD. uv's cache is different:
+every `uv sync` links each package from the cache into the repo's `.venv`, an
+APFS clone on macOS that shares blocks with the cache, so one copy of pandas
+serves every repo that pins it. A clone cannot cross volumes, so while the
+cache was redirected (until 2026-09-10) uv silently fell back to full copies:
+5.5 GB of venvs across 19 repos on the internal disk against a 480 MB cache on
+the SSD. Venvs created during that period stay copies until re-created; a
+`uv sync --reinstall` in the repo rebuilds them as clones.
 
 A machine with no `zshenv_local.<host>` variant has no `~/.zshenv.local` at all
 (there is no bare default); `.zshenv` skips it and the manifest entry reports

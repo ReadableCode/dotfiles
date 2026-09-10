@@ -44,8 +44,8 @@ its size: most of it is hardlinked into project `.venv` directories, which
 keep the data alive.
 
 **Measure the directory the prune command will actually act on.** A host that
-redirects its caches (Envy points `UV_CACHE_DIR` / `HOMEBREW_CACHE` at an
-external SSD, see `setup_mac_workstation.md`) does not keep them under `~`.
+redirects its caches (Envy points `HOMEBREW_CACHE` at an external SSD, see
+`setup_mac_workstation.md`) does not keep them under `~`.
 `PACKAGE_CACHES` therefore asks each tool where its cache is (`uv cache dir`,
 `brew --cache`, `npm config get cache`) through a login shell, because the
 redirect is an export. Hardcoding the default paths measured one directory and

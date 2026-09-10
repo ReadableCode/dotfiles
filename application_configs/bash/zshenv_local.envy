@@ -6,11 +6,18 @@
 #
 # Sourced from .zshenv, not .zshrc, so that scripts, launchd jobs and agent
 # tool calls get the redirect too. While these lived in ~/.zshrc.local only
-# interactive shells saw them, and every non-interactive `uv`/`brew`/`go`
+# interactive shells saw them, and every non-interactive `brew`/`go`
 # invocation rebuilt its cache under ~ instead - 4.7 GB of it by 2026-09-09.
 #
+# Only caches the tool consumes itself are redirected. The uv cache is not:
+# uv links each package from its cache into the project's .venv (an APFS clone
+# on macOS), and that only works on the same volume as the repos under ~. With
+# the cache on the SSD every venv became a full copy on the internal disk,
+# 5.5 GB across 19 repos against a 480 MB cache, so uv keeps its default
+# cache under ~ where the venvs can share its blocks.
+#
 # These exports are deliberately unconditional. With the SSD unmounted the
-# paths are invalid and brew/uv/go fail loudly, which is the point - falling
+# paths are invalid and brew/go fail loudly, which is the point - falling
 # back to the defaults under ~ would quietly refill the internal disk this
 # redirect exists to protect. The warning below only says why they failed.
 
@@ -18,11 +25,10 @@ ENVY_EXT_SSD=/Volumes/EnvyExtSSD
 
 export HOMEBREW_CACHE="$ENVY_EXT_SSD/HomebrewCache"
 export OLLAMA_MODELS="$ENVY_EXT_SSD/ollama/models"
-export UV_CACHE_DIR="$ENVY_EXT_SSD/cache/uv"
 export GOCACHE="$ENVY_EXT_SSD/cache/go-build"
 
 if [[ ! -d $ENVY_EXT_SSD ]]; then
-    print -u2 "warning: $ENVY_EXT_SSD is not mounted - brew/uv/go caches point at it and will fail until it is"
+    print -u2 "warning: $ENVY_EXT_SSD is not mounted - brew/go caches point at it and will fail until it is"
 fi
 
 unset ENVY_EXT_SSD
