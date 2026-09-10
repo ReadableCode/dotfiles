@@ -49,6 +49,8 @@ colored table when writing to a terminal (set `NO_COLOR` to disable colors).
   method: symlink | none                  # default symlink
   on_drift: replace | adopt               # default replace; adopt acts on
                                           # WORKTREE_HOST only, see below
+  refresh: none | relink                  # default none; relink re-creates the link
+                                          # when a pull changed the repo file, see below
   generated: true                         # optional: the deploy itself produces the
                                           # source (data/mcp/*.mcp.json); may be absent
                                           # in a fresh clone until the first deploy
@@ -272,6 +274,23 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   no-symlink machine still holding pre-pull content) it wins as usual, so
   `adopt` cannot resurrect stale content over a pulled update.
 
+  **`refresh: relink`** covers the opposite failure, the one a symlink hides.
+  A symlink is always current on disk, so a `git pull` that rewrites the repo
+  file changes what the destination reads with no drift for deploy to fix —
+  `deployconfigs` reports `0 changed`. That is correct for a config read on
+  demand, and wrong for one an app loaded into memory at startup and watches
+  by **destination path**: writing new bytes into the repo file fires no event
+  on that path, so the running app keeps serving the pre-pull copy. T3 Code's
+  `settings.json` is the case that named this: the fleet pulled a corrected
+  value, every machine's file was right on disk, and every running server kept
+  reporting the old one until its link was re-created (2026-09-10). With
+  `refresh: relink`, deploy re-creates a correct link whose own mtime predates
+  the repo file it points at (status calls that `STALE_LINK`), which is the
+  path event the app is waiting for. Self-limiting: the fresh link is newer
+  than the repo file, so the next deploy is a no-op. Hard-link machines never
+  need it — a pull orphans the hard link and the existing `NOT_A_LINK` path
+  re-links it, which is why this only ever bit symlink machines.
+
   **Adoption happens on one machine only**: `WORKTREE_HOST` in
   `src/deploy_configs.py` (envy, the same host that regenerates the deploy
   map, for the same reason - it is the one checkout a deploy may dirty).
@@ -316,6 +335,7 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
 | `NOT_DEPLOYED` | Destination missing. |
 | `BROKEN_LINK` | Destination is a dangling symlink. |
 | `WRONG_TARGET` | Destination is a link resolving somewhere else. |
+| `STALE_LINK` | `refresh: relink` entries only: the link is correct but older than the repo file it points at, so an app that cached the file still holds the pre-pull content. Deploy re-creates the link to fire the path event. |
 | `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file, an orphaned hard link (git replaced the inode on pull), or an app's atomic-rename save; the detail says whether its content matches the repo copy or diverges. Deploy backs it up, then replaces it with a link to the repo version — except under `on_drift: adopt`, where a newer diverging system file is first adopted into the repo working tree. |
 
 Unhealthy rows get a second dimmed line explaining what is wrong and what

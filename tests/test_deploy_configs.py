@@ -1075,6 +1075,65 @@ def test_status_planned_action_mentions_adoption_for_adopt_entries():
     assert "adopt" not in deploy_configs.planned_action("NOT_A_LINK")
 
 
+# %%
+# refresh: relink (a pull changes the file under a link an app already cached) #
+
+
+def _linked_pair(tmp_path, link_mtime, repo_mtime):
+    """A correctly symlinked repo/dest pair with the two sides' mtimes set explicitly."""
+    repo_file = write_file(str(tmp_path / "repo" / "application_configs" / "app" / "conf"), "pulled update")
+    dest = str(tmp_path / "sys" / "conf")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    os.symlink(repo_file, dest)
+    os.utime(repo_file, (repo_mtime, repo_mtime))
+    os.utime(dest, (link_mtime, link_mtime), follow_symlinks=False)
+    return repo_file, dest
+
+
+def test_link_is_stale_only_when_the_repo_file_is_newer_than_the_link(tmp_path):
+    repo_file, dest = _linked_pair(tmp_path, link_mtime=1000000, repo_mtime=2000000)
+    assert deploy_configs.link_is_stale(repo_file, dest)
+    fresh_repo, fresh_dest = _linked_pair(tmp_path / "b", link_mtime=2000000, repo_mtime=1000000)
+    assert not deploy_configs.link_is_stale(fresh_repo, fresh_dest)
+
+
+def test_relink_recreates_a_stale_link_so_the_app_sees_a_path_event(tmp_path):
+    repo_file, dest = _linked_pair(tmp_path, link_mtime=1000000, repo_mtime=2000000)
+    result = deploy_configs.deploy_config(repo_file, dest, refresh="relink")
+    assert result == "relinked"
+    assert os.path.islink(dest) and os.path.realpath(dest) == os.path.realpath(repo_file)
+    # self-limiting: the fresh link is newer than the repo file, so the next run is a no-op
+    assert not deploy_configs.link_is_stale(repo_file, dest)
+    assert deploy_configs.deploy_config(repo_file, dest, refresh="relink") == "noop"
+
+
+def test_a_stale_link_is_a_no_op_without_the_refresh_flag(tmp_path):
+    repo_file, dest = _linked_pair(tmp_path, link_mtime=1000000, repo_mtime=2000000)
+    assert deploy_configs.deploy_config(repo_file, dest) == "noop"
+
+
+def test_status_reports_a_stale_link_only_for_refresh_entries(tmp_path):
+    repo_file, dest = _linked_pair(tmp_path, link_mtime=1000000, repo_mtime=2000000)
+    assert deploy_configs.classify_entry(repo_file, dest, "relink")[0] == "STALE_LINK"
+    assert deploy_configs.classify_entry(repo_file, dest)[0] == "OK"
+    assert "STALE_LINK" not in deploy_configs.HEALTHY_STATUSES
+
+
+def test_load_manifest_rejects_bad_refresh(tmp_path):
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "refresh": "touch"}])
+    with pytest.raises(ValueError, match="refresh"):
+        deploy_configs.load_manifest(manifest_path)
+
+
+def test_build_plan_carries_refresh(fake_home):
+    entries = [
+        {"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "refresh": "relink"},
+        {"name": "b", "repo": "f2", "dest": {"darwin": "~/.f2"}},
+    ]
+    plan = deploy_configs.build_plan(entries, "darwin", "ENVY", repo_root="/repo")
+    assert [row["refresh"] for row in plan] == ["relink", "none"]
+
+
 def test_build_plan_carries_on_drift(fake_home):
     entries = [
         {"name": "a", "repo": "f1", "dest": {"darwin": "~/.f1"}, "on_drift": "adopt"},

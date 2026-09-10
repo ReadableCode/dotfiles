@@ -784,6 +784,25 @@ deploy and the app's rewrite goes to the backup, so make settings changes
 on envy or in the repo file; a change made in the app on another machine
 lasts until that machine's next deploy.
 
+`settings.json` also carries **`refresh: relink`** (2026-09-10): the server
+reads it at startup and watches the destination *path*, so a pull that changed
+the repo file left every running server serving the pre-pull value while the
+file on disk was already correct — `deployconfigs` saw a healthy link and
+reported `0 changed`. The symptom was the client's "Settings differ on
+<host>. Thread and source control preferences are meant to match on every
+environment" banner refusing to clear after the fix was pulled. With the flag,
+deploy re-creates the link when it is older than the repo file, which is the
+path event the server needs; see `refresh: relink` in
+[repo_deploy_configs.md](repo_deploy_configs.md). The five keys the client
+holds identical on every environment
+(`continueThreadsAfterServerUpdate`, `sidebarAutoSettleAfterDays`,
+`sidebarAutoSettleOnMerge`, `newWorktreesStartFromOrigin`,
+`sourceControlWritingStyle`) are defined in the app's own
+`packages/client-runtime/src/state/sharedSettings.ts`; the client pushes them
+to every environment, so each context's `settings.json` has to carry them or
+that environment shows up in the banner. Reloads are visible in
+`~/.t3/userdata/logs/server.trace.ndjson` as `"startup.phase":"settings.start"`.
+
 | File | Manifest-worthy? | Why |
 |------|------------------|-----|
 | `settings.json` | yes | Provider instances, default model/effort. Has an `opencode.serverPassword` field — must stay empty in a public repo. |

@@ -80,6 +80,7 @@ STATUS_COLORS = {
     "BROKEN_LINK": "red",
     "WRONG_TARGET": "red",
     "NOT_A_LINK": "red",
+    "STALE_LINK": "yellow",
     "REPO_MISSING": "red",
     "NONE": "dim",
     "SKIP_HOST": "dim",
@@ -207,6 +208,28 @@ def is_deployed(repo_path, system_path):
         return os.path.exists(system_path) and os.path.realpath(system_path) == os.path.realpath(repo_path)
     # an existing correct hard link is left alone - do not churn it
     return is_hard_link_to(repo_path, system_path)
+
+
+def link_is_stale(repo_path, system_path):
+    """
+    True when the destination is a correct SYMLINK older than the repo file it
+    points at - the signature of a git pull that changed the content under a
+    link deploy never had to touch.
+
+    Only entries carrying refresh: relink care. A symlink is always current on
+    disk, so nothing is broken; what goes stale is a running app that read the
+    file into memory and watches the DESTINATION path for changes (T3 Code's
+    settings.json). Writing new bytes into the repo file fires no event on the
+    path, so the app keeps serving the pre-pull copy until something re-creates
+    the link. Hard links share the repo inode and never go stale this way - a
+    pull orphans them instead, which classify_entry already reports.
+    """
+    if not os.path.islink(system_path) or not os.path.isfile(repo_path):
+        return False
+    try:
+        return os.path.getmtime(repo_path) > os.lstat(system_path).st_mtime
+    except OSError:
+        return False
 
 
 def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None):
@@ -359,6 +382,7 @@ def deploy_config(
     backup_root=None,
     repo_root=None,
     on_drift="replace",
+    refresh="none",
 ):
     """
     Keep the real file in the repo and place a symlink at system_path.
@@ -377,6 +401,11 @@ def deploy_config(
     through on WORKTREE_HOST; everywhere else the entry arrives here as
     "replace".
 
+    refresh="relink" re-creates a correct-but-stale symlink (see
+    link_is_stale) so the app watching the destination path sees an event and
+    re-reads the pulled content. Self-limiting: the fresh link is newer than
+    the repo file, so the next deploy is a no-op again.
+
     Idempotent: a destination that is already a correct symlink - or an
     existing hard link sharing the repo file's inode - is a no-op.
     """
@@ -384,6 +413,12 @@ def deploy_config(
     system_path = os.path.abspath(os.path.expanduser(system_path))
 
     if is_deployed(repo_path, system_path):
+        if refresh == "relink" and link_is_stale(repo_path, system_path):
+            os.remove(system_path)
+            action = create_link(repo_path, system_path)
+            print(f"  repo file changed since the link was made - re-{action} {system_path}"
+                  f"\n         -> {repo_path}")
+            return "relinked"
         print(f"  already deployed: {system_path}")
         return "noop"
 
@@ -581,6 +616,11 @@ def _parse_manifest_file(manifest_path):
         if on_drift not in ("replace", "adopt"):
             raise ValueError(
                 f"Manifest entry {entry['name']} has invalid on_drift: {on_drift} (use 'replace' or 'adopt')"
+            )
+        refresh = entry.get("refresh", "none")
+        if refresh not in ("none", "relink"):
+            raise ValueError(
+                f"Manifest entry {entry['name']} has invalid refresh: {refresh} (use 'none' or 'relink')"
             )
         requires = entry.get("requires")
         if requires is not None:
@@ -895,6 +935,9 @@ def build_plan(entries, platform_key, hostname, repo_root=None, assume_requires=
             # deploys as replace and status says where adoption lives.
             "on_drift": entry.get("on_drift", "replace") if adopts_here(hostname) else "replace",
             "adopt_elsewhere": entry.get("on_drift", "replace") == "adopt" and not adopts_here(hostname),
+            # relink entries: an app caches this file, so a pull that changes it
+            # needs the link re-created for the app to notice (see link_is_stale)
+            "refresh": entry.get("refresh", "none"),
             "note": entry.get("note", ""),
             "requires": None,
             "dest": None,
@@ -946,7 +989,7 @@ def requires_satisfied(entry, row, hostname, repo_root, assume_requires=False):
 # Status #
 
 
-def classify_entry(repo_path, system_path):
+def classify_entry(repo_path, system_path, refresh="none"):
     """Classify the deployment health of one destination. Returns (status, detail)."""
     if not os.path.exists(repo_path):
         return "REPO_MISSING", f"repo file {repo_path} does not exist"
@@ -956,6 +999,9 @@ def classify_entry(repo_path, system_path):
         if not os.path.exists(system_path):
             return "BROKEN_LINK", f"dangling link -> {os.readlink(system_path)}"
         if os.path.realpath(system_path) == os.path.realpath(repo_path):
+            if refresh == "relink" and link_is_stale(repo_path, system_path):
+                return ("STALE_LINK",
+                        "link resolves to repo file but predates its content; the app still holds the old copy")
             return "OK", "link resolves to repo file"
         return "WRONG_TARGET", f"link resolves to {os.path.realpath(system_path)}"
     if os.path.isdir(system_path):
@@ -979,6 +1025,7 @@ def planned_action(status, on_drift="replace"):
         "WRONG_TARGET": "deploy would remove the stale link and create symlink",
         "NOT_A_LINK": "deploy would back up the system file to data/config_backups, then replace it with a link "
                       "to the repo version",
+        "STALE_LINK": "deploy would re-create the link so the app re-reads the pulled content",
         "REPO_MISSING": "nothing to deploy (repo file missing)",
     }
     return descriptions.get(status, "unknown")
@@ -1009,7 +1056,7 @@ def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
         if row["action"] != "apply":
             info.append((row["action"].upper(), row, _info_detail(row, platform_key)))
             continue
-        status, detail = classify_entry(row["repo"], row["dest"])
+        status, detail = classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))
         (healthy if status in HEALTHY_STATUSES else unhealthy).append((status, row, detail))
 
     if info and not problems_only:
@@ -1066,7 +1113,8 @@ def run_deploy(plan):
     """
     info = [row for row in plan if row["action"] != "apply"]
     apply_rows = [row for row in plan if row["action"] == "apply"]
-    healthy = [row for row in apply_rows if classify_entry(row["repo"], row["dest"])[0] == "OK"]
+    healthy = [row for row in apply_rows
+               if classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))[0] == "OK"]
     work = [row for row in apply_rows if row not in healthy]
     counts = {"changed": 0, "noop": len(healthy), "skipped": 0}
 
@@ -1074,7 +1122,8 @@ def run_deploy(plan):
         print_section("Changes", len(work), "cyan")
         for row in work:
             print("  " + paint(row["name"], "bold"))
-            result = deploy_config(row["repo"], row["dest"], on_drift=row.get("on_drift", "replace"))
+            result = deploy_config(row["repo"], row["dest"], on_drift=row.get("on_drift", "replace"),
+                                   refresh=row.get("refresh", "none"))
             if result == "noop":
                 counts["noop"] += 1
             elif result in ("skipped", "missing"):
