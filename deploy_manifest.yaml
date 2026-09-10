@@ -114,6 +114,18 @@
     On Windows tmux runs under MSYS2, whose HOME resolves to the Windows
     profile, so ~/.tmux.conf is correct there too.
 
+- name: btop_conf
+  repo: application_configs/btop/btop.conf
+  dest:
+    darwin: ~/.config/btop/btop.conf
+    linux: ~/.config/btop/btop.conf
+  note: >-
+    btop is installed from the Brewfile and linux_apps.txt, not on Windows.
+    The file lists only non-default settings and turns off
+    save_config_on_exit. btop writes its config only at exit with that option
+    on, or once when the option is switched off in its menu, so it never
+    rewrites the linked file.
+
 # --- Editors ---
 
 - name: nvim_init
