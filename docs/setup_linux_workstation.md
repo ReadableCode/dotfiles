@@ -16,8 +16,8 @@ not in this public repo, see `notes/cloning_credentials_repos.md` in the persona
 repo.
 
 Bootstrap installs git and uv if missing, clones dotfiles to `~/GitHub`, runs `uv sync`,
-`clone_repos.py` and `deploy_configs.py`, then installs packages with whichever manager
-the machine has:
+`clone_repos.py`, `sync_python_envs.py` and `deploy_configs.py`, then installs packages
+with whichever manager the machine has:
 
 | Machine | List | Installer |
 |---------|------|-----------|
@@ -661,24 +661,98 @@ the rest of its machine config.
 
 ## Enable or Disable Swap
 
-### Ubuntu/Debian
+### Which setup applies
 
-* Check if swap is enabled:
+Check what swap exists and what filesystem a swapfile would live on:
 
-  ```bash
-  sudo swapon --show
-  ```
+```bash
+swapon --show           # /dev/zram0 is compressed RAM; a path like /swapfile is on disk
+findmnt -no FSTYPE /    # btrfs, ext4, xfs, ...
+getenforce              # Enforcing means SELinux is on (Fedora's default)
+free -h
+df -h /
+```
 
-* Change swap allocation:
+- Raspberry Pi OS (`dphys-swapfile` is installed): use **Raspberry Pi** below.
+- Root filesystem is `btrfs` (Fedora's default): use **Swapfile on btrfs**.
+- Anything else (`ext4`, `xfs`; Ubuntu's default is `ext4`): use **Swapfile on ext4 and
+  other filesystems**.
 
-  ```bash
-  sudo swapoff /swapfile
-  sudo fallocate -l 32G /swapfile  # change size as needed
-  sudo chmod 600 /swapfile
-  sudo mkswap /swapfile
-  sudo swapon /swapfile
-  swapon --show
-  ```
+Fedora also sets up zram by default (`/dev/zram0`, compressed RAM capped at 8 GB). zram is
+fast, but it takes its space out of the same RAM, so once RAM is full it adds no real
+capacity. Keep it as the first tier and add a disk swapfile behind it at a lower
+priority: the kernel fills the higher-priority zram first and only overflows to disk.
+
+With SELinux enforcing, a new swapfile also needs the `swapfile_t` label or `swapon` fails
+with "Permission denied"; both blocks below include the two lines that set it, marked
+SELinux only.
+
+Size the swapfile for the heaviest thing the machine keeps open. A large multi-root VS
+Code window holds several idle linter processes per workspace folder, so machines that
+run one all day get 64 GB; a few GB is enough for a light machine.
+
+### Swapfile on ext4 and other filesystems
+
+```bash
+sudo swapoff /swapfile 2>/dev/null   # only when resizing an existing swapfile
+sudo fallocate -l 64G /swapfile      # change size as needed
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+# SELinux only: label the file as swap
+sudo semanage fcontext -a -t swapfile_t '/swapfile'
+sudo restorecon -F /swapfile
+sudo swapon /swapfile
+grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap defaults,pri=10 0 0' | sudo tee -a /etc/fstab
+swapon --show
+```
+
+### Swapfile on btrfs
+
+`fallocate` does not make a usable swapfile on btrfs: `swapon` refuses a file that is
+copy-on-write or compressed, so btrfs has its own command that creates one correctly. The
+file goes in its own subvolume so snapshots of `/` never include it:
+
+```bash
+sudo btrfs subvolume create /swap
+sudo btrfs filesystem mkswapfile --size 64g /swap/swapfile
+# SELinux only: label the subvolume and file as swap
+sudo semanage fcontext -a -t swapfile_t '/swap(/.*)?'
+sudo restorecon -RF /swap
+sudo swapon --priority 10 /swap/swapfile
+grep -q '^/swap/swapfile ' /etc/fstab || echo '/swap/swapfile none swap defaults,pri=10 0 0' | sudo tee -a /etc/fstab
+swapon --show           # zram0 at priority 100 (if present), /swap/swapfile at 10
+```
+
+To resize, `sudo swapoff /swap/swapfile`, delete it, run `mkswapfile` again with the new
+size, then `sudo restorecon -RF /swap` on SELinux systems (the `semanage` rule persists, so
+it is not added twice).
+
+### Swappiness
+
+`vm.swappiness` (0 to 200) tells the kernel how expensive swapping is compared with
+dropping file cache. The kernel default is 60, 100 treats the two as equal, and the
+kernel docs suggest going above 100 only when swap is in memory (zram) or on a device
+faster than the filesystem.
+
+| Swap on the machine | Set | Why |
+|---------------------|-----|-----|
+| Disk swapfile only | 60 (leave the default) | Swap and filesystem share the same disk, so swapping is not cheaper than dropping cache |
+| zram in front of a disk swapfile | 100 | zram takes idle pages cheaply, and the disk tier behind it is no faster than the filesystem |
+
+Under memory pressure this lets idle processes (such as per-folder linter runners) move
+out of RAM instead of evicting the file cache that the editor and git read from.
+
+```bash
+sysctl vm.swappiness                                          # current value
+echo 'vm.swappiness = 100' | sudo tee /etc/sysctl.d/99-swappiness.conf
+sudo sysctl --system
+```
+
+On Fedora the active tuned profile sets its own value (`tuned-adm active` shows which;
+`throughput-performance` sets 10, which keeps idle processes in RAM until memory runs
+out). tuned re-applies `/etc/sysctl.d` after its profile when `reapply_sysctl = 1` in
+`/etc/tuned/tuned-main.conf`, as it is on Fedora 43, so the file above wins. Confirm with
+`sysctl vm.swappiness` after a reboot.
 
 ### Raspberry Pi
 
