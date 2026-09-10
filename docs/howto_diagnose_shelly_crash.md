@@ -234,8 +234,8 @@ ssh "$SHELLY" "powershell -NoProfile -Command \"Get-ScheduledTask -TaskName Libr
 Only these start at sign-in: Steam, Epic Games Launcher, Discord, OneDrive,
 SyncTrayzor, Razer Synapse (`RazerAppEngine`: the Naga V2 HyperSpeed mouse and
 BlackShark V2 HS headset are Razer), Elgato Stream Deck and its Volume
-Controller plugin (an Elgato `0FD9:0090` device is connected), and Windows
-Security.
+Controller plugin (an Elgato `0FD9:0090` device is connected), Wallpaper
+Engine, and Windows Security.
 
 Turned off, all through the same `StartupApproved` flag Task Manager's Startup
 tab uses, so each can be turned back on there:
@@ -244,7 +244,6 @@ tab uses, so each can be turned back on there:
 | --- | --- | --- |
 | `EADM` (EA app) | HKCU Run | other game launcher |
 | `Battle.net` | HKCU Run | other game launcher |
-| `WallpaperEngine` | HKCU Run | not needed at sign-in |
 | `com.squirrel.Teams.Teams` | HKCU Run | not used |
 | `CiscoMeetingDaemon` (Webex) | HKCU Run | not used |
 | `GoogleChromeAutoLaunch_*` | HKCU Run | Chrome background start |
