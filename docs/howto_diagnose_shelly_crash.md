@@ -187,7 +187,8 @@ The CPU throttles at 95 degrees C. Reading the rows before a crash:
 - Epic launcher: `$env:LOCALAPPDATA\EpicGamesLauncher\Saved\Logs`.
 - Anti-cheat driver: `C:\Program Files (x86)\EasyAntiCheat_EOS\EasyAntiCheat_EOS.sys`.
   Fortnite rewrites it when it updates; the dump's `lm t n` line shows the build
-  date that was loaded. BattlEye and the older EasyAntiCheat are installed too.
+  date that was loaded. It is absent after an Easy Anti-Cheat `repair` until
+  Fortnite starts again. BattlEye and the older EasyAntiCheat are installed too.
 - Windows service start and stop events (7036) are not logged on this Windows
   build, so the System log cannot show when a game session ran.
 
@@ -228,6 +229,49 @@ ssh "$SHELLY" "powershell -NoProfile -Command \"Get-ScheduledTask -TaskName Libr
   to rewrite it: [setup_windows_fancontrol.md](setup_windows_fancontrol.md).
 - In the sensor log, the `control` columns should follow those curves.
 
+## 6a. Startup apps, trimmed 2026-09-10
+
+Only these start at sign-in: Steam, Epic Games Launcher, Discord, OneDrive,
+SyncTrayzor, Razer Synapse (`RazerAppEngine`: the Naga V2 HyperSpeed mouse and
+BlackShark V2 HS headset are Razer), Elgato Stream Deck and its Volume
+Controller plugin (an Elgato `0FD9:0090` device is connected), and Windows
+Security.
+
+Turned off, all through the same `StartupApproved` flag Task Manager's Startup
+tab uses, so each can be turned back on there:
+
+| Entry | Where | Why |
+| --- | --- | --- |
+| `EADM` (EA app) | HKCU Run | other game launcher |
+| `Battle.net` | HKCU Run | other game launcher |
+| `WallpaperEngine` | HKCU Run | not needed at sign-in |
+| `com.squirrel.Teams.Teams` | HKCU Run | not used |
+| `CiscoMeetingDaemon` (Webex) | HKCU Run | not used |
+| `GoogleChromeAutoLaunch_*` | HKCU Run | Chrome background start |
+| `iTunesHelper` | HKLM Run | not needed; Apple device services still run |
+| `TeamsMachineInstaller` | HKLM Run32 | Teams reinstaller |
+| `Discord` (`SquirrelMachineInstalls`) | HKLM Run32 | machine-wide reinstaller; her own Discord entry stays |
+| `LogiOptions` | HKLM Run | no Logitech device connected |
+| `REDRAGON IMPACT Gaming Mouse` | HKLM Run32 | that mouse is not connected |
+| `CortanaStartupId` | Store app startup task, `State` 2 to 1 | not used |
+
+The `OptionsPlusUpdaterService` (Logi Options+) service went from Automatic to
+Manual and was stopped. An app that re-adds its Run value on update keeps the
+off flag, because the flag is stored by value name.
+
+To list what starts, send as an encoded script:
+
+```powershell
+foreach ($s in @(@('HKCU', 'Run', 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'), @('HKLM', 'Run', 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Run'), @('HKLM', 'Run32', 'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'))) {
+  $item = Get-Item -LiteralPath $s[2]
+  foreach ($name in $item.GetValueNames()) {
+    $v = (Get-ItemProperty -LiteralPath "$($s[0]):\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\$($s[1])" -Name $name -ErrorAction SilentlyContinue).$name
+    $state = if ($null -eq $v -or ($v[0] % 2) -eq 0) { 'on' } else { 'off' }
+    '{0,-4} {1}/{2} {3}' -f $state, $s[0], $s[1], $name
+  }
+}
+```
+
 ## 7. Traps
 
 Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
@@ -242,6 +286,14 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
 - HWiNFO free refuses command-line logging, and its `uiAccess` manifest stops a
   scheduled task starting it directly. It is not used.
 - `winget` from an ssh session cannot reach its source (step Access).
+- `EasyAntiCheat_EOS_Setup.exe repair` deletes the 45 MB kernel driver, and
+  `install prod-fn` only re-registers the game (it finishes in milliseconds;
+  the setup program is under 1 MB). The driver returns when the game starts.
+  Do not run `repair` unless the game can be started afterwards.
+- `%APPDATA%\EasyAntiCheat\service.log` is rewritten by every setup run, so it
+  holds no history.
+- In Windows PowerShell 5.1, `Start-Process -PassThru` loses `ExitCode` unless
+  `$p.Handle` is read before the process exits; the exit code prints blank.
 
 ## 8. Machine facts, 2026-09-10
 
@@ -261,8 +313,13 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
 - Done 2026-09-10: Windows Memory Diagnostic, standard, no errors. MemTest86
   only if another blue screen is not the anti-cheat unload.
 - Reseating the GPU power cables and the 24-pin and CPU 8-pin.
-- Repairing Easy Anti-Cheat with
+- Done 2026-09-10: Easy Anti-Cheat `repair`, then `install prod-fn`, with
   `C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe`.
+  The `EasyAntiCheat_EOS` service is registered again, but `repair` deleted the
+  kernel driver file and its driver service and `install` did not bring them
+  back. The driver is expected back the next time Fortnite starts (step 4). If
+  Fortnite reports that Easy Anti-Cheat is not installed, run Verify on
+  Fortnite in the Epic Games Launcher.
 
 Record what was done and when in the matching backlog entry before judging a
 new crash against them.
