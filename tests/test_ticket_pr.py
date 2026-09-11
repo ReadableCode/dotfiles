@@ -203,6 +203,29 @@ def test_rollup_ignores_approval_gate_and_reports_green():
     ]
 
 
+def test_rollup_carries_a_failed_checks_details():
+    entries = [
+        {"name": "SonarQube Code Analysis", "bucket": "fail",
+         "details": {"details_url": "https://sonar/x", "title": "Quality Gate failed",
+                     "summary": "2 new issues"}},
+        {"name": "linter", "bucket": "pass", "details": {"details_url": None}},
+    ]
+    report = ticket_pr.rollup(entries, [])
+    assert report["failed"] == ["SonarQube Code Analysis"]
+    assert report["failed_details"] == [
+        {"name": "SonarQube Code Analysis", "details_url": "https://sonar/x",
+         "title": "Quality Gate failed", "summary": "2 new issues"}
+    ]
+
+
+def test_check_run_details_reads_output_and_link():
+    run = {"details_url": "https://ci/run/1", "output": {"title": "t", "summary": "s"}}
+    assert ticket_pr.check_run_details(run) == {"details_url": "https://ci/run/1",
+                                                "title": "t", "summary": "s"}
+    assert ticket_pr.check_run_details({}) == {"details_url": None, "title": None,
+                                               "summary": None}
+
+
 def test_rollup_not_green_on_failure_or_pending():
     failing = ticket_pr.rollup([{"name": "linter", "bucket": "fail"}], [])
     assert failing["green"] is False and failing["failed"] == ["linter"]

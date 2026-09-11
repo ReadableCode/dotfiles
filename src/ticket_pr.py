@@ -541,6 +541,21 @@ def bucket_check_run(run):
     return "fail"  # failure, timed_out, action_required, startup_failure, stale
 
 
+def check_run_details(run):
+    """Where a check explains itself: its details page and the output it posted.
+
+    Apps such as SonarQube put the failed conditions in output.summary, and
+    Actions jobs link their log from details_url; without these a failing
+    check is a bare name.
+    """
+    output = run.get("output") or {}
+    return {
+        "details_url": run.get("details_url"),
+        "title": output.get("title"),
+        "summary": output.get("summary"),
+    }
+
+
 def bucket_commit_status(status):
     state = (status.get("state") or "").lower()
     if state == "success":
@@ -560,7 +575,7 @@ def collect_check_entries(repo, sha, headers):
     a token only legacy commit statuses are reported and callers must surface
     that the Actions-based checks are invisible rather than implying green.
     """
-    latest = {}  # name -> (started_at, bucket)
+    latest = {}  # name -> (started_at, bucket, details)
     page = 1
     check_runs_visible = True
     while True:
@@ -575,21 +590,24 @@ def collect_check_entries(repo, sha, headers):
             name = run.get("name") or "<unnamed>"
             stamp = run.get("started_at") or ""
             if name not in latest or stamp >= latest[name][0]:
-                latest[name] = (stamp, bucket_check_run(run))
+                latest[name] = (stamp, bucket_check_run(run), check_run_details(run))
         if len(runs) < CHECKS_PER_PAGE:
             break
         page += 1
     combined = http_json("GET", f"{GITHUB_API}/repos/{repo}/commits/{sha}/status", headers)
     for status in combined.get("statuses", []):  # already latest-per-context
         name = status.get("context") or "<unnamed>"
-        latest[name] = ("", bucket_commit_status(status))
-    entries = [{"name": name, "bucket": bucket} for name, (_, bucket) in sorted(latest.items())]
+        latest[name] = ("", bucket_commit_status(status),
+                        {"details_url": status.get("target_url"),
+                         "title": status.get("description"), "summary": None})
+    entries = [{"name": name, "bucket": bucket, "details": details}
+               for name, (_, bucket, details) in sorted(latest.items())]
     return entries, check_runs_visible
 
 
 def rollup(entries, ignore_substrings):
     """Pure rollup of [{name, bucket}] into a green/failed/pending report."""
-    ignored, failed, pending = [], [], []
+    ignored, failed, failed_details, pending = [], [], [], []
     passed = skipped = 0
     for entry in entries:
         name, bucket = entry["name"], entry["bucket"]
@@ -597,6 +615,7 @@ def rollup(entries, ignore_substrings):
             ignored.append({"name": name, "bucket": bucket})
         elif bucket == "fail":
             failed.append(name)
+            failed_details.append({"name": name, **(entry.get("details") or {})})
         elif bucket == "pending":
             pending.append(name)
         elif bucket == "pass":
@@ -605,6 +624,7 @@ def rollup(entries, ignore_substrings):
             skipped += 1
     return {
         "failed": failed,
+        "failed_details": failed_details,
         "pending": pending,
         "passed": passed,
         "skipped": skipped,
@@ -653,6 +673,12 @@ def cmd_pr_status(args):
     else:
         report.update({"pr": pull["number"], "url": pull["html_url"]})
     state = "GREEN" if report["green"] else ("FAILED" if report["failed"] else "PENDING")
+    for detail in report["failed_details"]:
+        print(f"FAILED {detail['name']}: {detail.get('title') or ''}")
+        if detail.get("summary"):
+            print(detail["summary"].strip())
+        if detail.get("details_url"):
+            print(f"  {detail['details_url']}")
     if not report["check_runs_visible"]:
         print("WARNING: check runs (GitHub Actions) are NOT visible to this token - "
               "fine-grained PATs cannot be granted the Checks permission (GitHub limitation); "
