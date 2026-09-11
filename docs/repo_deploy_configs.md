@@ -421,7 +421,7 @@ Two files are written, side by side:
 | File | What it is |
 | --- | --- |
 | `deploy_map.html` | One self-contained page (no network, no build step), four views: **Disk** (default), **Fleet**, **Matrix** and **Destinations** — see below. Open it straight from the repo. |
-| `deploy_map.json` | The same dataset, indented — the diffable half, so a pull request shows *which* link changed rather than one 350 KB blob. |
+| `deploy_map.json` | The same dataset, one record per line (`format_json`): the diffable half, so a pull request shows *which* link changed rather than one huge blob. The page embeds this exact text, so it has no giant line either. |
 
 Since 2026-09-07 the map also applies the **clone gate**: an entry from an
 overlay manifest counts on a machine only if that overlay's repo would be
@@ -491,6 +491,15 @@ means the fleet actually changed:
   report `skip_requires`, but the map would then change shape depending on
   which machine happened to redraw it. Platform blocks, `hosts:` filters and
   per-host variant files *are* evaluated for real, per machine.
+- Nothing is keyed by position. A matrix cell holds its destination path, not
+  an index into `dests` (an index renumbered every later cell when one path
+  was added), and per-host `counts` follow the `ACTIONS` order.
+- A container stays on one line up to `JSON_LINE_WIDTH` characters and opens
+  up one child per line past that, so one new link is a handful of lines
+  rather than thousands (`indent=1` gave every number its own line).
+- The personal credentials repo's `.gitattributes` marks `deploy_map.html` as
+  `-diff`: its data block is the JSON again, so `git diff` shows the change
+  once, in the JSON.
 
 Colours and clusters come from the data, not from a hardcoded list: the
 dotfiles manifest is always the first (shared) cluster, and every other context

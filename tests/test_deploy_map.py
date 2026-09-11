@@ -239,6 +239,41 @@ def test_destinations_are_home_relative(fleet):
     assert entry["dests"] == ["~/GitHub/envy-acme.code-workspace"]
 
 
+def test_matrix_cells_name_the_path_so_a_new_dest_renumbers_nothing(fleet):
+    data = build(fleet)
+    hosts = [host["id"] for host in data["hosts"]]
+    row = data["matrix"][[entry["id"] for entry in data["entries"]].index("shared_conf")]
+    assert row[hosts.index("Envy")] == [deploy_map.ACTION_CODE["apply"], "~/.conf"]
+    mac_only = data["matrix"][[entry["id"] for entry in data["entries"]].index("mac_only_conf")]
+    assert mac_only[hosts.index("Pi")][1] is None
+    assert data["dests"] == sorted(data["dests"])
+
+
+def test_host_counts_follow_the_action_order(fleet):
+    data = build(fleet)
+    for host in data["hosts"]:
+        assert list(host["counts"]) == [action for action in deploy_map.ACTIONS if action in host["counts"]]
+
+
+def test_format_json_keeps_short_containers_on_one_line(monkeypatch):
+    monkeypatch.setattr(deploy_map, "JSON_LINE_WIDTH", 40)
+    data = {"repos": [{"name": "a", "hosts": []}, {"name": "b", "hosts": ["x"]}], "long": ["y" * 30, "z" * 30]}
+    text = deploy_map.format_json(data)
+    assert json.loads(text) == data
+    assert text.splitlines() == [
+        "{",
+        ' "repos": [',
+        '  {"name": "a", "hosts": []},',
+        '  {"name": "b", "hosts": ["x"]}',
+        " ],",
+        ' "long": [',
+        f'  "{"y" * 30}",',
+        f'  "{"z" * 30}"',
+        " ]",
+        "}",
+    ]
+
+
 def test_paths_view_lists_every_machine_a_file_lands_on(fleet):
     data = build(fleet)
     entries = data["paths"]["~"]
@@ -285,9 +320,14 @@ def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
     with open(paths[0], "r", encoding="utf-8") as file_handle:
         page = file_handle.read()
     assert deploy_map.DATA_PLACEHOLDER not in page
-    assert "</script>" not in page.split('type="application/json">')[1].split("</script>")[0]
+    payload = page.split('type="application/json">')[1].split("</script>")[0]
+    assert "</script>" not in payload
     with open(paths[1], "r", encoding="utf-8") as file_handle:
-        assert json.load(file_handle)["meta"]["hostCount"] == 3
+        text = file_handle.read()
+    assert json.loads(text)["meta"]["hostCount"] == 3
+    # the page carries the JSON file's own line-per-record text, never one huge line
+    assert payload == text.rstrip("\n").replace("</", "<\\/")
+    assert max(len(line) for line in text.splitlines()) < 1000
 
 
 def test_write_map_skips_machines_without_the_personal_repo(fleet):

@@ -323,7 +323,7 @@
 <script id="data" type="application/json">__DATA__</script>
 <script>
 const DATA = JSON.parse(document.getElementById('data').textContent);
-const {hosts, entries, dests, matrix, paths, meta} = DATA;
+const {hosts, entries, matrix, paths, meta} = DATA;
 const ACT = meta.actions;
 
 /* ---------------- palette + taxonomy ----------------
@@ -813,7 +813,7 @@ function entryLandsOn(e, h){
   if (ACT[cell[0]] !== 'apply') return {ok:false, why:cellStyle(cell[0], e.ctx).label, dest:null};
   const missing = (h.reqMissing || {})[e.id];
   if (missing) return {ok:false, why:'would skip: ' + missing.join(', ') + ' not cloned here', dest:null};
-  return {ok:true, why:'deployed', dest:cell[1] >= 0 ? dests[cell[1]] : null};
+  return {ok:true, why:'deployed', dest:cell[1]};
 }
 function nodeLandsOn(node, h){
   if (!h) return true;
@@ -1055,7 +1055,7 @@ function buildMatrix(){
       i.style.opacity = st.op;
       td.appendChild(i);
       td.addEventListener('mousemove', ev => {
-        const dest = cell[1] >= 0 ? dests[cell[1]] : null;
+        const dest = cell[1];
         showTip(`<b>${e.id}</b> → <b>${h.id}</b><br>` +
           `<span style="color:${ACT[cell[0]] === 'apply' ? CTX[e.ctx].color : '#8fa3bb'}">${st.label}</span>` +
           (dest ? `<br><span class="p">${dest}</span>` : '') +

@@ -37,6 +37,8 @@ OUTPUT_BASENAME = "deploy_map"
 OUTPUT_SUBDIR = "generated"
 TEMPLATE_PATH = os.path.join(templates_dir, "deploy_map.html")
 DATA_PLACEHOLDER = "__DATA__"
+# format_json keeps a container on one line up to this many characters
+JSON_LINE_WIDTH = 160
 
 # Only these platforms have manifest dest blocks; everything else in the
 # inventories (phones, TVs, switches, routers) receives no configs at all.
@@ -443,19 +445,12 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
         if not host["deployable"]
     ]
 
-    dest_table: list = []
-    dest_lookup: dict = {}
-
-    def dest_id(path):
-        if path is None:
-            return -1
-        if path not in dest_lookup:
-            dest_lookup[path] = len(dest_table)
-            dest_table.append(path)
-        return dest_lookup[path]
-
+    # a matrix cell names its destination path rather than an index into a
+    # shared table: an index shifts for every cell after a newly added path,
+    # which turned one new link into thousands of changed lines in the diff
+    dests = set()
     declarations = _add_clone_sets(mapped, hosts, repo_root, credentials_root)
-    matrix = [[[ACTION_CODE["none"], -1] for _ in hosts] for _ in mapped]
+    matrix = [[[ACTION_CODE["none"], None] for _ in hosts] for _ in mapped]
     variants = [["" for _ in hosts] for _ in mapped]
     for column, host in enumerate(hosts):
         plan = deploy_configs.build_plan(
@@ -466,9 +461,12 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             # an overlay manifest only loads where its repo is cloned; the planner
             # cannot see that from the machine drawing the map, so gate it here
             if mapped[index]["repo"] not in host["_cloned"]:
-                matrix[index][column] = [ACTION_CODE["skip_overlay"], -1]
+                matrix[index][column] = [ACTION_CODE["skip_overlay"], None]
                 continue
-            matrix[index][column] = [ACTION_CODE[row["action"]], dest_id(portable_path(row["dest"]))]
+            dest = portable_path(row["dest"])
+            if dest is not None:
+                dests.add(dest)
+            matrix[index][column] = [ACTION_CODE[row["action"]], dest]
             variants[index][column] = os.path.basename(row["repo"])
         host["prune"] = [
             portable_path(dest)
@@ -477,8 +475,8 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             )
         ]
 
-    _roll_up_entries(mapped, hosts, matrix, variants, dest_table)
-    _roll_up_hosts(mapped, hosts, matrix, dest_table, repo_parent)
+    _roll_up_entries(mapped, hosts, matrix, variants)
+    _roll_up_hosts(mapped, hosts, matrix, repo_parent)
     _add_disk_view(mapped, entries, repo_root, credentials_root, repo_parent)
     _add_machine_view(mapped, entries, hosts, matrix, repo_parent)
 
@@ -492,7 +490,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
             "entryCount": len(mapped),
             "hostCount": len(hosts),
             "linkCount": sum(1 for row in matrix for cell in row if cell[0] == ACTION_CODE["apply"]),
-            "destCount": len(dest_table),
+            "destCount": len(dests),
             "nonTargets": sorted(non_targets, key=lambda device: device["name"].lower()),
             "repoStates": REPO_STATES,
             "repoCount": len(declarations),
@@ -502,9 +500,9 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
         "areas": [{"key": key, "label": label, "sub": sub} for key, label, sub in DISK_AREAS],
         "hosts": hosts,
         "entries": mapped,
-        "dests": dest_table,
+        "dests": sorted(dests),
         "matrix": matrix,
-        "paths": _build_path_tree(mapped, hosts, matrix, dest_table, repo_parent),
+        "paths": _build_path_tree(mapped, hosts, matrix, repo_parent),
         "disk": _build_disk_nodes(mapped, repo_parent),
     }
 
@@ -535,33 +533,33 @@ def _map_entries(entries, repo_root, credentials_root, overlay_dirs):
     return mapped
 
 
-def _roll_up_entries(entries, hosts, matrix, variants, dest_table):
+def _roll_up_entries(entries, hosts, matrix, variants):
     """Per-entry rollups: which machines it reaches, which paths, which variants."""
     for index, entry in enumerate(entries):
         cells = matrix[index]
         applied = [column for column, cell in enumerate(cells) if cell[0] == ACTION_CODE["apply"]]
         entry["hosts"] = [hosts[column]["id"] for column in applied]
-        entry["dests"] = sorted({dest_table[cells[column][1]] for column in applied if cells[column][1] >= 0})
+        entry["dests"] = sorted({cells[column][1] for column in applied if cells[column][1] is not None})
         entry["variantsUsed"] = sorted({variants[index][column] for column in applied})
         entry["cat"] = categorize(entry["dests"][0] if entry["dests"] else "", entry["method"])
 
 
-def _roll_up_hosts(entries, hosts, matrix, dest_table, repo_parent):
+def _roll_up_hosts(entries, hosts, matrix, repo_parent):
     """Per-machine rollups: which entries land, how they are grouped, what was skipped."""
     for column, host in enumerate(hosts):
         received, counts, zones = [], {}, {}
         for index, entry in enumerate(entries):
-            code, dest = matrix[index][column]
+            code, path = matrix[index][column]
             action = ACTIONS[code]
             counts[action] = counts.get(action, 0) + 1
             if action != "apply":
                 continue
             received.append(entry["id"])
-            if dest >= 0:
-                path = dest_table[dest]
+            if path is not None:
                 zones.setdefault(dest_zone(path, repo_parent), []).append([entry["id"], path])
         host["entries"] = received
-        host["counts"] = counts
+        # ACTIONS order, not first-seen order, so reordering entries leaves this line alone
+        host["counts"] = {action: counts[action] for action in ACTIONS if action in counts}
         host["zones"] = dict(sorted(zones.items()))
 
 
@@ -621,14 +619,13 @@ def _build_disk_nodes(mapped, repo_parent):
     return sorted(nodes.values(), key=lambda node: node["path"])
 
 
-def _build_path_tree(entries, hosts, matrix, dest_table, repo_parent):
+def _build_path_tree(entries, hosts, matrix, repo_parent):
     """Destination-first view: zone -> every file deployed there, with its machines."""
     grouped: dict = {}
     for index, entry in enumerate(entries):
-        for column, (code, dest) in enumerate(matrix[index]):
-            if code != ACTION_CODE["apply"] or dest < 0:
+        for column, (code, path) in enumerate(matrix[index]):
+            if code != ACTION_CODE["apply"] or path is None:
                 continue
-            path = dest_table[dest]
             grouped.setdefault((dest_zone(path, repo_parent), path, entry["id"]), []).append(hosts[column]["id"])
     tree: dict = {}
     for (zone, path, entry_id), host_ids in sorted(grouped.items()):
@@ -644,6 +641,27 @@ def _build_path_tree(entries, hosts, matrix, dest_table, repo_parent):
 # Render #
 
 
+def format_json(value, level=0):
+    """
+    Serialize the dataset so one change to the fleet is a few lines of git diff.
+
+    Compact JSON is a single line, and ``indent=1`` gives every scalar its own
+    line (70k+ lines for the real fleet); either way a diff is unreadable. Here
+    a container whose compact form fits in JSON_LINE_WIDTH stays on one line (a
+    repo record, a matrix cell, a short host list) and a longer one opens up
+    with one child per line.
+    """
+    flat = json.dumps(value, separators=(", ", ": "))
+    if not isinstance(value, (dict, list)) or not value or level + len(flat) <= JSON_LINE_WIDTH:
+        return flat
+    pad = " " * (level + 1)
+    if isinstance(value, dict):
+        lines = [f"{pad}{json.dumps(key)}: {format_json(item, level + 1)}" for key, item in value.items()]
+        return "{\n" + ",\n".join(lines) + "\n" + " " * level + "}"
+    lines = [f"{pad}{format_json(item, level + 1)}" for item in value]
+    return "[\n" + ",\n".join(lines) + "\n" + " " * level + "]"
+
+
 def render_map_html(data, template_path=None):
     """Inline the dataset into the template, producing one self-contained page."""
     template_path = template_path or TEMPLATE_PATH
@@ -651,8 +669,9 @@ def render_map_html(data, template_path=None):
         template = file_handle.read()
     if DATA_PLACEHOLDER not in template:
         raise ValueError(f"Template {template_path} has no {DATA_PLACEHOLDER} placeholder")
+    # the same text as deploy_map.json, so the page never holds one huge line;
     # </ inside a <script> block would close it early; \/ is the same string to JSON
-    payload = json.dumps(data, separators=(",", ":"), sort_keys=False).replace("</", "<\\/")
+    payload = format_json(data).replace("</", "<\\/")
     return template.replace(DATA_PLACEHOLDER, payload)
 
 
@@ -691,7 +710,7 @@ def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, t
     json_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.json")
     html_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.html")
     with open(json_path, "w", encoding="utf-8") as file_handle:
-        file_handle.write(json.dumps(data, indent=1, sort_keys=False) + "\n")
+        file_handle.write(format_json(data) + "\n")
     with open(html_path, "w", encoding="utf-8") as file_handle:
         file_handle.write(render_map_html(data, template_path))
     return [html_path, json_path]
