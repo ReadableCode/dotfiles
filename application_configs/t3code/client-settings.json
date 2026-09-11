@@ -17,7 +17,7 @@
   "confirmThreadUnpin": false,
   "contextWindowMeterEnabled": true,
   "diffIgnoreWhitespace": true,
-  "diffLayout": "stacked",
+  "diffLayout": "split",
   "dismissedProviderUpdateNotificationKeys": [],
   "environmentIdentificationMode": "artwork",
   "favorites": [
