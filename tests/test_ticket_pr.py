@@ -402,7 +402,8 @@ def test_transition_ticket_dry_run_reads_then_posts(monkeypatch, capsys):
     _jira_env(monkeypatch)
     out = _run_cli(["--dry-run", "transition-ticket", "--key", "ACME-401", "--to", "Done"],
                    monkeypatch, capsys)
-    assert "[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions" in out
+    assert ("[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions"
+            "?expand=transitions.fields") in out
     assert "[dry-run] POST https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions" in out
     assert json.loads(out.strip().splitlines()[-1])["status"] == "Done"
 
@@ -411,7 +412,10 @@ def test_transition_ticket_lists_options_without_to(monkeypatch, capsys):
     _jira_env(monkeypatch)
     offered = {"transitions": [
         {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
-        {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}},
+        {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}, "fields": {
+            "resolution": {"required": True, "allowedValues": [{"name": "Done"}, {"name": "Won't Do"}]},
+            "comment": {"required": False},
+        }},
     ]}
     calls = []
 
@@ -423,8 +427,9 @@ def test_transition_ticket_lists_options_without_to(monkeypatch, capsys):
     ticket_pr.main(["transition-ticket", "--key", "ACME-401"])
     out = capsys.readouterr().out
     assert out.splitlines()[0] == "ACME-401 can move via: In Progress, Resolve"
+    assert out.splitlines()[1] == "  Resolve needs resolution: Done, Won't Do"
     assert json.loads(out.strip().splitlines()[-1])["transitions"][1] == {
-        "id": "41", "name": "Resolve", "to": "Resolved"}
+        "id": "41", "name": "Resolve", "to": "Resolved", "required": {"resolution": ["Done", "Won't Do"]}}
     assert calls == ["GET"]
 
 
@@ -443,9 +448,9 @@ def test_transition_ticket_matches_target_status_and_posts_its_id(monkeypatch, c
         return offered
 
     monkeypatch.setattr(ticket_pr, "http_json", fake_http)
-    ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "resolved"])
+    ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "resolved", "--resolution", "Done"])
     out = capsys.readouterr().out
-    assert posted == {"transition": {"id": "41"}}
+    assert posted == {"transition": {"id": "41"}, "fields": {"resolution": {"name": "Done"}}}
     assert out.splitlines()[0] == "ACME-401 -> Resolved"
     assert json.loads(out.strip().splitlines()[-1]) == {
         "key": "ACME-401", "status": "Resolved", "transition": "Resolve",

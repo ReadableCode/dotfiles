@@ -342,20 +342,34 @@ def cmd_transition_ticket(args):
     Move a ticket to another status. ``--to`` is matched case-insensitively
     against the transitions Jira offers from the current status, by the
     transition's name or by the status it leads to. Without ``--to`` the
-    offered transitions are listed and nothing changes.
+    offered transitions are listed, each with the fields its screen requires
+    and their allowed values (a resolving transition usually wants
+    ``--resolution``), and nothing changes.
     """
     base, headers = jira_base(), jira_headers()
     url = f"{base}/rest/api/2/issue/{args.key}/transitions"
-    offered = http_json("GET", url, headers, dry_run=args.dry_run) or {}
-    transitions = [{
-        "id": t["id"],
-        "name": t["name"],
-        "to": (t.get("to") or {}).get("name"),
-    } for t in offered.get("transitions") or []]
+    offered = http_json("GET", f"{url}?expand=transitions.fields", headers,
+                        dry_run=args.dry_run) or {}
+    transitions = []
+    for t in offered.get("transitions") or []:
+        required = {}
+        for field_id, field in (t.get("fields") or {}).items():
+            if field.get("required"):
+                required[field_id] = [v.get("name") or v.get("value")
+                                      for v in field.get("allowedValues") or []]
+        transitions.append({
+            "id": t["id"],
+            "name": t["name"],
+            "to": (t.get("to") or {}).get("name"),
+            "required": required,
+        })
     names = ", ".join(t["name"] for t in transitions)
     if not args.to:
-        emit(f"{args.key} can move via: {names or '(none offered)'}",
-             {"key": args.key, "transitions": transitions})
+        lines = [f"{args.key} can move via: {names or '(none offered)'}"]
+        for t in transitions:
+            for field_id, values in t["required"].items():
+                lines.append(f"  {t['name']} needs {field_id}: {', '.join(v for v in values if v)}")
+        emit("\n".join(lines), {"key": args.key, "transitions": transitions})
         return
     wanted = args.to.strip().lower()
     match = next((t for t in transitions
@@ -363,8 +377,10 @@ def cmd_transition_ticket(args):
     if match is None and not args.dry_run:
         raise SystemExit(f"{args.key} offers no transition to {args.to!r}; offered: {names}")
     transition_id = match["id"] if match else "DRY"
-    http_json("POST", url, headers, payload={"transition": {"id": transition_id}},
-              dry_run=args.dry_run)
+    payload = {"transition": {"id": transition_id}}
+    if args.resolution:
+        payload["fields"] = {"resolution": {"name": args.resolution}}
+    http_json("POST", url, headers, payload=payload, dry_run=args.dry_run)
     landed = (match or {}).get("to") or (match or {}).get("name") or args.to
     emit(f"{args.key} -> {landed}",
          {"key": args.key, "status": landed, "transition": (match or {}).get("name") or args.to,
@@ -1196,6 +1212,8 @@ def build_parser():
                                 help="move a Jira ticket to another status; no --to lists the options")
     transition.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
     transition.add_argument("--to", help="transition or target status name as Jira shows it, e.g. Done")
+    transition.add_argument("--resolution",
+                            help="resolution name when the transition's screen requires one, e.g. Done")
     transition.set_defaults(func=cmd_transition_ticket)
 
     create_pr = sub.add_parser("create-pr", help="open a GitHub PR for the current branch")
