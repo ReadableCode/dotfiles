@@ -1,6 +1,7 @@
 """Unit tests for src/ticket_pr.py — no network, no credentials."""
 
 import json
+import re
 
 import pytest
 from src import ticket_pr
@@ -455,3 +456,229 @@ def test_pr_status_dry_run_is_parseable(monkeypatch, capsys):
     )
     result = json.loads(out.strip().splitlines()[-1])
     assert result["dry_run"] is True and result["green"] is True
+
+
+# ---------------------------------------------------------------- review
+
+
+def test_http_json_sends_no_content_type_without_a_body(monkeypatch):
+    # Bitbucket 400s a bodiless approve / request-changes POST that claims JSON.
+    sent = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b'{"state": "approved"}'
+
+    def fake_urlopen(request, timeout):
+        sent.append(request)
+        return Response()
+
+    monkeypatch.setattr(ticket_pr.urllib.request, "urlopen", fake_urlopen)
+    assert ticket_pr.http_json("POST", "https://example.org/approve", {}) == {"state": "approved"}
+    ticket_pr.http_json("POST", "https://example.org/comments", {}, payload={"a": 1})
+    assert sent[0].data is None and sent[0].get_header("Content-type") is None
+    assert sent[1].get_header("Content-type") == "application/json"
+
+
+def test_github_prefix_pins_the_provider(monkeypatch):
+    monkeypatch.setattr(
+        ticket_pr, "git_output", lambda *a: pytest.fail("should not call git")
+    )
+    assert ticket_pr.repo_spec("github:owner/name") == ("github", "owner/name")
+    assert ticket_pr.repo_spec("bitbucket:ws/slug") == ("bitbucket", "ws/slug")
+
+
+def test_review_queue_defaults_to_the_origin_repo(monkeypatch, capsys):
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "git@github.com:owner/name.git")
+    out = _run_cli(["--dry-run", "review-queue"], monkeypatch, capsys)
+    assert "[dry-run] would list open PRs in github:owner/name" in out
+
+
+def _bb_pull(pr_id, title, author, reviewers, participants=(), draft=False):
+    return {
+        "id": pr_id, "title": title, "author": author, "reviewers": list(reviewers),
+        "participants": list(participants), "draft": draft,
+        "source": {"branch": {"name": f"ACME-{pr_id}"}}, "destination": {"branch": {"name": "master"}},
+        "links": {"html": {"href": f"https://bitbucket.org/ws/slug/pull-requests/{pr_id}"}},
+    }
+
+
+def test_review_queue_bitbucket_marks_what_waits_on_me(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    me = {"uuid": "{me}", "display_name": "Me"}
+    sam = {"uuid": "{sam}", "display_name": "Sam"}
+    approved = {"user": me, "state": "approved", "participated_on": "2026-09-10T12:00:00.000000+00:00"}
+    pulls = [
+        _bb_pull(1, "Fresh work", sam, [me]),
+        _bb_pull(2, "Mine", me, []),
+        _bb_pull(3, "Asks someone else", sam, []),
+        _bb_pull(4, "WIP half done", sam, [me]),
+        _bb_pull(5, "Approved, untouched since", sam, [me], [approved]),
+        _bb_pull(6, "Approved, pushed to since", sam, [me], [approved]),
+    ]
+    # 11:30-01:00 is 12:30 UTC (after the approval) and 12:30+01:00 is 11:30 UTC
+    # (before it): string comparison gets both wrong, parsed comparison does not.
+    commits = {
+        5: [{"date": "2026-09-09T08:00:00+00:00"}],
+        6: [{"date": "2026-09-10T11:30:00-01:00"}, {"date": "2026-09-10T12:30:00+01:00"}],
+    }
+
+    def fake_http(method, url, headers, **kwargs):
+        if url.endswith("/2.0/user"):
+            return me
+        match = re.search(r"/pullrequests/(\d+)/commits", url)
+        if match:
+            return {"values": commits[int(match.group(1))]}
+        return {"values": pulls}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["review-queue", "--repo", "bitbucket:ws/slug"])
+    out = capsys.readouterr().out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert {pr["pr"]: pr["skip"] for pr in result["prs"]} == {
+        1: None, 2: "own", 3: "not_requesting", 4: "draft", 5: "approved", 6: None,
+    }
+    assert result["prs"][5]["commits_since_my_approval"] == 1
+    assert result["skipped"] == {"own": 1, "not_requesting": 1, "draft": 1, "approved": 1}
+    assert "pull-requests/6 Approved, pushed to since (re-review: 1 commit(s) since your approval)" in out
+
+
+def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+
+    def pull(number, author, requested=(), draft=False):
+        return {
+            "number": number, "title": f"PR {number}", "user": {"login": author}, "draft": draft,
+            "requested_reviewers": [{"login": login} for login in requested],
+            "head": {"ref": f"b{number}"}, "base": {"ref": "main"},
+            "html_url": f"https://github.com/owner/name/pull/{number}",
+        }
+
+    pulls = [pull(1, "sam", ["me"]), pull(2, "me"), pull(3, "sam"), pull(4, "sam", ["me"], draft=True)]
+    monkeypatch.setattr(
+        ticket_pr, "http_json",
+        lambda m, url, h, **k: {"login": "me"} if url.endswith("/user") else pulls,
+    )
+    ticket_pr.main(["review-queue", "--repo", "github:owner/name"])
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert {pr["pr"]: pr["skip"] for pr in result["prs"]} == {
+        1: None, 2: "own", 3: "not_requesting", 4: "draft",
+    }
+
+
+def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    pull = {
+        "id": 7, "title": "Add the thing", "author": {"display_name": "Sam"}, "description": "why",
+        "source": {"branch": {"name": "ACME-7-thing"}, "commit": {"hash": "abc123"}},
+        "destination": {"branch": {"name": "master"}},
+        "links": {"html": {"href": "https://bitbucket.org/ws/slug/pull-requests/7"}},
+    }
+    diffstat = {"values": [
+        {"status": "modified", "old": {"path": "src/a.py"}, "new": {"path": "src/a.py"},
+         "lines_added": 3, "lines_removed": 1},
+        {"status": "renamed", "old": {"path": "src/b.py"}, "new": {"path": "src/c.py"},
+         "lines_added": 0, "lines_removed": 9},
+    ]}
+    fetched = []
+
+    def fake_bytes(url, headers):
+        fetched.append(url)
+        return b"diff --git a/src/a.py b/src/a.py\n"
+
+    monkeypatch.setattr(
+        ticket_pr, "http_json", lambda m, url, h, **k: diffstat if url.endswith("/diffstat") else pull
+    )
+    monkeypatch.setattr(ticket_pr, "http_bytes", fake_bytes)
+    out_path = tmp_path / "pr7.diff"
+    ticket_pr.main(["pr-diff", "--repo", "bitbucket:ws/slug", "--pr", "7", "--out", str(out_path)])
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert fetched == ["https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/diff"]
+    assert out_path.read_bytes() == b"diff --git a/src/a.py b/src/a.py\n"
+    assert result == {
+        "pr": 7, "title": "Add the thing", "author": "Sam", "source": "ACME-7-thing",
+        "destination": "master", "head": "abc123", "description": "why",
+        "url": "https://bitbucket.org/ws/slug/pull-requests/7",
+        "files": [
+            {"path": "src/a.py", "status": "modified", "previous_path": None, "additions": 3, "deletions": 1},
+            {"path": "src/c.py", "status": "renamed", "previous_path": "src/b.py", "additions": 0, "deletions": 9},
+        ],
+        "diff_path": str(out_path),
+    }
+
+
+def _record_http(monkeypatch, responses):
+    calls = []
+
+    def fake_http(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        return next(resp for suffix, resp in responses.items() if url.endswith(suffix))
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    return calls
+
+
+def test_pr_review_bitbucket_posts_the_comment_before_the_vote(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/comments": {"id": 55},
+                                       "/request-changes": {"state": "changes_requested"}})
+    ticket_pr.main(["pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7",
+                    "--action", "request-changes", "--body", "The banner prints too early."])
+    base = "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7"
+    assert calls == [
+        ("POST", f"{base}/comments", {"content": {"raw": "The banner prints too early."}}),
+        ("POST", f"{base}/request-changes", None),
+    ]
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["state"] == "changes_requested" and result["comment_id"] == 55
+
+
+def test_pr_review_bitbucket_approve_is_one_bodiless_post(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/approve": {"state": "approved"}})
+    ticket_pr.main(["pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7", "--action", "approve"])
+    assert calls == [
+        ("POST", "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/approve", None),
+    ]
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["state"] == "approved"
+
+
+def test_pr_review_github_submits_one_review(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/reviews": {
+        "state": "COMMENTED", "html_url": "https://github.com/owner/name/pull/12#pullrequestreview-1"}})
+    ticket_pr.main(["pr-review", "--repo", "github:owner/name", "--pr", "12",
+                    "--action", "comment", "--body", "Why the retry?"])
+    assert calls == [("POST", "https://api.github.com/repos/owner/name/pulls/12/reviews",
+                      {"event": "COMMENT", "body": "Why the retry?"})]
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["state"] == "COMMENTED"
+
+
+def test_pr_review_rejects_an_empty_body(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    with pytest.raises(SystemExit, match="empty review body"):
+        ticket_pr.main(["pr-review", "--repo", "github:owner/name", "--pr", "12",
+                        "--action", "request-changes", "--body", "  "])
+
+
+def test_review_commands_dry_run(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    out = _run_cli(["--dry-run", "review-queue", "--repo", "bitbucket:ws/slug"], monkeypatch, capsys)
+    assert "[dry-run] would list open PRs in bitbucket:ws/slug" in out
+    out = _run_cli(["--dry-run", "pr-diff", "--repo", "bitbucket:ws/slug", "--pr", "7"],
+                   monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["dry_run"] is True
+    out = _run_cli(["--dry-run", "pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7",
+                    "--action", "approve"], monkeypatch, capsys)
+    assert "[dry-run] POST https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/approve" in out

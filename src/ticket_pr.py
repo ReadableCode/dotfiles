@@ -8,10 +8,14 @@ installed CLIs required. Credentials come from the calling repo's env file:
         --project ACME --type Task --summary "Do the thing"
 
 Subcommands: create-ticket, get-ticket, add-comment, create-pr, pr-status,
-update-branch, request-review. get-ticket returns everything on the ticket in one
-call (fields, description, every comment, every attachment downloaded to disk),
-so a caller never has to go to the Jira API on its own; add-comment is the way
-to keep a ticket up to date. Every subcommand honors the global ``--dry-run``
+update-branch, request-review, review-queue, pr-diff, pr-review. get-ticket
+returns everything on the ticket in one call (fields, description, every
+comment, every attachment downloaded to disk), so a caller never has to go to
+the Jira API on its own; add-comment is the way to keep a ticket up to date.
+review-queue, pr-diff and pr-review are the reviewer's side: which open PRs
+across a set of repos wait on this account, one PR's metadata with its diff on
+disk, and the approve / request-changes / comment call. Every subcommand honors
+the global ``--dry-run``
 flag, which prints the HTTP request(s) it would make and returns canned
 identifiers instead of touching the network - use it to exercise calling
 workflows without creating real tickets/PRs.
@@ -33,9 +37,10 @@ Env keys used (values win in the order: real environment, then --env-file files)
             BITBUCKET_TOKEN. Auth is Basic email:token.
 
 The PR provider (GitHub vs Bitbucket Cloud) is detected from the origin
-remote's host, so the same subcommands work in any checkout. With an explicit
---repo and no usable origin remote, GitHub is assumed unless --repo starts
-with "bitbucket:" (e.g. --repo bitbucket:workspace/slug).
+remote's host, so the same subcommands work in any checkout. A "bitbucket:" or
+"github:" prefix on --repo pins the provider regardless of the checkout (e.g.
+--repo bitbucket:workspace/slug); an unprefixed --repo with no usable origin
+remote is assumed to be GitHub.
 
 The last line of stdout for each subcommand is a single JSON object so calling
 agents/scripts can parse results without scraping prose.
@@ -53,6 +58,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime
 
 GITHUB_API = "https://api.github.com"
 GITHUB_GRAPHQL = "https://api.github.com/graphql"
@@ -117,7 +123,9 @@ def http_json(method, url, headers, payload=None, dry_run=False, timeout=60, tol
             print("  " + json.dumps(payload, indent=2).replace("\n", "\n  "))
         return None
     body = json.dumps(payload).encode() if payload is not None else None
-    all_headers = {"Content-Type": "application/json", **headers}
+    # No content type on a bodiless call: Bitbucket 400s an empty POST (approve,
+    # request-changes) that claims to carry JSON.
+    all_headers = {"Content-Type": "application/json", **headers} if body is not None else dict(headers)
     request = urllib.request.Request(url, data=body, method=method, headers=all_headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -368,7 +376,7 @@ def git_output(*cmd):
 def resolve_repo(explicit):
     """owner/name from --repo, else from the current directory's origin remote."""
     if explicit:
-        return explicit.partition(":")[2] if explicit.startswith("bitbucket:") else explicit
+        return explicit.partition(":")[2] if explicit.startswith(("bitbucket:", "github:")) else explicit
     url = git_output("remote", "get-url", "origin")
     match = re.search(r"(?:github\.com|bitbucket\.org)[:/](.+?)(?:\.git)?/?$", url)
     if not match:
@@ -380,6 +388,8 @@ def resolve_provider(explicit):
     """'github' or 'bitbucket', from --repo's prefix else the origin remote host."""
     if explicit and explicit.startswith("bitbucket:"):
         return "bitbucket"
+    if explicit and explicit.startswith("github:"):
+        return "github"
     try:
         url = git_output("remote", "get-url", "origin")
     except SystemExit:
@@ -784,6 +794,225 @@ def cmd_request_review(args):
          {"number": number, "requested_reviewers": logins, "marked_ready": was_draft})
 
 
+# ---------------------------------------------------------------- review
+
+
+BB_QUEUE_FIELDS = "%2Bvalues.reviewers,%2Bvalues.participants,%2Bvalues.draft"
+DRAFT_TITLE = re.compile(r"^\s*(\[WIP\]|WIP\b|Draft:)", re.IGNORECASE)
+REVIEW_EVENTS = {"approve": "APPROVE", "request-changes": "REQUEST_CHANGES", "comment": "COMMENT"}
+
+
+def repo_spec(spec):
+    """(provider, owner/name) for one --repo value."""
+    return resolve_provider(spec), resolve_repo(spec)
+
+
+def queue_skip(own, draft, requested, approved_current):
+    """Why a PR is not waiting on this account's review, or None when it is."""
+    if own:
+        return "own"
+    if draft:
+        return "draft"
+    if not requested:
+        return "not_requesting"
+    if approved_current:
+        return "approved"
+    return None
+
+
+def github_queue(repo, headers, me):
+    """
+    Open PRs in a GitHub repo. Submitting a review drops the reviewer from
+    requested_reviewers, so being listed there means the PR is waiting.
+    """
+    query = urllib.parse.urlencode({"state": "open", "per_page": 100})
+    entries = []
+    for pull in http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls?{query}", headers):
+        author = pull["user"]["login"]
+        requested = me in [user["login"] for user in pull.get("requested_reviewers", [])]
+        draft = bool(pull.get("draft"))
+        entries.append({
+            "provider": "github", "repo": repo, "pr": pull["number"], "title": pull["title"],
+            "author": author, "source": pull["head"]["ref"], "destination": pull["base"]["ref"],
+            "url": pull["html_url"], "draft": draft, "review_requested": requested,
+            "my_state": None, "commits_since_my_approval": None,
+            "skip": queue_skip(author == me, draft, requested, False),
+        })
+    return entries
+
+
+def bitbucket_queue(repo, headers, me):
+    """
+    Open PRs in a Bitbucket repo. Bitbucket keeps an approver in reviewers for
+    good, so an approval only settles a PR until its source branch moves: count
+    the commits dated after it, parsed, since the two stamps carry different
+    UTC offsets.
+    """
+    base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests"
+    entries = []
+    for pull in bb_paginate(f"{base_url}?state=OPEN&pagelen=50&fields={BB_QUEUE_FIELDS}", headers):
+        author = pull.get("author") or {}
+        mine = next((p for p in pull.get("participants", [])
+                     if (p.get("user") or {}).get("uuid") == me), {})
+        state = mine.get("state")
+        since = None
+        if state == "approved":
+            approved_at = datetime.fromisoformat(mine["participated_on"])
+            commits = http_json("GET", f"{base_url}/{pull['id']}/commits?pagelen=50&fields=values.date",
+                                headers)
+            since = sum(datetime.fromisoformat(c["date"]) > approved_at for c in commits.get("values", []))
+        draft = bool(pull.get("draft") or DRAFT_TITLE.match(pull["title"]))
+        requested = me in [r.get("uuid") for r in pull.get("reviewers", [])]
+        entries.append({
+            "provider": "bitbucket", "repo": repo, "pr": pull["id"], "title": pull["title"],
+            "author": author.get("display_name"), "source": pull["source"]["branch"]["name"],
+            "destination": pull["destination"]["branch"]["name"],
+            "url": bb_pr_url(pull, repo), "draft": draft, "review_requested": requested,
+            "my_state": state, "commits_since_my_approval": since,
+            "skip": queue_skip(author.get("uuid") == me, draft, requested, state == "approved" and not since),
+        })
+    return entries
+
+
+def cmd_review_queue(args):
+    """
+    Every open PR across the given repos, each with ``skip`` naming why it is
+    not waiting on this account's review (own, not_requesting, draft, approved)
+    or null when it is. The account is whoever the token belongs to, looked up
+    once per provider.
+    """
+    specs = [repo_spec(spec) for spec in args.repo or [None]]
+    if args.dry_run:
+        for provider, repo in specs:
+            print(f"[dry-run] would list open PRs in {provider}:{repo}")
+        emit("dry run", {"prs": [], "skipped": {}, "dry_run": True})
+        return
+    accounts, prs = {}, []
+    for provider, repo in specs:
+        if provider == "bitbucket":
+            headers = bitbucket_headers()
+            if provider not in accounts:
+                accounts[provider] = http_json("GET", f"{BITBUCKET_API}/user", headers)["uuid"]
+            prs += bitbucket_queue(repo, headers, accounts[provider])
+        else:
+            headers = github_headers()
+            if provider not in accounts:
+                accounts[provider] = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
+            prs += github_queue(repo, headers, accounts[provider])
+    skipped = {}
+    for pr in prs:
+        if pr["skip"]:
+            skipped[pr["skip"]] = skipped.get(pr["skip"], 0) + 1
+            continue
+        since = pr["commits_since_my_approval"]
+        note = f" (re-review: {since} commit(s) since your approval)" if since else ""
+        print(f"{pr['url']} {pr['title']}{note}")
+    waiting = sum(not pr["skip"] for pr in prs)
+    counts = ", ".join(f"{n} {reason}" for reason, n in skipped.items()) or "none"
+    emit(f"{waiting} awaiting review; skipped {sum(skipped.values())}: {counts}",
+         {"prs": prs, "skipped": skipped})
+
+
+def github_pr_files(repo, number, headers):
+    files, page = [], 1
+    while True:
+        query = urllib.parse.urlencode({"per_page": 100, "page": page})
+        batch = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{number}/files?{query}", headers)
+        files += [{"path": f["filename"], "status": f["status"],
+                   "previous_path": f.get("previous_filename"),
+                   "additions": f["additions"], "deletions": f["deletions"]} for f in batch]
+        if len(batch) < 100:
+            return files
+        page += 1
+
+
+def cmd_pr_diff(args):
+    """
+    One PR's metadata and per-file line counts, with the full unified diff
+    written to disk, so a reviewer never goes to the API on its own.
+    """
+    provider, repo = repo_spec(args.repo)
+    path = args.out or os.path.join(tempfile.gettempdir(), "ticket_pr",
+                                    f"{repo.replace('/', '_')}_{args.pr}.diff")
+    if args.dry_run:
+        print(f"[dry-run] would fetch PR #{args.pr} in {provider}:{repo} and write its diff to {path}")
+        emit("dry run", {"pr": args.pr, "diff_path": path, "dry_run": True})
+        return
+    if provider == "bitbucket":
+        headers = bitbucket_headers()
+        base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{args.pr}"
+        pull = http_json("GET", base_url, headers)
+        # diff and diffstat 302 to a signed URL; urllib follows it with the auth header
+        diff = http_bytes(f"{base_url}/diff", headers)
+        files = [{"path": (s.get("new") or s.get("old") or {}).get("path"), "status": s.get("status"),
+                  "previous_path": (s.get("old") or {}).get("path") if s.get("status") == "renamed" else None,
+                  "additions": s.get("lines_added"), "deletions": s.get("lines_removed")}
+                 for s in bb_paginate(f"{base_url}/diffstat", headers)]
+        result = {
+            "pr": pull["id"], "title": pull["title"],
+            "author": (pull.get("author") or {}).get("display_name"),
+            "source": pull["source"]["branch"]["name"],
+            "destination": pull["destination"]["branch"]["name"],
+            "head": pull["source"]["commit"]["hash"], "description": pull.get("description") or "",
+            "url": bb_pr_url(pull, repo),
+        }
+    else:
+        headers = github_headers()
+        base_url = f"{GITHUB_API}/repos/{repo}/pulls/{args.pr}"
+        pull = http_json("GET", base_url, headers)
+        diff = http_bytes(base_url, {**headers, "Accept": "application/vnd.github.diff"})
+        files = github_pr_files(repo, args.pr, headers)
+        result = {
+            "pr": pull["number"], "title": pull["title"], "author": pull["user"]["login"],
+            "source": pull["head"]["ref"], "destination": pull["base"]["ref"],
+            "head": pull["head"]["sha"], "description": pull.get("body") or "", "url": pull["html_url"],
+        }
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "wb") as handle:
+        handle.write(diff)
+    result.update({"files": files, "diff_path": path})
+    emit(f"PR #{result['pr']} {result['title']}: {len(files)} files, diff in {path}", result)
+
+
+def cmd_pr_review(args):
+    """
+    Approve, request changes on, or comment on a PR. GitHub takes all three as
+    one review. Bitbucket has no review object: the body goes up as a PR
+    comment and the vote is its own bodiless POST, sent after the comment so
+    the author sees the reason with it.
+    """
+    provider, repo = repo_spec(args.repo)
+    body = body_text(args).strip()
+    if not body and (args.action == "comment" or (provider == "github" and args.action == "request-changes")):
+        raise SystemExit(f"empty review body: {args.action} needs --body or --body-file")
+    if provider == "bitbucket":
+        headers = bitbucket_headers()
+        base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{args.pr}"
+        comment_id = None
+        if body:
+            response = http_json("POST", f"{base_url}/comments", headers,
+                                 payload={"content": {"raw": body}}, dry_run=args.dry_run)
+            comment_id = response["id"] if response else 0
+        state = "commented"
+        if args.action != "comment":
+            response = http_json("POST", f"{base_url}/{args.action}", headers, dry_run=args.dry_run)
+            state = response.get("state") if response else args.action
+        url = f"https://bitbucket.org/{repo}/pull-requests/{args.pr}"
+        emit(f"PR #{args.pr} {args.action}: {state} {url}",
+             {"pr": args.pr, "action": args.action, "state": state, "comment_id": comment_id, "url": url})
+        return
+    headers = github_headers()
+    payload = {"event": REVIEW_EVENTS[args.action]}
+    if body:
+        payload["body"] = body
+    response = http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls/{args.pr}/reviews", headers,
+                         payload=payload, dry_run=args.dry_run)
+    state = response["state"] if response else REVIEW_EVENTS[args.action]
+    url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
+    emit(f"PR #{args.pr} {args.action}: {state} {url}",
+         {"pr": args.pr, "action": args.action, "state": state, "url": url})
+
+
 # ---------------------------------------------------------------- cli
 
 
@@ -859,6 +1088,27 @@ def build_parser():
     review.add_argument("--reviewer", action="append", required=True,
                         help="GitHub login / Bitbucket nickname or display name; repeatable")
     review.set_defaults(func=cmd_request_review)
+
+    queue = sub.add_parser("review-queue",
+                           help="open PRs across repos, each marked with whether it waits on this account")
+    queue.add_argument("--repo", action="append",
+                       help="github:owner/name or bitbucket:workspace/slug; repeatable "
+                            "(default: parsed from origin remote)")
+    queue.set_defaults(func=cmd_review_queue)
+
+    pr_diff = sub.add_parser("pr-diff", help="a PR's metadata and file stats, with its full diff on disk")
+    pr_diff.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    pr_diff.add_argument("--pr", type=int, required=True, help="PR number")
+    pr_diff.add_argument("--out", help="diff path (default: <tmp>/ticket_pr/<owner>_<name>_<pr>.diff)")
+    pr_diff.set_defaults(func=cmd_pr_diff)
+
+    pr_review = sub.add_parser("pr-review", help="approve, request changes on, or comment on a PR")
+    pr_review.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    pr_review.add_argument("--pr", type=int, required=True, help="PR number")
+    pr_review.add_argument("--action", required=True, choices=sorted(REVIEW_EVENTS))
+    pr_review.add_argument("--body", help="review text, posted as the author will read it")
+    pr_review.add_argument("--body-file", help="file containing the review text")
+    pr_review.set_defaults(func=cmd_pr_review)
     return parser
 
 
