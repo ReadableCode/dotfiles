@@ -7,11 +7,15 @@ installed CLIs required. Credentials come from the calling repo's env file:
     python3 ~/GitHub/dotfiles/src/ticket_pr.py --env-file .env create-ticket \
         --project ACME --type Task --summary "Do the thing"
 
-Subcommands: create-ticket, get-ticket, add-comment, create-pr, pr-status,
+Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
+transition-ticket, create-pr, pr-comment, pr-status, rerun-job,
 update-branch, request-review, review-queue, pr-diff, pr-review. get-ticket
 returns everything on the ticket in one call (fields, description, every
-comment, every attachment downloaded to disk), so a caller never has to go to
-the Jira API on its own; add-comment is the way to keep a ticket up to date.
+comment, every attachment downloaded to disk), so a caller
+never has to go to the Jira API on its own; search-tickets runs a JQL query
+and lists the hits so "is this already ticketed?" is answered here too;
+add-comment is the way to keep a ticket up to date and transition-ticket
+moves it between statuses by the name Jira shows on the button.
 review-queue, pr-diff and pr-review are the reviewer's side: which open PRs
 across a set of repos wait on this account, one PR's metadata with its diff on
 disk, and the approve / request-changes / comment call. Every subcommand honors
@@ -293,6 +297,78 @@ def jira_attachments(headers, attachments, directory):
             "path": path,
         })
     return saved
+
+
+JIRA_SEARCH_FIELDS = "summary,status,issuetype,assignee,created,updated"
+
+
+def cmd_search_tickets(args):
+    """
+    Run a JQL query and list the matching tickets, newest first unless the
+    query orders otherwise. This is the "is it already known?" call: search
+    here, then read a hit in full with get-ticket. Uses the Cloud search
+    endpoint that replaced /rest/api/2/search.
+    """
+    base, headers = jira_base(), jira_headers()
+    query = urllib.parse.urlencode({
+        "jql": args.jql,
+        "fields": JIRA_SEARCH_FIELDS,
+        "maxResults": args.max_results,
+    })
+    found = http_json("GET", f"{base}/rest/api/3/search/jql?{query}", headers,
+                      dry_run=args.dry_run)
+    if found is None:  # dry run
+        return
+    tickets = []
+    for issue in found.get("issues") or []:
+        fields = issue.get("fields") or {}
+        tickets.append({
+            "key": issue.get("key"),
+            "summary": fields.get("summary"),
+            "status": (fields.get("status") or {}).get("name"),
+            "type": (fields.get("issuetype") or {}).get("name"),
+            "assignee": (fields.get("assignee") or {}).get("displayName"),
+            "created": fields.get("created"),
+            "updated": fields.get("updated"),
+            "url": f"{base}/browse/{issue.get('key')}",
+        })
+    lines = [f"{len(tickets)} ticket(s) for: {args.jql}"]
+    lines += [f"  {t['key']} [{t['status']}] {t['summary']}" for t in tickets]
+    emit("\n".join(lines), {"jql": args.jql, "tickets": tickets})
+
+
+def cmd_transition_ticket(args):
+    """
+    Move a ticket to another status. ``--to`` is matched case-insensitively
+    against the transitions Jira offers from the current status, by the
+    transition's name or by the status it leads to. Without ``--to`` the
+    offered transitions are listed and nothing changes.
+    """
+    base, headers = jira_base(), jira_headers()
+    url = f"{base}/rest/api/2/issue/{args.key}/transitions"
+    offered = http_json("GET", url, headers, dry_run=args.dry_run) or {}
+    transitions = [{
+        "id": t["id"],
+        "name": t["name"],
+        "to": (t.get("to") or {}).get("name"),
+    } for t in offered.get("transitions") or []]
+    names = ", ".join(t["name"] for t in transitions)
+    if not args.to:
+        emit(f"{args.key} can move via: {names or '(none offered)'}",
+             {"key": args.key, "transitions": transitions})
+        return
+    wanted = args.to.strip().lower()
+    match = next((t for t in transitions
+                  if t["name"].lower() == wanted or (t["to"] or "").lower() == wanted), None)
+    if match is None and not args.dry_run:
+        raise SystemExit(f"{args.key} offers no transition to {args.to!r}; offered: {names}")
+    transition_id = match["id"] if match else "DRY"
+    http_json("POST", url, headers, payload={"transition": {"id": transition_id}},
+              dry_run=args.dry_run)
+    landed = (match or {}).get("to") or (match or {}).get("name") or args.to
+    emit(f"{args.key} -> {landed}",
+         {"key": args.key, "status": landed, "transition": (match or {}).get("name") or args.to,
+          "url": f"{base}/browse/{args.key}"})
 
 
 def cmd_add_comment(args):
@@ -1039,6 +1115,40 @@ def cmd_pr_review(args):
          {"pr": args.pr, "action": args.action, "state": state, "url": url})
 
 
+def cmd_pr_comment(args):
+    """
+    A plain comment on a GitHub PR's conversation (an issue comment, which is
+    what bots and gates read), as opposed to pr-review, which files a review.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("pr-comment is GitHub-only; use pr-review --action comment on Bitbucket")
+    body = body_text(args).strip()
+    if not body:
+        raise SystemExit("empty comment: pr-comment needs --body or --body-file")
+    response = http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{args.pr}/comments",
+                         github_headers(), payload={"body": body}, dry_run=args.dry_run)
+    comment_id = response["id"] if response else 0
+    url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
+    emit(f"PR #{args.pr} comment {comment_id}: {url}",
+         {"pr": args.pr, "comment_id": comment_id, "url": url})
+
+
+def cmd_rerun_job(args):
+    """
+    Re-run one GitHub Actions job by id (the number at the end of a check's
+    details URL). This is what a gate means by "re-run this check from the
+    checks tab": the job runs again on the same commit, nothing is pushed.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("rerun-job is GitHub-only")
+    http_json("POST", f"{GITHUB_API}/repos/{repo}/actions/jobs/{args.job}/rerun",
+              github_headers(), dry_run=args.dry_run)
+    url = f"https://github.com/{repo}/actions/jobs/{args.job}"
+    emit(f"job {args.job} queued: {url}", {"job": args.job, "url": url})
+
+
 # ---------------------------------------------------------------- cli
 
 
@@ -1069,11 +1179,24 @@ def build_parser():
                             help="where attachments are saved (default: <tmp>/ticket_pr/<KEY>)")
     get_ticket.set_defaults(func=cmd_get_ticket)
 
+    search = sub.add_parser("search-tickets", help="list the Jira tickets matching a JQL query")
+    search.add_argument("--jql", required=True,
+                        help='JQL, e.g. \'project = ACME AND text ~ "dag-name" ORDER BY created DESC\'')
+    search.add_argument("--max-results", type=int, default=50,
+                        help="cap on the number of tickets listed (default 50)")
+    search.set_defaults(func=cmd_search_tickets)
+
     comment = sub.add_parser("add-comment", help="post a comment on a Jira ticket")
     comment.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
     comment.add_argument("--body", help="comment text (Jira wiki markup)")
     comment.add_argument("--body-file", help="file containing the comment text")
     comment.set_defaults(func=cmd_add_comment)
+
+    transition = sub.add_parser("transition-ticket",
+                                help="move a Jira ticket to another status; no --to lists the options")
+    transition.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
+    transition.add_argument("--to", help="transition or target status name as Jira shows it, e.g. Done")
+    transition.set_defaults(func=cmd_transition_ticket)
 
     create_pr = sub.add_parser("create-pr", help="open a GitHub PR for the current branch")
     create_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
@@ -1089,6 +1212,18 @@ def build_parser():
     create_pr.add_argument("--label", action="append", default=[],
                            help="PR label to add after creation; repeatable (GitHub only)")
     create_pr.set_defaults(func=cmd_create_pr)
+
+    pr_comment = sub.add_parser("pr-comment", help="post a plain comment on a GitHub PR")
+    pr_comment.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    pr_comment.add_argument("--pr", required=True, help="PR number")
+    pr_comment.add_argument("--body", help="comment text (GitHub Markdown)")
+    pr_comment.add_argument("--body-file", help="file containing the comment text")
+    pr_comment.set_defaults(func=cmd_pr_comment)
+
+    rerun = sub.add_parser("rerun-job", help="re-run one GitHub Actions job on the same commit")
+    rerun.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    rerun.add_argument("--job", required=True, help="job id from the check's details URL")
+    rerun.set_defaults(func=cmd_rerun_job)
 
     status = sub.add_parser("pr-status", help="bucket a PR's checks into a green/failed report")
     status.add_argument("--repo", help="owner/name (default: parsed from origin remote)")

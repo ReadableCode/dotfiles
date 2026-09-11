@@ -348,6 +348,118 @@ def test_get_ticket_reports_everything(monkeypatch, capsys, tmp_path):
     assert sum("/comment?" in c for c in calls) == 2
 
 
+def test_search_tickets_dry_run_hits_the_cloud_search_endpoint(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    out = _run_cli(
+        ["--dry-run", "search-tickets", "--jql", 'project = ACME AND text ~ "thing"',
+         "--max-results", "5"],
+        monkeypatch, capsys,
+    )
+    assert (
+        "[dry-run] GET https://example.atlassian.net/rest/api/3/search/jql"
+        "?jql=project+%3D+ACME+AND+text+~+%22thing%22"
+        "&fields=summary%2Cstatus%2Cissuetype%2Cassignee%2Ccreated%2Cupdated"
+        "&maxResults=5"
+    ) in out
+
+
+def test_search_tickets_lists_hits_and_ends_with_json(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    found = {"issues": [
+        {"key": "ACME-7", "fields": {
+            "summary": "Pod cannot reach Vault", "status": {"name": "Open"},
+            "issuetype": {"name": "Bug"}, "assignee": {"displayName": "Sam"},
+            "created": "2026-09-09T10:00:00.000+0000", "updated": "2026-09-10T10:00:00.000+0000"}},
+        {"key": "ACME-3", "fields": {"summary": "Older", "status": {"name": "Done"}}},
+    ]}
+    monkeypatch.setattr(ticket_pr, "http_json", lambda m, url, *a, **k: found)
+    ticket_pr.main(["search-tickets", "--jql", "project = ACME"])
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "2 ticket(s) for: project = ACME"
+    assert out.splitlines()[1] == "  ACME-7 [Open] Pod cannot reach Vault"
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["jql"] == "project = ACME"
+    assert result["tickets"][0] == {
+        "key": "ACME-7", "summary": "Pod cannot reach Vault", "status": "Open", "type": "Bug",
+        "assignee": "Sam", "created": "2026-09-09T10:00:00.000+0000",
+        "updated": "2026-09-10T10:00:00.000+0000",
+        "url": "https://example.atlassian.net/browse/ACME-7",
+    }
+    assert result["tickets"][1]["assignee"] is None
+
+
+def _jira_env(monkeypatch):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+
+
+def test_transition_ticket_dry_run_reads_then_posts(monkeypatch, capsys):
+    _jira_env(monkeypatch)
+    out = _run_cli(["--dry-run", "transition-ticket", "--key", "ACME-401", "--to", "Done"],
+                   monkeypatch, capsys)
+    assert "[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions" in out
+    assert "[dry-run] POST https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions" in out
+    assert json.loads(out.strip().splitlines()[-1])["status"] == "Done"
+
+
+def test_transition_ticket_lists_options_without_to(monkeypatch, capsys):
+    _jira_env(monkeypatch)
+    offered = {"transitions": [
+        {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
+        {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}},
+    ]}
+    calls = []
+
+    def fake_http(method, url, *a, **k):
+        calls.append(method)
+        return offered
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["transition-ticket", "--key", "ACME-401"])
+    out = capsys.readouterr().out
+    assert out.splitlines()[0] == "ACME-401 can move via: In Progress, Resolve"
+    assert json.loads(out.strip().splitlines()[-1])["transitions"][1] == {
+        "id": "41", "name": "Resolve", "to": "Resolved"}
+    assert calls == ["GET"]
+
+
+def test_transition_ticket_matches_target_status_and_posts_its_id(monkeypatch, capsys):
+    _jira_env(monkeypatch)
+    offered = {"transitions": [
+        {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
+        {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}},
+    ]}
+    posted = {}
+
+    def fake_http(method, url, headers, payload=None, **k):
+        if method == "POST":
+            posted.update(payload)
+            return {}
+        return offered
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "resolved"])
+    out = capsys.readouterr().out
+    assert posted == {"transition": {"id": "41"}}
+    assert out.splitlines()[0] == "ACME-401 -> Resolved"
+    assert json.loads(out.strip().splitlines()[-1]) == {
+        "key": "ACME-401", "status": "Resolved", "transition": "Resolve",
+        "url": "https://example.atlassian.net/browse/ACME-401"}
+
+
+def test_transition_ticket_refuses_an_unknown_target(monkeypatch):
+    _jira_env(monkeypatch)
+    monkeypatch.setattr(ticket_pr, "http_json", lambda *a, **k: {"transitions": [
+        {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}}]})
+    with pytest.raises(SystemExit, match="offers no transition to 'Done'; offered: In Progress"):
+        ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "Done"])
+
+
 def test_add_comment_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
     monkeypatch.setenv("JIRA_USER", "user@example.com")
@@ -410,6 +522,36 @@ def test_get_ticket_no_comments(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert out.splitlines()[0] == "ACME-402 [To Do] Quiet (0 comments)"
     assert json.loads(out.strip().splitlines()[-1])["comments"] == []
+
+
+def test_pr_comment_dry_run_posts_an_issue_comment(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        ["--dry-run", "pr-comment", "--repo", "acme/widgets", "--pr", "7",
+         "--body", "SonarQube-Integration-Ticket: https://example.atlassian.net/browse/ACME-1"],
+        monkeypatch, capsys,
+    )
+    assert "[dry-run] POST https://api.github.com/repos/acme/widgets/issues/7/comments" in out
+    assert '"body": "SonarQube-Integration-Ticket: https://example.atlassian.net/browse/ACME-1"' in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result == {"pr": "7", "comment_id": 0, "url": "https://github.com/acme/widgets/pull/7"}
+
+
+def test_pr_comment_rejects_an_empty_body(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    with pytest.raises(SystemExit, match="empty comment"):
+        ticket_pr.main(["--dry-run", "pr-comment", "--repo", "acme/widgets", "--pr", "7"])
+
+
+def test_rerun_job_dry_run_hits_the_job_rerun_endpoint(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        ["--dry-run", "rerun-job", "--repo", "acme/widgets", "--job", "123456"],
+        monkeypatch, capsys,
+    )
+    assert "[dry-run] POST https://api.github.com/repos/acme/widgets/actions/jobs/123456/rerun" in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result == {"job": "123456", "url": "https://github.com/acme/widgets/actions/jobs/123456"}
 
 
 def test_create_pr_dry_run(monkeypatch, capsys):
