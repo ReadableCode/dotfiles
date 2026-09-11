@@ -139,7 +139,7 @@ on change. Do not add it here.
   create an empty **directory** at that path on the host — check the source
   file landed (got committed/pulled) before `up`.
 - herdstone_web specifics: `HERDSTONE_HOSTS=/config/hosts.json` +
-  `../personal_credentials/hosts.json:/config/hosts.json:ro` mount.
+  `../personal_credentials/personal_hosts.json:/config/hosts.json:ro` mount.
 
 ## SWAG / reverse proxy (elitedesk)
 
