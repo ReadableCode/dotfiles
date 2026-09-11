@@ -292,6 +292,10 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
   Do not run `repair` unless the game can be started afterwards.
 - `%APPDATA%\EasyAntiCheat\service.log` is rewritten by every setup run, so it
   holds no history.
+- With the game closed there is no `EasyAntiCheat_EOSSys` driver service: Easy
+  Anti-Cheat creates it at launch and removes it on a clean exit, while the
+  driver file stays. A leftover `EasyAntiCheat_EOSSys` service with the game
+  closed means the last unload did not finish, as after the 2026-09-09 crash.
 - In Windows PowerShell 5.1, `Start-Process -PassThru` loses `ExitCode` unless
   `$p.Handle` is read before the process exits; the exit code prints blank.
 
@@ -316,11 +320,12 @@ Things that looked like evidence on 2026-09-09 and 2026-09-10 and were not:
 - Done 2026-09-10: Easy Anti-Cheat `repair`, then `install prod-fn`, with
   `C:\Program Files\Epic Games\Fortnite\FortniteGame\Binaries\Win64\EasyAntiCheat\EasyAntiCheat_EOS_Setup.exe`.
   The `EasyAntiCheat_EOS` service is registered again, but `repair` deleted the
-  kernel driver file and its driver service and `install` did not bring them
-  back. It returned when Fortnite next started, at 17:11:55 the same day: the
-  same 44666520 byte build, Epic signature valid, `EasyAntiCheat_EOSSys`
-  running. If Fortnite ever reports that Easy Anti-Cheat is not installed, run
-  Verify on Fortnite in the Epic Games Launcher.
+  kernel driver file and `install` did not bring it back. It returned when
+  Fortnite next started, at 17:11:55 the same day: the same 44666520 byte
+  build, Epic signature valid, `EasyAntiCheat_EOSSys` running. Fortnite then
+  exited cleanly at 17:17:54 with no crash. If Fortnite ever reports that Easy
+  Anti-Cheat is not installed, run Verify on Fortnite in the Epic Games
+  Launcher.
 
 Record what was done and when in the matching backlog entry before judging a
 new crash against them.
