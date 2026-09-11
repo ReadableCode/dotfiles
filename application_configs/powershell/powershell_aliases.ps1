@@ -38,16 +38,16 @@ function cataliases {
     if (Test-Path "$HOME\.powershell_local.d") {
         $files += Get-ChildItem "$HOME\.powershell_local.d\*.ps1" | Sort-Object Name | ForEach-Object { $_.FullName }
     }
-    Write-Host 'Commands:'
+    # Rows go to the pipeline, not Write-Host, so `cataliases | grep ssh` filters them.
+    'Commands:'
     foreach ($file in $files) { _AliasTable (Get-Content $file) }
     if ($sshAliasGenerator -and (Test-Path $sshAliasGenerator)) {
         $pythonCommand = Get-PythonCommand
         if ($pythonCommand) {
-            Write-Host 'Hosts (generated from the credentials inventories):'
+            'Hosts (generated from the credentials inventories):'
             & $pythonCommand $sshAliasGenerator --format powershell --root $gitDir 2>$null |
                 Select-String -Pattern "function:global:([\w-]+)' -Value \(\[scriptblock\]::Create\('(.*)'\)\)" |
-                ForEach-Object { '  {0,-24} {1}' -f $_.Matches[0].Groups[1].Value, $_.Matches[0].Groups[2].Value } |
-                Write-Host
+                ForEach-Object { '  {0,-24} {1}' -f $_.Matches[0].Groups[1].Value, $_.Matches[0].Groups[2].Value }
         }
     }
 }
@@ -78,7 +78,7 @@ function _AliasTable {
         if ($name -and $name -notmatch '^_' -and $name -notmatch '^[A-Z][a-z]+-') {
             $d = if ($inComment) { $desc } else { $body }
             if ($d.Length -gt ($width - 30)) { $d = $d.Substring(0, $width - 33) + '...' }
-            Write-Host ('  {0,-24} {1}' -f $name, $d)
+            '  {0,-24} {1}' -f $name, $d
         }
         $inComment = $false
     }
@@ -785,8 +785,8 @@ function getwifipass {
 function showwifi {
     $wifiName = getwifiname
     $wifiPass = getwifipass
-    Write-Host "WiFi Name: $wifiName"
-    Write-Host "WiFi Pass: $wifiPass"
+    "WiFi Name: $wifiName"
+    "WiFi Pass: $wifiPass"
 }
 
 
