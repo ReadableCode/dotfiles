@@ -790,7 +790,8 @@ def _record_http(monkeypatch, responses):
 
     def fake_http(method, url, headers, payload=None, **kwargs):
         calls.append((method, url, payload))
-        return next(resp for suffix, resp in responses.items() if url.endswith(suffix))
+        resp = next(resp for suffix, resp in responses.items() if url.endswith(suffix))
+        return resp.pop(0) if isinstance(resp, list) else resp
 
     monkeypatch.setattr(ticket_pr, "http_json", fake_http)
     return calls
@@ -852,3 +853,64 @@ def test_review_commands_dry_run(monkeypatch, capsys):
     out = _run_cli(["--dry-run", "pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7",
                     "--action", "approve"], monkeypatch, capsys)
     assert "[dry-run] POST https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/approve" in out
+
+
+# ---------------------------------------------------------------- merge
+
+
+def _github_pull(state, auto_merge=None):
+    return {"number": 12, "node_id": "PR_node", "html_url": "https://github.com/owner/name/pull/12",
+            "head": {"sha": "abc123"}, "mergeable": True, "mergeable_state": state,
+            "auto_merge": auto_merge}
+
+
+def test_merge_pr_dry_run_is_parseable(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    out = _run_cli(["--dry-run", "merge-pr", "--repo", "owner/name", "--pr", "12"], monkeypatch, capsys)
+    assert "[dry-run] would squash-merge PR #12 in owner/name" in out
+    assert json.loads(out.strip().splitlines()[-1])["dry_run"] is True
+
+
+def test_merge_pr_merges_a_clean_pr_pinned_to_its_head(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/merge": {"sha": "def456", "merged": True},
+                                       "/pulls/12": _github_pull("clean")})
+    ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
+    base = "https://api.github.com/repos/owner/name/pulls/12"
+    assert calls == [("GET", base, None),
+                     ("PUT", f"{base}/merge", {"merge_method": "squash", "sha": "abc123"})]
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["merged"] is True and result["sha"] == "def456"
+
+
+def test_merge_pr_enables_auto_merge_while_blocked(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {
+        "/graphql": {"data": {}},
+        "/pulls/12": [_github_pull("blocked"), _github_pull("blocked", {"merge_method": "squash"})]})
+    ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
+    assert [call[:2] for call in calls] == [
+        ("GET", "https://api.github.com/repos/owner/name/pulls/12"),
+        ("POST", "https://api.github.com/graphql"),
+        ("GET", "https://api.github.com/repos/owner/name/pulls/12"),
+    ]
+    assert calls[1][2]["variables"] == {"id": "PR_node", "method": "SQUASH"}
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["auto_merge"] is True and result["merged"] is False
+
+
+def test_merge_pr_refuses_a_pr_with_a_failing_check(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/pulls/12": _github_pull("unstable")})
+    with pytest.raises(SystemExit, match="'unstable'"):
+        ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
+    assert calls == [("GET", "https://api.github.com/repos/owner/name/pulls/12", None)]
+
+
+def test_merge_pr_reports_a_rejected_auto_merge(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    _record_http(monkeypatch, {
+        "/graphql": {"errors": [{"message": "Auto merge is not allowed for this repository"}]},
+        "/pulls/12": _github_pull("blocked")})
+    with pytest.raises(SystemExit, match="Auto merge is not allowed"):
+        ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])

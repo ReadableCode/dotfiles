@@ -9,7 +9,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
 transition-ticket, create-pr, pr-comment, pr-status, rerun-job,
-update-branch, request-review, review-queue, pr-diff, pr-review. get-ticket
+update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
 never has to go to the Jira API on its own; search-tickets runs a JQL query
@@ -912,6 +912,68 @@ def cmd_request_review(args):
          {"number": number, "requested_reviewers": logins, "marked_ready": was_draft})
 
 
+MERGE_METHODS = ("merge", "rebase", "squash")
+MERGE_NOW_STATES = ("clean", "has_hooks")
+
+
+def cmd_merge_pr(args):
+    """
+    Merge a GitHub PR, or have GitHub merge it once it is allowed to. A PR
+    GitHub already calls mergeable merges at once, pinned to the head sha that
+    was read so a later push cannot slip in. A PR blocked on its approval or
+    its required checks gets auto-merge enabled, so GitHub merges it the moment
+    they land; GitHub refuses auto-merge on a PR that can already merge, hence
+    the split. Any other state (a conflict, a base that must be current, a
+    failing check, a draft) is reported for a human rather than worked around.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("merge-pr is GitHub-only")
+    if args.dry_run:
+        print(f"[dry-run] would {args.method}-merge PR #{args.pr or '<current branch>'} in {repo}, "
+              "or enable auto-merge while it waits on approval or checks")
+        emit("dry run", {"merged": False, "auto_merge": False, "dry_run": True})
+        return
+    headers = github_headers()
+    pull = resolve_pr(repo, headers, args.pr)
+    number = pull["number"]
+    pull_url = f"{GITHUB_API}/repos/{repo}/pulls/{number}"
+    # GitHub computes mergeability in the background; null means not yet.
+    for _ in range(10):
+        if pull.get("mergeable") is not None:
+            break
+        time.sleep(3)
+        pull = http_json("GET", pull_url, headers)
+    state = pull.get("mergeable_state")
+    result = {"pr": number, "mergeable_state": state, "url": pull["html_url"]}
+    if state in MERGE_NOW_STATES:
+        merged = http_json("PUT", f"{pull_url}/merge", headers,
+                           payload={"merge_method": args.method, "sha": pull["head"]["sha"]})
+        emit(f"PR #{number} merged ({args.method}): {merged.get('sha')}",
+             {**result, "merge_method": args.method, "merged": True, "auto_merge": False,
+              "sha": merged.get("sha")})
+        return
+    if state != "blocked":
+        raise SystemExit(f"PR #{number} can neither merge nor queue auto-merge from mergeable_state "
+                         f"{state!r}: dirty is a conflict, behind needs update-branch, unstable is "
+                         f"a failing or pending check (pr-status), draft needs request-review")
+    if not pull.get("auto_merge"):
+        mutation = ("mutation($id: ID!, $method: PullRequestMergeMethod!) { "
+                    "enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method}) "
+                    "{ pullRequest { autoMergeRequest { mergeMethod } } } }")
+        response = http_json("POST", GITHUB_GRAPHQL, headers,
+                             payload={"query": mutation,
+                                      "variables": {"id": pull["node_id"], "method": args.method.upper()}})
+        if response.get("errors"):
+            raise SystemExit(f"failed to enable auto-merge on PR #{number}: {response['errors']}")
+        pull = http_json("GET", pull_url, headers)
+        if not pull.get("auto_merge"):
+            raise SystemExit(f"PR #{number} shows no auto-merge after the enable mutation")
+    method = pull["auto_merge"].get("merge_method") or args.method
+    emit(f"PR #{number} will {method}-merge automatically once its approval and required checks land",
+         {**result, "merge_method": method, "merged": False, "auto_merge": True})
+
+
 # ---------------------------------------------------------------- review
 
 
@@ -1267,6 +1329,14 @@ def build_parser():
     review.add_argument("--reviewer", action="append", required=True,
                         help="GitHub login / Bitbucket nickname or display name; repeatable")
     review.set_defaults(func=cmd_request_review)
+
+    merge = sub.add_parser("merge-pr",
+                           help="merge a PR now, or enable auto-merge while it waits (GitHub only)")
+    merge.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    merge.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
+    merge.add_argument("--method", choices=MERGE_METHODS, default="squash",
+                       help="merge method (default: squash)")
+    merge.set_defaults(func=cmd_merge_pr)
 
     queue = sub.add_parser("review-queue",
                            help="open PRs across repos, each marked with whether it waits on this account")
