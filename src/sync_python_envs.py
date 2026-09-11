@@ -16,6 +16,12 @@ Python at all) is skipped, never given a lock it does not have.
 `uv sync --frozen` installs exactly what the lock pins and never rewrites
 uv.lock, which is tracked in the repo. A project that fails to sync is reported
 and counted but never stops the rest; the exit code is 1 when any failed.
+
+`--check` is the read-only twin behind `cmdr pull --check`: `uv sync --frozen
+--check` changes nothing and exits nonzero when the environment differs from
+the lock, so a stale project is reported the same way a failed one is. A uv
+too old for the flag rejects it and the project is reported as failed, never
+skipped.
 """
 
 import argparse
@@ -32,6 +38,7 @@ from config import grandparent_dir
 GIT_DIR = grandparent_dir
 
 SYNC_COMMAND = ["uv", "sync", "--frozen"]
+CHECK_COMMAND = SYNC_COMMAND + ["--check"]
 
 # Never searched for a nested project: dependency and cache trees can carry a
 # uv.lock that is not a project of ours. Hidden directories (.venv, .git) are
@@ -73,12 +80,13 @@ def sync_env():
     return {key: value for key, value in os.environ.items() if key not in INHERITED_ENV_VARS}
 
 
-def sync_project(project):
-    """Run `uv sync --frozen` in project and return its exit code."""
-    return subprocess.run(SYNC_COMMAND, cwd=project, env=sync_env(), check=False).returncode
+def sync_project(project, check=False):
+    """Run `uv sync --frozen` (or its `--check`) in project and return its exit code."""
+    command = CHECK_COMMAND if check else SYNC_COMMAND
+    return subprocess.run(command, cwd=project, env=sync_env(), check=False).returncode
 
 
-def run(git_dir, list_only=False):
+def run(git_dir, list_only=False, check=False):
     projects = find_uv_projects(git_dir)
     if not projects:
         print(f"No uv projects under {git_dir}.")
@@ -92,20 +100,25 @@ def run(git_dir, list_only=False):
     for project in projects:
         name = os.path.relpath(project, git_dir)
         print(f"-- {name}")
-        if sync_project(project) != 0:
+        if sync_project(project, check=check) != 0:
             failed.append(name)
+    verb = "in sync" if check else "synced"
     if failed:
-        print(f"synced {len(projects) - len(failed)} of {len(projects)} uv projects; failed: {', '.join(failed)}")
+        what = "out of sync or failed" if check else "failed"
+        print(f"{verb}: {len(projects) - len(failed)} of {len(projects)} uv projects; {what}: {', '.join(failed)}")
         return 1
-    print(f"synced all {len(projects)} uv projects")
+    print(f"{verb}: all {len(projects)} uv projects")
     return 0
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="uv sync --frozen in every uv project under gitDir.")
     parser.add_argument("--list", action="store_true", help="only list the uv projects that would be synced")
+    parser.add_argument(
+        "--check", action="store_true", help="change nothing; exit 1 if any project's environment differs from its lock"
+    )
     args = parser.parse_args(argv)
-    return run(GIT_DIR, list_only=args.list)
+    return run(GIT_DIR, list_only=args.list, check=args.check)
 
 
 # %%

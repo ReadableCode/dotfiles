@@ -34,6 +34,15 @@
 # and was pure duplication: it was already in app_lists/linux_apps.txt the whole
 # time, and the "missing package" it worked around was just 24.04 predating
 # fastfetch's arrival in the Ubuntu archive (24.10). Don't re-add their like.
+#
+# One exception, and why it is not a per-package case: uv. bootstrap installs
+# it with the standalone installer where no package manager carries it (apt has
+# no uv), and that build upgrades only itself, with `uv self update`. A brew or
+# dnf uv refuses that command (exit 2, "installed through an external package
+# manager") and was already upgraded by the bulk command above, so update_uv()
+# is a no-op there. Found 2026-09-11: elitedesk sat at uv 0.6.5 from its
+# bootstrap day while every other host had 0.11+, and `uv sync --check`, which
+# `cmdr pull --check` runs in every uv project, did not exist yet in 0.6.5.
 
 echo "#################   Updating Packages   #####################"
 
@@ -72,6 +81,17 @@ update_dnf() {
     sudo dnf -y upgrade --refresh
     echo "Removing unused packages..."
     sudo dnf -y autoremove
+}
+
+# Upgrade a standalone uv (see the header). A package-manager build refuses
+# self-update and names the manager to use instead; that manager already ran
+# above, so the refusal is informational and never fails the run.
+update_uv() {
+    command -v uv &> /dev/null || return 0
+    echo "Updating uv..."
+    if ! uv self update; then
+        echo "uv is package-manager owned; the package upgrade above covers it."
+    fi
 }
 
 ##############################   Third-party apt sources   ##############################
@@ -942,6 +962,7 @@ case "$OS" in
     else
         echo "Neither dnf nor apt found, skipping package updates."
     fi
+    update_uv
     # After the upgrade: if it pulled in a new vendor package, that package may
     # just have reset its own systemd units, so the checks that repair such
     # state run downstream of it.
@@ -957,6 +978,7 @@ case "$OS" in
         echo "Homebrew not found, attempting macOS system updates without Homebrew."
         sudo softwareupdate -i -a
     fi
+    update_uv
     ;;
   *)
     echo "Unsupported operating system: $OS"

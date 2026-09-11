@@ -20,32 +20,13 @@ configs_deploy_check() {
 }
 
 packages_upgrade() {
-    case "$(uname)" in
-      Darwin)
-        echo "Checking for macOS system updates..."
-        sudo softwareupdate -i -a
-        echo "Updating and upgrading brew..."
-        brew update
-        brew upgrade
-        brew upgrade --cask
-        brew upgrade --cask --greedy
-        brew cleanup
-        ;;
-      Linux)
-        # dnf first: Fedora ships both dnf and (sometimes) an apt shim.
-        if command -v dnf >/dev/null 2>&1; then
-            sudo dnf -y upgrade --refresh
-            sudo dnf -y autoremove
-        elif command -v apt >/dev/null 2>&1; then
-            sudo apt update
-            sudo apt -y upgrade
-            sudo apt -y dist-upgrade
-            sudo apt -y autoremove
-        else
-            echo "neither dnf nor apt found, skipping package upgrades"
-        fi
-        ;;
-    esac
+    # The script the shell's updatepackages runs, not a second copy of it: it
+    # reads this host's updater policy from the inventory and, on Linux,
+    # repairs apt sources, runs the host-mapped checks and offers the release
+    # upgrade after the package upgrade, then prints the system info. It asks
+    # [y/N] before each repair, which is why the step is `terminal` in
+    # update.cmd.
+    bash "$CMDR_REPO_DIR/scripts/my_updater.sh"
 }
 
 packages_upgrade_check() {
@@ -86,10 +67,6 @@ packages_upgrade_check() {
         fi
         ;;
     esac
-}
-
-sysinfo() {
-    fastfetch
 }
 
 # --- pull (the gitpullall flow) ---
@@ -157,6 +134,18 @@ repos_clone() {
 repos_clone_check() {
     # cmdr's built-in already knows the yaml and exits 1 on missing repos.
     "$CMDR_BIN" repos ensure --check
+}
+
+python_envs_sync() {
+    # uv sync --frozen in every uv project under gitDir: never rewrites a
+    # lock, so the editor gets each repo's pinned tools.
+    (cd "$CMDR_REPO_DIR" && uv run python src/sync_python_envs.py)
+}
+
+python_envs_sync_check() {
+    # uv sync --frozen --check per project: changes nothing, exits nonzero
+    # when an environment differs from its lock.
+    (cd "$CMDR_REPO_DIR" && uv run python src/sync_python_envs.py --check)
 }
 
 configs_prune() {

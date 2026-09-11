@@ -67,6 +67,16 @@ def test_a_failing_project_never_stops_the_rest_and_sets_exit_code(tmp_path, mon
     assert "failed: b" in capsys.readouterr().out
 
 
+def test_check_runs_the_read_only_probe_and_reports_stale_projects(tmp_path, monkeypatch, capsys):
+    for name in ("a", "b"):
+        touch(tmp_path / name / "uv.lock")
+    fake = FakeRun(failing={"b"})
+    monkeypatch.setattr(sync_python_envs.subprocess, "run", fake)
+    assert sync_python_envs.run(str(tmp_path), check=True) == 1
+    assert all(cmd == ["uv", "sync", "--frozen", "--check"] for cmd, _, _ in fake.calls)
+    assert "out of sync or failed: b" in capsys.readouterr().out
+
+
 def test_list_only_never_runs_uv(tmp_path, monkeypatch, capsys):
     touch(tmp_path / "a" / "uv.lock")
 

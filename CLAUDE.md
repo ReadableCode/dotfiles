@@ -133,8 +133,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   gitDir (a repo root, or an immediate subdirectory of one, holding a
   `uv.lock`), so each repo's own pinned formatters, linters and type checkers
   are installed and the editor runs those instead of bundled copies; run by
-  gitpullall and myupdater right after the clone step, and by bootstrap. Repos
-  without a `uv.lock` are skipped and the lock is never rewritten.
+  gitpullall, myupdater and `cmdr pull` right after the clone step, and by
+  bootstrap; `--check` is the read-only probe behind `cmdr pull --check`.
+  Repos without a `uv.lock` are skipped and the lock is never rewritten.
 - **`chrome_bookmarks.py`** — saves the personal Chrome profile's bookmarks
   into `personal_credentials/bookmarks/` as an editable JSON plus the HTML to
   re-import through the Bookmark Manager, collapsing the duplicate folders

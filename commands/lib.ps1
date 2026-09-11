@@ -23,6 +23,9 @@ function packages_upgrade {
     } else {
         Write-Host "neither winget nor choco found, skipping package upgrades"
     }
+    # System info at the end, the way scripts/my_updater.sh ends on the other
+    # platforms; fastfetch is an ordinary app_lists entry, not installed here.
+    if (Get-Command fastfetch -ErrorAction SilentlyContinue) { fastfetch }
     exit 0
 }
 
@@ -41,10 +44,6 @@ function packages_upgrade_check {
     }
     Write-Host "no package manager to check"
     exit 0
-}
-
-function sysinfo {
-    fastfetch
 }
 
 # --- pull (the gitpullall flow) ---
@@ -95,6 +94,20 @@ function repos_clone {
 function repos_clone_check {
     # cmdr's built-in already knows the yaml and exits 1 on missing repos.
     & $env:CMDR_BIN repos ensure --check
+    exit $LASTEXITCODE
+}
+
+function python_envs_sync {
+    # uv sync --frozen in every uv project under gitDir; never rewrites a lock.
+    Set-Location $env:CMDR_REPO_DIR
+    uv run python src/sync_python_envs.py
+    exit $LASTEXITCODE
+}
+
+function python_envs_sync_check {
+    # uv sync --frozen --check per project: changes nothing, nonzero on drift.
+    Set-Location $env:CMDR_REPO_DIR
+    uv run python src/sync_python_envs.py --check
     exit $LASTEXITCODE
 }
 
