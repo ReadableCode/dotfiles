@@ -198,14 +198,14 @@ The division of labor:
 | Flow | Mechanism | Used by |
 |---|---|---|
 | **A. Authelia forward-auth** | SSO cookie on `tinkernet.me`, argon2 hashes in `users_database.yml` (file backend, on-server only, not in git), groups `admins`/`friends`, `password_reset: disable`, regulation 4 tries / 2 min → 10 min ban, sessions in `/config/db.sqlite3` | Self-built: `assistant`, `crowncentral`, `herdstone`. Third-party: `sonarr`(+elite), `radarr`(+elite,4k), `readarr`, `readarraudio`, `lazylibrarian`, `bazarr`, `nzbget`(+elite), `deluge`, `calibre` |
-| **B. postgrest-auth service** (the standard since 2026-08-28) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire` |
-| **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | `syncplex` (hashes in `users.json`) |
+| **B. postgrest-auth service** (the standard since 2026-08-28) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire`, `syncplex` |
+| **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | None as of 2026-08-29 (`syncplex` moved to flow B in Sync_Plex 794c425; its `users.json` is gone) |
 | **D. nginx basic auth** | `.htpasswd` at the proxy | None as of 2026-08-27 (`duck_db_api` retired; every other occurrence is commented out) |
 | **E. App's own internal auth** | Out of scope | `jellyfin`, `nextcloud`, `grafana`, `bitwarden`, `homeassistant` |
 | **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `a-girls-guide-to-georgetown`, `minecraft*`, `minio`, `ntfy`, `auth`†, `pgrest`† |
 
-\* Open **at the proxy** by design — the app itself requires a login (flow B or
-C). Authelia's config comments this explicitly for the whole group; the dead
+\* Open **at the proxy** by design — the app itself requires a login (flow B).
+Authelia's config comments this explicitly for the whole group; the dead
 `bookbot` rule (`admins`+`friends`) was removed 2026-08-28.
 
 `ourcash` was dropped from flow A on 2026-08-28: the container had already been
@@ -249,11 +249,13 @@ hash prefix and rehashes to argon2id on the next successful login.
 
 ## 6. Known divergences from these conventions
 
-Every one of these has a `POSTGRES_MIGRATION_PLAN.md` in its repo.
+A repo still migrating carries a `POSTGRES_MIGRATION_PLAN.md`; as of
+2026-09-11 only `Terminal_To_Do` does. The others below are either done or a
+decided exception.
 
 | Repo | Gap |
 |---|---|
-| `Sync_Plex` | Accounts + request queue in JSON files on a host bind-mount. No schema at all. Violates I1, I2, I5, I8. |
+| `Sync_Plex` | Conforms as of 2026-08-29 (Sync_Plex 794c425 moved accounts and the request queue into the `syncplex` schema; checked against I1–I11 on 2026-09-11). `syncplex_user` is `NOLOGIN`, `users` is revoked from it and from `web_anon`, `requests` has RLS with `WITH CHECK` on both policies, bootstrap is version-gated and additive and runs from the web startup path, every PostgREST call carries `Accept-Profile`/`Content-Profile`, there is no fallback store, and the one-shot `scripts/import_json_stores.py` is the only JSON reader left. I10 closed the same day (Sync_Plex e697487): `test_postgrest_real.py` does a read-only `GET /requests` through `store.py` as a throwaway user, so a PostgREST without the schema exposed fails the suite, and RLS itself is proven straight against Postgres in `test_db_real.py`. |
 | `Cash_Flow_Commander` | **Sanctioned exception, decided 2026-08-28 — see §7.** Stays on SQLAlchemy: I2, I3, I5 and I11 do not apply, and I8 applies in the amended form. I6 was closed (`src/bootstrap.py`). |
 | `Terminal_To_Do` | SQLite file round-tripped through S3. Violates I1, I2, I5, I6, I8. |
 | `Book-Bot` | Conforms as of 2026-08-28. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). Its `test_postgrest_real.py` stays red until `postgrest-auth` is redeployed — deploy the service **before** Book-Bot's app code, or every user locks out. |
