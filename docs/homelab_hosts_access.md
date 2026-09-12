@@ -80,11 +80,17 @@ the things that silently fail a plausible remote workflow.
 - SSH is the Advanced SSH & Web Terminal add-on (user hassio, password). The
   `ha` CLI needs a login shell (`bash -l -c 'ha ...'`) for its supervisor
   token.
-- Config mirror: `personal-automation/src/pull_home_assistant_configs.py`
-  pulls the tree into `server_configs/application_configs/homeassistant/`
-  (non-secret) and `personal_credentials/homeassistant/` (secrets). Root-only
-  files (`.storage/auth`, `auth.session`, homekit `*.state`) are unreadable
-  over the add-on; only `ha backups new` captures them.
+- The add-on runs as the `hassio` user (uid 1000); `/config` and
+  `/config/.storage` are root-owned, so it can read most config but write
+  nothing. `.storage/http` and `auth*` are root-only even to read. Full
+  config capture is `bash -l -c 'ha backups new'` (lands on BehemothBackups).
+  The old config-mirror script in personal-automation was retired for the
+  built-in backups.
+- Dashboards are managed from `server_configs/application_configs/homeassistant/haos/dashboards/`
+  and pushed over the websocket API by
+  `server_configs/scripts/deploy_homeassistant_dashboards.py` (`--dry-run`
+  prints the diff). The REST history endpoint silently returns nothing when
+  the flag params are sent; use the websocket `history/history_during_period`.
 
 ## The desk
 
