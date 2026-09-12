@@ -703,7 +703,7 @@ def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, t
     if not output_dir:
         return []
     # generated/ keeps the two artifacts out of the repo root, next to the
-    # declarations and secrets a human actually edits (moved 2026-09-07).
+    # declarations and secrets a human actually edits.
     output_dir = os.path.join(output_dir, OUTPUT_SUBDIR)
     os.makedirs(output_dir, exist_ok=True)
     data = build_map_data(entries, repo_root=repo_root, credentials_root=credentials_root)

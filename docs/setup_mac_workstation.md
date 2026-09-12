@@ -156,7 +156,7 @@ and the bridge presents its own fallback identity instead: a display named
 as a real monitor, restores the saved mirror config, and locks the built-in
 panel into a hardware-mirror set with a sink that has no receiver behind it.
 
-Symptom (2026-09-09): the built-in screen flashes only while docked. Apple
+Symptom: the built-in screen flashes only while docked. Apple
 power and battery never bring that video path up, so they are clean. Power
 delivery and hotplug were ruled out from `pmset -g log` and the unified log;
 the only display reconfiguration is the dock attach itself.
@@ -316,10 +316,10 @@ $EDITOR ~/GitHub/dotfiles/application_configs/bash/zshenv_local.envy
 It must be `.zshenv`, not `.zshrc`. `.zshrc` is read by interactive shells
 only, so exports placed there are invisible to every script, launchd job, cron
 entry and agent tool call, and each of those then rebuilds its cache under
-`~`, on the disk the redirect exists to protect. That is exactly what happened
-here: the exports lived in `~/.zshrc.local` until 2026-09-09 and had quietly
-grown 4.7 GB of duplicate `Homebrew`, `go-build` and `uv` caches on the
-internal disk. Check both kinds of shell agree after any change:
+`~`, on the disk the redirect exists to protect. That is exactly the failure
+this avoids: with the exports in `~/.zshrc.local` instead, 4.7 GB of duplicate
+`Homebrew`, `go-build` and `uv` caches quietly grew on the internal disk.
+Check both kinds of shell agree after any change:
 
 ```bash
 zsh -c 'echo $HOMEBREW_CACHE'      # non-interactive - the one that regressed
@@ -337,11 +337,11 @@ The uv cache stays on the internal disk, and `UV_CACHE_DIR` must not be set.
 Only caches a tool consumes itself belong on the SSD. uv's cache is different:
 every `uv sync` links each package from the cache into the repo's `.venv`, an
 APFS clone on macOS that shares blocks with the cache, so one copy of pandas
-serves every repo that pins it. A clone cannot cross volumes, so while the
-cache was redirected (until 2026-09-10) uv silently fell back to full copies:
-5.5 GB of venvs across 19 repos on the internal disk against a 480 MB cache on
-the SSD. Venvs created during that period stay copies until re-created; a
-`uv sync --reinstall` in the repo rebuilds them as clones.
+serves every repo that pins it. A clone cannot cross volumes, so redirecting
+the cache makes uv fall back silently to full copies: 5.5 GB of venvs across
+19 repos on the internal disk against a 480 MB cache on the SSD. Venvs created
+while it is redirected stay copies until re-created; a `uv sync --reinstall`
+in the repo rebuilds them as clones.
 
 A machine with no `zshenv_local.<host>` variant has no `~/.zshenv.local` at all
 (there is no bare default); `.zshenv` skips it and the manifest entry reports

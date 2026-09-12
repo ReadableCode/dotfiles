@@ -112,10 +112,8 @@ Notes:
   pulling; it inode-checks them and re-links anything orphaned.
 - The AutoHotkey startup entries (`app_jumping.ahk`, `sheets.ahk`,
   `desktop_numbers.ahk` → the Startup folder) are manifest entries — the deploy
-  above is the only way to create them. The two older scripts that also did it
-  (`create_sym_links_startup.ps1`, `deploy_ahk_startup_shortcuts.ps1`) were
-  deleted 2026-08-15; the Startup folder runs a symlinked `.ahk` at login, so
-  the `.lnk` shortcuts the second one made were never needed.
+  above is the only way to create them. The Startup folder runs a symlinked
+  `.ahk` at login, so no `.lnk` shortcuts are involved.
 - Neovim and the PowerShell profile intentionally use no links (config-path
   indirection) — see their `method: none` entries in `deploy_manifest.yaml`.
 

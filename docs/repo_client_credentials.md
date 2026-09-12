@@ -16,7 +16,7 @@ minus the `_credentials` suffix):
 | File | Purpose |
 |------|---------|
 | `acme_manifest.yaml` | Optional **overlay deploy manifest** — same entry schema as `deploy_manifest.yaml`, but its `repo:` paths are relative to `acme_credentials/`. Loaded automatically by `src/deploy_configs.py`; see [repo_deploy_configs.md](./deploy_configs.md). |
-| `acme_hosts.json` | Optional **host inventory** — same schema in every context. A host record may carry `contexts: [...]`, the other contexts that machine works in (a personal dev box that also does a client's work). The record is the one membership declaration: a context's overlay manifests load, its repos are offered by `clone_repos.py` and the map draws them on a machine only when that machine's record is in the context. A checkout that sits on a box for another reason (the git hub of a credentials repo) makes it no member (the personal one is `personal_hosts.json`; the bare `hosts.json` fallback was retired 2026-09-07). |
+| `acme_hosts.json` | Optional **host inventory** — same schema in every context. A host record may carry `contexts: [...]`, the other contexts that machine works in (a personal dev box that also does a client's work). The record is the one membership declaration: a context's overlay manifests load, its repos are offered by `clone_repos.py` and the map draws them on a machine only when that machine's record is in the context. A checkout that sits on a box for another reason (the git hub of a credentials repo) makes it no member (the personal one is `personal_hosts.json`; there is no bare `hosts.json` fallback). |
 | `acme_mcp_servers.yaml` | Optional **MCP server declaration** - URL and env var *names* only; the generator resolves values from this repo's env file at deploy time. Stays here even though the links that register it deploy from the dev repo (below). |
 | config payloads | The actual private files the overlay manifest links into place (client `.env` files, `configuration.json`, workspace variants, shell / ssh fragments, ...). Never anything that names an agent: see the next section. |
 | anything else | Credentials, keys, notes — the repo is private, so it can hold whatever that context needs. |
@@ -35,8 +35,8 @@ entries by its own presence. Secret payloads still stay in the credentials
 repo; the narrower overlay just points `repo:` back across at them with a
 matching `requires:`.
 
-This is the **standard shape for every client context**, not an exception
-(aligned 2026-09-07): the credentials repo carries no path that names Claude
+This is the **standard shape for every client context**, not an exception:
+the credentials repo carries no path that names Claude
 and no bot-guiding markdown, and each client's `<client>_dev` repo holds the
 slash commands, project allow lists, user-level Claude and T3 settings, and the per-repo `.mcp.json` entry, whether or not that client
 allows agents on its machines. Working notes that become a repo's `CLAUDE.md`
@@ -207,6 +207,5 @@ that only prints an install prompt and killed every commit made from VS Code.
 The framework is looked up in the repo's own `.venv` first
 (each worktree carries one) and on `PATH` second, and a repo that declares a
 config but has no framework installed refuses the commit rather than
-skipping its linters. Nothing else guards this: before
-2026-09-07 the rule lived in an agent memory file and two leaks reached
-commits anyway.
+skipping its linters. Nothing else guards this: as a rule in an agent memory
+file rather than a hook, it let two leaks reach commits anyway.

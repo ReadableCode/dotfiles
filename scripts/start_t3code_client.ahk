@@ -6,22 +6,18 @@
 ; .ahk files here - a symlinked file in that folder is the one Windows autostart
 ; the manifest can own. The app's own "open at login" toggle writes an
 ; HKCU\Software\Microsoft\Windows\CurrentVersion\Run value instead: nothing in
-; the repo, nothing `deploy_configs.py status` can see, and it was simply never
-; on (RyzenWhite had no T3 entry in Run or Startup at all, 2026-08-17).
+; the repo, nothing `deploy_configs.py status` can see.
 ;
 ; Exits without doing anything when T3 Code is not installed or is already
 ; running, so the entry is safe on every personal Windows machine.
 ;
-; This script used to detect the t3code-server scheduled task and, on that one
-; machine, pin the client to port 3774 and T3CODE_HOME=~/.t3-client to keep the
-; desktop backend away from the headless server's port and data directory. That
-; whole split was retired on 2026-08-17 when RyzenWhite moved to the combo (one
-; backend, the desktop app's, on ~/.t3) - see "Combo backend" in
-; docs/setup_t3_code.md. There is no longer a second server to avoid, and the
-; split was actively harmful: the account session (clerk-tokens.json) and the
-; paired-environment catalog (connection-catalog.json) both live in ~/.t3, so
-; every launch that took the split branch came up signed out with no
-; environments, which read as "signing in with GitHub does not work".
+; The client keeps the default T3CODE_HOME (~/.t3) and one backend serves both
+; the desktop and the headless use - see "Combo backend" in
+; docs/setup_t3_code.md. Pointing the client at a separate home breaks it: the
+; account session (clerk-tokens.json) and the paired-environment catalog
+; (connection-catalog.json) both live in ~/.t3, so such a launch comes up
+; signed out with no environments, which reads as "signing in with GitHub does
+; not work".
 
 installDir := EnvGet("LOCALAPPDATA") "\Programs\t3code"
 

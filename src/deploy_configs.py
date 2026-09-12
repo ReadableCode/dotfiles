@@ -31,11 +31,11 @@ from utils.inventory_tools import (
 # regenerates the fleet map there (its MAP_HOST is this constant), and
 # on_drift: adopt copies an app's rewrite into the worktree only there. Every
 # other machine treats the repo copy as the truth and never gets a dirty
-# checkout from a deploy. Adopting everywhere deadlocked pulls (2026-09-09):
-# T3 Code rewrites its settings on every update, each machine adopted its own
-# copy, envy's adoption got committed, and git then refused to pull the same
-# file over the uncommitted adoption on every other machine - forever, until
-# a human reverted it by hand.
+# checkout from a deploy. Adopting everywhere deadlocks pulls: T3 Code
+# rewrites its settings on every update, so each machine adopts its own copy,
+# and once one adoption is committed git refuses to pull that file over the
+# uncommitted adoption on every other machine until a human reverts it by
+# hand.
 WORKTREE_HOST = "envy"
 
 # %%
@@ -717,9 +717,9 @@ def load_context_repo_names(context, overlay_root=None):
     An entry's ``dir`` wins over its ``name`` when set - that is the folder
     clone_repos.py actually creates under gitDir (a repo cloned under a
     clearer local name), so it is the only value {context_repo} can usefully
-    expand to. Substituting ``name`` there (the behaviour until 2026-09-07)
-    built destinations under a folder that never exists, so every link for
-    such a repo silently skipped as SKIP_REQUIRES.
+    expand to. Substituting ``name`` there builds destinations under a folder
+    that never exists, so every link for such a repo silently skips as
+    SKIP_REQUIRES.
     """
     path = find_repos_config(context, overlay_root)
     with open(path, "r", encoding="utf-8") as handle:

@@ -348,9 +348,7 @@ def cleanup_app_logs(delete: bool) -> int:
 # The directory is asked of the tool rather than hardcoded because the prune
 # command follows the tool's own configuration, and on a host that redirects
 # its caches (Envy points HOMEBREW_CACHE at an external SSD) that is not the
-# default path under ~. Hardcoding measured one directory and
-# pruned another: the 2026-09-09 dry run claimed 4.63 GB of package cache on
-# the internal disk that `uv cache prune` would never have touched.
+# default path under ~. Hardcoding measures one directory and prunes another.
 #
 # The query runs through a login shell because the redirect is an export, and
 # a plain subprocess inherits whatever this script was started from.

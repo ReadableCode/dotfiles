@@ -308,9 +308,9 @@ function Invoke-Elevated {
         # An unelevated parent cannot always read the exit code of the elevated
         # child it started - on a machine where UAC prompts for a DIFFERENT
         # account's credentials the child runs as that user and .ExitCode comes
-        # back $null. Treating $null as a failure reported "elevation declined"
-        # over a run that had just installed v2 correctly (seen 2026-08-17), so
-        # unknown means unknown: say it ran and let the re-probe judge.
+        # back $null. Treating $null as a failure reports "elevation declined"
+        # over a run that just installed v2 correctly, so unknown means
+        # unknown: say it ran and let the re-probe judge.
         $code = $null
         try { $code = $proc.ExitCode } catch { }
         return ($null -eq $code -or $code -eq 0)

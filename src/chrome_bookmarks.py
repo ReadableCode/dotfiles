@@ -2,9 +2,13 @@
 # Imports #
 
 import argparse
+import contextlib
+import difflib
+import io
 import json
 import os
 import sys
+import tempfile
 import time
 
 # %%
@@ -18,6 +22,9 @@ URL_KEYS = ("date_added", "name", "type", "url")
 FOLDER_KEYS = ("children", "date_added", "name", "type")
 ATTR_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ('"', "&quot;"))
 TEXT_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
+# How much of the diff --check prints: enough to recognise what moved, not the
+# whole export again.
+DIFF_PREVIEW_LINES = 20
 
 
 # %%
@@ -40,15 +47,24 @@ def get_default_bookmarks_file_path(profile="Default"):
         raise OSError("Unsupported operating system")
 
 
-def get_bookmarks_dir():
+def repo_bookmarks_dir():
     # personal_credentials is a sibling repo of dotfiles on every personal machine
     repo_parent = os.path.dirname(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     )
-    bookmarks_dir = os.path.join(repo_parent, "personal_credentials", "bookmarks")
+    return os.path.join(repo_parent, "personal_credentials", "bookmarks")
+
+
+def get_bookmarks_dir():
+    bookmarks_dir = repo_bookmarks_dir()
     if not os.path.isdir(bookmarks_dir):
         raise FileNotFoundError(f"bookmarks folder not found at {bookmarks_dir}")
     return bookmarks_dir
+
+
+def get_repo_json_path(bookmarks_dir=None):
+    """The committed copy's path, whether or not personal_credentials is cloned."""
+    return os.path.join(bookmarks_dir or repo_bookmarks_dir(), f"{BASE_NAME}.json")
 
 
 def read_bookmarks(path):
@@ -209,6 +225,41 @@ def write_outputs(bookmarks, output_dir):
     export_bookmarks_as_html(deduped, os.path.join(output_dir, f"{BASE_NAME}.html"))
 
 
+def check_drift(bookmarks, repo_json_path):
+    """Report how the live bookmarks differ from the committed copy, writing nothing to the repo.
+
+    The read-only twin of a normal run: the export goes to a temporary
+    directory, so a probe never leaves a file in personal_credentials or
+    updates it behind a real export. Returns the exit code - 1 when the two
+    differ, 0 when they match and 0 when there is no committed copy to compare
+    against (personal_credentials not cloned, or bookmarks never exported).
+    """
+    if not os.path.exists(repo_json_path):
+        print(f"No committed copy at {repo_json_path}; nothing to compare against.")
+        return 0
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # The export names the temporary directory it wrote to, which is noise
+        # in a drift report; the diff below is the report.
+        with contextlib.redirect_stdout(io.StringIO()):
+            write_outputs(bookmarks, temp_dir)
+        with open(get_repo_json_path(temp_dir), "r", encoding="utf-8") as f:
+            fresh = f.readlines()
+    with open(repo_json_path, "r", encoding="utf-8") as f:
+        committed = f.readlines()
+
+    diff = list(difflib.unified_diff(committed, fresh, fromfile="repo copy", tofile="chrome now"))
+    if not diff:
+        print(f"Bookmarks match {repo_json_path}.")
+        return 0
+    print(f"Bookmarks differ from {repo_json_path} ({len(diff)} diff lines):")
+    for line in diff[:DIFF_PREVIEW_LINES]:
+        print(line.rstrip("\n"))
+    if len(diff) > DIFF_PREVIEW_LINES:
+        print(f"... and {len(diff) - DIFF_PREVIEW_LINES} more diff lines")
+    print("Run this script with no arguments to update the repo copy.")
+    return 1
+
+
 # %%
 # Main Run #
 
@@ -218,7 +269,8 @@ if __name__ == "__main__":
             "Save Chrome bookmarks to the personal_credentials repo, collapsing the "
             "duplicate folders Chrome Sync creates when a device reconnects. Writes "
             f"{BASE_NAME}.json (the editable copy) and {BASE_NAME}.html (for re-import "
-            "through the Bookmark Manager). See docs/repo_chrome_bookmarks.md."
+            "through the Bookmark Manager). --check writes nothing and only reports "
+            "drift. See docs/repo_chrome_bookmarks.md."
         )
     )
     parser.add_argument(
@@ -234,12 +286,20 @@ if __name__ == "__main__":
         "--output-dir",
         help="override output directory (default: personal_credentials/bookmarks)",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="write nothing; report how the live bookmarks differ from the repo copy and exit 1 if they do",
+    )
     args = parser.parse_args()
 
     source = args.input or get_default_bookmarks_file_path(args.profile)
     if not os.path.exists(source):
         sys.exit(f"bookmarks file not found: {source}")
-    write_outputs(read_bookmarks(source), args.output_dir or get_bookmarks_dir())
+    bookmarks = read_bookmarks(source)
+    if args.check:
+        sys.exit(check_drift(bookmarks, get_repo_json_path()))
+    write_outputs(bookmarks, args.output_dir or get_bookmarks_dir())
 
 
 # %%

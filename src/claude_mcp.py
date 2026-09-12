@@ -55,9 +55,9 @@ def write(quiet=False, output_dir=None, contexts=None):
     ones. The case it exists for: a client's credentials repo declares that
     client's servers and is cloned on the client's own machines, while the
     entry that links the generated file lives in a repo those machines never
-    clone - without the filter the deploy still wrote a file holding the
-    resolved secrets into this checkout on hardware that must carry nothing of
-    the kind (2026-09-07). ``None`` means no filter (the manual CLI).
+    clone - without the filter the deploy writes a file holding the resolved
+    secrets into this checkout on hardware that must carry nothing of the
+    kind. ``None`` means no filter (the manual CLI).
 
     Called by deploy_configs before it builds its plan, so each file is a product
     of what is cloned right now and exists before the per-repo entries that link

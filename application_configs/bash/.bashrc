@@ -15,7 +15,7 @@ esac
 
 # The official go tarball installs here and puts nothing on PATH itself. That is
 # the route scripts/ensure_go.sh takes when the distro package is missing or too
-# old, so without this block go would exist but only cmdr could find it.
+# old, so without this block go would exist but nothing would find it.
 # Prepended, not appended: this directory only exists because someone chose that
 # toolchain over the packaged one, and on the pi that choice was made precisely
 # because apt's go was too old (docs/setup_go.md).

@@ -147,7 +147,7 @@ Why each one goes:
 ## Platform exceptions
 
 - **Windows**: keep `mark-wiemer.vscode-autohotkey-plus-plus` — AHK scripts
-  are actively edited there. It was removed on macOS only.
+  are actively edited there. The remove-list entry applies to macOS only.
 - **Windows**: keep `ms-vscode.powershell` — ~16 `.ps1` scripts live across
   `dotfiles/scripts/` and several work repos, and they are
   maintained from the Windows box. The remove-list entry applies to macOS/Linux
@@ -284,7 +284,7 @@ built-in**, so it shows up activating in `exthost.log` while being absent from
    truly needed, and never override the per-repo linter configs (some work repos' are
    carefully tuned and live in those repositories).
 7. After removing extensions, also prune the multiroot workspace file's
-   `extensions.recommendations` list so it no longer recommends anything you
+   `extensions.recommendations` list so it stops recommending anything you
    uninstalled (otherwise VS Code nags to reinstall them), and drop any now-dead
    settings keys tied to removed extensions (e.g. `sqlfluff.dialect`). Each
    machine's workspace file at `~/GitHub/<host>.code-workspace` is a symlink

@@ -171,9 +171,8 @@ def sync_warnings(config_paths):
     One warning line per declaring repo whose branch has diverged from its
     upstream. A declaration committed but not pushed generates a correct
     .mcp.json HERE and silently never reaches any other machine - that is
-    invisible in the generated file itself, so the generator says it out loud
-    (2026-08-27: a labeled google server sat unpushed for an hour and another
-    machine deployed without it). A repo with no upstream is the hub of record
+    invisible in the generated file itself, so the generator says it out
+    loud. A repo with no upstream is the hub of record
     and has nothing to be behind; "behind" counts are as of the last fetch.
     """
     warnings = []
@@ -292,7 +291,7 @@ def write_document(dest, document):
     Write the document to dest, returning "unchanged", "updated" or "created".
 
     Three things this must get right. A pre-existing SYMLINK is unlinked rather
-    than written through - the dest used to be a managed symlink into the repo,
+    than written through: a managed symlink at the dest points into the repo,
     and following it would rewrite a tracked file. An existing regular file is
     rewritten IN PLACE, not replaced by rename: on Windows the per-repo links to
     this file are hard links (the unprivileged fallback), which share the inode

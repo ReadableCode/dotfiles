@@ -71,8 +71,7 @@ def find_inventory_paths(credentials_root):
     """
     Locate the host inventory file of every ``*_credentials`` repo under
     credentials_root. Each repo may declare ``<context>_hosts.json``; repos
-    without one contribute nothing. (A bare ``hosts.json`` was accepted as a
-    legacy fallback until 2026-09-07, when the last one was renamed.)
+    without one contribute nothing.
     """
     paths = []
     for credentials_dir in find_credentials_dirs(credentials_root):

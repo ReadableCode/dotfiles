@@ -9,8 +9,8 @@
 #   "$go_bin" build .
 #
 # Progress and errors go to stderr. Nothing here is interactive beyond the sudo
-# password prompt the package manager raises, so it is safe to call from the
-# `cmdr` shell shim on first use.
+# password prompt the package manager raises, so it is safe to call from
+# bootstrap.
 #
 # Usage:
 #   ensure_go.sh              resolve, installing if needed

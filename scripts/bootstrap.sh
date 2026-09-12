@@ -334,8 +334,6 @@ fi
 # The app lists carry go, so on most platforms the step above already installed
 # it. This one is the guarantee: it also covers --skip-apps, a machine whose
 # package manager has no go, and a distro package too old to build go_apps/*.
-# cmdr calls the same script on first use, so a machine that skips this here
-# still ends up with a toolchain the first time anyone types cmdr.
 step "go"
 ENSURE_GO="$DOTFILES_DIR/scripts/ensure_go.sh"
 if [ ! -f "$ENSURE_GO" ]; then
@@ -349,7 +347,7 @@ elif [ -n "$DRY_RUN" ]; then
 elif go_path="$(bash "$ENSURE_GO")"; then
     ok "go ready ($go_path)"
 else
-    warn "no go toolchain - cmdr and the other go_apps cannot be built"
+    warn "no go toolchain - the go_apps cannot be built"
     note_manual "install go by hand: docs/setup_go.md"
 fi
 

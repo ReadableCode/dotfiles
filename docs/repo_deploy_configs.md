@@ -4,8 +4,8 @@ All repo-path → system-path config mappings for the public dotfiles live in
 one file at the repo root: [`deploy_manifest.yaml`](../deploy_manifest.yaml).
 Sibling `*_credentials` repos can contribute **overlay manifests** with the
 same schema (see below). One command deploys (or dry-runs, or health-checks)
-every config for the current machine — the per-app `ln -s` / `mklink` blocks
-that used to live in the setup docs are gone.
+every config for the current machine, so the setup docs carry no per-app
+`ln -s` / `mklink` blocks.
 
 ## Commands
 
@@ -30,10 +30,9 @@ uv run python src/deploy_configs.py prune --apply
 uv run python src/deploy_configs.py map
 ```
 
-There used to be separate `--dry-run` and `--status` modes; they showed the
-same classification, so they are collapsed into the single `status` command
-(`--status` and `--dry-run` still work as aliases). Output is an aligned,
-colored table when writing to a terminal (set `NO_COLOR` to disable colors).
+`--status` and `--dry-run` are aliases of the single `status` command. Output
+is an aligned, colored table when writing to a terminal (set `NO_COLOR` to
+disable colors).
 
 ## Manifest entry schema
 
@@ -92,8 +91,8 @@ on this box" everywhere. The deploy prints every overlay it left out and
 why, and takes back what such an overlay linked before the gate existed: a
 symlink at one of its destinations that points into a checkout under gitDir
 is pruned with the removals; a real file or directory there is left alone. The reason this exists: elitedesk holds a client's credentials repo
-only as its git hub, and until 2026-09-08 that checkout alone was enough to
-deploy the context's shell shard there. A machine no inventory lists is not
+only as its git hub, and that checkout alone must not deploy the context's
+shell shard there. A machine no inventory lists is not
 gated (every cloned overlay loads), and neither is an opt-in overlay no
 repos file declares.
 
@@ -167,9 +166,7 @@ The repo list is the context's **`<context>_repos.yaml`** — the same file
 `clone_repos.py` offers to clone from, so adding a repo to a context puts the
 links in it on the next deploy with no manifest edit. The value substituted
 is the **checkout directory**: an entry's `dir` when it has one, otherwise
-its `name` (`exclude_repos` names the same thing). Until 2026-09-07 the
-expansion used `name` even for `dir:` entries, so a repo cloned under a
-different local name only ever skipped. `true` means the
+its `name` (`exclude_repos` names the same thing). `true` means the
 manifest's own context (`acme_credentials` → `acme`; the main manifest →
 `dotfiles`, which has its own `dotfiles_repos.yaml`); a context name or a list
 of names reads those files instead, which is how an opt-in overlay such as
@@ -188,10 +185,10 @@ error rather than a silent no-op.
 The links are untracked in the target repos: the global git ignore dotfiles
 deploys (`application_configs/git/ignore`) lists `**/.mcp.json`.
 
-Removals files accept the same keys, so a retired per-repo link is retired in
-every checkout it reached with one line. Add `link_only: true` to a removal
-when the retired thing was a link and a real file or directory at that path
-now is something else (the real directory that replaced a directory link): it
+Removals files accept the same keys, so a dropped per-repo link is removed
+from every checkout it reached with one line. Add `link_only: true` to a
+removal when the thing dropped was a link and a real file or directory now
+sits at that path (the real directory that replaced a directory link): it
 is then neither removed nor reported as drift.
 
 Slash commands are deliberately **not** per repo. T3 Code builds its command
@@ -200,22 +197,20 @@ menu from one probe of `claude` run in its server's own working directory
 `~/.claude/commands` is the only place its picker can list from. Each context
 therefore links its commands **one file at a time** into that directory, and
 the context prefix in every filename is what keeps N contexts from colliding
-in one path. Two alternatives were tried on 2026-09-02 and retired the same
-day: per-repo directory links (emptied that menu) and per-context subfolders
-under `~/.claude/commands` (Claude Code namespaces those, so `/acme_x` becomes
-`/acme:acme_x`).
+in one path. Two alternatives do not work: per-repo directory links (they
+empty that menu) and per-context subfolders under `~/.claude/commands`
+(Claude Code namespaces those, so `/acme_x` becomes `/acme:acme_x`).
 
 Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is
 built — so they are absent in a fresh clone until the first deploy; `status`
 reports them as `REPO_MISSING` until then, and the manifest tests do not
 require them to exist. Generation is limited to the contexts some loaded
-entry actually links (since 2026-09-07): a machine that clones a context's
-declaring credentials repo but not the dev overlay holding its `*_repo_mcp`
-entry gets no file for that context, and a previously generated one is
-removed. That keeps a client's resolved secrets out of this checkout on the
-client's own machines, where the declaration is cloned but nothing consumes
-it.
+entry actually links: a machine that clones a context's declaring credentials
+repo but not the dev overlay holding its `*_repo_mcp` entry gets no file for
+that context, and a stale one is removed. That keeps a client's resolved
+secrets out of this checkout on the client's own machines, where the
+declaration is cloned but nothing consumes it.
 
 ### Host / platform variant files
 
@@ -283,7 +278,7 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   on that path, so the running app keeps serving the pre-pull copy. T3 Code's
   `settings.json` is the case that named this: the fleet pulled a corrected
   value, every machine's file was right on disk, and every running server kept
-  reporting the old one until its link was re-created (2026-09-10). With
+  reporting the old one until its link was re-created. With
   `refresh: relink`, deploy re-creates a correct link whose own mtime predates
   the repo file it points at (status calls that `STALE_LINK`), which is the
   path event the app is waiting for. Self-limiting: the fresh link is newer
@@ -296,11 +291,11 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   map, for the same reason - it is the one checkout a deploy may dirty).
   Everywhere else an `adopt` entry deploys as `replace`: the app's rewrite is
   backed up and the repo copy re-linked, and `status` says so under the
-  entry. Adopting on every machine deadlocked pulls (2026-09-09): T3 Code
-  rewrites its settings after every app update, each machine adopted its own
-  copy, envy's adoption was committed, and git then refused to pull that file
-  over the uncommitted adoption on every other machine until someone reverted
-  it by hand. So in-app settings changes are made on envy (or in the repo
+  entry. Adopting on every machine deadlocks pulls: T3 Code rewrites its
+  settings after every app update, so each machine adopts its own copy, and
+  once envy's adoption is committed git refuses to pull that file over the
+  uncommitted adoption on every other machine until someone reverts it by
+  hand. So in-app settings changes are made on envy (or in the repo
   file); a change made in the app elsewhere lasts until that machine's next
   deploy.
 
@@ -322,7 +317,7 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   inode as the repo file) counts as deployed and is left alone. A copy is
   **never** used — a copy has no tie to the repo at all and silently drifts.
   The hard-link caveat: `git pull` replaces file inodes, orphaning the link —
-  `status` catches that (inode no longer matches → `NOT_A_LINK`) and a
+  `status` catches that (inode stops matching → `NOT_A_LINK`) and a
   re-deploy re-links it, so run `status`/deploy after pulling on those
   machines. See
   [howto_symlinks_and_hardlinks.md](./sym_linking_and_hard_linking.md).
@@ -345,19 +340,26 @@ everything is `OK`.
 
 ## Running it automatically
 
-`gitpullall` and `myupdater` (shell functions in `.shared_aliases` and
-`powershell_aliases.ps1`, same shape on both) are compositions of individually
-callable steps: `pullrepos` (git_puller over every sibling repo — **all** of
-them, since the deploy reads overlay manifests, host inventories and payload
-files from the `*_credentials` repos, not just dotfiles), `updatepackages`
-(myupdater only; packages run before the deploy so anything an upgrade clobbers
-gets re-linked), `clonerepos`, `syncpythonenvs` (`uv sync --frozen` in every
-repo root or immediate subdirectory holding a `uv.lock`, so each repo's own
-pinned tools are installed; a project that fails to sync is reported and never
-stops the rest), `deployconfigs`, then
-`deployconfigs prune --apply`. A repo that cannot be pulled (local WIP,
-auth) is warned about but never blocks the run — the deploy proceeds from
-that repo's current, possibly stale, checkout.
+`gitpullall`, `myupdater` and `pullrepos` all run `src/refresh_machine.py`;
+the commands in `.shared_aliases` and `powershell_aliases.ps1` only launch it,
+and `refresh_machine.py --help` lists every step. In order: the pull
+(git_puller over every sibling repo, **all** of them, since the deploy reads
+overlay manifests, host inventories and payload files from the
+`*_credentials` repos, not just dotfiles; `pullrepos` is this step alone), the
+OS package update (`myupdater` only; packages run before the deploy so anything
+an upgrade clobbers gets re-linked), `clone_repos.py`, `sync_python_envs.py`
+(`uv sync --frozen` in every repo root or immediate subdirectory holding a
+`uv.lock`, so each repo's own pinned tools are installed; a project that fails
+to sync is reported and never stops the rest), the deploy, then
+`prune --apply`. Every step runs even when an earlier one fails. A repo that
+cannot be pulled (local WIP, auth) is warned about but never blocks the run:
+the deploy proceeds from that repo's current, possibly stale, checkout.
+
+`gitpullall --check` is the read-only twin of the whole chain: it fetches
+every repo to report which are behind, then asks each tool for its own check
+(`clone_repos.py --list`, `sync_python_envs.py --check`, `deploy_configs.py
+status --problems`, and prune's dry run). It writes nothing and exits 1 when
+anything reported drift.
 
 To run it from cron (add via `crontab -e` on the machine — cron jobs are
 managed per-host, see [homelab_deployments.md](./homelab_deployments.md) for
@@ -397,9 +399,9 @@ hatches, and each is checked back the other way so it cannot go stale:
 
 So the options for a new payload are: give it an entry, give it a
 `method: none` entry with a `note:` saying how it really reaches machines, or
-delete it. "Store it and copy it by hand" is not one of them — that is what
-the `.desktop` autostart file was until 2026-08-17, existing on exactly one
-machine, reproduced by copy-pasting a heredoc out of a doc.
+delete it. "Store it and copy it by hand" is not one of them — that is how a
+payload ends up on exactly one machine, reproduced by copy-pasting a heredoc
+out of a doc.
 
 Coverage understands the same resolution the deployer does: a variant file
 (`keybindings.mac.json`, `zshrc_local.envy`) counts for the entry that names
@@ -423,12 +425,10 @@ Two files are written, side by side:
 | `deploy_map.html` | One self-contained page (no network, no build step), four views: **Disk** (default), **Fleet**, **Matrix** and **Destinations** — see below. Open it straight from the repo. |
 | `deploy_map.json` | The same dataset, one record per line (`format_json`): the diffable half, so a pull request shows *which* link changed rather than one huge blob. The page embeds this exact text, so it has no giant line either. |
 
-Since 2026-09-07 the map also applies the **clone gate**: an entry from an
-overlay manifest counts on a machine only if that overlay's repo would be
-cloned there, so a client laptop shows none of the other contexts' entries
-even though every manifest is loaded on the machine that draws the map
-(before this, the map showed personal and other-client commands landing on
-client machines that never clone those repos).
+The map also applies the **clone gate**: an entry from an overlay manifest
+counts on a machine only if that overlay's repo would be cloned there, so a
+client laptop shows none of the other contexts' entries even though every
+manifest is loaded on the machine that draws the map.
 
 The page has a **Machine** tab: pick one host and it shows every repo the
 contexts declare, with the ones `clone_repos.py` would not put there dimmed
@@ -549,7 +549,7 @@ So the workflow is:
 2. Add its `dest` to the relevant removals file.
 3. `prune` (dry run) to see what would go, then `prune --apply` — or just
    deploy, which applies the removals **before** it links anything, so a
-   retired link never sits where a new entry needs a real directory.
+   removed link never sits where a new entry needs a real directory.
 4. Once every machine has pruned, the line can be dropped from the file.
 
 `prune` never touches a real directory, removes a file only if a removals entry

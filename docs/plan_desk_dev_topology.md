@@ -95,9 +95,8 @@ actually needed.
 - Yoga7i: must stay Windows for a finicky scanner.
 - nukbuntu / Pavilioni5: too old to be the primary target (Pavilion may be
   revived as a low-stakes sidecar).
-- RyzenWhite (Windows desktop, 64 GB): the August pick, dropped 2026-09-10.
-  Windows Update reboots and shutdowns keep taking it down, which an
-  always-on dev target cannot absorb.
+- RyzenWhite (Windows desktop, 64 GB): Windows Update reboots and shutdowns
+  keep taking it down, which an always-on dev target cannot absorb.
 - Replacing Envy: declined; it is adequate once dev moves off.
 - Any remote-desktop-based workflow: rejected on latency.
 
@@ -111,9 +110,8 @@ actually needed.
 - The MacBook's display problem is only the Thunderbolt-dock-through-KVM path
   (macOS rejects MST fan-out and KVM EDID re-training): dock video goes direct
   to spare monitor inputs, the KVM carries keyboard and mouse only.
-- Personal dev target: Option B, JasonZephyrus on Fedora (revised
-  2026-09-10; RyzenWhite was the August pick until Windows Update reboots
-  ruled it out). Claude Code over ssh does the heavy lifting. Jobs that need
+- Personal dev target: Option B, JasonZephyrus on Fedora. Claude Code over
+  ssh does the heavy lifting. Jobs that need
   persistent processes, and anything that outgrows it, go to a behemoth
   Ubuntu VM when one is built.
 

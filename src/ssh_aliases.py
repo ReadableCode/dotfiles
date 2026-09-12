@@ -201,14 +201,14 @@ def collect_aliases(root, local_short, include_vnc):
     return sorted(deduped.items())
 
 
-# ---------------------------------------------------------------- hosts (for cmdr fleet)
+# ---------------------------------------------------------------- hosts (for checks over ssh)
 
 
 def collect_hosts(root, local_short):
     """
     One record per ssh-reachable host across every inventory under ``root``:
     ``{"host", "os", "command"}`` with the same ``ssh ...`` line its aliases
-    get. What ``cmdr fleet`` runs its checks over, so the inventory's ssh
+    get, for running one check on every host over ssh, so the inventory's ssh
     rules (jumps, ports, users) stay implemented here alone. Later
     inventories win a name collision, like aliases do.
     """

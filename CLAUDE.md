@@ -31,7 +31,7 @@ personal context; each client has its own), and recurring homelab jobs live in
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
-| `go_apps/` | Small Go tools: `cmdr` (the fleet CLI/TUI, built per machine by its shell shim, never committed; doc `docs/repo_cmdr.md`), `git_puller`, syncthing cleanup. The latter two commit prebuilt binaries. The ping/command client-server moved to its own repo (`ReadableCode/go-client-server`). |
+| `go_apps/` | Small Go tools: `git_puller` and the syncthing cleanup, both committing prebuilt binaries. |
 | `docs/` | Setup/how-to docs (one per topic), indexed in `docs/README.md`. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
 | `pythonista/` | iOS Pythonista scripts. |
@@ -133,9 +133,25 @@ is the one-paragraph orientation so an agent knows which file to open.
   gitDir (a repo root, or an immediate subdirectory of one, holding a
   `uv.lock`), so each repo's own pinned formatters, linters and type checkers
   are installed and the editor runs those instead of bundled copies; run by
-  gitpullall, myupdater and `cmdr pull` right after the clone step, and by
-  bootstrap; `--check` is the read-only probe behind `cmdr pull --check`.
+  gitpullall and myupdater right after the clone step, and by bootstrap;
+  `--check` is its read-only probe.
   Repos without a `uv.lock` are skipped and the lock is never rewritten.
+- **`refresh_machine.py`** - the one implementation of `pullrepos`,
+  `gitpullall` and `myupdater` on every platform: pull every repo, upgrade OS
+  packages with `--packages` (`scripts/my_updater.sh` or `my_updater.ps1`),
+  clone, sync envs, deploy, prune, and the AutoHotkey fix on Windows. Both
+  shell profiles only launch it, so its `--help` is the one description of the
+  steps. `--check` is the read-only twin: it fetches every repo to report what
+  is behind and asks each other tool for its own check, writing nothing. Stdlib-only; its step headers and tldr-style help page come from
+  **`terminal_style.py`**, whose terminal-navy tokens copy
+  `readable_utils.design_tokens` (a test keeps them equal). A help page lives
+  in the tool that does the work, never in a shell alias.
+- **`fleet_check.py`** - asks every ssh-reachable machine in the inventories the
+  same read-only question at once (default `gitpullall --check`) and prints one
+  row per host: ok, drift, unreachable, failed, or no command. Hosts and their
+  ssh lines come from `ssh_aliases.py --format hosts`, so jumps, ports and users
+  stay defined once; each host's full answer lands in `~/logs/fleet/`. Nothing
+  is ever applied across the fleet, and the machine it runs on is skipped.
 - **`chrome_bookmarks.py`** — saves the personal Chrome profile's bookmarks
   into `personal_credentials/bookmarks/` as an editable JSON plus the HTML to
   re-import through the Bookmark Manager, collapsing the duplicate folders
@@ -212,8 +228,9 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
   labels, `//` section headers with the slashes in `#56d364`, green accent
   `#2ea043` / bright `#56d364`, amber highlights `#b8860b` / `#e3b341`,
   hairline borders, no shadows. Python TUIs take the tokens and the Textual
-  theme from `readable_utils.design_tokens`; `go_apps/cmdr/theme.go` carries
-  the same values for Go. Never a terminal-palette colour number: those are
+  theme from `readable_utils.design_tokens`; the stdlib-only tools in `src/`
+  take them from `src/terminal_style.py`. Never a terminal-palette colour
+  number: those are
   whatever the user's terminal profile says.
 - New docs: add a `docs/<prefix>_<topic>.md`, one topic per file, using one
   of the existing prefix families (`repo_`, `setup_`, `homelab_`, `howto_`,

@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # OS package updates for macOS/Linux — the `updatepackages` step, nothing more.
-# Repo pulls and config deploys live in the shell functions (.shared_aliases):
-# `myupdater` runs pullrepos → updatepackages → clonerepos → syncpythonenvs →
-# deployconfigs → prune, deploying AFTER the package updates in case an upgrade
-# clobbers a linked config.
+# Repo pulls and config deploys live in src/refresh_machine.py: `myupdater` runs
+# it with --packages, which runs this script between the pull and the clone,
+# env sync, deploy and prune, deploying AFTER the package updates in case an
+# upgrade clobbers a linked config. The Windows twin is scripts/my_updater.ps1.
 #
 # On Linux, on top of the package upgrade, three things are re-checked EVERY run
 # and repaired in place after a [y/N] — each one is a state a release upgrade or
@@ -19,8 +19,8 @@
 #                            PER HOST by the same updater block — that repo's
 #                            docs say why the cap exists and how to raise it
 # All three are no-ops once healthy, so the normal run prints where it stands
-# and changes nothing. macOS and Windows are untouched by all of it — Windows
-# lives in application_configs/powershell.
+# and changes nothing. macOS and Windows are untouched by all of it; Windows
+# package updates live in scripts/my_updater.ps1.
 #
 # NO PER-PACKAGE OR PER-CONTEXT SPECIAL CASES HERE. Individual packages are
 # installed by the app_lists/ + scripts/install_*.sh path and upgraded by the
@@ -28,23 +28,56 @@
 # third-party apt source first (VS Code, Chrome) that is one-time machine setup
 # and belongs in docs/setup_linux_workstation.md, not here. A check that only
 # one context's machines need (a work VPN client, say) lives in a repo that
-# context owns and is wired up per host through the inventory — a vendor
-# health check lived inline here until 2026-08-31 and ran (as a no-op) on every
-# personal machine too. A fastfetch install path lived here until the same day
-# and was pure duplication: it was already in app_lists/linux_apps.txt the whole
-# time, and the "missing package" it worked around was just 24.04 predating
-# fastfetch's arrival in the Ubuntu archive (24.10). Don't re-add their like.
+# context owns and is wired up per host through the inventory, never inline
+# here, where it would run as a no-op on every other machine. An install path
+# for a package the app_lists already carry is duplication. Don't add their
+# like.
 #
 # One exception, and why it is not a per-package case: uv. bootstrap installs
 # it with the standalone installer where no package manager carries it (apt has
 # no uv), and that build upgrades only itself, with `uv self update`. A brew or
 # dnf uv refuses that command (exit 2, "installed through an external package
 # manager") and was already upgraded by the bulk command above, so update_uv()
-# is a no-op there. Found 2026-09-11: elitedesk sat at uv 0.6.5 from its
-# bootstrap day while every other host had 0.11+, and `uv sync --check`, which
-# `cmdr pull --check` runs in every uv project, did not exist yet in 0.6.5.
+# is a no-op there. Without this step a standalone uv stays on its bootstrap
+# version for good, and newer flags other tools rely on (`uv sync --check`) are
+# missing.
+#
+# Modes: no arguments is the full update run and behaves exactly as it always
+# did. --check is the read-only probe (check_updates below), which reports what
+# is outdated and exits 1 when anything is, without sudo, without prompting and
+# without entering any of the repair paths above, so anything that only wants
+# the answer can ask for it safely. --help prints the modes.
 
-echo "#################   Updating Packages   #####################"
+usage() {
+    cat <<'EOF'
+usage: my_updater.sh [--check | --help]
+
+  (no arguments)  Upgrade this machine's OS packages. On Linux it also repairs
+                  third-party apt sources, runs this host's mapped checks and
+                  offers a release upgrade. Prompts, and uses sudo.
+  --check         Read-only: report what is outdated, exit 1 when anything is
+                  and 0 when everything is current. No sudo, no prompts, no
+                  repairs, and the apt package lists are read as they stand
+                  rather than refreshed.
+  --help          This page.
+
+The no-argument form is what myupdater runs, through
+src/refresh_machine.py --packages. The Windows twin is scripts/my_updater.ps1.
+EOF
+}
+
+MODE="update"
+for arg in "$@"; do
+    case "$arg" in
+      --check) MODE="check" ;;
+      --help|-h) usage; exit 0 ;;
+      *) echo "my_updater.sh: unknown option '$arg'" >&2; usage >&2; exit 2 ;;
+    esac
+done
+
+if [ "$MODE" = "update" ]; then
+    echo "#################   Updating Packages   #####################"
+fi
 
 # Function for updating & upgrading macOS with Brew and system updates
 update_macos() {
@@ -92,6 +125,69 @@ update_uv() {
     if ! uv self update; then
         echo "uv is package-manager owned; the package upgrade above covers it."
     fi
+}
+
+# The read-only twin of the functions above, for `my_updater.sh --check`. It
+# reports what the package manager already knows is outdated and nothing else:
+# no sudo, no prompt, no metadata refresh, and none of the apt source, mapped
+# check or release upgrade paths. Returns 1 when anything is outdated, 0 when
+# everything is current.
+check_updates() {
+    local report=""
+    local code=0
+    local outdated=0
+    case "$(uname)" in
+      "Darwin")
+        if command -v brew &> /dev/null; then
+            echo "Checking Brew for outdated packages..."
+            report="$(brew outdated)"
+            if [ -n "$report" ]; then
+                echo "$report"
+                outdated=1
+            else
+                echo "All Brew packages are current."
+            fi
+        else
+            echo "Homebrew not found, so there is nothing to check."
+        fi
+        ;;
+      "Linux")
+        # dnf first, the same order the update run uses.
+        if command -v dnf &> /dev/null; then
+            echo "Checking dnf for outdated packages..."
+            report="$(dnf -q check-update 2> /dev/null)"
+            code=$?
+            # check-update exits 100 when updates are available, 0 when none.
+            if [ "$code" -eq 100 ]; then
+                echo "$report"
+                outdated=1
+            elif [ "$code" -ne 0 ]; then
+                echo "dnf check-update failed with exit code $code."
+                outdated=1
+            else
+                echo "All dnf packages are current."
+            fi
+        elif command -v apt &> /dev/null; then
+            # No `apt update` first: refreshing the lists needs sudo, which a
+            # check must never take. The answer is as fresh as the lists the
+            # last real run left on disk.
+            echo "Checking apt for upgradable packages (lists as they stand; refreshing them needs sudo)..."
+            report="$(apt list --upgradable 2> /dev/null | grep -v '^Listing')"
+            if [ -n "$report" ]; then
+                echo "$report"
+                outdated=1
+            else
+                echo "All apt packages are current."
+            fi
+        else
+            echo "Neither dnf nor apt found, so there is nothing to check."
+        fi
+        ;;
+      *)
+        echo "Unsupported operating system: $(uname)"
+        ;;
+    esac
+    return "$outdated"
 }
 
 ##############################   Third-party apt sources   ##############################
@@ -946,6 +1042,12 @@ check_release_upgrade() {
         ;;
     esac
 }
+
+# Read-only mode stops here: everything below prompts, sudoes or repairs.
+if [ "$MODE" = "check" ]; then
+    check_updates
+    exit $?
+fi
 
 # Detect the operating system
 OS="$(uname)"

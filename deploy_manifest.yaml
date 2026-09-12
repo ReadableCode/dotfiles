@@ -74,8 +74,9 @@
     (SKIP_VARIANT) - intentional: the only variant is Envy redirecting its
     caches to the external SSD because its internal disk is small, which is a
     fact about that machine and nothing to mirror onto the rest of the fleet.
-    Was zshrc_local until 2026-09-09; .zshrc is interactive-only, so every
-    non-interactive uv/brew/go run rebuilt its cache on the internal disk.
+    These exports belong in .zshenv, not .zshrc: .zshrc is interactive-only, so
+    a non-interactive uv/brew/go run would rebuild its cache on the internal
+    disk.
 
 - name: bashrc
   repo: application_configs/bash/.bashrc
@@ -149,16 +150,14 @@
 # per-host entries in the client manifests): a workspace file lists every
 # sibling repo at once, and settings.json carries the Remote-SSH host map plus
 # repo exclude lists - exactly the cross-client inventory the public repo must
-# not carry. Settings moved out 2026-08-14; the overlay entries re-claim the
-# same dests, so machines relink on their next deploy (a machine that loads no
+# not carry. The overlay entries own those dests, so a machine that loads no
 # overlay at all keeps a dangling link until one is cloned - removals can't
-# name these dests while live entries still want them).
+# name these dests while live entries still want them.
 
-# Zed settings.json lived in personal_credentials on the same terms (entry
-# zed_settings there, moved 2026-08-14): its ssh_connections block names client
-# checkouts on a client machine. Zed was uninstalled 2026-08-17, so that entry
-# is gone and its dest is retired in personal_removals.yaml; the config source
-# stays in that repo for a future reinstall.
+# Zed settings.json belongs in personal_credentials on the same terms: its
+# ssh_connections block names client checkouts on a client machine. Zed is not
+# installed, so no entry deploys it and its dest is retired in
+# personal_removals.yaml; the config source stays in that repo for a reinstall.
 
 # --- Git ---
 
@@ -173,10 +172,9 @@
     needed). Candidate for config-path indirection instead of a link:
     git config --global core.excludesFile <repo path>.
     Git for Windows sets HOME from USERPROFILE and honours the same default
-    path, so windows uses the identical dest. It was missing here until
-    2026-07-23, which meant **/.claude/settings.local.json was never ignored on
-    Windows machines - the deployed symlinks showed up as untracked changes in
-    every repo and VS Code offered to commit them.
+    path, so windows uses the identical dest. Windows needs it: without this
+    entry **/.claude/settings.local.json goes unignored there and the deployed
+    symlinks show up as untracked changes in every repo.
 
 # --- Python (uv) ---
 
@@ -206,7 +204,7 @@
 # (settings, statusline, themes, rules, the /init_worktree command) are
 # dotfiles payloads deployed by the personal and dev overlays with host
 # filters, so a client machine that must carry nothing of the kind never
-# gets them even though it clones this repo (2026-09-07).
+# gets them even though it clones this repo.
 
 - name: claude_mcp_servers
   repo: mcp_servers.yaml
@@ -220,8 +218,7 @@
     deploy (--no-mcp skips), and each context's manifest links its file into
     that context's checkouts as <repo>/.mcp.json (per_context_repo entries
     marked generated: true), so a session registers only its own context's
-    servers. Before 2026-09-02 this was one ~/.mcp.json holding every context.
-    Listed here as method: none so this file stays a complete inventory of
+    servers. Listed here as method: none so this file stays a complete inventory of
     deployed config.
     Why generated rather than a payload: the content is machine-specific (server
     args need an absolute path to this clone, and deploy has no templating, so a
@@ -233,15 +230,10 @@
     cannot be namespaced the way ~/.claude/commands/<context>_*.md is, so if each
     repo deployed its own copy they would overwrite each other. Declaring and
     merging means N repos contribute to one file that one generator owns.
-    Lands in the USER FOLDER because .mcp.json is inherited by every directory
-    below it and MERGES with any below it (verified: a ~/.mcp.json server resolves
-    from a path nowhere near the clones), so one file covers every session on the
-    machine - including repos checked out outside the clone root, which the
-    clone-root copy this replaced could not reach (retired the same day, see
-    removed_clone_root_mcp_json in deploy_removals.yaml). Home is not a git repo,
-    so nothing is dirtied. Owning a user-folder file is safe only because it is
-    generated: one writer, no repos racing. Generated 0600 - it can carry a live
-    API token. Added 2026-08-27.
+    Generated 0600 - it can carry a live API token. The two dests this replaced,
+    a clone-root and a user-folder .mcp.json, are retired in
+    deploy_removals.yaml and must stay gone: either one merges with the
+    per-context file and re-registers servers deleted from the declarations.
 
 - name: claude_cloud_session_env_vars
   repo: application_configs/claude/cloud_session_env_vars.txt
@@ -286,9 +278,9 @@
 # working tree (git diff to review, commit or revert - VS Code-style) and
 # re-links, instead of clobbering it with the repo copy - on WORKTREE_HOST
 # (envy) only; every other machine deploys these as replace, because T3
-# rewrites them after each app update and adopting on two machines left the
-# second one unable to pull (2026-09-09). The machine file is
-# still backed up to data/config_backups first, and a repo copy that is the
+# rewrites them after each app update, and adopting on two machines leaves the
+# second one unable to pull. The machine file is still backed up to
+# data/config_backups first, and a repo copy that is the
 # newer side (orphaned hard link after git pull) still wins as usual. Adopted
 # json is re-serialized to the canonical repo form (2-space indent, sorted
 # keys) so the app's minified saves diff per-key - keep the repo copies in
@@ -305,12 +297,11 @@
 # fall behind. See the "Server version" section of docs/setup_t3_code.md.
 # settings.json and client-settings.json have no variant; if a mac drift-merge
 # ever introduces a key the npm server rejects, split off a .mac.json variant
-# again at that point (the 2026-08-05 split of all three left the other two
-# byte-identical, so they were deleted 2026-08-14).
+# at that point.
 
 # t3code_settings (application_configs/t3code/settings.json ->
-# ~/.t3/userdata/settings.json) deploys via personal_manifest.yaml as of
-# 2026-08-06: the file stays here and is still public, but the ENTRY needs a
+# ~/.t3/userdata/settings.json) deploys via personal_manifest.yaml: the file
+# stays here and is still public, but the ENTRY needs a
 # hosts whitelist so client contexts can point that dest at their own copy,
 # and hosts filters are overlay-manifest-only. Same split as claude_settings
 # above, and for the same reason: a work machine on Bedrock needs a
@@ -347,9 +338,9 @@
     make it log "ignoring invalid keybinding entry" and surface config-issue
     warnings in connected clients.
 
-# Removed 2026-08-18, with the files themselves: the whole Windows headless
-# server method. On Windows, T3 is now the DESKTOP APP ONLY - one backend, the
-# app's own, on ~/.t3. Deleted in that pass:
+# There is no Windows headless server method, and the files are gone with it.
+# On Windows, T3 is the DESKTOP APP ONLY - one backend, the app's own, on
+# ~/.t3. Deleted, and not to be reintroduced:
 #
 #   t3code_server_launcher       application_configs/t3code/t3serve.cmd
 #   t3code_server_task           application_configs/t3code/t3code-server-task.xml
@@ -357,8 +348,8 @@
 #   t3code_client_home_keybindings       -> ~/.t3-client/userdata/...
 #   (plus scripts/setup_t3_server_windows.ps1)
 #
-# Do not reintroduce these. Windows has no service manager for T3
-# (`t3 service install` is systemd-only), so the pattern was a restart loop
+# Windows has no service manager for T3 (`t3 service install` is
+# systemd-only), so the pattern was a restart loop
 # around `t3 serve` driven by a boot/logon/watchdog scheduled task, and it was
 # never stable: a 72-hour ExecutionTimeLimit silently killed the server every
 # three days, the serve leaked to V8's 4 GB cap and aborted after three, and a
@@ -396,13 +387,12 @@
 
 # --- Barrier (KVM sharing) ---
 
-# Per-host barrier_config.<host>.sgc files moved to the credentials overlays
-# 2026-08-14 (entry barrier_configs in personal_manifest.yaml; the client
-# machine's own config was already in its context repo): a screen layout names
-# every machine it spans, including work machines - cross-client inventory the
-# public repo must not carry. method was none (loaded by path from the Barrier
-# GUI), so there are no links to remove, but Barrier on each host must be
-# re-pointed at the overlay repo's path.
+# Per-host barrier_config.<host>.sgc files live in the credentials overlays
+# (entry barrier_configs in personal_manifest.yaml; a client machine's own
+# config sits in its context repo): a screen layout names every machine it
+# spans, including work machines - cross-client inventory the public repo must
+# not carry. method is none (loaded by path from the Barrier GUI), so there are
+# no links; Barrier on each host is pointed at the overlay repo's path.
 
 # --- macOS automation ---
 
@@ -415,10 +405,9 @@
 
 # --- Windows automation (AutoHotkey startup scripts) ---
 #
-# These entries are the only mechanism: the pre-manifest symlink script
-# (scripts/create_sym_links_startup.ps1) and the interactive .lnk creator
-# (scripts/deploy_ahk_startup_shortcuts.ps1) were deleted 2026-08-15. A .lnk is
-# not needed - verified on ryzenwhite (Windows 11 26200): the Startup folder
+# These entries are the only mechanism: no symlink script and no .lnk creator
+# exist any more. A .lnk is not needed - verified on ryzenwhite (Windows 11
+# 26200): the Startup folder
 # launches a symlinked .ahk at login like any other file, and the AutoHotkey
 # process gets the resolved repo path on its command line, so A_ScriptDir is
 # scripts/ (which is why desktop_numbers.ahk finds VirtualDesktopAccessor.dll
@@ -469,8 +458,8 @@
   note: >-
     Not linked, and NOT hand-copied either: the running sshd is started with
     `-f <this repo path>`, so it reads the working-tree copy in place (verified
-    2026-08-15 against the live process). Editing this file changes the live
-    config on the next sshd restart. Validate with `sshd.exe -t -f <path>`
+    against the live process). Editing this file changes the live config on the
+    next sshd restart. Validate with `sshd.exe -t -f <path>`
     before restarting, and restart at the machine, not over ssh - port 2222 is
     the only way in. Only AuthorizedKeysFile expands tokens (%h); HostKey,
     Subsystem and ForceCommand are literal paths. See

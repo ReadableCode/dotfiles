@@ -237,7 +237,7 @@ A release upgrade sets `Enabled: no` on **every** third-party source in
 `/etc/apt/sources.list.d/` and rewrites the old `.list` files as deb822
 `.sources`. Nothing re-enables them, so the app stops updating while apt keeps
 exiting 0. On this machine `code` sat on 1.71.0 (Sept 2022) from the 21.10 →
-24.04 upgrade until 2026-08-31 for exactly this reason.
+24.04 upgrade for years for exactly this reason.
 
 The repair names **no packages**. A well-behaved third-party `.deb` registers its
 own apt source and key from its `postinst`, so `myupdater` finds the owning
@@ -436,7 +436,7 @@ removes it in the same batch as ordinary cruft, and `--reinstall` has nothing
 to reinstall from afterwards). That is what the pre-upgrade list of unsourced
 packages exists to warn about. Recovery is per-package, per-release work — a
 package built against the release you left can declare libraries the new one
-no longer ships, some stale metadata nothing links and some real — so the
+does not ship, some stale metadata nothing links and some real — so the
 analysis and repair scripts live with the repo that owns the affected
 software, reachable through the host's mapped checks, not here. Whatever the
 procedure, install with `apt install ./file.deb` rather than `dpkg -i`:

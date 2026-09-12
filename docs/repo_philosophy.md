@@ -69,8 +69,7 @@ A client's credentials repo is cloned on the client's own hardware, so it
 carries **no path that names Claude and no bot-guiding markdown**. Each client
 context therefore has a second private repo, `<client>_dev`, that holds the
 agent tooling and declares its own overlay manifest (the opt-in form, see
-`docs/repo_client_credentials.md`). Both clients share the shape
-(aligned 2026-09-07):
+`docs/repo_client_credentials.md`). Both clients share the shape:
 
 | Category | Home |
 |---|---|
@@ -84,9 +83,10 @@ agent tooling and declares its own overlay manifest (the opt-in form, see
 | Context-free payloads (`init_worktree`, user `settings.json`, statusline, themes) and the generated `data/mcp/*.mcp.json` | `dotfiles` |
 | Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal-automation` for the homelab |
 
-Claude's auto-memory directories are **not** synced (retired 2026-09-07):
-they are machine-local by design, written by the agent without review, and
-were accumulating rules and facts that belong in tracked docs. Durable rules go in the user-level files (`application_configs/claude/rules/working_rules.md`
+Claude's auto-memory directories are **not** synced: they are machine-local by
+design, written by the agent without review, and accumulate rules and facts
+that belong in tracked docs. Durable rules go in the user-level files
+(`application_configs/claude/rules/working_rules.md`
 here for the context-free ones, each context's `CLAUDE.<context>.md` in its
 dev repo for the rest) and durable facts in the doc that owns the topic.
 
@@ -99,8 +99,7 @@ clone sets differ - one must be on its client's laptop for that machine's
 crontab, the other must never touch client hardware - but their role is the
 same.
 
-**The personal context has the same split** (`personal_dev`, added
-2026-09-07 after a morning where the credentials repo played both roles): the
+**The personal context has the same split** (`personal_dev`): the
 secrets repo stays a secrets repo, and the agent tooling lives in a
 GitHub-private repo that cloud and web sessions can read, which the LAN-hosted
 credentials repo never can. It is cloned wherever the credentials repo is.

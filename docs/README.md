@@ -8,7 +8,6 @@ prefixes; nothing lives unprefixed.
 - [repo_chrome_bookmarks.md](repo_chrome_bookmarks.md) - Chrome bookmarks as a repo file
 - [repo_client_credentials.md](repo_client_credentials.md) - Client Credentials Repos (`*_credentials`)
 - [repo_deploy_configs.md](repo_deploy_configs.md) - Deploying Configs with the Manifest
-- [repo_cmdr.md](repo_cmdr.md) - the fleet CLI/TUI: discovering commands from sibling repos, the check/apply convention, logs, kill and fleet checks
 - [repo_gmail_filters.md](repo_gmail_filters.md) - Gmail filters as code
 - [repo_init_worktree.md](repo_init_worktree.md) - Initialising a git worktree
 - [repo_philosophy.md](repo_philosophy.md) - Repo philosophy and boundaries
@@ -86,7 +85,6 @@ prefixes; nothing lives unprefixed.
 ## `plan_*` - Design plans
 
 - [plan_desk_dev_topology.md](plan_desk_dev_topology.md) - Plan: Desk and Dev Topology
-- [plan_unified_cli_tui.md](plan_unified_cli_tui.md) - Unified CLI and TUI (design plan)
 - [plan_unified_device.md](plan_unified_device.md) - Crafting a Unified Device Ecosystem: The Agnostic Approach
 
 ## Directories

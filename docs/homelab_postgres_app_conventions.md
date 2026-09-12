@@ -1,9 +1,8 @@
 # Shared Postgres / PostgREST App Conventions
 
-**Status: UNCOMMITTED DRAFT (2026-08-27, amended 2026-08-28).** Written as the
-single authority the per-repo `POSTGRES_MIGRATION_PLAN.md` files defer to. Every
-self-built app that touches the elitedesk Postgres instance must end up matching
-this document, and the migration plans exist to close the gaps.
+The single authority the per-repo `POSTGRES_MIGRATION_PLAN.md` files defer to.
+Every self-built app that touches the elitedesk Postgres instance must end up
+matching this document, and the migration plans exist to close the gaps.
 
 One recorded exception: **`Cash_Flow_Commander` (§7)**, which is not a PostgREST
 app and is not going to become one. Exceptions get a numbered section stating the
@@ -76,9 +75,8 @@ committed transaction.
 No JSON file, no DuckDB, no "dev mode" that swaps backends behind your back. The
 hazard is not a second backend, it is an *unannounced* one: a fallback that
 silently accepts writes is how you end up running against an empty database and
-not noticing, which is why `duck_db_api` was retired and why
-`Cash_Flow_Commander/src/db.py` grew its guard by hand after exactly that
-happened.
+not noticing, which is why `Cash_Flow_Commander/src/db.py` carries an explicit
+guard.
 
 So the rule is about how the backend is chosen, not which one it is. A backend
 the operator selected and was told about is fine. A misconfigured app that
@@ -149,22 +147,21 @@ CREATE TABLE IF NOT EXISTS <schema>.users (
 
 `password_changed_at` is load-bearing: sessions issued before it are rejected,
 so a password change, a disable, and a re-enable each revoke every live session
-without any server-side session store. Book-Bot and load-log gained the four
-missing columns (`role`, `display_name`, `disabled`, `password_changed_at`)
-additively when the §4 decision landed; postgrest-auth now requires this shape
-for every schema it serves.
+without any server-side session store. postgrest-auth requires this shape for
+every schema it serves, so `role`, `display_name`, `disabled` and
+`password_changed_at` are not optional.
 
 `password_hash` is an **opaque string**. It is never parsed, reformatted, or
 re-encoded by any migration. Algorithms are self-identifying by prefix
 (`$2b$` bcrypt, `$argon2id$` argon2id), which is what makes a future unified
 verifier possible without touching stored data.
 
-## 4. Auth — DECIDED 2026-08-28: the shared service is the standard
+## 4. Auth: the shared service is the standard
 
-Jason took the decision: **central password verification via postgrest-auth**,
-upgraded to Solitaire's crypto and revocation. C2 (one account shared across
-sites) was dropped — accounts stay per-app. The surviving constraints and how
-each is met:
+**Password verification is central, via postgrest-auth.** Accounts stay
+per-app, and are per-app by construction: `POST /token` takes a `schema` and
+looks up `<schema>.users`. Authelia cannot share that table either, since its
+backends are file and LDAP only. The constraints the arrangement meets:
 
 - **C1. No user-visible change to how anyone logs in, and no password
   resets.** Met by prefix dispatch: the service verifies `$argon2id$` and
@@ -174,8 +171,7 @@ each is met:
   (the syncplex posture) — Authelia forward-auth is not needed for the
   self-built apps.
 - **C4. No stacked edge layer.** Authelia fronts only the third-party
-  services that cannot gate themselves; its dead `bookbot` rule and the
-  `friends` group are retired.
+  services that cannot gate themselves.
 
 The division of labor:
 
@@ -193,81 +189,49 @@ The division of labor:
   argon2id hashes and bumps `password_changed_at` on password change,
   disable, and re-enable.
 
-## 5. Current auth flows (audited 2026-08-27)
+## 5. Current auth flows
 
 | Flow | Mechanism | Used by |
 |---|---|---|
 | **A. Authelia forward-auth** | SSO cookie on `tinkernet.me`, argon2 hashes in `users_database.yml` (file backend, on-server only, not in git), groups `admins`/`friends`, `password_reset: disable`, regulation 4 tries / 2 min → 10 min ban, sessions in `/config/db.sqlite3` | Self-built: `assistant`, `crowncentral`, `herdstone`. Third-party: `sonarr`(+elite), `radarr`(+elite,4k), `readarr`, `readarraudio`, `lazylibrarian`, `bazarr`, `nzbget`(+elite), `deluge`, `calibre` |
-| **B. postgrest-auth service** (the standard since 2026-08-28) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire`, `syncplex` |
-| **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | None as of 2026-08-29 (`syncplex` moved to flow B in Sync_Plex 794c425; its `users.json` is gone) |
-| **D. nginx basic auth** | `.htpasswd` at the proxy | None as of 2026-08-27 (`duck_db_api` retired; every other occurrence is commented out) |
+| **B. postgrest-auth service** (the standard) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire`, `syncplex` |
+| **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | None |
+| **D. nginx basic auth** | `.htpasswd` at the proxy | None; every occurrence is commented out |
 | **E. App's own internal auth** | Out of scope | `jellyfin`, `nextcloud`, `grafana`, `bitwarden`, `homeassistant` |
 | **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `a-girls-guide-to-georgetown`, `minecraft*`, `minio`, `ntfy`, `auth`†, `pgrest`† |
 
 \* Open **at the proxy** by design — the app itself requires a login (flow B).
-Authelia's config comments this explicitly for the whole group; the dead
-`bookbot` rule (`admins`+`friends`) was removed 2026-08-28.
+Authelia's config comments this explicitly for the whole group.
 
-`ourcash` was dropped from flow A on 2026-08-28: the container had already been
-removed from the compose file (`a05d584`) and the app is retired. Its git-side
-remnants are gone; its **Authelia rule, SWAG proxy-conf, and Cloudflare DNS
-record are on the server only** and still need retiring there.
+`ourcash` is gone from the compose file and from flow A, and its git-side
+remnants are gone, but its **Authelia rule, SWAG proxy-conf, and Cloudflare DNS
+record live on the server only** and still need removing there.
 
 † `auth` and `pgrest` are correctly ungated at nginx: each authenticates its
 own requests, and the proxy-confs say so in comments.
-
-### What blocked a single shared login (historical — C2 dropped 2026-08-28)
-
-1. **postgrest-auth is per-schema, not per-identity.** `POST /token` takes a
-   `schema` and looks up `<schema>.users`. Accounts are per-app by
-   construction. C2 needs one identity table (e.g. an `auth` schema owning
-   `users`) with per-app authorization mapped onto it, and `/token` issuing a
-   token whose `role` claim is the requested app's role only if that user is
-   entitled to it.
-2. **Authelia's file backend cannot read Postgres.** Its backends are file and
-   LDAP. So Authelia can never share the Postgres users table directly. The
-   realistic options are (a) generate `users_database.yml` from Postgres as a
-   sync step, keeping Postgres as the source of truth — needs confirmation that
-   Authelia 4.39's file backend accepts the hash algorithms in use, since it
-   supports several but the set must be checked against the docs, not assumed;
-   (b) add a forward-auth endpoint to postgrest-auth (a `GET /verify` that
-   nginx `auth_request` can call, plus a login portal and a `tinkernet.me`
-   session cookie) and retire Authelia; (c) keep them separate and accept two
-   account systems.
-3. **Two hash algorithms are in play** (bcrypt in flow B, argon2id in flows A
-   and C). This is *not* actually a blocker for C1: a unified verifier can
-   dispatch on the `$...$` prefix and transparently rehash to the target
-   algorithm on the next successful login. No resets, no user-visible change.
-   It only becomes a blocker if a component is chosen that can verify just one
-   algorithm.
-
-Resolution: Jason dropped C2 — accounts stay per-app, so items 1 and 2 are
-moot. Item 3 was solved exactly as described: the service dispatches on the
-hash prefix and rehashes to argon2id on the next successful login.
 
 ---
 
 ## 6. Known divergences from these conventions
 
-A repo still migrating carries a `POSTGRES_MIGRATION_PLAN.md`; as of
-2026-09-11 only `Terminal_To_Do` does. The others below are either done or a
-decided exception.
+A repo still migrating carries a `POSTGRES_MIGRATION_PLAN.md`; only
+`Terminal_To_Do` does. The others below are either done or a decided
+exception.
 
 | Repo | Gap |
 |---|---|
-| `Sync_Plex` | Conforms as of 2026-08-29 (Sync_Plex 794c425 moved accounts and the request queue into the `syncplex` schema; checked against I1–I11 on 2026-09-11). `syncplex_user` is `NOLOGIN`, `users` is revoked from it and from `web_anon`, `requests` has RLS with `WITH CHECK` on both policies, bootstrap is version-gated and additive and runs from the web startup path, every PostgREST call carries `Accept-Profile`/`Content-Profile`, there is no fallback store, and the one-shot `scripts/import_json_stores.py` is the only JSON reader left. I10 closed the same day (Sync_Plex e697487): `test_postgrest_real.py` does a read-only `GET /requests` through `store.py` as a throwaway user, so a PostgREST without the schema exposed fails the suite, and RLS itself is proven straight against Postgres in `test_db_real.py`. |
-| `Cash_Flow_Commander` | **Sanctioned exception, decided 2026-08-28 — see §7.** Stays on SQLAlchemy: I2, I3, I5 and I11 do not apply, and I8 applies in the amended form. I6 was closed (`src/bootstrap.py`). |
+| `Sync_Plex` | Conforms. Accounts and the request queue live in the `syncplex` schema: `syncplex_user` is `NOLOGIN`, `users` is revoked from it and from `web_anon`, `requests` has RLS with `WITH CHECK` on both policies, bootstrap is version-gated and additive and runs from the web startup path, every PostgREST call carries `Accept-Profile`/`Content-Profile`, there is no fallback store, and the one-shot `scripts/import_json_stores.py` is the only JSON reader left. For I10, `test_postgrest_real.py` does a read-only `GET /requests` through `store.py` as a throwaway user, so a PostgREST without the schema exposed fails the suite, and RLS itself is proven straight against Postgres in `test_db_real.py`. The TUI signs in nobody: `engine/media/tui/operator.py` mints the admin JWT itself from `POSTGREST_JWT_SECRET` in personal.env, with the claims flow B issues (`role`, `username`, `app_role=admin`, `iat`, `exp`, no `user_id`), so the same RLS admits it; `test_postgrest_real.py` reads the queue with that token against the real PostgREST. |
+| `Cash_Flow_Commander` | **Sanctioned exception, see §7.** Stays on SQLAlchemy: I2, I3, I5 and I11 do not apply, and I8 applies in the amended form. I6 is met (`src/bootstrap.py`). |
 | `Terminal_To_Do` | SQLite file round-tripped through S3. Violates I1, I2, I5, I6, I8. |
-| `Book-Bot` | Conforms as of 2026-08-28. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). Its `test_postgrest_real.py` stays red until `postgrest-auth` is redeployed — deploy the service **before** Book-Bot's app code, or every user locks out. |
-| `load-log` | Conforms as of 2026-08-28. Alembic removed in favour of `deploy/*.sql` + `src/bootstrap.py` called from the Streamlit and TUI startup paths; `users` brought to the §3 shape. One open backlog item is fleet-level, not load-log's own conformance: its historic migration set `search_path` on the whole shared `apps` database (`load-log/backlog/shared-apps-search-path.md`). |
-| `Solitaire_Associations` | Conforms. Moved from flow C to flow B when the §4 decision landed (2026-08-28). |
+| `Book-Bot` | Conforms. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). Its `test_postgrest_real.py` stays red until `postgrest-auth` is redeployed — deploy the service **before** Book-Bot's app code, or every user locks out. |
+| `load-log` | Conforms. The schema converges from `deploy/*.sql` + `src/bootstrap.py` called from the Streamlit and TUI startup paths, and `users` is at the §3 shape. One open backlog item is fleet-level, not load-log's own conformance: its historic migration set `search_path` on the whole shared `apps` database (`load-log/backlog/shared-apps-search-path.md`). |
+| `Solitaire_Associations` | Conforms, on flow B. |
 
 ---
 
-## 7. Cash_Flow_Commander — DECIDED 2026-08-28: not a PostgREST app
+## 7. Cash_Flow_Commander: not a PostgREST app
 
-Jason took the decision: **CFC keeps SQLAlchemy and does not migrate.** Its
-`POSTGRES_MIGRATION_PLAN.md` is superseded; the permanent record is in
+**CFC keeps SQLAlchemy and does not migrate.** The permanent record is in
 `Cash_Flow_Commander/deploy/DEPLOY.md`.
 
 The decisive constraint is a product requirement, not a preference: **anyone
@@ -294,15 +258,14 @@ What this means for the invariants, so the state is not re-flagged as a gap:
 | **I2** | Does not apply. Direct SQLAlchemy is the design. |
 | **I3** | Does not apply. `cash_flow_commander_user` keeps `LOGIN` + password. |
 | **I4/I5** | Do not apply. No `users` table, no RLS, single-user. |
-| **I6** | **Closed.** `src/bootstrap.py`, version-gated on `deploy_meta`, called from all ten entry points. Previously only three called `create_tables()`. |
+| **I6** | **Closed.** `src/bootstrap.py`, version-gated on `deploy_meta`, called from all ten entry points. |
 | **I7** | Holds. `create_all(checkfirst=True)`; a definition change is a reviewed migration. |
 | **I8** | Holds in the amended form (see I8). SQLite is chosen and announced, never a silent fallback. |
 | **I9/I11** | Do not apply. No PostgREST. |
 | **I10** | Open. `tests/test_raw_store.py::test_postgres_ingest_and_dedup` still `skipif`s on `CFC_TEST_DATABASE_URL`. |
 
 Grafana keeps reading the tables directly as `grafana_ro` (`SELECT`-only,
-schema-scoped). Under the original plan RLS would have blanked every dashboard;
-without RLS that problem does not arise.
+schema-scoped). Adding RLS here would blank every dashboard.
 
 **This exception does not generalize.** It rests on the clone-and-run
 requirement. An app that serves over HTTP, or that ever gains a second user,

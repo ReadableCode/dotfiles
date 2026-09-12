@@ -17,7 +17,7 @@ Python at all) is skipped, never given a lock it does not have.
 uv.lock, which is tracked in the repo. A project that fails to sync is reported
 and counted but never stops the rest; the exit code is 1 when any failed.
 
-`--check` is the read-only twin behind `cmdr pull --check`: `uv sync --frozen
+`--check` is the read-only twin: `uv sync --frozen
 --check` changes nothing and exits nonzero when the environment differs from
 the lock, so a stale project is reported the same way a failed one is. A uv
 too old for the flag rejects it and the project is reported as failed, never

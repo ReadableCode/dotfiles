@@ -103,11 +103,11 @@ so no per-repo enabled list is needed. `deploy_manifest.yaml` carries a
 files themselves are produced by the generator, and the manifest entries that
 link them are marked `generated: true`.
 
-Before 2026-09-02 the generator wrote one machine-level `~/.mcp.json`, inherited
-by every directory below it. That did reach every session, including ones outside
-the clone root — and that was the problem: every cloned context's servers, a few
-hundred tool names, loaded into every session regardless of which client's repo
-it was in. The user-folder file is now a removals line. Generation is still the
+The generator deliberately does **not** write one machine-level `~/.mcp.json`.
+That file is inherited by every directory below it, so it reaches every session
+including ones outside the clone root, and every cloned context's servers, a few
+hundred tool names, load into every session regardless of which client's repo it
+is in. The user-folder path is carried as a removals line. Generation is also the
 reason this is not `claude mcp add -s user` (below): one writer per context, no
 per-machine registry to drift.
 

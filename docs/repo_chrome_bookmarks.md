@@ -18,7 +18,7 @@ means reading two trees side by side; the script does it in one pass.
 |------|------|
 | `personal_credentials/bookmarks/personal_bookmarks.json` | the deduped tree in Chrome's own order, only `name`, `url`, `type`, `date_added` and `children` per node; edit this |
 | `personal_credentials/bookmarks/personal_bookmarks.html` | Netscape import file generated from the JSON; never edit |
-| `personal_credentials/bookmarks/Bookmarks-organized.md` | the 2026-08-02 cleanup write-up: what was collapsed, what was judged stale |
+| `personal_credentials/bookmarks/Bookmarks-organized.md` | the cleanup write-up: what was collapsed, what was judged stale |
 
 Bookmarks are synced, so there is one file, not one per host. Only the
 personal profile (`Default`) is handled; client profiles keep their own.

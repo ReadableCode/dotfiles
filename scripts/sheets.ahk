@@ -9,10 +9,10 @@ SetWorkingDir A_ScriptDir
 ; # for Win
 ; + for Shift
 
-; Copy the selection, then open it as a Google Docs id. The v1 original slept
-; 50 ms and used whatever was on the clipboard by then; ClipWait waits for the
-; copy to actually land instead, and does nothing at all if the copy produced
-; no text (which used to open the URL with the PREVIOUS clipboard contents).
+; Copy the selection, then open it as a Google Docs id. ClipWait waits for the
+; copy to actually land rather than sleeping a fixed interval, and the function
+; does nothing at all when the copy produced no text; without that check it
+; would open the URL with the PREVIOUS clipboard contents.
 OpenCopiedId(urlPrefix) {
     A_Clipboard := ""
     Send "^c"

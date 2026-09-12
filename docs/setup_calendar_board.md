@@ -192,7 +192,7 @@ tmux new-session -s boards 'uv run --project ~/GitHub/status_board python ~/GitH
 or as separate tmux windows (`c` / `n` to flip), or two terminal tabs — the
 calendar board never causes the status board to redraw, and vice versa.
 
-## Auth facts per context (settled 2026-07-25)
+## Auth facts per context
 
 - A client tenant that blocks all app consent (no app registrations, even
   first-party device-code flows want admin approval) cannot be reached by

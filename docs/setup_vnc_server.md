@@ -75,9 +75,9 @@ the autostart entry is deployed by the manifest:
 | Stop script | [`scripts/stop_x0vncserver.sh`](../scripts/stop_x0vncserver.sh) |
 | Autostart entry | `application_configs/autostart/start_x0vncserver.desktop`, linked to `~/.config/autostart/start_x0vncserver.desktop` by manifest entry `vnc_autostart_desktop` |
 
-The script bodies are deliberately **not** reproduced in this doc. They used to
-be, and the copy here had already drifted from the real script (it was missing
-the `&`, so following the doc gave you a start script that never returned).
+The script bodies are deliberately **not** reproduced in this doc: a copy
+drifts from the real script invisibly (one here had lost the `&`, so following
+the doc gave you a start script that never returned).
 
 So on a rebuilt machine, after the install and `tigervncpasswd` steps above:
 

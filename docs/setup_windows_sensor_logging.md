@@ -1,8 +1,7 @@
 # Windows sensor logging (LibreHardwareMonitor)
 
 CPU, board and GPU temperatures, fan speeds and CPU power, logged to CSV every
-10 seconds from sign-in and kept for 14 days. Running on Shelly since
-2026-09-10.
+10 seconds from sign-in and kept for 14 days. Running on Shelly.
 
 ## Why LibreHardwareMonitor and not HWiNFO
 

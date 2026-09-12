@@ -46,7 +46,7 @@ set_git_dir() {
             break
         fi
     done
-    # Exported so child processes (cmdr, scripts) see the same resolution the
+    # Exported so child processes (scripts, tools) see the same resolution the
     # shell made - they must never re-derive this themselves.
     export gitDir
 }
@@ -113,9 +113,7 @@ alias venvdeactivate='deactivate'
 # cannot leak into the calling shell however the script exits.
 #
 # The PowerShell twin (run-python-script in powershell_aliases.ps1) resolves
-# the same three ways. The two had drifted: bash had the walk-up search and the
-# subshell, PowerShell had the uv branch (be3bfd4, 2026-08-11). Merged
-# 2026-08-15 — change both or neither.
+# the same three ways: change both or neither.
 function run_python_script() {
     if [ -z "$1" ]; then
         echo "Usage: run_python_script <python_script_path> [args...]" >&2
@@ -178,75 +176,56 @@ function statusboard() {
     run_python_script "$gitDir/status_board/src/status_board.py" "$@"
 }
 
+# The calendar board TUI: side-by-side day columns per account (src/calendar_board.py; --help lists its flags).
+function calendarboard() {
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "calendarboard: uv is not installed (wanted to run src/calendar_board.py)"
+        return 1
+    fi
+    uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/calendar_board.py" "$@"
+}
+
+# Export this machine's Chrome bookmarks into personal_credentials (src/chrome_bookmarks.py; --check reports drift).
+function bookmarks() {
+    if ! command -v uv >/dev/null 2>&1; then
+        echo "bookmarks: uv is not installed (wanted to run src/chrome_bookmarks.py)"
+        return 1
+    fi
+    uv run --project "$gitDir/dotfiles" python "$gitDir/dotfiles/src/chrome_bookmarks.py" "$@"
+}
+
+# Ask every machine in the inventories one read-only question (src/fleet_check.py; --list shows the hosts, --help explains).
+function fleetcheck() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    python3 "$gitDir/dotfiles/src/fleet_check.py" "$@"
+}
+
 ### Command Shortcuts ###
 
 alias ll='ls -AlhF'
 
-# Open the files this branch changed (vs the merge-base with the default branch) in VSCode.
-# Skips deleted/renamed-away paths and never includes changes that only happened upstream.
+# Open the files this branch changed in VS Code (scripts/branch_diffs.sh; --list prints them, --help explains).
 function openbranchdiffs() {
-    local root base f
-    local -a files=()
-    root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Not a git repository." >&2; return 1; }
-    cd "$root" || return 1
-    git fetch -q
-    base=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || echo origin/master)
-    # base...HEAD diffs from the merge-base, so only this branch's own commits count;
-    # --diff-filter=d drops files deleted on this branch
-    while IFS= read -r f; do
-        [ -e "$f" ] && files+=("$f")
-    done < <(git diff --name-only --diff-filter=d "$base"...HEAD)
-    if [ ${#files[@]} -eq 0 ]; then
-        echo "No files changed on this branch relative to $base."
-        return 0
-    fi
-    code "${files[@]}"
+    bash "$gitDir/dotfiles/scripts/branch_diffs.sh" "$@"
 }
 
-# Fuzzy-pick a branch (most recently committed first, remotes included) and switch to it.
-# Esc aborts; picking a remote-only branch creates the local tracking branch via git switch.
+# Fuzzy-pick a branch, remotes included, and switch to it (scripts/git_switch.sh; --help explains).
 function gsw() {
-    command -v fzf >/dev/null 2>&1 || { echo "fzf is not installed" >&2; return 1; }
-    git rev-parse --git-dir >/dev/null 2>&1 || { echo "Not a git repository." >&2; return 1; }
-    git branch -a --sort=-committerdate --format='%(refname:short)' \
-        | sed 's|^origin/||' | grep -vx 'HEAD' | awk '!seen[$0]++' \
-        | fzf --preview 'git log --oneline --color=always -10 {}' --ansi \
-        | xargs -r git switch
+    bash "$gitDir/dotfiles/scripts/git_switch.sh" "$@"
 }
 
-# pullrepos: pull every repo under $gitDir in parallel via the committed
-# git_puller binary (arch-selected). Never aborts the caller: repos that
-# cannot be pulled (WIP protected, failed, auth required) get a summary
-# warning so later steps knowingly run from those repos' current, possibly
-# stale, checkouts.
+# _refresh_machine ARGS...: run src/refresh_machine.py, the one implementation
+# of pullrepos, gitpullall and myupdater for every shell (the PowerShell profile
+# launches the same script). Stdlib-only, so a bare python3 runs it before uv
+# is installed.
+function _refresh_machine() {
+    [ -z "$gitDir" ] && { echo "gitDir is not set" >&2; return 1; }
+    python3 "$gitDir/dotfiles/src/refresh_machine.py" "$@"
+}
+
+# Pull every repo under $gitDir at once (refresh_machine.py --pull-only; --help shows what happens).
 function pullrepos() {
-    local arch os bin out unpulled
-    arch=$(uname -m)
-    os=$(uname -s | tr '[:upper:]' '[:lower:]')
-    bin="$gitDir/dotfiles/go_apps/git_puller/git_puller"
-
-    if [[ "$os" == "darwin" ]]; then
-        # macOS: pick arm or x86 binary
-        if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
-            bin="${bin}_mac_arm"
-        else
-            bin="${bin}_mac_x86"
-        fi
-    elif [[ "$os" == "linux" ]]; then
-        # Linux: arm gets a suffix; x86 uses the default binary name
-        if [[ "$arch" == "arm64" || "$arch" == "aarch64" ]]; then
-            bin="${bin}_arm"
-        fi
-    fi
-
-    chmod +x "$bin"
-    out=$(mktemp)
-    "$bin" -path "$gitDir" -r | tee "$out"
-    unpulled=$(grep -cE '^\[(WIP PROTECTED|FAILED|AUTH REQUIRED)\]' "$out")
-    rm -f "$out"
-    if [[ "$unpulled" -gt 0 ]]; then
-        printf '\033[1;33mWARNING: %s repo(s) could not be pulled (tagged above) - later steps run from their current, possibly stale, checkouts.\033[0m\n' "$unpulled"
-    fi
+    _refresh_machine --pull-only "$@"
 }
 
 # clonerepos: offer clones of entitled-but-missing repos, driven by the
@@ -284,52 +263,14 @@ function updatepackages() {
     bash "$gitDir/dotfiles/scripts/my_updater.sh"
 }
 
-function _fleet_banner() {
-    printf '\033[1;36m──────────────  %s  ──────────────\033[0m\n' "$1"
-}
-
-# _fleet_refresh_configs: the shared tail of gitpullall and myupdater.
-# Clone check first (a fresh clone may be a deploy target), then sync every
-# uv project's environment so each repo's own tools are installed (fresh
-# clones included), then deploy
-# (idempotent, and re-links the hard links the pulls just orphaned on
-# no-symlink machines like work laptops), then prune with --apply: the
-# removals files are a committed list of paths that must not exist, so every
-# machine has to act on them for the list to ever be finished. A dry run here
-# would reprint the same dead links forever and still need a second command
-# by hand. Safe after the deploy because prune only removes a path a removals
-# entry names AND no live manifest entry wants (see docs/repo_deploy_configs.md).
-function _fleet_refresh_configs() {
-    _fleet_banner 'Checking for repos to clone'
-    clonerepos
-    echo ""
-    _fleet_banner 'Syncing Python environments'
-    syncpythonenvs
-    echo ""
-    _fleet_banner 'Deploying configs'
-    deployconfigs
-    echo ""
-    _fleet_banner 'Pruning removed configs'
-    deployconfigs prune --apply
-}
-
-# Pull every repo, then redeploy configs and prune removed ones.
+# Pull every repo, then clone, sync envs, deploy and prune (refresh_machine.py; --help shows what happens).
 function gitpullall() {
-    pullrepos
-    echo ""
-    _fleet_refresh_configs
+    _refresh_machine "$@"
 }
 
-# myupdater: gitpullall plus package updates. The packages run between the
-# pull and the deploy so anything an upgrade clobbers gets re-linked.
+# gitpullall plus OS package updates before the deploy (refresh_machine.py --packages; --help shows what happens).
 function myupdater() {
-    _fleet_banner 'Running System Update'
-    pullrepos
-    echo ""
-    _fleet_banner 'Updating packages'
-    updatepackages
-    echo ""
-    _fleet_refresh_configs
+    _refresh_machine --packages "$@"
 }
 
 ### tmux ###
@@ -368,52 +309,6 @@ function ta() {
 }
 
 ### Script Shortcuts ###
-
-# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine and
-# never committed, so it builds itself on first use - including installing the
-# go toolchain when the machine has none, because "install go by hand first" is
-# not something a fleet command may ask for. A release install will replace
-# this shim eventually (docs/plan_unified_cli_tui.md).
-function cmdr() {
-    local dir="$gitDir/dotfiles/go_apps/cmdr"
-    local bin="$dir/cmdr"
-    # cargo-run semantics: rebuild only when a source file is newer than the
-    # binary (a git pull freshens mtimes, so the next run after a pull
-    # rebuilds itself). The mtime scan costs ~10ms; a no-op go build costs
-    # ~10x that, so go is only invoked when something actually changed.
-    local stale=""
-    if [ ! -x "$bin" ]; then
-        stale=1
-    elif [ -n "$(find "$dir" \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "$bin" 2>/dev/null | head -n 1)" ]; then
-        stale=1
-    fi
-    if [ -n "$stale" ]; then
-        echo "cmdr: building (no binary yet, or sources are newer)..."
-        # ensure_go.sh prints the go path on stdout and nothing else, installing
-        # a toolchain first if the machine has none. It is re-run on every stale
-        # invocation rather than remembering a failure: you only get here by
-        # typing cmdr, so a retry is what you asked for.
-        local ensure="$gitDir/dotfiles/scripts/ensure_go.sh"
-        local go_bin=""
-        if [ -x "$ensure" ]; then
-            go_bin="$("$ensure")"
-        elif command -v go >/dev/null 2>&1; then
-            go_bin="$(command -v go)"    # clone predates ensure_go.sh
-        fi
-        # -x, not -n: an installer that narrates to stdout would otherwise hand
-        # back its own output with the path buried in it, and bash would try to
-        # exec the whole thing (dnf did exactly this, 2026-09-01).
-        if [ -x "$go_bin" ]; then
-            (cd "$dir" && "$go_bin" build .) || return 1
-        elif [ -x "$bin" ]; then
-            echo "cmdr: no go toolchain and none could be installed - running the existing binary"
-        else
-            echo "cmdr: no go toolchain and none could be installed, so $bin cannot be built (see docs/setup_go.md)"
-            return 1
-        fi
-    fi
-    "$bin" "$@"
-}
 
 # deployconfigs: run the dotfiles config deploy from anywhere (uv resolves the
 # repo venv via --project, so no cd needed). Args pass straight through and the
@@ -456,10 +351,9 @@ _ssh_local_hostname() {
 # instead of two twins kept in step by hand. See its module docstring and
 # docs/repo_client_credentials.md for the inventory schema.
 #
-# Stdlib-only, so bare python3 runs it before any venv exists — and it is ONE
-# process for all inventories, where the old loader spawned one per file. No
-# python3 (or no generator on disk) just means no ssh aliases; nothing else in
-# this file depends on them.
+# Stdlib-only, so bare python3 runs it before any venv exists, and it is ONE
+# process for all inventories, never one per file. No python3 (or no generator
+# on disk) just means no ssh aliases; nothing else in this file depends on them.
 _load_ssh_aliases() {
     [[ -n "$gitDir" ]] || return 0
     command -v python3 >/dev/null 2>&1 || return 0
@@ -476,14 +370,13 @@ _load_ssh_aliases
 
 ### Alias inventory ###
 
-# `cataliases` used to cat the rc file, which never showed what the context
-# shards or the ssh generator added to this session. This walks what the shell
-# actually sourced - the rc file, this file, every ~/.shell_local.d shard, then
-# the generated ssh/vnc aliases - and prints a CLI-style table: one command per
-# line with a one-line description. The description is the comment sitting
-# directly above the definition, or the alias body when there is none, so a
-# comment line above an alias is all it takes to label it. `cataliases <name>`
-# prints that one definition instead.
+# `cataliases` walks what the shell actually sourced - the rc file, this file,
+# every ~/.shell_local.d shard, then the generated ssh/vnc aliases - so what the
+# context shards and the ssh generator added to this session is listed too, and
+# prints a CLI-style table: one command per line with a one-line description.
+# The description is the comment sitting directly above the definition, or the
+# alias body when there is none, so a comment line above an alias is all it
+# takes to label it. `cataliases <name>` prints that one definition instead.
 _alias_table() {
     # `alias NAME=` at any indent; `NAME() {` and `function NAME` only at column
     # 0 so helpers nested inside another function stay out. Underscore-prefixed

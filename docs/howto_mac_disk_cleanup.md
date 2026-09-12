@@ -49,8 +49,8 @@ redirects its caches (Envy points `HOMEBREW_CACHE` at an external SSD, see
 `PACKAGE_CACHES` therefore asks each tool where its cache is (`uv cache dir`,
 `brew --cache`, `npm config get cache`) through a login shell, because the
 redirect is an export. Hardcoding the default paths measured one directory and
-pruned another: the 2026-09-09 dry run claimed 4.63 GB of internal-disk cache
-that `uv cache prune` would never have touched.
+pruned another: a dry run claimed 4.63 GB of internal-disk cache that
+`uv cache prune` would never have touched.
 
 **Freeing another volume is not freeing this one.** Sizes on a volume other
 than `$HOME`'s are printed but excluded from the total, since the total is

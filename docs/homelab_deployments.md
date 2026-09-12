@@ -1,8 +1,6 @@
 # Homelab Deployments
 
-How self-hosted apps are deployed and managed across the homelab. Written
-2026-07-02 after setting up the herdstone media remote and the elitedesk
-auto-deploy pipeline.
+How self-hosted apps are deployed and managed across the homelab.
 
 This doc is the canonical description of the **process** (which repo deploys
 what, how the auto-deploy loop and cron declarations work). Each repo's own
@@ -33,7 +31,7 @@ layout must exist on the Mac and on the servers.
 | Repo | Role |
 |------|------|
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
-| `personal_credentials` | `personal.env` (KEY="value" secrets) and `personal_hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is this checkout (`receive.denyCurrentBranch=updateInstead`), so a push from any machine lands in the working tree directly. Listed in `~/GitHub/.skiprepos` so nothing tries to fetch it; `git_pull.sh` treats it as a *hub* repo and redeploys its consumers when HEAD moves (since 2026-09-07). |
+| `personal_credentials` | `personal.env` (KEY="value" secrets) and `personal_hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is this checkout (`receive.denyCurrentBranch=updateInstead`), so a push from any machine lands in the working tree directly. Listed in `~/GitHub/.skiprepos` so nothing tries to fetch it; `git_pull.sh` treats it as a *hub* repo and redeploys its consumers when HEAD moves. |
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. Also owns elitedesk's crontabs — see [Cron](#cron-how-scheduled-jobs-are-declared). |
 | `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`). |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
@@ -67,9 +65,9 @@ Key behaviors:
   deployed, recorded in `~/GitHub/.git_pull_state/<repo>.rev`, and recreates
   the mapped services (herdstone-web, syncplex-web) when it moved. So a push
   of `personal.env` or `personal_hosts.json` from any machine is live within
-  5 minutes like everything else; no manual `redeploy.sh` step any more
-  (2026-09-07). Delete the state file to force one redeploy.
-- **dotfiles on this box** (2026-09-08): root's loop pulls every repo but
+  5 minutes like everything else, with no manual `redeploy.sh` step. Delete
+  the state file to force one redeploy.
+- **dotfiles on this box**: root's loop pulls every repo but
   never clones a newly declared one or links anything, so jason's crontab
   (`jason.cron`, minute 5 of every quarter hour) runs the two steps
   `gitpullall` runs after its pull: `clone_repos.py --yes` (whatever
@@ -107,7 +105,7 @@ Adding a host: give it a `<host>/cron/<user>.cron` file in whichever repo
 already deploys to it, and have that repo's deploy script `crontab` the file
 on change. Do not add it here.
 
-### Hosts that are deliberately out of scope (verified 2026-08-14)
+### Hosts that are deliberately out of scope
 
 - **behemoth (Unraid)** — root's crontab is the stock Slackware default;
   every real schedule (mover, parity-check, ssd-trim, monitor, plugin and

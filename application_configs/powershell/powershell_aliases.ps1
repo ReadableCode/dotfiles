@@ -173,7 +173,7 @@ foreach ($candidate in $gitDirCandidates) {
         break
     }
 }
-# Exported so child processes (cmdr, scripts) see the same resolution the
+# Exported so child processes (scripts, tools) see the same resolution the
 # shell made - they must never re-derive this themselves.
 $env:gitDir = $gitDir
 
@@ -230,9 +230,7 @@ function venvdeactivate { deactivate }
 #   system python - neither.
 #
 # The bash twin (run_python_script in application_configs/bash/.shared_aliases)
-# resolves the same three ways. The two had drifted: bash had the walk-up
-# search and its subshell isolation, this side had the uv branch (be3bfd4,
-# 2026-08-11). Merged 2026-08-15 - change both or neither.
+# resolves the same three ways: change both or neither.
 function run-python-script {
     param (
         [string]$scriptPath,
@@ -259,8 +257,9 @@ function run-python-script {
     Write-Host "Running Python script: $scriptPath"
 
     # Nearest ancestor holding either project marker, starting at the script's
-    # own directory. Empty when there is no project above it. Replaces the old
-    # hardcoded "..", which only ever found a project exactly one level up.
+    # own directory: the search walks all the way up, never a fixed "..", which
+    # only ever finds a project exactly one level up. Empty when there is no
+    # project above it.
     $projectRoot = ''
     $dir = Get-Item -LiteralPath $scriptDir
     while ($null -ne $dir) {
@@ -300,8 +299,8 @@ function run-python-script {
     }
     finally {
         # Deactivate HERE, not after the run: PowerShell activates in-process,
-        # so a script that threw used to leave the venv live in the caller's
-        # session. The bash twin gets this free from its subshell.
+        # so a script that throws would otherwise leave the venv live in the
+        # caller's session. The bash twin gets this free from its subshell.
         if ($activated -and (Get-Command deactivate -ErrorAction SilentlyContinue)) { deactivate }
         Pop-Location
     }
@@ -312,6 +311,40 @@ function statusboard {
     if (-not (Test-GitDir)) { return }
     $scriptPath = (Join-Path $gitDir 'status_board\src\status_board.py')
     run-python-script $scriptPath @args
+}
+
+# The calendar board TUI: side-by-side day columns per account (src\calendar_board.py; --help lists its flags).
+function calendarboard {
+    if (-not (Test-GitDir)) { return }
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Host "calendarboard: uv is not installed (wanted to run src/calendar_board.py)"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    uv run --project $repo python (Join-Path $repo 'src\calendar_board.py') @args
+}
+
+# Export this machine's Chrome bookmarks into personal_credentials (src\chrome_bookmarks.py; --check reports drift).
+function bookmarks {
+    if (-not (Test-GitDir)) { return }
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Host "bookmarks: uv is not installed (wanted to run src/chrome_bookmarks.py)"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    uv run --project $repo python (Join-Path $repo 'src\chrome_bookmarks.py') @args
+}
+
+# Ask every machine in the inventories one read-only question (src\fleet_check.py; --list shows the hosts, --help explains).
+function fleetcheck {
+    if (-not (Test-GitDir)) { return }
+    $python = Get-PythonCommand
+    if (-not $python) {
+        Write-Host "no python found to run src/fleet_check.py"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    & $python (Join-Path $repo 'src\fleet_check.py') @args
 }
 
 
@@ -327,69 +360,37 @@ function which {
     Get-Command $args
 }
 
-# Open every file this branch changed vs the default branch.
+# Open the files this branch changed in VS Code (scripts\branch_diffs.ps1; --list prints them, --help explains).
 function openbranchdiffs {
-    # Navigate to the root of the Git repository
-    $repoRoot = git rev-parse --show-toplevel 2>$null
-    if (-not $repoRoot) {
-        Write-Host "Not a Git repository." -ForegroundColor Red
-        return
-    }
-    Set-Location -Path $repoRoot
-
-    # Fetch to ensure the remote default branch is up to date before diffing
-    git fetch -q
-
-    # Detect the remote default branch instead of assuming origin/master
-    $base = git symbolic-ref --short refs/remotes/origin/HEAD 2>$null
-    if (-not $base) { $base = 'origin/master' }
-
-    # base...HEAD diffs from the merge-base, so only this branch's own commits count;
-    # --diff-filter=d drops files deleted on this branch, Test-Path drops renamed-away paths
-    $changedFiles = git diff --name-only --diff-filter=d "$base...HEAD" | Where-Object { Test-Path -LiteralPath $_ }
-
-    if (-not $changedFiles) {
-        Write-Host "No files changed on this branch relative to $base." -ForegroundColor Yellow
-        return
-    }
-
-    # Open all changed files in one VSCode invocation
-    code @($changedFiles)
-}
-
-# Fuzzy-pick a branch (most recently committed first, remotes included) and switch to it.
-# Esc aborts; picking a remote-only branch creates the local tracking branch via git switch.
-function gsw {
-    if (-not (Get-Command fzf -ErrorAction SilentlyContinue)) {
-        Write-Host "fzf is not installed" -ForegroundColor Red
-        return
-    }
-    git rev-parse --git-dir 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Not a Git repository." -ForegroundColor Red
-        return
-    }
-    $branch = git branch -a --sort=-committerdate --format='%(refname:short)' |
-        ForEach-Object { $_ -replace '^origin/', '' } |
-        Where-Object { $_ -ne 'HEAD' } |
-        Select-Object -Unique |
-        fzf --preview 'git log --oneline --color=always -10 {}' --ansi
-    if ($branch) { git switch $branch }
-}
-
-# pullrepos: pull every repo under $gitDir in parallel via the committed
-# git_puller binary. Never aborts the caller: repos that cannot be pulled
-# (WIP protected, failed, auth required) get a summary warning so later steps
-# knowingly run from those repos' current, possibly stale, checkouts.
-function pullrepos {
     if (-not (Test-GitDir)) { return }
-    $binary = Join-Path $gitDir "dotfiles/go_apps/git_puller/git_puller.exe"
-    & $binary -path $gitDir -r | Tee-Object -Variable pullOutput
-    $unpulled = @($pullOutput | Where-Object { $_ -match '^\[(WIP PROTECTED|FAILED|AUTH REQUIRED)\]' }).Count
-    if ($unpulled -gt 0) {
-        Write-Host "WARNING: $unpulled repo(s) could not be pulled (tagged above) - later steps run from their current, possibly stale, checkouts." -ForegroundColor Yellow
-    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    & (Join-Path $repo 'scripts\branch_diffs.ps1') @args
 }
+
+# Fuzzy-pick a branch, remotes included, and switch to it (scripts\git_switch.ps1; --help explains).
+function gsw {
+    if (-not (Test-GitDir)) { return }
+    $repo = Join-Path $gitDir 'dotfiles'
+    & (Join-Path $repo 'scripts\git_switch.ps1') @args
+}
+
+# _RefreshMachine: run src/refresh_machine.py, the one implementation of
+# pullrepos, gitpullall and myupdater for every shell (the bash profile
+# launches the same script). Stdlib-only, so any python runs it before uv is
+# installed.
+function _RefreshMachine {
+    if (-not (Test-GitDir)) { return }
+    $python = Get-PythonCommand
+    if (-not $python) {
+        Write-Host "no python found to run src/refresh_machine.py"
+        return
+    }
+    $repo = Join-Path $gitDir 'dotfiles'
+    & $python (Join-Path $repo 'src\refresh_machine.py') @args
+}
+
+# Pull every repo under $gitDir at once (refresh_machine.py --pull-only; --help shows what happens).
+function pullrepos { _RefreshMachine --pull-only @args }
 
 # clonerepos: offer clones of entitled-but-missing repos, driven by the
 # <context>_repos.yaml configs in the *_credentials repos (which a preceding
@@ -418,55 +419,15 @@ function syncpythonenvs {
     uv run --project $repo python (Join-Path $repo 'src\sync_python_envs.py') @args
 }
 
-# updatepackages: OS package updates only (winget, then choco) - no repo
-# pulls, no config deploy.
+# updatepackages: OS package updates only (scripts/my_updater.ps1: winget, then choco).
 function updatepackages {
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "Updating via winget..." -ForegroundColor Green
-        winget upgrade --all
-    }
-    if (Get-Command choco -ErrorAction SilentlyContinue) {
-        Write-Host "Updating via Chocolatey..." -ForegroundColor Green
-        choco upgrade all -y
-    }
-}
-
-# The shared tail of gitpullall and myupdater. Clone check first (a fresh
-# clone may be a deploy target), then sync every uv project's environment so
-# each repo's own tools are installed (fresh clones included), then deploy
-# (idempotent, and re-links the hard links the pulls just orphaned on
-# no-symlink machines like work laptops), then prune with --apply: the
-# removals files are a committed list of paths that must not exist, so every
-# machine has to act on them for the list to ever be finished. A dry run here
-# would reprint the same dead links forever and still need a second command by
-# hand. Safe after the deploy because prune only removes a path a removals
-# entry names AND no live manifest entry wants (see
-# docs/repo_deploy_configs.md). The slow AutoHotkey probes (registry scan,
-# choco list) ride along last - too expensive for shell startup, cheap here
-# where seconds do not matter. Silent on a correct machine.
-function _FleetRefreshConfigs {
-    Write-Host "==============  Checking for repos to clone  ==============" -ForegroundColor Cyan
-    clonerepos
-    Write-Host ""
-    Write-Host "==============  Syncing Python environments  ==============" -ForegroundColor Cyan
-    syncpythonenvs
-    Write-Host ""
-    Write-Host "==============  Deploying configs  ==============" -ForegroundColor Cyan
-    deployconfigs
-    Write-Host ""
-    Write-Host "==============  Pruning removed configs  ==============" -ForegroundColor Cyan
-    deployconfigs prune --apply
-    $ensureAhk = Join-Path $gitDir 'dotfiles\scripts\ensure_autohotkey_v2.ps1'
-    if (Test-Path $ensureAhk) { & $ensureAhk -AutoFix -Full }
-}
-
-# Pull every repo, then redeploy configs and prune removed ones.
-function gitpullall {
     if (-not (Test-GitDir)) { return }
-    pullrepos
-    Write-Host ""
-    _FleetRefreshConfigs
+    $repo = Join-Path $gitDir 'dotfiles'
+    & (Join-Path $repo 'scripts\my_updater.ps1') @args
 }
+
+# Pull every repo, then clone, sync envs, deploy and prune (refresh_machine.py; --help shows what happens).
+function gitpullall { _RefreshMachine @args }
 
 # Bring this machine's AutoHotkey install in line with the repo's v2 scripts:
 # installs/upgrades v2, removes v1, repoints the .ahk association. Idempotent -
@@ -483,10 +444,9 @@ function ensureahk {
 # points at `ensureahk` - it deliberately does not fix from here.
 #
 # -Check, not -AutoFix: fixing needs admin, and raising UAC from a profile
-# means every new shell hangs on a modal prompt until it is answered (a
-# declined-looking prompt cost 60 s of profile load on a work laptop,
-# 2026-08-17). The fixing pass belongs where a wait is expected - `ensureahk`,
-# or `gitpullall`, which runs -AutoFix -Full further down.
+# means every new shell hangs on a modal prompt until it is answered. The
+# fixing pass belongs where a wait is expected - `ensureahk`, or `gitpullall`,
+# which runs -AutoFix -Full further down.
 #
 # Interactive only: `ssh host '<command>'`, scp and every -File/-Command run
 # skip it, so remote commands neither pay the probe nor print a nag nobody is
@@ -502,61 +462,6 @@ if ($global:IsInteractiveShell -and $gitDir) {
 }
 
 ### Script Shortcuts ###
-
-# cmdr: the fleet CLI/TUI (go_apps/cmdr). Its binary is built per machine and
-# never committed, so it builds itself on first use - including installing the
-# go toolchain when the machine has none, because "install go by hand first" is
-# not something a fleet command may ask for. A release install will replace
-# this shim eventually (docs/plan_unified_cli_tui.md).
-function cmdr {
-    if (-not (Test-GitDir)) { return }
-    $dir = Join-Path $gitDir 'dotfiles\go_apps\cmdr'
-    $bin = Join-Path $dir 'cmdr.exe'
-    # cargo-run semantics: rebuild only when a source file is newer than the
-    # binary (a git pull freshens mtimes, so the next run after a pull
-    # rebuilds itself).
-    $stale = -not (Test-Path $bin)
-    if (-not $stale) {
-        $binTime = (Get-Item $bin).LastWriteTime
-        $newer = Get-ChildItem $dir -File | Where-Object {
-            ($_.Extension -eq '.go' -or $_.Name -in 'go.mod', 'go.sum') -and $_.LastWriteTime -gt $binTime
-        }
-        $stale = [bool]$newer
-    }
-    if ($stale) {
-        Write-Host "cmdr: building (no binary yet, or sources are newer)..."
-        # ensure_go.ps1 emits the go path and nothing else, installing a
-        # toolchain first if the machine has none. It is re-run on every stale
-        # invocation rather than remembering a failure: you only get here by
-        # typing cmdr, so a retry is what you asked for.
-        $ensure = Join-Path $gitDir 'dotfiles\scripts\ensure_go.ps1'
-        $goBin = $null
-        if (Test-Path $ensure) {
-            # Select-Object -Last 1 and a Test-Path guard: an installer that
-            # narrates to the success stream would otherwise hand back its own
-            # output with the path buried in it (dnf did exactly this on the
-            # bash side, 2026-09-01).
-            $goBin = & $ensure | Select-Object -Last 1
-            if ($LASTEXITCODE -ne 0 -or -not ($goBin -and (Test-Path -LiteralPath $goBin))) { $goBin = $null }
-        } else {
-            # clone predates ensure_go.ps1
-            $onPath = Get-Command go -ErrorAction SilentlyContinue
-            if ($onPath) { $goBin = $onPath.Source }
-        }
-        if ($goBin) {
-            Push-Location $dir
-            & $goBin build .
-            Pop-Location
-            if (-not (Test-Path $bin)) { return }
-        } elseif (Test-Path $bin) {
-            Write-Host "cmdr: no go toolchain and none could be installed - running the existing binary"
-        } else {
-            Write-Host "cmdr: no go toolchain and none could be installed, so $bin cannot be built (see docs/setup_go.md)"
-            return
-        }
-    }
-    & $bin @args
-}
 
 # deployconfigs: run the dotfiles config deploy from anywhere (uv resolves the
 # repo venv via --project, so no cd needed). Args pass straight through and the
@@ -578,18 +483,8 @@ function ntfyme {
     & (Join-Path $gitDir 'dotfiles\.venv\Scripts\python.exe') (Join-Path $gitDir 'dotfiles\scripts\ntfyme.py') @args
 }
 
-# myupdater: gitpullall plus package updates. The packages run between the
-# pull and the deploy so anything an upgrade clobbers gets re-linked.
-function myupdater {
-    if (-not (Test-GitDir)) { return }
-    Write-Host "#################   Running System Update   #####################" -ForegroundColor Cyan
-    pullrepos
-    Write-Host ""
-    Write-Host "==============  Updating packages  ==============" -ForegroundColor Cyan
-    updatepackages
-    Write-Host ""
-    _FleetRefreshConfigs
-}
+# gitpullall plus OS package updates before the deploy (refresh_machine.py --packages; --help shows what happens).
+function myupdater { _RefreshMachine --packages @args }
 
 # Weather report from wttr.in.
 function weather {
@@ -799,10 +694,10 @@ function showwifi {
 #     STUBS that open the Microsoft Store instead of running anything, so they
 #     are skipped by path.
 #   * a real .exe is preferred over a shim, because `python3` often resolves to
-#     a pyenv-win .bat that re-launches through cmd: measured on RyzenWhite
-#     2026-08-15, the same generator run took ~610 ms through the shim and
-#     ~110 ms through C:\Python314\python.exe. Shims are still used when
-#     nothing else is installed - slow aliases beat no aliases.
+#     a pyenv-win .bat that re-launches through cmd: the same generator run
+#     takes ~610 ms through the shim and ~110 ms through a real
+#     C:\Python314\python.exe. Shims are still used when nothing else is
+#     installed - slow aliases beat no aliases.
 # The dotfiles venv is the last resort, for a machine whose only Python is the
 # one uv created.
 function Get-PythonCommand {

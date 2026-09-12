@@ -14,7 +14,7 @@ the things that silently fail a plausible remote workflow.
   `~/GitHub` has a normal forge origin.
 - **Never `sudo` or `sudo -n` there from an agent.** There is no passwordless
   sudo, and every failed attempt emails me a security alert (mail_badpass +
-  ssmtp root forward, since 2026-08-02; kept on deliberately). Read what is
+  ssmtp root forward, kept on deliberately). Read what is
   readable as jason; the backup jobs avoid sudo through the docker group.
 - Docker needs root; automation runs from root's crontab by design. See
   `homelab_deployments.md`.
@@ -45,7 +45,7 @@ the things that silently fail a plausible remote workflow.
   on nukbuntu even though every binary under /usr, rsyslogd included, dies
   with the stick. There is no console when that happens: ssh accepts and
   resets, the web UI dies within the hour, containers keep running. Power
-  cycle; the evidence is already on nukbuntu (2026-09-08).
+  cycle; the evidence is already on nukbuntu.
 - UPS: CyberPower PR1500LCDRT2U on USB, monitored by the desertwitch NUT
   plugin (`nut-dw`), not apcupsd. CyberPower's USB interrupt pipe goes silent
   and usbhid-ups marks data stale; the fix is `pollonly` on line 9 of

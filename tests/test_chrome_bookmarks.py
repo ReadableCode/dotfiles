@@ -1,6 +1,8 @@
 # %%
 # Imports #
 
+import os
+
 import config_test_utils  # noqa F401
 from src import chrome_bookmarks
 
@@ -99,3 +101,56 @@ def test_write_outputs_writes_both_files(tmp_path):
     chrome_bookmarks.write_outputs(sync_duplicated_tree(), str(tmp_path))
     assert (tmp_path / "personal_bookmarks.json").exists()
     assert (tmp_path / "personal_bookmarks.html").exists()
+
+
+def test_check_drift_says_so_and_passes_when_there_is_no_repo_copy(tmp_path, capsys):
+    # personal_credentials not cloned, or bookmarks never exported.
+    missing = tmp_path / "personal_bookmarks.json"
+
+    assert chrome_bookmarks.check_drift(sync_duplicated_tree(), str(missing)) == 0
+    assert "nothing to compare against" in capsys.readouterr().out
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_check_drift_passes_when_the_repo_copy_matches(tmp_path, capsys):
+    chrome_bookmarks.write_outputs(sync_duplicated_tree(), str(tmp_path))
+    repo_json = tmp_path / "personal_bookmarks.json"
+    before = repo_json.read_text(encoding="utf-8")
+
+    assert chrome_bookmarks.check_drift(sync_duplicated_tree(), str(repo_json)) == 0
+    assert "match" in capsys.readouterr().out
+    assert repo_json.read_text(encoding="utf-8") == before
+
+
+def test_check_drift_exits_one_and_shows_the_lines_that_differ(tmp_path, capsys):
+    chrome_bookmarks.write_outputs(sync_duplicated_tree(), str(tmp_path))
+    repo_json = tmp_path / "personal_bookmarks.json"
+    live = sync_duplicated_tree()
+    live["roots"]["other"]["children"].append(url("Added Since", "http://added"))
+
+    assert chrome_bookmarks.check_drift(live, str(repo_json)) == 1
+    out = capsys.readouterr().out
+    assert "differ" in out
+    assert "Added Since" in out
+
+
+def test_check_drift_prints_at_most_the_preview_and_never_writes_to_the_repo(tmp_path, capsys):
+    chrome_bookmarks.write_outputs(sync_duplicated_tree(), str(tmp_path))
+    repo_json = tmp_path / "personal_bookmarks.json"
+    repo_html = tmp_path / "personal_bookmarks.html"
+    stamps = {p.name: p.stat().st_mtime_ns for p in (repo_json, repo_html)}
+    live = sync_duplicated_tree()
+    live["roots"]["other"]["children"] = [url(f"New {i}", f"http://new/{i}") for i in range(40)]
+
+    assert chrome_bookmarks.check_drift(live, str(repo_json)) == 1
+    out = capsys.readouterr().out
+    diff_lines = [line for line in out.splitlines() if line.startswith(("+", "-", "@@"))]
+    assert len(diff_lines) <= chrome_bookmarks.DIFF_PREVIEW_LINES
+    assert "more diff lines" in out
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["personal_bookmarks.html", "personal_bookmarks.json"]
+    assert {p.name: p.stat().st_mtime_ns for p in (repo_json, repo_html)} == stamps
+
+
+def test_repo_json_path_is_the_committed_copy_in_personal_credentials():
+    path = chrome_bookmarks.get_repo_json_path()
+    assert path.endswith(os.path.join("personal_credentials", "bookmarks", "personal_bookmarks.json"))

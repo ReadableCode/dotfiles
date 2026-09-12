@@ -6,8 +6,6 @@ Go installs itself on this fleet. `scripts/ensure_go.sh` (and
 `scripts/ensure_go.ps1` on Windows) resolves a toolchain and installs one when
 the machine has none:
 
-- `cmdr` calls it before building `go_apps/cmdr`, so the first `cmdr` on a
-  machine with no Go installs Go, builds, and runs.
 - `scripts/bootstrap.sh` / `bootstrap.ps1` run it as their own step.
 - `go` is on every platform app list (`app_lists/*`), so the normal package
   install covers it too.
@@ -84,7 +82,7 @@ profile. Go ships as a plain zip with no installer and no registry writes, so
 everything lands under `C:\Users\<you>\userapps\go`, following the layout in
 [setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md).
 
-Nothing here needs MSYS2. A pure-Go build (`go_apps/cmdr` included) links with
+Nothing here needs MSYS2. A pure-Go build links with
 Go's own linker. MSYS2's `mingw-w64-x86_64-gcc` only matters if a dependency
 turns on cgo, and `C:\msys64\mingw64\bin` is already on `PATH` from the shared
 portable paths file if that day comes.
@@ -139,7 +137,6 @@ Close and reopen PowerShell (and VS Code), then:
 where.exe go        # expect ...\userapps\go\bin\go.exe
 go version
 go env GOROOT GOPATH GOCACHE
-cmdr                # builds go_apps/cmdr on first run, then runs it
 ```
 
 If `go build` hangs or fails resolving modules, the corporate proxy is likely

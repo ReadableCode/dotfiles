@@ -262,9 +262,7 @@ if ($SkipApps) {
 
 # The choco list carries golang, so the step above usually already installed it.
 # This one is the guarantee: it also covers -SkipApps and an unelevated shell,
-# where the choco step is skipped but winget still works. cmdr calls the same
-# script on first use, so a machine that skips this here still ends up with a
-# toolchain the first time anyone types cmdr.
+# where the choco step is skipped but winget still works.
 Write-Step "go"
 $ensureGo = Join-Path $DotfilesDir 'scripts\ensure_go.ps1'
 if (-not (Test-Path $ensureGo)) {
@@ -277,7 +275,7 @@ if (-not (Test-Path $ensureGo)) {
     if ($LASTEXITCODE -eq 0) {
         Write-Ok "go ready ($goPath)"
     } else {
-        Write-Warn "no go toolchain - cmdr and the other go_apps cannot be built"
+        Write-Warn "no go toolchain - the go_apps cannot be built"
         Add-Manual "install go by hand: docs/setup_go.md"
     }
 }

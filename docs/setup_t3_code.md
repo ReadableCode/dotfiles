@@ -19,8 +19,7 @@ apps. Source: [github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code)
 **Headless servers install unpinned**, same as the desktop app: `t3@latest`
 (the Linux prereq script prints `npx -y t3@latest service install`). No file in
 this repo names a server version, so nothing here can go stale. Only Linux runs
-a headless server now — the Windows method was removed 2026-08-18, see
-[Windows: desktop app only](#windows-desktop-app-only-2026-08-18).
+a headless server; see [Windows: desktop app only](#windows-desktop-app-only).
 
 `latest` is npm's **stable** tag. Nightlies ship under a separate `nightly`
 tag and are never resolved by `@latest` — the 0.0.32 nightly that filled
@@ -71,12 +70,10 @@ tracks it like everything else (it's in
 winget install T3Tools.T3Code
 ```
 
-**That is the whole Windows install.** There is no headless-server option any
-more — the desktop app is the only supported way to run T3 on Windows, and a
-Windows box is therefore never an always-on environment. The method, its
-scripts and its config files were deleted 2026-08-18; see
-[Windows: desktop app only](#windows-desktop-app-only-2026-08-18) for what was
-removed and why, before proposing to bring any of it back.
+**That is the whole Windows install.** There is no headless-server option: the
+desktop app is the only supported way to run T3 on Windows, and a Windows box
+is therefore never an always-on environment. See
+[Windows: desktop app only](#windows-desktop-app-only).
 
 Phones: the
 [iOS](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) /
@@ -92,8 +89,6 @@ install` writes a systemd **user** unit and turns lingering on, so the server
 starts at boot and keeps running with nobody logged in. No desktop app, no
 scheduled-task workaround like Windows needs, and unlike a `serve` started
 over SSH it doesn't die with the session.
-
-Done on JasonZephyrus (Fedora 43) 2026-08-14.
 
 ```bash
 # 1. prereqs (node in range + a C++ toolchain — see the node-pty trap below)
@@ -115,7 +110,7 @@ systemctl`, it's a user unit. Logs go to
 `~/.t3/userdata/logs/boot-service.log`, and updates use
 `npx -y t3@<version> service update` (**not** the panel's copy-update
 command — see [Updating a service-managed Linux
-server](#updating-a-service-managed-linux-server-2026-08-11)).
+server](#updating-a-service-managed-linux-server)).
 
 What it writes, as of 0.0.33 — worth knowing before hand-editing anything:
 
@@ -194,30 +189,20 @@ deploy for everyone). Confirm all three landed as symlinks with
 keybinding entry" — the bare (non-`.mac`) files must stay within the pinned
 server's schema.
 
-**The headless server breaks the keybindings symlink too** (JasonZephyrus,
-2026-08-14). The `NOT_A_LINK` drift documented under Settings is not
-desktop-only: on first start the **0.0.33 headless server** merged its own
-defaults into `keybindings.json` and saved, replacing the deployed symlink
-with a regular file. It writes once — a file that already contains the
-defaults survives later restarts — so this is a one-shot on a fresh install,
-not a loop, but `deploy_configs.py status` reports `NOT_A_LINK` until it's
-resolved.
+**The headless server breaks the keybindings symlink too.** The `NOT_A_LINK`
+drift documented under Settings is not desktop-only: on first start a headless
+server merges its own defaults into `keybindings.json` and saves, replacing the
+deployed symlink with a regular file. It writes once — a file that already
+contains the defaults survives later restarts — so this is a one-shot on a
+fresh install, not a loop, but `deploy_configs.py status` reports `NOT_A_LINK`
+until it's resolved.
 
-The three commands it added were the catch:
-`filePicker.toggle`, `projectSearch.toggle`, `themeEditor.toggle` — the first
-two are exactly what **0.0.31 rejected** with "ignoring invalid keybinding
-entry" (see Known issues; that's why they were stripped from the bare file in
-the first place). Simply re-deploying would have handed 0.0.33 a file it
-rewrites again, so the bare file had to move up with the servers.
-
-**Resolved 2026-08-14**: the three bindings are now in the bare
-`keybindings.json` and the fleet's servers moved to 0.0.33 together. Restart
-after re-deploying and the server leaves the file alone — verified here: the
-symlink survives restarts and the boot log is free of keybinding warnings.
-The lesson generalizes — **the bare file tracks the lowest server version
-deployed anywhere**, so bump the servers first and promote new default
-bindings second. `keybindings.mac.json` is a separate track (the desktop
-app's version) and was deliberately left alone.
+Re-deploying alone just hands the server a file it rewrites again, so the bare
+file has to move up with the servers: **it tracks the lowest server version
+deployed anywhere**. Bump every server first, promote the new default bindings
+into the bare `keybindings.json` second, then restart after re-deploying and
+the server leaves the file alone. `keybindings.mac.json` is a separate track
+(the desktop app's version).
 
 ### Reachability: Tailscale Serve on the boot service
 
@@ -229,8 +214,7 @@ choice RyzenWhite made, for the same reason.
 
 **Serve flags reach the service only through the environment.** The Linux
 service launcher spawns `serve` with **no arguments** and there is no wrapper
-script to edit (the Windows setup's `~\.t3\t3serve.cmd` trick has no
-equivalent). It does pass its own environment through, and every `serve` flag
+script to edit. It does pass its own environment through, and every `serve` flag
 has a `T3CODE_*` twin — `T3CODE_TAILSCALE_SERVE`,
 `T3CODE_TAILSCALE_SERVE_PORT`, `T3CODE_HOST`, `T3CODE_PORT`,
 `T3CODE_MODE`. So configuration is a drop-in:
@@ -258,8 +242,7 @@ sudo tailscale set --operator=$USER
 ```
 
 Don't "fix" it by running the service as root: `~/.local/bin/claude`, `~/.t3`,
-and the deployed dotfiles symlinks are all user-owned. Windows never hits this
-because its scheduled task runs with different privileges. On success the log
+and the deployed dotfiles symlinks are all user-owned. On success the log
 line becomes `INFO ... Tailscale Serve configured`, and
 `tailscale serve status` shows the proxy:
 
@@ -301,12 +284,10 @@ t3 auth pairing create      # single-use; also `pairing list` / `pairing revoke`
 ```
 
 Desktop: Add environment → **Remote link** → the `https://` tailnet URL + the
-token. Note 0.0.33 **does** have a `t3 pair` ("Mint a pairing token for a
-running T3 Code server and print it as a QR code") — an earlier version of this
-doc said otherwise, from a build where it was absent. The warning behind that
-line still stands, though: bare `t3 <word>` treats an unrecognised word as a
-cwd and silently starts a stray server, so check `t3 --help` before inventing a
-subcommand.
+token. 0.0.33 also has a `t3 pair` ("Mint a pairing token for a running T3 Code
+server and print it as a QR code"). Take care not to invent a subcommand,
+though: bare `t3 <word>` treats an unrecognised word as a cwd and silently
+starts a stray server, so check `t3 --help` first.
 
 Reboot persistence is three independent things; check all three, since any one
 of them silently breaks "always on":
@@ -400,8 +381,8 @@ Connect-linked environments). Much shorter than the Mac list:
    no `claude` CLI (providers auth on the machine *running* the agent — just
    don't start local threads here), no T3 Connect publishing (keeps the machine
    unreachable and burns no tunnel slot), no Network access toggle. There is no
-   Windows headless-server option to skip any more — see
-   [Windows: desktop app only](#windows-desktop-app-only-2026-08-18).
+   Windows headless-server option to skip; see
+   [Windows: desktop app only](#windows-desktop-app-only).
 4. **Optional managed settings**: if the machine has a dotfiles clone, quit
    the app, `uv run python src/deploy_configs.py`, relaunch. Windows
    correctly resolves the bare server-safe config files, not the `.mac.json`
@@ -431,7 +412,7 @@ If auth fails at session start, the UI shows the login command to run.
 Other providers (Codex, Cursor, Grok Build, OpenCode) follow the same pattern
 with their own CLIs.
 
-### Claude Code on Bedrock (2026-08-06)
+### Claude Code on Bedrock
 
 On a machine where Claude Code authenticates through Bedrock rather than a
 Claude subscription — `CLAUDE_CODE_USE_BEDROCK=1` plus `AWS_PROFILE` /
@@ -499,8 +480,8 @@ inside the app. Notes on that block:
   capabilities, so T3 stops appending the `[1m]` suffix and `--effort` for
   them — and their effort / context-window dropdowns disappear in the UI.
   That's the trade for using Bedrock here.
-- This writes an explicit `claudeAgent` providerInstance where the instance
-  was previously implicit. Watch the provider list on first deploy.
+- The block writes an explicit `claudeAgent` providerInstance; watch the
+  provider list on first deploy.
 - Model IDs pass through `normalizeCustomModelSlug`, which only trims, so
   the dots and colons survive intact. It's an array — list several profiles
   if more than one is enabled.
@@ -536,7 +517,7 @@ lands in the shared one.
 invocation without an explicit `--model` still resolves to a first-party
 alias Bedrock rejects. Drop it or set it to the inference profile.
 
-## First launch (macOS quirks seen on Envy, 2026-08-05)
+## First launch (macOS quirks)
 
 Two things blocked the very first launch:
 
@@ -581,13 +562,13 @@ tunnels** (see Known issues); beyond that, expose the server with
 no slot used). The SSH card remains as a LAN alternative for Linux/macOS
 remotes.
 
-Current fleet (2026-08-14):
+Current fleet:
 
 | Environment | How | Notes |
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
-| RyzenWhite | T3 Connect **and** Tailscale Serve | Windows: **desktop app only** since 2026-08-18 — the app's own backend on `~/.t3`, no headless serve, so it is an environment only while the app is open. Both transports still work while it is (relay tunnel plus the tailnet proxy on 3773). See [Windows: desktop app only](#windows-desktop-app-only-2026-08-18). |
+| RyzenWhite | T3 Connect **and** Tailscale Serve | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve, so it is an environment only while the app is open. Both transports work while it is (relay tunnel plus the tailnet proxy on 3773). See [Windows: desktop app only](#windows-desktop-app-only). |
 | JasonZephyrus | Remote link over Tailscale Serve | Fedora 43: systemd boot service (`t3 service install`), not the SSH card. See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 
 Concrete LAN IPs and usernames are deliberately not listed here: look the
@@ -596,18 +577,15 @@ repo it belongs to (`hostname` + `user` fields).
 
 **Slot policy**: the 3 T3 Connect tunnel slots go to the most-used machines,
 because only relay-linked environments send push notifications and Live
-Activities to the phone. Machines beyond the cap ride Tailscale Serve instead
-(RyzenWhite did until a slot freed up). Mixing transports is fine — the
-connection method is per-environment plumbing and threads behave identically
-once connected, and a machine can carry both at once, as RyzenWhite now does.
+Activities to the phone. Machines beyond the cap ride Tailscale Serve instead.
+Mixing transports is fine — the connection method is per-environment plumbing
+and threads behave identically once connected, and a machine can carry both at
+once, as RyzenWhite does.
 
 **SSH environments (Linux/macOS remotes only).** Requirements on the remote:
 Node `^22.16 || ^23.11 || >=24.10` resolvable from a *non-interactive* shell,
 plus the agent CLIs (`claude`, ...) installed and authed there. The launcher
-probes PATH then nvm/asdf/mise/fnm; on the Linux dev box the apt node was v18,
-so Node 24 LTS was installed via the existing nvm and
-`node`/`npm`/`npx` symlinked into `~/.local/bin` (already on the
-non-interactive PATH). That prep is now scripted —
+probes PATH then nvm/asdf/mise/fnm. That prep is scripted —
 [`scripts/setup_t3_server_prereqs_linux.sh`](../scripts/setup_t3_server_prereqs_linux.sh)
 (idempotent: checks the bare-PATH node version, installs Node 24 via nvm if
 needed, links into `~/.local/bin`, and installs a C++ toolchain if none is
@@ -616,77 +594,37 @@ clone. The remote server listens on loopback only; the desktop reaches it
 through the SSH tunnel.
 
 **Windows machines cannot be remote environments at all.** The SSH card does
-not work — T3's remote launch scripts are POSIX `sh` only — and the native
-headless server that used to cover the gap was removed 2026-08-18 as
-unstable, see
-[Windows: desktop app only](#windows-desktop-app-only-2026-08-18). A Windows
-box is a *client* that reaches other environments; it is only an environment
-itself while its own desktop app is open, and only for that app.
+not work (T3's remote launch scripts are POSIX `sh` only) and there is no
+native headless server, see
+[Windows: desktop app only](#windows-desktop-app-only). A Windows box is a
+*client* that reaches other environments; it is only an environment itself
+while its own desktop app is open, and only for that app.
 
 If a Windows machine genuinely needs to host agents for other clients, the
 honest answers are to run the work on a Linux box instead, or to accept the
-desktop app being open. Do not rebuild the scheduled-task pattern without
-reading why it was removed first.
+desktop app being open.
 
-### Windows: desktop app only (2026-08-18)
+### Windows: desktop app only
 
 **On Windows, T3 is the desktop app and nothing else.** One backend, the app's
 own, on `~/.t3`. No headless serve, no scheduled task, no second data
-directory. RyzenWhite is set up this way and is the only Windows box that ever
-was otherwise.
-
-Deleted in this pass, and **not to be reintroduced**:
-
-| Removed | Was |
-|---|---|
-| `application_configs/t3code/t3serve.cmd` | restart loop around `t3 serve` |
-| `application_configs/t3code/t3code-server-task.xml` | boot/logon/watchdog scheduled task |
-| `scripts/setup_t3_server_windows.ps1` | end-to-end installer for both |
-| manifest `t3code_server_launcher`, `t3code_server_task` | deployed the two files |
-| manifest `t3code_client_home_client_settings`, `t3code_client_home_keybindings` | managed the `~/.t3-client` split home |
-
-**Why it went.** Windows has no service manager for T3 — `t3 service status`
-answers "unavailable on this machine · Supported on: Linux with systemd" — so
-a scheduled task plus a `cmd` restart loop *was* the supervisor, and every
-property of it was bought with an outage:
-
-- an inherited `ExecutionTimeLimit` of `PT72H` silently terminated a healthy
-  always-on server every three days (`LastTaskResult` 267014)
-- the serve leaked to V8's ~4 GB cap and aborted after three days, unprompted
-  by any workload
-- a default principal meant the task never started with nobody logged on
-  (`LastTaskResult` 267011), so it needed S4U
-- a wedged wrapper left the box serverless in a state the 15-minute watchdog
-  could not break, because `MultipleInstancesPolicy: IgnoreNew` made Task
-  Scheduler *refuse* every trigger against the zombie (`0x800710E0`)
-- the loop's port-clearing kill had to be unredirected, because `cmd` skips any
-  command whose redirect fails and the orphan it existed to kill held the lock
-  on that very log
-
-Each fix surfaced the next. The pattern was never stable for a useful stretch,
-and the whole point of it — always-on reachability — is exactly what it kept
-failing to deliver.
+directory. Windows has no service manager for T3 — `t3 service status` answers
+"unavailable on this machine · Supported on: Linux with systemd" — so there is
+nothing to supervise an always-on server with, and a scheduled task plus a
+`cmd` restart loop is not a working substitute for one.
 
 **What it costs.** A Windows box is an environment only while its desktop app
 is open, and it cannot be a remote environment for other clients at all (the
 SSH card is POSIX-only). That is the accepted trade. Machines that must be
 always-on are Linux, which has a real boot service.
 
-**The `~/.t3-client` split went too, and was itself a bug.** It existed only to
-keep a desktop backend off a headless server's port and data directory. But
-`clerk-tokens.json` (the account session) and `connection-catalog.json` (the
-paired environments) live in `~/.t3`, so every launch that took the split
-branch came up signed out with an empty environment list, while a manual launch
-used `~/.t3` and looked fine. With no second server there is nothing to split.
-The directory was renamed to `~/.t3-client.disabled-<date>` rather than deleted.
-
-**Identity survives the change**, which is why no client had to re-pair:
-environment identity is per-home (`userdata/environment-id` plus
-`secrets/cloud-relay-environment-credential.bin`), and the desktop backend
-inherits both by using `~/.t3`. RyzenWhite stayed `091b1652-…b80040`
-throughout, and reclaimed its managed tunnel. Verified after the switch: the
-local endpoint, the tailnet URL, and a `curl` from Envy all answered with that
-id.
+**Never split the T3 home.** `clerk-tokens.json` (the account session) and
+`connection-catalog.json` (the paired environments) live in `~/.t3`, so a
+launch pointed at any other `T3CODE_HOME` comes up signed out with an empty
+environment list while a manual launch on `~/.t3` looks fine. Environment
+identity is per-home too (`userdata/environment-id` plus
+`secrets/cloud-relay-environment-credential.bin`), so a second home is a second
+environment id and every client has to re-pair.
 
 **Port 3773 is load-bearing.** `start_t3code_client.ahk` sets
 `T3CODE_PORT=3773`. `resolveDesktopBackendPort()` would scan upward from 3773
@@ -705,8 +643,8 @@ holds 3773.
 app at logon; without it the machine is not an environment until someone opens
 it by hand. The app's own open-at-login toggle writes an
 `HKCU\...\CurrentVersion\Run` value no repo file owns and
-`deploy_configs.py status` cannot see — on RyzenWhite it had simply never been
-turned on, which is why the Startup folder sat empty.
+`deploy_configs.py status` cannot see, so an empty Startup folder is the thing
+to check when a box stops showing up.
 
 Note `desktop-settings.json` is per-home and unmanaged, so `serverExposureMode`
 carries over independently: a home set to `network-accessible` binds `0.0.0.0`
@@ -714,7 +652,7 @@ rather than loopback (Settings → Connections → Network access). RyzenWhite's
 `~/.t3` copy is `network-accessible`, which is why its backend shows as
 `0.0.0.0:3773`.
 
-## Updating a service-managed Linux server (2026-08-11)
+## Updating a service-managed Linux server
 
 When a T3 Connect Linux environment runs as the background service
 (`t3 service install` → systemd user unit `t3code.service`), the desktop
@@ -758,39 +696,37 @@ so future updates shouldn't need to touch the unit at all. Verify with
 running version) and wait for the 4 registered connections in
 `boot-service.log`; the panel then goes green and the update banner clears.
 
-## Settings (manifest-managed as of 2026-08-05)
+## Settings
 
 `settings.json`, `client-settings.json`, and `keybindings.json` in
 `~/.t3/userdata/` are deployed as symlinks from
 `application_configs/t3code/` (gated on `~/.t3/userdata` existing, so machines
 without T3 are skipped). `client-settings.json` and `keybindings.json` deploy
 from the `t3code_*` entries in `deploy_manifest.yaml`; **`settings.json`
-deploys from `user_t3code_settings` in `personal_manifest.yaml`** as of
-2026-08-06 — the file is still the public one in this repo, but the entry
-needs a hosts whitelist so a client context can point the same dest at its own
-copy (hosts filters are overlay-manifest-only). Work machines get their
-`settings.json` from their own context manifest instead — see
-[Claude Code on Bedrock](#claude-code-on-bedrock-2026-08-06) for the case that
-forced the split. Adding a personal T3 machine means adding it to that entry's
-hosts list. The split:
+deploys from `user_t3code_settings` in `personal_manifest.yaml`**. The file is
+still the public one in this repo, but the entry needs a hosts whitelist so a
+client context can point the same dest at its own copy (hosts filters are
+overlay-manifest-only). Work machines get their `settings.json` from their own
+context manifest instead, the case being
+[Claude Code on Bedrock](#claude-code-on-bedrock). Adding a personal T3 machine
+means adding it to that entry's hosts list.
 
 All three carry `on_drift: adopt`, and adoption acts on **envy only**
 (`WORKTREE_HOST` in `src/deploy_configs.py`): T3 rewrites these files after
-every app update, not just on a settings change, so when every machine
-adopted its own copy the ones that do not commit could never pull the file
-again (the MacBook sat five commits behind on 2026-09-09 with two "modified"
-t3code files git refused to merge over). Elsewhere the repo copy wins on
-deploy and the app's rewrite goes to the backup, so make settings changes
-on envy or in the repo file; a change made in the app on another machine
-lasts until that machine's next deploy.
+every app update, not just on a settings change, so a machine that adopts its
+own copy and never commits it can never pull the file again: it sits behind
+with two "modified" t3code files git refuses to merge over. Elsewhere the repo
+copy wins on deploy and the app's rewrite goes to the backup, so make settings
+changes on envy or in the repo file; a change made in the app on another
+machine lasts until that machine's next deploy.
 
-`settings.json` also carries **`refresh: relink`** (2026-09-10): the server
-reads it at startup and watches the destination *path*, so a pull that changed
-the repo file left every running server serving the pre-pull value while the
-file on disk was already correct — `deployconfigs` saw a healthy link and
-reported `0 changed`. The symptom was the client's "Settings differ on
+`settings.json` also carries **`refresh: relink`**: the server reads it at
+startup and watches the destination *path*, so without it a pull that changes
+the repo file leaves every running server serving the pre-pull value while the
+file on disk is already correct — `deployconfigs` sees a healthy link and
+reports `0 changed`. The symptom is the client's "Settings differ on
 <host>. Thread and source control preferences are meant to match on every
-environment" banner refusing to clear after the fix was pulled. With the flag,
+environment" banner refusing to clear after the fix is pulled. With the flag,
 deploy re-creates the link when it is older than the repo file, which is the
 path event the server needs; see `refresh: relink` in
 [repo_deploy_configs.md](repo_deploy_configs.md). The five keys the client
@@ -812,14 +748,12 @@ that environment shows up in the banner. Reloads are visible in
 | `connection-catalog.json` | never | Per-machine registry of paired environments (named `saved-environments.json` in newer source). **Not syncable even by hand**: the app writes `{version, encryptedCatalog}` where the payload is Electron `safeStorage` — DPAPI on Windows, Keychain on macOS — so it is keyed to one OS user on one machine. A copy from another box cannot decrypt, hand-written JSON is not the expected shape, and the only writer is the `desktop:set-connection-catalog` IPC channel, i.e. the GUI. Adding an environment is a GUI-only operation in 0.0.33; there is no CLI subcommand for it (every `t3` subcommand is server-side). |
 | `clerk-tokens.json`, `secrets/`, `state.sqlite`, `logs/`, `environment-id`, `server-runtime.json`, `~/.t3/caches/` | never | Auth tokens, signing keys, thread state — machine-private. |
 
-`clerk-tokens.json` and `connection-catalog.json` being machine-private and
-**home-private** is what made the two-server split break sign-in on RyzenWhite;
-see [Windows: desktop app only](#windows-desktop-app-only-2026-08-18).
+`clerk-tokens.json` and `connection-catalog.json` are **home-private** as well
+as machine-private; see
+[Windows: desktop app only](#windows-desktop-app-only).
 
 One runtime entry lives one level up in `~/.t3/`: `t3code_client_startup`, the
-desktop app's Startup-folder launcher. The two that sat beside it,
-`t3serve.cmd` and `t3code-server-task.xml`, were deleted 2026-08-18 with the
-rest of the Windows headless-server method.
+desktop app's Startup-folder launcher.
 
 Caveat (still true): Electron saves settings via atomic rename, which
 replaces a deployed symlink with a plain file — expect `NOT_A_LINK` drift
@@ -827,8 +761,8 @@ after in-app settings changes. `deploy_configs.py status` catches it; merge
 the in-app edit into the repo copy, then re-deploy to re-link (deploy backs
 the machine file up to `data/config_backups/` first).
 
-**Platform variants (2026-08-05)**: all three files exist as a `*.mac.json`
-variant plus a bare default. Macs auto-resolve the mac variant; Windows and
+**Platform variants**: all three files exist as a `*.mac.json` variant plus a
+bare default. Macs auto-resolve the mac variant; Windows and
 Linux (both running the npm `t3` server) fall through to the bare file,
 which must stay within what that pinned server version's schema accepts —
 the server hard-warns on unknown keys/commands ("ignoring invalid keybinding
@@ -858,16 +792,16 @@ Avoid composing into the *same running thread* from two machines at once
 Tailscale HTTPS remains available for off-LAN use — see
 [setup_tailscale.md](./setup_tailscale.md) — but is not part of this setup.
 
-## Evaluation: what it replaces, and gaps before switching (as of 2026-07)
+## What T3 replaces, and the gaps that remain
 
-T3 is a candidate replacement for the **Claude desktop app** (agent session
-management), NOT for VS Code — its editor pane is a viewer with a diff tab
+T3 replaces the **Claude desktop app** (agent session
+management), NOT VS Code — its editor pane is a viewer with a diff tab
 (open via `Cmd+D` or the `+` tab button → Diff), not an editing environment.
 So "no code cells" and "no inline completions" only disqualify it as an
 editor, which it isn't trying to be. Keep VS Code for hand-editing (`# %%`
 cells, Copilot-style completion).
 
-Gaps that matter for replacing the Claude desktop app:
+Gaps that matter next to the Claude desktop app:
 
 | Gap | Detail |
 |-----|--------|
@@ -903,7 +837,7 @@ How T3 maps onto that:
   with Remote Control (phone/web via claude.ai; one connected session at a
   time) or a self-hosted web UI, at the cost of T3's side-by-side thread UI.
 
-## Known issues & recommended fixes (as of 2026-08-06)
+## Known issues & recommended fixes
 
 Running notes from daily use — each is either an upstream candidate
 ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
@@ -926,8 +860,8 @@ a doc/automation task in this repo.
   to expand them, or run `claude` in T3's terminal panel (`mod+j`) where
   `~/.claude/settings.json` `verbose: true` applies.
 - **Background commands can't be watched live, from inside or outside T3
-  (upstream, 2026-08-06)**: when a thread launches a long-running command in
-  the background, the thread shows only a collapsed Work Log card
+  (upstream)**: when a thread launches a long-running command in the
+  background, the thread shows only a collapsed Work Log card
   ("Background command ... ") — there is no live output pane, so the only way
   to see progress is to ask the thread to poll it and wait for the reply. It
   can't be watched from outside either: the background shell belongs to the
@@ -947,8 +881,8 @@ a doc/automation task in this repo.
   provider_session_runtime order by last_seen_at desc limit 5;"`, then
   `tail -f ~/.claude/projects/<cwd-slug>/<session_id>.jsonl` to see the tool
   calls and every polled output the thread has captured.
-- **File preview stops at the first 1 MB, with no tail (upstream,
-  2026-08-06)**: opening a large file in the side pane shows
+- **File preview stops at the first 1 MB, with no tail (upstream)**: opening a
+  large file in the side pane shows
   "Preview limited to the first 1 MB of a *N* byte file" (seen on a ~120 MB
   run log) and there is no way to seek to the end, follow the tail, or load
   the next chunk — so for a growing log, the one part that matters (the last
@@ -958,8 +892,8 @@ a doc/automation task in this repo.
   Workaround: `tail -f` the file in the terminal panel (`mod+j`) or from any
   shell on that machine.
 - **OAuth account sign-in is broken on Windows — the callback is dropped
-  (upstream, OPEN, found 2026-08-18)**: on RyzenWhite (0.0.33), signing in to
-  the T3 account with any provider button — Apple, GitHub, Google, Microsoft —
+  (upstream, OPEN)**: on RyzenWhite (0.0.33), signing in to the T3 account
+  with any provider button — Apple, GitHub, Google, Microsoft —
   loops forever. The Clerk modal comes back with a red **"You are signed out"**
   banner, and `~/.t3/userdata/clerk-tokens.json` is never rewritten. GitHub
   itself authenticates fine; the token never gets back into the app.
@@ -998,7 +932,7 @@ a doc/automation task in this repo.
   (and markdown links) in the transcript renderer and open them in the
   system browser.
 - **Bedrock-authed machines: T3 overrides the two things `settings.json`
-  can't win (upstream + this repo, handled 2026-08-06)**: on a machine where
+  can't win (upstream + this repo, handled)**: on a machine where
   Claude Code authenticates through Bedrock
   (`CLAUDE_CODE_USE_BEDROCK=1` in `~/.claude/settings.json`), the interactive
   CLI works but every T3 turn fails. T3 does spawn that CLI and the CLI does
@@ -1033,73 +967,21 @@ a doc/automation task in this repo.
      disappear — that's the trade).
   Handled here by giving Bedrock machines their own `settings.json` from
   their context manifest rather than the shared one — full procedure in
-  [Claude Code on Bedrock](#claude-code-on-bedrock-2026-08-06) under Connect
+  [Claude Code on Bedrock](#claude-code-on-bedrock) under Connect
   providers.
-- **The server leaks until V8 kills it, ~3 days on a quiet box (upstream;
-  historical on Windows)**: this and the two Windows scheduled-task entries
-  after it describe the headless method **removed 2026-08-18** — the files they
-  name (`t3serve.cmd`, the task XML) no longer exist, and no Windows box runs a
-  serve. They are kept because the leak itself is upstream and unfixed, so a
-  Linux `t3code.service` can still hit it, and because together they are the
-  evidence for why the Windows pattern was abandoned rather than repaired. See
-  [Windows: desktop app only](#windows-desktop-app-only-2026-08-18).
-  RyzenWhite's `t3 serve` started at boot on
-  8/14 00:32 and aborted on 8/17 00:36 with `FATAL ERROR: Ineffective
-  mark-compacts near heap limit — JavaScript heap out of memory`, sitting at
-  V8's default ~4 GB cap. The last GCs in `~\.t3\server.log` show the death
-  spiral before it (`4090.7 → 4089.9 MB`, 1.17 s per mark-compact,
-  `current mu = 0.019`), so the box is effectively unresponsive for a while
-  before the process actually dies. Nothing on that machine was driving
-  threads at the time; the only steady traffic in the log is the relay's own
-  reconnects, so it looks like idle-time growth rather than per-thread
-  retention. Fix upstream. Here, the workaround is the restart loop in
-  `t3serve.cmd` plus the watchdog trigger in the task XML — the server comes
-  back in ~15 s instead of staying down until the next reboot. To confirm a
-  suspected leak on a running box:
+- **The server leaks until V8 kills it, ~3 days on a quiet box (upstream,
+  OPEN)**: a `t3 serve` left running aborted almost exactly three days after
+  start with `FATAL ERROR: Ineffective mark-compacts near heap limit —
+  JavaScript heap out of memory`, sitting at V8's default ~4 GB cap. The last
+  GCs in the server log show the death spiral before it (`4090.7 → 4089.9 MB`,
+  1.17 s per mark-compact, `current mu = 0.019`), so the box is effectively
+  unresponsive for a while before the process actually dies. Nothing was
+  driving threads at the time; the only steady traffic in the log is the
+  relay's own reconnects, so it looks like idle-time growth rather than
+  per-thread retention. A Linux `t3code.service` restarts itself out of it
+  (`Restart=always`), which is the only supervision that exists for this. To
+  confirm a suspected leak on a running box:
   `Get-Process node | Sort-Object WS -Descending | Select-Object -First 3 Id,WS,StartTime`.
-- **A wedged wrapper is a serverless state the watchdog cannot break (this
-  repo, OPEN, found 2026-08-17)**: RyzenWhite was found with no T3 server at
-  all and `Get-ScheduledTask` reporting the task `Running`. The 14:30 wrapper's
-  serve shut down cleanly at 16:39:44 (`Released the managed tunnel on
-  shutdown` is the last line in `server.log`), but the wrapper `cmd` stayed
-  alive with no serve child and never completed the loop iteration — no
-  `t3 serve exited ... restarting in 15s` line was ever written to
-  `t3serve.log`, and none appears anywhere in that log's history. Because
-  `MultipleInstancesPolicy` is `IgnoreNew`, Task Scheduler then **refused**
-  every 15-minute watchdog trigger against the zombie instance
-  (`LastTaskResult` 2147946720 = `0x800710E0`, "The operator or administrator
-  has refused the request"), so the box sat serverless and stable — 25 minutes
-  when caught, and unbounded otherwise. Recovery is
-  `Stop-ScheduledTask -TaskName t3code-server` then `Start-ScheduledTask`
-  (the stop was clean here — no orphaned `node.exe` to clear). The missing
-  echo is *not* a quoting bug: the exact three `echo ... >>` lines from
-  `t3serve.cmd`, `%T3_PORT%` and `(code %ERRORLEVEL%)` included, all write
-  correctly in isolation, so the wrapper genuinely never got past `call`.
-  Root cause of the block is not established. **The lesson is that the
-  watchdog trigger is not a health check**: it only restarts a task that is
-  *not running*, and every failure mode that leaves the wrapper alive is
-  therefore invisible to it. The durable fix is a probe of 3773 that stops and
-  restarts the task when nothing is listening, rather than a trigger that
-  assumes a live wrapper means a live server. Note this makes `0x800710E0` a
-  **useless symptom on its own** — it is the *expected* `LastTaskResult` on a
-  healthy box too, written every 15 minutes as the watchdog is refused against
-  the legitimately running wrapper (confirmed on a known-good server the same
-  day). It only means an outage together with the thing actually worth
-  checking: **nothing listening on 3773** while the task reads `Running`. The
-  corroborating detail is a `t3serve.log` whose last line is
-  `starting t3 serve` with no exit line after it. This is also the counterpoint
-  to the 72-hour entry below — there, `LastTaskResult` was the tell; here it is
-  noise, so probe the port.
-- **A default scheduled task quietly stops an always-on server every 72 hours
-  (this repo, fixed 2026-08-17)**: `Register-ScheduledTask` with no
-  `-Settings` writes `ExecutionTimeLimit PT72H`. RyzenWhite's task therefore
-  terminated its own run 72 h after the trigger (`LastTaskResult` 267014 =
-  `SCHED_S_TASK_TERMINATED`, task back to `Ready`, port 3773 closed) — and
-  since the only triggers were boot and logon, `State: Ready` with no server
-  is a stable state: the machine had last booted three days earlier, so it
-  stayed down. Two symptoms, one lesson — check `LastTaskResult` before
-  believing a task "ran fine", and never let a service-shaped task inherit
-  the default limit. Both are now properties of the deployed XML.
 - **npm server rejects newer config than its pinned version (this repo,
   handled)**: the headless `t3` server schema-validates managed configs and
   warns on anything a newer build wrote — RyzenWhite's `server.log` spammed
@@ -1109,14 +991,14 @@ a doc/automation task in this repo.
   variant split in the Settings section (bare files stay server-safe);
   deploying to RyzenWhite replaces the stale file and clears the warnings.
 - **"Copy update command" starts a second server instead of updating the
-  service (upstream, 2026-08-11)**: for a service-managed Linux environment,
+  service (upstream)**: for a service-managed Linux environment,
   the remote-environments panel's update command is bare `npx t3@<version>`
   — running it spawns a foreground server that steals the relay tunnel;
   killing it strands the environment on "Relay environment endpoint is
   unavailable" until `systemctl --user restart t3code.service`. The CLI has
   a real updater (`t3 service update`) that the panel should surface when
   the endpoint is service-managed. Full procedure and recovery in
-  [Updating a service-managed Linux server](#updating-a-service-managed-linux-server-2026-08-11).
+  [Updating a service-managed Linux server](#updating-a-service-managed-linux-server).
 - **Settle button hit area (upstream)**: only part of the Settle button
   registers clicks, not the whole visible button. Fix: extend the click target
   to the full button bounds.
@@ -1139,7 +1021,7 @@ a doc/automation task in this repo.
   `client-settings.json` has `sidebarProjectGroupingMode: "repository"` —
   worth testing whether a different grouping mode changes the behavior, but
   the add-wizard refusal suggests it's storage-level, not display-level.
-  **Working workaround (2026-08-05)**: add the *parent* workspace folder
+  **Working workaround**: add the *parent* workspace folder
   (e.g. `~/GitHub`) as the project instead of the repo — a non-repo
   directory has no repository identity, so the dedup never fires and each
   machine gets its own project over the same repos. Combine with the naming
@@ -1151,14 +1033,14 @@ a doc/automation task in this repo.
 - **iOS app misses new threads until relaunch (upstream)**: a thread created
   from another client on a connected environment didn't appear on the
   iPhone until the app was killed and reopened; after relaunch it showed and
-  synced normally (seen 2026-08-05 on a Tailscale-paired environment). Fix:
+  synced normally (seen on a Tailscale-paired environment). Fix:
   resubscribe/refresh thread lists when the app foregrounds instead of only
   at launch.
 - **iPad app auto-settles threads after 3 days and can't be told not to
   (upstream)**: the iPad app settles any thread untouched for about three
   days on its own. Only the iPad app does this - the desktop app leaves
   threads alone - and the iPad app has no settings file or setting to
-  turn it off, so there is nothing to deploy for it (noted 2026-09-07). A
+  turn it off, so there is nothing to deploy for it. A
   thread you come back to on the iPad after a few days is in the settled
   list, not the active one. Fix: make it a setting, or drop the timer to
   match desktop.
@@ -1213,10 +1095,10 @@ a doc/automation task in this repo.
   hand-built here (Node 24 via nvm + `~/.local/bin` symlinks on the Linux dev
   box). Upstream fix: document the server install, or better, have the
   launcher verify/install Node and the server itself. This repo's side is
-  handled for Linux by `scripts/setup_t3_server_prereqs_linux.sh`; the Windows
-  equivalent was deleted 2026-08-18 along with the method it installed.
-- **T3 Connect: 3 managed tunnels per account, and the CLI hides the error
-  (root cause found 2026-08-05)**: the mystery relay `403 POST
+  handled for Linux by `scripts/setup_t3_server_prereqs_linux.sh`; there is no
+  Windows equivalent.
+- **T3 Connect: 3 managed tunnels per account, and the CLI hides the error**:
+  the mystery relay `403 POST
   /v1/client/environment-links` on RyzenWhite was the account's tunnel cap —
   the desktop's Set up T3 Connect dialog shows the real message ("this
   account already has its maximum of 3 managed tunnels. Unlink an
@@ -1226,14 +1108,13 @@ a doc/automation task in this repo.
   counts *published environments*, not the remote-environments list in the
   dashboard — which is why it looks like only two. Workaround while capped:
   `t3 serve --tailscale-serve` + Remote link over the tailnet (no slot
-  consumed; see Windows remotes section) — RyzenWhite's path until a slot
-  freed up and it relinked to the relay (2026-08-17). Debugging breadcrumbs
-  kept: auth codes are genuinely issued uppercase (a re-cased code 400s at
+  consumed; see Windows remotes section). Other breadcrumbs: auth codes are
+  genuinely issued uppercase (a re-cased code 400s at
   token exchange — enter exactly as displayed); the 0.0.32 nightly never
   attempts the reconcile at all; upstream issue creation is restricted, so
   report via their Discord.
 - **File chips resolve relative paths against the workspace root, inventing an
-  absolute path that does not exist (upstream, found 2026-08-27 on 0.0.34)**:
+  absolute path that does not exist (upstream, found on 0.0.34)**:
   when an assistant message mentions a file by a repo-relative path — say
   `references/rules.tsv` for a file that actually lives at
   `<repo>/some/deep/dir/references/rules.tsv` — T3 renders it as a file chip
@@ -1252,7 +1133,7 @@ a doc/automation task in this repo.
   `ls` before believing a file is somewhere surprising, and ask agents to
   write workspace-relative paths in messages so the join happens to be right.
 - **Enumerating a hung FUSE mount wedges the whole server while systemd calls
-  it healthy (upstream, OPEN, found 2026-09-01)**: on a work Linux box (0.0.37
+  it healthy (upstream, OPEN)**: on a work Linux box (0.0.37
   boot service), a thread enumerated into the `google-drive-ocamlfuse` mount
   at `~/GoogleDrive` and the server went dark — clients saw it as a crash.
   Nothing had actually exited. The ocamlfuse daemon had wedged (main thread
@@ -1266,10 +1147,9 @@ a doc/automation task in this repo.
   spans still landing in `server.trace.ndjson` every 3 s), and the only
   visible symptom was the relay spamming `Incoming request ended abruptly:
   context canceled`. So `Restart=always` never fires (nothing exits) and
-  `systemctl --user status` reads healthy — the exact blind spot as the
-  Windows wedged-wrapper entry above: probe the port, don't trust the unit
-  state. Diagnosis: `timeout 5 ls <mountpoint>` per FUSE mount (`mount | grep
-  fuse`), then per-thread wchan on the serve pid (`for t in
+  `systemctl --user status` reads healthy — the blind spot to remember: probe
+  the port, don't trust the unit state. Diagnosis: `timeout 5 ls
+  <mountpoint>` per FUSE mount (`mount | grep fuse`), then per-thread wchan on the serve pid (`for t in
   /proc/<pid>/task/*; do cat $t/wchan; done`) — `request_wait_answer` is the
   tell. Recovery: kill the fuse daemon (SIGTERM was ignored; SIGKILL worked,
   and the mtab entry cleaned itself up), then restart t3 from outside its

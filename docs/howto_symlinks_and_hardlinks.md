@@ -61,9 +61,8 @@ ln -s /home/jason/GitHub/dotfiles/application_configs/vscode/settings.json /home
 ### Hard linking on Linux
 
 `ln` without `-s` creates a hard link. Do **not** use this for files inside a
-git repo (see above) — the examples that used to live here hard-linked
-`.code-workspace` files into the repo and went stale on the next pull. Use a
-symlink instead.
+git repo (see above): a hard-linked `.code-workspace` file goes stale on the
+next pull. Use a symlink instead.
 
 ## Windows
 

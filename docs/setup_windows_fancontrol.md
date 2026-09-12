@@ -1,15 +1,15 @@
 # FanControl curves on Windows
 
-Fan curves for FanControl (Rem0o), written directly to its config file. Running
-on Shelly since 2026-09-10, after a FanControl update on 2026-08-24 replaced its
-config with a fresh default and left every fan on the BIOS.
+Fan curves for FanControl (Rem0o), written directly to its config file,
+running on Shelly. A FanControl update can replace that config with a fresh
+default and leave every fan on the BIOS, so check the curves after one.
 
 ## Shelly (MSI MPG B550 GAMING PLUS, NCT6687D)
 
 LibreHardwareMonitor reads rpm on only two channels: `System Fan #1` to `#6` read
 0 rpm although the case fans are plugged into those headers. Only the rpm
-reading is wrong. FanControl still sets their duty, and it turned the case fans
-down before the 2026-08-24 config reset. Leaving those six controls disabled
+reading is wrong. FanControl still sets their duty and turns the case fans
+down. Leaving those six controls disabled
 hands the case fans back to the BIOS, which runs them at full speed. The
 channel it calls Pump Fan holds a PWM fan, not a pump: its speed follows its
 duty (1767 rpm at 100%, 1026 rpm at 48%).
@@ -28,7 +28,7 @@ The system fan headers were added later the same day; their duty went from the
 BIOS's 58 to 60% to 55% at 56 degrees, following the `Case` curve
 (see [setup_windows_sensor_logging.md](setup_windows_sensor_logging.md)).
 
-## Load check (2026-09-10)
+## Load check
 
 Ten minutes on all 12 threads, from a PowerShell arithmetic loop (no AVX, so
 lighter than Prime95), with an abort at 90 degrees C that never fired:
