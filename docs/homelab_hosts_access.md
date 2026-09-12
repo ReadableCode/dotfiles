@@ -46,6 +46,14 @@ the things that silently fail a plausible remote workflow.
   with the stick. There is no console when that happens: ssh accepts and
   resets, the web UI dies within the hour, containers keep running. Power
   cycle; the evidence is already on nukbuntu.
+- Boot flash since 2026-09-12: a 128 GB stick in the upper of the two black
+  USB 2.0 ports on the rear panel (the PNY that dropped twice lived in the
+  lower one). The license is on the motherboard TPM, so a stick swap needs
+  no key replacement. Unraid waits 30 s at boot for a FAT volume labelled
+  exactly `UNRAID`; the USB Creator left the label as `BOOT` once. The
+  weekly flash zip from the appdata.backup plugin is copied to nukbuntu's
+  `backups` Samba share (`docker_app_data/backups/behemoth_flash/`, newest
+  eight kept); procedure in `server_configs/system_configs/behemoth/README.md`.
 - UPS: CyberPower PR1500LCDRT2U on USB, monitored by the desertwitch NUT
   plugin (`nut-dw`), not apcupsd. CyberPower's USB interrupt pipe goes silent
   and usbhid-ups marks data stale; the fix is `pollonly` on line 9 of
