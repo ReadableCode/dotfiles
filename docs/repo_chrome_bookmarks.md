@@ -25,6 +25,9 @@ personal profile (`Default`) is handled; client profiles keep their own.
 
 ## The cycle
 
+The personal context's `/personal_chrome_bookmarks` command walks an agent
+through these steps; the Chrome import in step 4 stays manual.
+
 1. Export and dedupe from the live profile:
 
    ```bash
