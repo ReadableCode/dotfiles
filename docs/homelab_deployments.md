@@ -113,8 +113,11 @@ on change. Do not add it here.
   `/boot/config/plugins/dynamix/`, merged by `update_cron`. `/etc` is tmpfs,
   so anything installed with `crontab` is lost at reboot and fights the GUI.
   Schedule Unraid jobs through the Unraid UI, not a repo.
-- **JasonZephyrus** — Fedora without cronie; `crontab` is not installed. Two
-  stock systemd timers, nothing of ours. Would need a systemd timer unit.
+- **JasonZephyrus** — Fedora without cronie; `crontab` is not installed. Its
+  one schedule, the Docker deploy loop (`Docker/scripts/git_pull_zephyrus.sh`,
+  since 2026-09-13), is a systemd user timer declared in
+  `server_configs/system_configs/jasonzephyrus/systemd/` and linked by the
+  personal manifest, not a crontab.
 - **Envy, macmini14, nukbuntu, the five pis** — no user or root crontab at
   all. Macs would use launchd if they ever need one.
 - **Windows machines** — Task Scheduler, no cron.

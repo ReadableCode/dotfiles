@@ -180,7 +180,8 @@ What fits 6 GB VRAM (needs quant ≤ ~5.4 GB to be marked "fits"):
 
 Reality check: Odysseus uses plain diffusers (hungrier than optimized
 ComfyUI/A1111). SD 1.5 feels great; SDXL is sluggish. For optimized SDXL/FLUX,
-run ComfyUI natively instead.
+use the Forge Neo container instead (see
+[`setup_stable_diffusion.md`](setup_stable_diffusion.md)).
 
 ### Troubleshooting
 
