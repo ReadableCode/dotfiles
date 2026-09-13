@@ -20,18 +20,27 @@ See also: [`setup_stable_diffusion.md`](setup_stable_diffusion.md),
 | Host / IP | ROG Zephyrus G14 GA401QM / 192.168.86.170 | 192.168.86.94 |
 | OS | Fedora 43 (Workstation) | Windows 11 Pro |
 | CPU | Ryzen 9 5900HS (8C/16T, Zen 3) | Ryzen 7 2700X (8C/16T, Zen+) |
-| RAM | 15 GB | **64 GB** |
-| GPU | RTX 3060 Laptop **6 GB**, NVIDIA/**CUDA** | RX 6600 XT **8 GB**, AMD (**no CUDA**) |
-| Free disk | ~936 GB | ~87 GB (C:) |
-| Container stack | Docker + NVIDIA toolkit **working** | Docker Desktop installed (stopped), WSL2 Ubuntu |
+| RAM | 16 GB | **64 GB** |
+| GPU | RTX 3060 Laptop **6 GB**, NVIDIA/CUDA | **RTX 5070 Ti 16 GB**, NVIDIA/CUDA |
+| Free disk | ~800 GB | not checked since the GPU swap |
+| Role | always on; Docker + NVIDIA toolkit working | gaming PC, Windows; on only when in use |
 
-**Verdict for local AI: use the Zephyrus.** Despite less VRAM/RAM, its NVIDIA
-GPU gives the plug-and-play CUDA path that both llama.cpp and diffusers (Stable
-Diffusion) want. The RyzenWhite's AMD card has no CUDA — LLMs would fall back to
-Vulkan (slower) and Stable Diffusion on AMD/Windows is painful (ROCm is
-Linux-only). RyzenWhite's only real edge is 64 GB RAM, useful only for slow
-CPU-offloaded inference of very large (14B–70B) models. The Mac mini is the
-control machine (runs admin tooling, holds SSH keys); it does not serve models.
+GPU facts come from the host inventory (`personal_hosts.json`); the RyzenWhite
+column is not verified on the machine itself. This table used to list an RX
+6600 XT for RyzenWhite, which it no longer has.
+
+**Split by job, not one winner.**
+
+- **Zephyrus runs the always-on LLM** (Odysseus's llama-server, below). It
+  owns the laptop's 6 GB GPU; Stable Diffusion is kept commented out there
+  because the two cannot share it.
+- **RyzenWhite does image generation**, started by hand when wanted and closed
+  before gaming: 16 GB of VRAM holds SDXL whole and makes Flux-class models
+  practical. See [`setup_stable_diffusion.md`](setup_stable_diffusion.md). It
+  would also run bigger LLMs faster, but it is not an always-on box.
+
+The Mac mini is the control machine (runs admin tooling, holds SSH keys); it
+does not serve models.
 
 ---
 
