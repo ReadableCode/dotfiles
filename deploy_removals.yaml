@@ -84,3 +84,19 @@
     {repo_parent} only, so this line names that literal path and prune deletes
     the link plus the empty chain it sits in.
 
+- name: removed_cmdr_binary
+  dest:
+    darwin: "{repo_parent}/dotfiles/go_apps/cmdr/cmdr"
+    linux: "{repo_parent}/dotfiles/go_apps/cmdr/cmdr"
+    windows: "{repo_parent}/dotfiles/go_apps/cmdr/cmdr.exe"
+  note: >-
+    The per-machine build product of the retired cmdr shim, which compiled
+    go_apps/cmdr in place on the first run after a source change. It was never
+    committed and its .gitignore lines went out with the sources, so the commit
+    that dropped cmdr could not take it with it: every machine that ever ran
+    cmdr still holds ~5 MB there, and shows go_apps/cmdr as untracked once it
+    pulls past that commit. Not a symlink - a regular file, which prune removes
+    as a hard link / regular file, and the emptied go_apps/cmdr goes with it.
+    Nothing builds this path any more - drop these lines once every machine has
+    pruned.
+
