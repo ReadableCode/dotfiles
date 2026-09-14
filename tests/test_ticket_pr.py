@@ -548,6 +548,28 @@ def test_pr_comment_rejects_an_empty_body(monkeypatch):
         ticket_pr.main(["--dry-run", "pr-comment", "--repo", "acme/widgets", "--pr", "7"])
 
 
+def test_pr_comment_bitbucket_posts_a_pr_comment(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/comments": {
+        "id": 91, "links": {"html": {"href": "https://bitbucket.org/ws/slug/pull-requests/7#comment-91"}}}})
+    ticket_pr.main(["pr-comment", "--repo", "bitbucket:ws/slug", "--pr", "7", "--body", "Rebased, ready again"])
+    assert calls == [("POST", "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/comments",
+                      {"content": {"raw": "Rebased, ready again"}})]
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1]) == {
+        "pr": "7", "comment_id": 91, "url": "https://bitbucket.org/ws/slug/pull-requests/7#comment-91"}
+
+
+def test_pr_comment_bitbucket_dry_run(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    out = _run_cli(["--dry-run", "pr-comment", "--repo", "bitbucket:ws/slug", "--pr", "7", "--body", "hi"],
+                   monkeypatch, capsys)
+    assert "[dry-run] POST https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/comments" in out
+    assert json.loads(out.strip().splitlines()[-1]) == {
+        "pr": "7", "comment_id": 0, "url": "https://bitbucket.org/ws/slug/pull-requests/7"}
+
+
 def test_rerun_job_dry_run_hits_the_job_rerun_endpoint(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
@@ -758,21 +780,40 @@ def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, t
         {"status": "renamed", "old": {"path": "src/b.py"}, "new": {"path": "src/c.py"},
          "lines_added": 0, "lines_removed": 9},
     ]}
+    # one collection holds general, inline and reply comments; deleted ones stay as tombstones
+    comments = {"values": [
+        {"id": 4, "user": {"display_name": "Alex"}, "created_on": "2026-09-14T10:00:00+00:00",
+         "content": {"raw": "Dropped it"}, "inline": {"path": "src/b.py", "from": 8, "to": None},
+         "parent": {"id": 1}},
+        {"id": 1, "user": {"display_name": "Sam"}, "created_on": "2026-09-13T09:00:00+00:00",
+         "content": {"raw": "Why remove the retry?"}, "inline": {"path": "src/b.py", "from": 8, "to": None}},
+        {"id": 2, "deleted": True, "user": {"display_name": "Sam"}, "created_on": "2026-09-13T09:30:00+00:00",
+         "content": {"raw": ""}},
+        {"id": 3, "user": {"display_name": "Alex"}, "created_on": "2026-09-14T09:00:00+00:00",
+         "content": {"raw": "Rebased on master"}},
+    ]}
     fetched = []
 
     def fake_bytes(url, headers):
         fetched.append(url)
         return b"diff --git a/src/a.py b/src/a.py\n"
 
-    monkeypatch.setattr(
-        ticket_pr, "http_json", lambda m, url, h, **k: diffstat if url.endswith("/diffstat") else pull
-    )
+    def fake_http(method, url, headers, **kwargs):
+        if url.endswith("/diffstat"):
+            return diffstat
+        if "/comments?" in url:
+            return comments
+        return pull
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
     monkeypatch.setattr(ticket_pr, "http_bytes", fake_bytes)
     out_path = tmp_path / "pr7.diff"
     ticket_pr.main(["pr-diff", "--repo", "bitbucket:ws/slug", "--pr", "7", "--out", str(out_path)])
-    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    out = capsys.readouterr().out
+    result = json.loads(out.strip().splitlines()[-1])
     assert fetched == ["https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/diff"]
     assert out_path.read_bytes() == b"diff --git a/src/a.py b/src/a.py\n"
+    assert out.splitlines()[0] == f"PR #7 Add the thing: 2 files, 3 comments, diff in {out_path}"
     assert result == {
         "pr": 7, "title": "Add the thing", "author": "Sam", "source": "ACME-7-thing",
         "destination": "master", "head": "abc123", "description": "why",
@@ -781,8 +822,67 @@ def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, t
             {"path": "src/a.py", "status": "modified", "previous_path": None, "additions": 3, "deletions": 1},
             {"path": "src/c.py", "status": "renamed", "previous_path": "src/b.py", "additions": 0, "deletions": 9},
         ],
+        "comments": [
+            {"id": 1, "kind": "inline", "author": "Sam", "created": "2026-09-13T09:00:00+00:00",
+             "body": "Why remove the retry?", "path": "src/b.py", "line": 8, "reply_to": None, "state": None},
+            {"id": 3, "kind": "comment", "author": "Alex", "created": "2026-09-14T09:00:00+00:00",
+             "body": "Rebased on master", "path": None, "line": None, "reply_to": None, "state": None},
+            {"id": 4, "kind": "inline", "author": "Alex", "created": "2026-09-14T10:00:00+00:00",
+             "body": "Dropped it", "path": "src/b.py", "line": 8, "reply_to": 1, "state": None},
+        ],
         "diff_path": str(out_path),
     }
+
+
+def test_pr_diff_github_reads_every_kind_of_comment(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    base = "https://api.github.com/repos/owner/name/pulls/12"
+    pull = {"number": 12, "title": "Retry the upload", "user": {"login": "sam"}, "body": "why",
+            "head": {"ref": "ACME-12-retry", "sha": "abc123"}, "base": {"ref": "main"},
+            "html_url": "https://github.com/owner/name/pull/12"}
+    # GitHub keeps them in three places: the conversation, diff lines, and review bodies
+    responses = {
+        f"{base}/files?": [{"filename": "src/a.py", "status": "modified", "additions": 3, "deletions": 1}],
+        "/issues/12/comments?": [
+            {"id": 1, "user": {"login": "sam"}, "created_at": "2026-09-12T09:00:00Z", "body": "Ready for a look"}],
+        f"{base}/comments?": [
+            {"id": 3, "user": {"login": "sam"}, "created_at": "2026-09-13T11:00:00Z", "body": "Dropped it",
+             "path": "src/a.py", "line": None, "original_line": 40, "in_reply_to_id": 2},
+            {"id": 2, "user": {"login": "me"}, "created_at": "2026-09-13T10:00:00Z", "body": "Why the retry?",
+             "path": "src/a.py", "line": 40}],
+        f"{base}/reviews?": [
+            {"id": 9, "user": {"login": "me"}, "submitted_at": "2026-09-13T10:00:05Z",
+             "body": "One question inline", "state": "CHANGES_REQUESTED"},
+            {"id": 10, "user": {"login": "me"}, "submitted_at": "2026-09-14T08:00:00Z", "body": "",
+             "state": "APPROVED"}],
+    }
+    fetched = []
+
+    def fake_http(method, url, headers, **kwargs):
+        fetched.append(url)
+        if url == base:
+            return pull
+        return next(resp for marker, resp in responses.items() if marker in url)
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    monkeypatch.setattr(ticket_pr, "http_bytes", lambda url, headers: b"diff")
+    out_path = tmp_path / "pr12.diff"
+    ticket_pr.main(["pr-diff", "--repo", "github:owner/name", "--pr", "12", "--out", str(out_path)])
+    out = capsys.readouterr().out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert out.splitlines()[0] == f"PR #12 Retry the upload: 1 files, 4 comments, diff in {out_path}"
+    assert f"{base}/reviews?per_page=100&page=1" in fetched
+    assert result["comments"] == [
+        {"id": 1, "kind": "comment", "author": "sam", "created": "2026-09-12T09:00:00Z",
+         "body": "Ready for a look", "path": None, "line": None, "reply_to": None, "state": None},
+        {"id": 2, "kind": "inline", "author": "me", "created": "2026-09-13T10:00:00Z",
+         "body": "Why the retry?", "path": "src/a.py", "line": 40, "reply_to": None, "state": None},
+        {"id": 9, "kind": "review", "author": "me", "created": "2026-09-13T10:00:05Z",
+         "body": "One question inline", "path": None, "line": None, "reply_to": None,
+         "state": "CHANGES_REQUESTED"},
+        {"id": 3, "kind": "inline", "author": "sam", "created": "2026-09-13T11:00:00Z",
+         "body": "Dropped it", "path": "src/a.py", "line": 40, "reply_to": 2, "state": None},
+    ]
 
 
 def _record_http(monkeypatch, responses):

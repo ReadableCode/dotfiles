@@ -18,7 +18,9 @@ add-comment is the way to keep a ticket up to date and transition-ticket
 moves it between statuses by the name Jira shows on the button.
 review-queue, pr-diff and pr-review are the reviewer's side: which open PRs
 across a set of repos wait on this account, one PR's metadata with its diff on
-disk, and the approve / request-changes / comment call. Every subcommand honors
+disk and every comment on it (the same shape from GitHub and Bitbucket), and
+the approve / request-changes / comment call; pr-comment posts a plain comment
+on either provider. Every subcommand honors
 the global ``--dry-run``
 flag, which prints the HTTP request(s) it would make and returns canned
 identifiers instead of touching the network - use it to exercise calling
@@ -502,6 +504,17 @@ def resolve_pr(repo, headers, number):
     return pulls[0]
 
 
+def github_paginate(url, headers):
+    """Yield every item from a GitHub list endpoint (``url`` without a query), 100 per page."""
+    page = 1
+    while True:
+        batch = http_json("GET", f"{url}?per_page=100&page={page}", headers)
+        yield from batch
+        if len(batch) < 100:
+            return
+        page += 1
+
+
 # ---------------------------------------------------------------- bitbucket
 
 
@@ -557,6 +570,12 @@ def bb_resolve_pr(repo, headers, number):
 def bb_pr_url(pull, repo):
     return (pull.get("links", {}).get("html", {}) or {}).get(
         "href", f"https://bitbucket.org/{repo}/pull-requests/{pull.get('id', 0)}")
+
+
+def bb_post_comment(repo, number, body, headers, dry_run=False):
+    """POST one PR comment (Bitbucket wants the text under content.raw); None on a dry run."""
+    return http_json("POST", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}/comments",
+                     headers, payload={"content": {"raw": body}}, dry_run=dry_run)
 
 
 def bucket_bitbucket_status(status):
@@ -1094,22 +1113,68 @@ def cmd_review_queue(args):
 
 
 def github_pr_files(repo, number, headers):
-    files, page = [], 1
-    while True:
-        query = urllib.parse.urlencode({"per_page": 100, "page": page})
-        batch = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{number}/files?{query}", headers)
-        files += [{"path": f["filename"], "status": f["status"],
-                   "previous_path": f.get("previous_filename"),
-                   "additions": f["additions"], "deletions": f["deletions"]} for f in batch]
-        if len(batch) < 100:
-            return files
-        page += 1
+    return [{"path": f["filename"], "status": f["status"], "previous_path": f.get("previous_filename"),
+             "additions": f["additions"], "deletions": f["deletions"]}
+            for f in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/files", headers)]
+
+
+def pr_comment_entry(kind, comment_id, author, created, body, path=None, line=None, reply_to=None, state=None):
+    """One PR comment in the shape both providers report."""
+    return {"id": comment_id, "kind": kind, "author": author, "created": created, "body": body or "",
+            "path": path, "line": line, "reply_to": reply_to, "state": state}
+
+
+def github_pr_comments(repo, number, headers):
+    """
+    Every comment on a GitHub PR, oldest first, from the three places GitHub
+    keeps them: the conversation (issue comments), comments on diff lines, and
+    the body of each submitted review. A review with no body is a bare vote,
+    not a comment, and is left out.
+    """
+    comments = []
+    for c in github_paginate(f"{GITHUB_API}/repos/{repo}/issues/{number}/comments", headers):
+        comments.append(pr_comment_entry("comment", c["id"], (c.get("user") or {}).get("login"),
+                                         c.get("created_at"), c.get("body")))
+    for c in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/comments", headers):
+        # line is null once the diff moves past the comment; original_line still places it
+        comments.append(pr_comment_entry("inline", c["id"], (c.get("user") or {}).get("login"),
+                                         c.get("created_at"), c.get("body"), path=c.get("path"),
+                                         line=c.get("line") or c.get("original_line"),
+                                         reply_to=c.get("in_reply_to_id")))
+    for r in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/reviews", headers):
+        if (r.get("body") or "").strip():
+            comments.append(pr_comment_entry("review", r["id"], (r.get("user") or {}).get("login"),
+                                             r.get("submitted_at"), r.get("body"), state=r.get("state")))
+    return sorted(comments, key=lambda c: c["created"] or "")
+
+
+def bitbucket_pr_comments(repo, number, headers):
+    """
+    Every comment on a Bitbucket PR, oldest first. One collection holds them
+    all: general comments, inline ones (``inline`` carries the path, with the
+    new-side line in ``to`` or the old-side line in ``from`` on a removed
+    line) and replies (``parent``). Deleted comments stay in the collection as
+    tombstones and are left out.
+    """
+    comments = []
+    url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}/comments?pagelen=100"
+    for c in bb_paginate(url, headers):
+        if c.get("deleted"):
+            continue
+        inline = c.get("inline") or {}
+        comments.append(pr_comment_entry("inline" if inline else "comment", c["id"],
+                                         (c.get("user") or {}).get("display_name"), c.get("created_on"),
+                                         (c.get("content") or {}).get("raw"), path=inline.get("path"),
+                                         line=inline.get("to") or inline.get("from"),
+                                         reply_to=(c.get("parent") or {}).get("id")))
+    return sorted(comments, key=lambda c: c["created"] or "")
 
 
 def cmd_pr_diff(args):
     """
-    One PR's metadata and per-file line counts, with the full unified diff
-    written to disk, so a reviewer never goes to the API on its own.
+    One PR's metadata, per-file line counts and every comment, with the full
+    unified diff written to disk, so a reviewer never goes to the API on its
+    own and never sees a PR without its discussion.
     """
     provider, repo = repo_spec(args.repo)
     path = args.out or os.path.join(tempfile.gettempdir(), "ticket_pr",
@@ -1128,6 +1193,7 @@ def cmd_pr_diff(args):
                   "previous_path": (s.get("old") or {}).get("path") if s.get("status") == "renamed" else None,
                   "additions": s.get("lines_added"), "deletions": s.get("lines_removed")}
                  for s in bb_paginate(f"{base_url}/diffstat", headers)]
+        comments = bitbucket_pr_comments(repo, args.pr, headers)
         result = {
             "pr": pull["id"], "title": pull["title"],
             "author": (pull.get("author") or {}).get("display_name"),
@@ -1142,6 +1208,7 @@ def cmd_pr_diff(args):
         pull = http_json("GET", base_url, headers)
         diff = http_bytes(base_url, {**headers, "Accept": "application/vnd.github.diff"})
         files = github_pr_files(repo, args.pr, headers)
+        comments = github_pr_comments(repo, args.pr, headers)
         result = {
             "pr": pull["number"], "title": pull["title"], "author": pull["user"]["login"],
             "source": pull["head"]["ref"], "destination": pull["base"]["ref"],
@@ -1150,8 +1217,9 @@ def cmd_pr_diff(args):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "wb") as handle:
         handle.write(diff)
-    result.update({"files": files, "diff_path": path})
-    emit(f"PR #{result['pr']} {result['title']}: {len(files)} files, diff in {path}", result)
+    result.update({"files": files, "comments": comments, "diff_path": path})
+    emit(f"PR #{result['pr']} {result['title']}: {len(files)} files, {len(comments)} comments, diff in {path}",
+         result)
 
 
 def cmd_pr_review(args):
@@ -1170,8 +1238,7 @@ def cmd_pr_review(args):
         base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{args.pr}"
         comment_id = None
         if body:
-            response = http_json("POST", f"{base_url}/comments", headers,
-                                 payload={"content": {"raw": body}}, dry_run=args.dry_run)
+            response = bb_post_comment(repo, args.pr, body, headers, args.dry_run)
             comment_id = response["id"] if response else 0
         state = "commented"
         if args.action != "comment":
@@ -1195,19 +1262,25 @@ def cmd_pr_review(args):
 
 def cmd_pr_comment(args):
     """
-    A plain comment on a GitHub PR's conversation (an issue comment, which is
-    what bots and gates read), as opposed to pr-review, which files a review.
+    A plain comment on a PR's conversation, as opposed to pr-review, which
+    files a review (on Bitbucket, a comment plus a vote). On GitHub it is an
+    issue comment, which is what bots and gates read; Bitbucket has one kind of
+    PR comment.
     """
     provider, repo = repo_spec(args.repo)
-    if provider != "github":
-        raise SystemExit("pr-comment is GitHub-only; use pr-review --action comment on Bitbucket")
     body = body_text(args).strip()
     if not body:
         raise SystemExit("empty comment: pr-comment needs --body or --body-file")
-    response = http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{args.pr}/comments",
-                         github_headers(), payload={"body": body}, dry_run=args.dry_run)
-    comment_id = response["id"] if response else 0
-    url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
+    if provider == "bitbucket":
+        response = bb_post_comment(repo, args.pr, body, bitbucket_headers(), args.dry_run)
+        comment_id = response["id"] if response else 0
+        url = (((response or {}).get("links") or {}).get("html") or {}).get(
+            "href", f"https://bitbucket.org/{repo}/pull-requests/{args.pr}")
+    else:
+        response = http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{args.pr}/comments",
+                             github_headers(), payload={"body": body}, dry_run=args.dry_run)
+        comment_id = response["id"] if response else 0
+        url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
     emit(f"PR #{args.pr} comment {comment_id}: {url}",
          {"pr": args.pr, "comment_id": comment_id, "url": url})
 
@@ -1293,10 +1366,10 @@ def build_parser():
                            help="PR label to add after creation; repeatable (GitHub only)")
     create_pr.set_defaults(func=cmd_create_pr)
 
-    pr_comment = sub.add_parser("pr-comment", help="post a plain comment on a GitHub PR")
+    pr_comment = sub.add_parser("pr-comment", help="post a plain comment on a GitHub or Bitbucket PR")
     pr_comment.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     pr_comment.add_argument("--pr", required=True, help="PR number")
-    pr_comment.add_argument("--body", help="comment text (GitHub Markdown)")
+    pr_comment.add_argument("--body", help="comment text (Markdown)")
     pr_comment.add_argument("--body-file", help="file containing the comment text")
     pr_comment.set_defaults(func=cmd_pr_comment)
 
@@ -1345,7 +1418,8 @@ def build_parser():
                             "(default: parsed from origin remote)")
     queue.set_defaults(func=cmd_review_queue)
 
-    pr_diff = sub.add_parser("pr-diff", help="a PR's metadata and file stats, with its full diff on disk")
+    pr_diff = sub.add_parser("pr-diff",
+                             help="a PR's metadata, file stats and every comment, with its full diff on disk")
     pr_diff.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     pr_diff.add_argument("--pr", type=int, required=True, help="PR number")
     pr_diff.add_argument("--out", help="diff path (default: <tmp>/ticket_pr/<owner>_<name>_<pr>.diff)")
