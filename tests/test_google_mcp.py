@@ -132,7 +132,21 @@ def test_resolve_reports_an_unknown_name():
 def test_every_tool_is_registered_once():
     names = [tool.name for tool in google_mcp.server._tool_manager.list_tools()]
     assert len(names) == len(set(names))
-    for expected in ("calendar_agenda", "calendar_get_event", "gmail_search", "gmail_send_message"):
+    for expected in (
+        "calendar_agenda",
+        "calendar_get_event",
+        "gmail_search",
+        "gmail_send_message",
+        "gmail_list_message_ids",
+        "gmail_save_attachment_to_drive",
+        "drive_about",
+        "drive_search",
+        "drive_read_file",
+        "drive_upload_file",
+        "drive_update_file",
+        "drive_trash_file",
+        "sheets_get_values",
+    ):
         assert expected in names
 
 
@@ -164,20 +178,21 @@ def test_context_pins_calendar_discovery_to_that_repos_config(monkeypatch, tmp_p
     assert captured["config_path"] == str(config)
 
 
-def test_context_pins_mailbox_discovery_to_that_repos_config(monkeypatch, tmp_path):
-    config = tmp_path / "acme_credentials" / "acme_googlemail.yaml"
+@pytest.mark.parametrize(("reader", "kind"), [("_mailboxes", "googlemail"), ("_drives", "googledrive")])
+def test_context_pins_account_discovery_to_that_repos_config(monkeypatch, tmp_path, reader, kind):
+    config = tmp_path / "acme_credentials" / f"acme_{kind}.yaml"
     _write_empty(config)
     captured = {}
 
-    def fake_load(root, repo_root=None, config_path=None):
-        captured["config_path"] = config_path
+    def fake_load(load_kind, root, repo_root=None, config_path=None):
+        captured.update(kind=load_kind, config_path=config_path)
         return [], [config_path]
 
-    monkeypatch.setattr(google_mcp.gtools, "load_mailboxes", fake_load)
+    monkeypatch.setattr(google_mcp.gtools, "load_accounts", fake_load)
     monkeypatch.setattr(google_mcp, "CREDENTIALS_ROOT", str(tmp_path))
     monkeypatch.setattr(google_mcp, "_context", "acme")
-    assert google_mcp._mailboxes() == []
-    assert captured["config_path"] == str(config)
+    assert getattr(google_mcp, reader)() == []
+    assert captured == {"kind": kind, "config_path": str(config)}
 
 
 def test_pinned_context_without_a_config_reports_no_accounts_not_everyones(monkeypatch, tmp_path):
@@ -187,13 +202,45 @@ def test_pinned_context_without_a_config_reports_no_accounts_not_everyones(monke
         raise AssertionError("discovery must not run for a pinned context with no config")
 
     monkeypatch.setattr(google_mcp, "load_sources", explode)
-    monkeypatch.setattr(google_mcp.gtools, "load_mailboxes", explode)
+    monkeypatch.setattr(google_mcp.gtools, "load_accounts", explode)
     monkeypatch.setattr(google_mcp, "CREDENTIALS_ROOT", str(tmp_path))
     monkeypatch.setattr(google_mcp, "_context", "acme")
     assert google_mcp._calendar_sources() == []
     assert google_mcp._mailboxes() == []
+    assert google_mcp._drives() == []
 
 
 def test_parse_args_context_defaults_to_unpinned():
     assert google_mcp.parse_args([]).context == ""
     assert google_mcp.parse_args(["--context", "acme"]).context == "acme"
+
+
+# %%
+# Drive token minting #
+
+
+def test_parse_args_auth_defaults_to_serving():
+    assert google_mcp.parse_args([]).auth == ""
+    assert google_mcp.parse_args(["--auth", "acme_drive"]).auth == "acme_drive"
+
+
+def test_main_auth_mints_for_the_named_drive_without_serving(monkeypatch):
+    drive = {"name": "acme_drive"}
+    minted = []
+
+    def explode(*_args, **_kwargs):
+        raise AssertionError("--auth must not start the stdio server")
+
+    monkeypatch.setattr(google_mcp, "_context", "")
+    monkeypatch.setattr(google_mcp, "_drives", lambda: [drive])
+    monkeypatch.setattr(google_mcp.gtools, "run_drive_auth", lambda entry: minted.append(entry) or 0)
+    monkeypatch.setattr(google_mcp.server, "run", explode)
+    assert google_mcp.main(["--context", "acme", "--auth", "acme_drive"]) == 0
+    assert minted == [drive]
+
+
+def test_main_auth_names_the_configured_drives_on_a_miss(monkeypatch):
+    monkeypatch.setattr(google_mcp, "_context", "")
+    monkeypatch.setattr(google_mcp, "_drives", lambda: [{"name": "acme_drive"}])
+    with pytest.raises(ValueError, match="configured drives: acme_drive"):
+        google_mcp.main(["--auth", "nope"])

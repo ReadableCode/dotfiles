@@ -4,6 +4,7 @@
 import base64
 import json
 import os
+from urllib.parse import parse_qs, urlparse
 
 import config_test_utils  # noqa F401
 import pytest
@@ -28,6 +29,13 @@ CALENDAR_SOURCE = {
     "refresh_token_env": "G_REFRESH",
 }
 
+DRIVE = {
+    "name": "acme_drive",
+    "type": "google_drive",
+    "oauth_env": "D_OAUTH",
+    "token_env": "D_TOKEN",
+}
+
 
 def write_yaml(path, payload):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -36,12 +44,12 @@ def write_yaml(path, payload):
     return path
 
 
-def make_credentials_repo(root, context, mailboxes=None):
-    """Create a fake <context>_credentials repo with an optional googlemail config."""
+def make_credentials_repo(root, context, accounts=None, kind="googlemail"):
+    """Create a fake <context>_credentials repo with an optional <context>_<kind>.yaml config."""
     repo = os.path.join(str(root), f"{context}_credentials")
     os.makedirs(repo, exist_ok=True)
-    if mailboxes is not None:
-        write_yaml(os.path.join(repo, f"{context}_googlemail.yaml"), mailboxes)
+    if accounts is not None:
+        write_yaml(os.path.join(repo, f"{context}_{kind}.yaml"), accounts)
     return repo
 
 
@@ -50,11 +58,12 @@ def b64(text):
 
 
 class FakeResponse:
-    def __init__(self, payload, status_code=200):
+    def __init__(self, payload=None, status_code=200, headers=None, content=None):
         self.payload = payload
         self.status_code = status_code
-        self.text = json.dumps(payload)
-        self.content = self.text.encode("utf-8")
+        self.headers = headers or {}
+        self.content = content if content is not None else json.dumps(payload).encode("utf-8")
+        self.text = self.content.decode("utf-8", errors="replace")
 
     def json(self):
         return self.payload
@@ -64,8 +73,10 @@ def stub_requests(monkeypatch, handler, module=googlemcp_tools):
     """Route module-level requests.request through ``handler(method, url, params, payload)``."""
     calls = []
 
-    def fake_request(method, url, headers=None, params=None, json=None, timeout=None):
-        calls.append({"method": method, "url": url, "params": params, "payload": json})
+    def fake_request(method, url, headers=None, params=None, json=None, data=None, timeout=None):
+        calls.append(
+            {"method": method, "url": url, "headers": headers, "params": params, "payload": json, "data": data}
+        )
         return handler(method, url, params, json)
 
     monkeypatch.setattr(module.requests, "request", fake_request)
@@ -80,49 +91,63 @@ def clear_tokens():
 
 
 # %%
-# Mailbox config discovery #
+# Account config discovery #
 
 
-def test_load_mailboxes_reads_credentials_overlays(tmp_path):
+def test_load_accounts_reads_credentials_overlays(tmp_path):
     make_credentials_repo(tmp_path, "acme", [MAILBOX])
-    mailboxes, paths = googlemcp_tools.load_mailboxes(str(tmp_path))
+    mailboxes, paths = googlemcp_tools.load_accounts("googlemail", str(tmp_path))
     assert [mailbox["name"] for mailbox in mailboxes] == ["personal_gmail"]
     assert mailboxes[0]["_base_dir"].endswith("acme_credentials")
     assert len(paths) == 1
 
 
-def test_load_mailboxes_skips_repos_without_a_config(tmp_path):
+def test_load_accounts_skips_repos_without_a_config(tmp_path):
     make_credentials_repo(tmp_path, "acme", [MAILBOX])
     make_credentials_repo(tmp_path, "beta")
-    mailboxes, paths = googlemcp_tools.load_mailboxes(str(tmp_path))
+    mailboxes, paths = googlemcp_tools.load_accounts("googlemail", str(tmp_path))
     assert len(mailboxes) == 1 and len(paths) == 1
 
 
-def test_load_mailboxes_rejects_duplicate_names_across_configs(tmp_path):
+def test_load_accounts_rejects_duplicate_names_across_configs(tmp_path):
     make_credentials_repo(tmp_path, "acme", [MAILBOX])
     make_credentials_repo(tmp_path, "beta", [MAILBOX])
     with pytest.raises(ValueError, match="Duplicate googlemail mailbox name"):
-        googlemcp_tools.load_mailboxes(str(tmp_path))
+        googlemcp_tools.load_accounts("googlemail", str(tmp_path))
 
 
-def test_load_mailboxes_rejects_missing_keys(tmp_path):
+def test_load_accounts_rejects_missing_keys(tmp_path):
     broken = {key: value for key, value in MAILBOX.items() if key != "token_env"}
     make_credentials_repo(tmp_path, "acme", [broken])
     with pytest.raises(ValueError, match="is missing"):
-        googlemcp_tools.load_mailboxes(str(tmp_path))
+        googlemcp_tools.load_accounts("googlemail", str(tmp_path))
 
 
-def test_load_mailboxes_rejects_unknown_type(tmp_path):
+def test_load_accounts_rejects_unknown_type(tmp_path):
     make_credentials_repo(tmp_path, "acme", [dict(MAILBOX, type="imap")])
     with pytest.raises(ValueError, match="unknown type"):
-        googlemcp_tools.load_mailboxes(str(tmp_path))
+        googlemcp_tools.load_accounts("googlemail", str(tmp_path))
 
 
-def test_load_mailboxes_rejects_a_mapping_instead_of_a_list(tmp_path):
+def test_load_accounts_rejects_a_mapping_instead_of_a_list(tmp_path):
     repo = make_credentials_repo(tmp_path, "acme")
     write_yaml(os.path.join(repo, "acme_googlemail.yaml"), {"name": "oops"})
     with pytest.raises(ValueError, match="expected a list of mailboxes"):
-        googlemcp_tools.load_mailboxes(str(tmp_path))
+        googlemcp_tools.load_accounts("googlemail", str(tmp_path))
+
+
+def test_load_accounts_reads_drives_from_their_own_config(tmp_path):
+    make_credentials_repo(tmp_path, "acme", [MAILBOX])
+    make_credentials_repo(tmp_path, "acme", [DRIVE], kind="googledrive")
+    drives, paths = googlemcp_tools.load_accounts("googledrive", str(tmp_path))
+    assert [drive["name"] for drive in drives] == ["acme_drive"]
+    assert paths[0].endswith("acme_googledrive.yaml")
+
+
+def test_load_accounts_rejects_a_mailbox_type_in_a_drive_config(tmp_path):
+    make_credentials_repo(tmp_path, "acme", [dict(DRIVE, type="gmail")], kind="googledrive")
+    with pytest.raises(ValueError, match="drive 'acme_drive' has unknown type 'gmail'"):
+        googlemcp_tools.load_accounts("googledrive", str(tmp_path))
 
 
 def test_find_by_name_lists_the_valid_names_when_it_misses():
@@ -131,31 +156,78 @@ def test_find_by_name_lists_the_valid_names_when_it_misses():
 
 
 # %%
-# Gmail credentials #
+# OAuth credentials #
 
 
-def test_gmail_credentials_prefers_the_token_files_own_client(monkeypatch):
+def test_account_credentials_prefers_the_token_files_own_client(monkeypatch):
     monkeypatch.setenv("M_TOKEN", json.dumps({"refresh_token": "r", "client_id": "i", "client_secret": "s"}))
-    assert googlemcp_tools._gmail_credentials(MAILBOX) == ("i", "s", "r")
+    assert googlemcp_tools._account_credentials(MAILBOX) == ("i", "s", "r")
 
 
-def test_gmail_credentials_falls_back_to_the_oauth_client_json(monkeypatch):
+def test_account_credentials_falls_back_to_the_oauth_client_json(monkeypatch):
     monkeypatch.setenv("M_TOKEN", json.dumps({"refresh_token": "r"}))
     monkeypatch.setenv("M_OAUTH", json.dumps({"installed": {"client_id": "i", "client_secret": "s"}}))
-    assert googlemcp_tools._gmail_credentials(MAILBOX) == ("i", "s", "r")
+    assert googlemcp_tools._account_credentials(MAILBOX) == ("i", "s", "r")
 
 
-def test_gmail_credentials_without_a_refresh_token_is_an_error(monkeypatch):
+def test_account_credentials_without_a_refresh_token_is_an_error(monkeypatch):
     monkeypatch.setenv("M_TOKEN", json.dumps({"client_id": "i"}))
     with pytest.raises(ValueError, match="has no refresh_token"):
-        googlemcp_tools._gmail_credentials(MAILBOX)
+        googlemcp_tools._account_credentials(MAILBOX)
 
 
-def test_gmail_credentials_without_any_client_is_an_error(monkeypatch):
+def test_account_credentials_without_any_client_is_an_error(monkeypatch):
     monkeypatch.setenv("M_TOKEN", json.dumps({"refresh_token": "r"}))
     monkeypatch.setenv("M_OAUTH", json.dumps({"installed": {}}))
     with pytest.raises(ValueError, match="no client_id/client_secret"):
-        googlemcp_tools._gmail_credentials(MAILBOX)
+        googlemcp_tools._account_credentials(MAILBOX)
+
+
+# %%
+# Drive token minting #
+
+
+def test_consent_url_asks_for_an_offline_refresh_token():
+    url = google_oauth_tools.consent_url("i", "http://localhost:8080", googlemcp_tools.DRIVE_SCOPE)
+    query = parse_qs(urlparse(url).query)
+    assert query["scope"] == [googlemcp_tools.DRIVE_SCOPE]
+    assert query["access_type"] == ["offline"] and query["prompt"] == ["consent"]
+    assert query["redirect_uri"] == ["http://localhost:8080"]
+
+
+def test_run_drive_auth_prints_a_token_line_the_env_file_reads_back(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("D_OAUTH", json.dumps({"installed": {"client_id": "i", "client_secret": "s"}}))
+    consented = {}
+
+    def fake_consent(client_id, client_secret, scope, label):
+        consented.update(client_id=client_id, client_secret=client_secret, scope=scope)
+        return {"refresh_token": "r", "access_token": "a"}
+
+    monkeypatch.setattr(googlemcp_tools, "run_loopback_consent", fake_consent)
+    assert googlemcp_tools.run_drive_auth(DRIVE) == 0
+    assert consented == {"client_id": "i", "client_secret": "s", "scope": googlemcp_tools.DRIVE_SCOPE}
+
+    line = next(row.strip() for row in capsys.readouterr().out.splitlines() if row.strip().startswith("D_TOKEN="))
+    (tmp_path / "acme.env").write_text(line + "\n")
+    drive = dict(DRIVE, env_file="acme.env", _base_dir=str(tmp_path))
+    assert googlemcp_tools._account_credentials(drive) == ("i", "s", "r")
+    assert json.loads(line.partition("=")[2])["scopes"] == [googlemcp_tools.DRIVE_SCOPE]
+
+
+def test_run_drive_auth_fails_when_consent_fails(monkeypatch):
+    monkeypatch.setenv("D_OAUTH", json.dumps({"installed": {"client_id": "i", "client_secret": "s"}}))
+    monkeypatch.setattr(googlemcp_tools, "run_loopback_consent", lambda *args: None)
+    assert googlemcp_tools.run_drive_auth(DRIVE) == 1
+
+
+def test_run_drive_auth_without_a_client_never_opens_consent(monkeypatch):
+    monkeypatch.setenv("D_OAUTH", json.dumps({"installed": {}}))
+
+    def explode(*_args):
+        raise AssertionError("consent must not start without an OAuth client")
+
+    monkeypatch.setattr(googlemcp_tools, "run_loopback_consent", explode)
+    assert googlemcp_tools.run_drive_auth(DRIVE) == 1
 
 
 # %%
@@ -499,6 +571,263 @@ def test_paged_stops_when_a_page_has_no_token(monkeypatch):
     pages = [FakeResponse({"items": [1, 2], "nextPageToken": "p2"}), FakeResponse({"items": [3]})]
     stub_requests(monkeypatch, lambda *args: pages.pop(0))
     assert googlemcp_tools._paged("https://x/y", {}, {}, "items") == [1, 2, 3]
+
+
+# %%
+# Gmail message ids and attachments #
+
+
+def test_gmail_list_message_ids_follows_every_page(monkeypatch):
+    gmail_env(monkeypatch)
+    pages = [
+        FakeResponse({"messages": [{"id": "m1", "threadId": "t1"}], "nextPageToken": "p2"}),
+        FakeResponse({"messages": [{"id": "m2", "threadId": "t1"}]}),
+    ]
+    calls = stub_requests(monkeypatch, lambda *args: pages.pop(0))
+    assert googlemcp_tools.gmail_list_message_ids(MAILBOX, query="from:notes@x.com") == [
+        {"id": "m1", "thread_id": "t1"},
+        {"id": "m2", "thread_id": "t1"},
+    ]
+    assert calls[0]["params"]["q"] == "from:notes@x.com"
+    assert calls[0]["params"]["maxResults"] == googlemcp_tools.MAX_GMAIL_RESULTS
+    assert calls[1]["params"]["pageToken"] == "p2"
+
+
+def test_gmail_summary_carries_the_internal_date_as_utc_iso():
+    summary = googlemcp_tools._gmail_summary({"id": "m1", "internalDate": "1767225600000", "payload": {}})
+    assert summary["internal_date"] == "2026-01-01T00:00:00Z"
+    assert googlemcp_tools._gmail_summary({"id": "m1", "payload": {}})["internal_date"] == ""
+
+
+def drive_env(monkeypatch):
+    monkeypatch.setattr(googlemcp_tools, "drive_headers", lambda drive: {"Authorization": "Bearer tok"})
+
+
+ATTACHMENT_MESSAGE = {
+    "id": "m1",
+    "payload": {
+        "headers": [],
+        "parts": [
+            {"mimeType": "text/plain", "body": {"data": b64("body")}},
+            {"filename": "book.xlsx", "mimeType": "application/vnd.ms-excel",
+             "body": {"size": 5, "attachmentId": "a1"}},
+        ],
+    },
+}
+
+
+def upload_handler(result, existing_mime="application/json"):
+    """Answer a resumable upload: the session call gets a Location, the PUT returns ``result``."""
+
+    def handler(method, url, params, payload):
+        if "/upload/" in url:
+            return FakeResponse({}, headers={"Location": "https://upload.example/session"})
+        if method == "PUT":
+            return FakeResponse(result)
+        return FakeResponse({"id": "f1", "mimeType": existing_mime})
+
+    return handler
+
+
+def test_gmail_save_attachment_to_drive_uploads_the_attachment_bytes(monkeypatch):
+    gmail_env(monkeypatch)
+    drive_env(monkeypatch)
+    uploads = upload_handler({"id": "f1", "name": "book.xlsx"})
+
+    def handler(method, url, params, payload):
+        if url.endswith("/attachments/a1"):
+            return FakeResponse({"data": b64("bytes")})
+        if "/gmail/" in url:
+            return FakeResponse(ATTACHMENT_MESSAGE)
+        return uploads(method, url, params, payload)
+
+    calls = stub_requests(monkeypatch, handler)
+    result = googlemcp_tools.gmail_save_attachment_to_drive(MAILBOX, DRIVE, "m1", "book.xlsx", parent_id="folder")
+    assert result == {"id": "f1", "name": "book.xlsx"}
+    session, sent = calls[-2], calls[-1]
+    assert session["payload"] == {"name": "book.xlsx", "parents": ["folder"]}
+    assert session["params"]["uploadType"] == "resumable"
+    assert sent["url"] == "https://upload.example/session" and sent["data"] == b"bytes"
+    assert sent["headers"]["Content-Type"] == "application/vnd.ms-excel"
+
+
+def test_gmail_save_attachment_to_drive_names_the_attachments_on_a_miss(monkeypatch):
+    gmail_env(monkeypatch)
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, lambda *args: FakeResponse(ATTACHMENT_MESSAGE))
+    with pytest.raises(ValueError, match="no attachment 'other.pdf' - attachments: book.xlsx"):
+        googlemcp_tools.gmail_save_attachment_to_drive(MAILBOX, DRIVE, "m1", "other.pdf")
+
+
+# %%
+# Drive reads #
+
+
+def test_drive_about_returns_the_account(monkeypatch):
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, lambda *args: FakeResponse({"user": {"emailAddress": "me@x.com"}, "storageQuota": {}}))
+    assert googlemcp_tools.drive_about(DRIVE) == {"user": {"emailAddress": "me@x.com"}, "storage_quota": {}}
+
+
+def test_drive_search_hides_trash_and_reaches_shared_drives(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"files": [{"id": "f1"}]}))
+    assert googlemcp_tools.drive_search(DRIVE, "name contains 'notes'") == [{"id": "f1"}]
+    params = calls[0]["params"]
+    assert params["q"] == "(name contains 'notes') and trashed = false"
+    assert params["corpora"] == "allDrives" and params["includeItemsFromAllDrives"] == "true"
+
+
+def test_drive_search_leaves_an_explicit_trashed_filter_alone(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"files": []}))
+    googlemcp_tools.drive_search(DRIVE, "trashed = true")
+    assert calls[0]["params"]["q"] == "trashed = true"
+
+
+def file_handler(mime_type, content):
+    """Answer the metadata call with ``mime_type`` and the download/export call with ``content`` bytes."""
+
+    def handler(method, url, params, payload):
+        if url.endswith("/export") or (params or {}).get("alt") == "media":
+            return FakeResponse(content=content)
+        return FakeResponse({"id": "f1", "name": "file", "mimeType": mime_type})
+
+    return handler
+
+
+def test_drive_read_file_exports_a_sheet_as_csv(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, file_handler("application/vnd.google-apps.spreadsheet", b"a,b\n1,2\n"))
+    result = googlemcp_tools.drive_read_file(DRIVE, "f1")
+    assert result["text"] == "a,b\n1,2\n" and result["truncated"] is False
+    assert calls[1]["params"] == {"mimeType": "text/csv"}
+
+
+def test_drive_read_file_returns_a_stored_file_as_is_and_flags_truncation(monkeypatch):
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, file_handler("application/json", b'{"extracted": []}'))
+    result = googlemcp_tools.drive_read_file(DRIVE, "f1", max_chars=5)
+    assert result["text"] == '{"ext' and result["truncated"] is True
+
+
+def test_drive_read_file_refuses_binary(monkeypatch):
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, file_handler("application/pdf", b"\xff\xfe\x00\x81"))
+    with pytest.raises(ValueError, match="is binary"):
+        googlemcp_tools.drive_read_file(DRIVE, "f1")
+
+
+def test_drive_read_file_refuses_a_folder(monkeypatch):
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, file_handler(googlemcp_tools.DRIVE_FOLDER_MIME, b""))
+    with pytest.raises(ValueError, match="no export format"):
+        googlemcp_tools.drive_read_file(DRIVE, "f1")
+
+
+def test_drive_download_file_writes_the_bytes(monkeypatch, tmp_path):
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, file_handler("application/pdf", b"%PDF-1.7"))
+    target = tmp_path / "out" / "report.pdf"
+    assert googlemcp_tools.drive_download_file(DRIVE, "f1", str(target))["bytes"] == 8
+    assert target.read_bytes() == b"%PDF-1.7"
+
+
+def test_drive_download_file_never_overwrites(monkeypatch, tmp_path):
+    drive_env(monkeypatch)
+    existing = tmp_path / "report.pdf"
+    existing.write_bytes(b"keep")
+
+    def explode(*_args):
+        raise AssertionError("nothing may be fetched for a path that already exists")
+
+    stub_requests(monkeypatch, explode)
+    with pytest.raises(ValueError, match="already exists"):
+        googlemcp_tools.drive_download_file(DRIVE, "f1", str(existing))
+    assert existing.read_bytes() == b"keep"
+
+
+def test_sheets_get_values_can_return_formulas(monkeypatch):
+    drive_env(monkeypatch)
+    formula = [["=IMPORTRANGE(\"x\", \"Tab!A1\")"]]
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"range": "Tab!A1:B2", "values": formula}))
+    result = googlemcp_tools.sheets_get_values(DRIVE, "s1", "Tab!A1:B2", render="FORMULA")
+    assert result == {"range": "Tab!A1:B2", "values": formula}
+    assert calls[0]["params"] == {"valueRenderOption": "FORMULA"}
+    assert calls[0]["url"].endswith("/spreadsheets/s1/values/Tab%21A1%3AB2")
+
+
+def test_sheets_get_values_rejects_an_unknown_render(monkeypatch):
+    drive_env(monkeypatch)
+    with pytest.raises(ValueError, match="render must be one of"):
+        googlemcp_tools.sheets_get_values(DRIVE, "s1", "Tab", render="VALUES")
+
+
+# %%
+# Drive writes #
+
+
+def test_drive_upload_file_opens_a_session_then_sends_the_bytes(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, upload_handler({"id": "f1", "name": "n.txt"}))
+    result = googlemcp_tools.drive_upload_file(DRIVE, "n.txt", parent_id="folder", content="hello")
+    assert result == {"id": "f1", "name": "n.txt"}
+    assert calls[0]["method"] == "POST" and calls[0]["url"].endswith("/upload/drive/v3/files")
+    assert calls[0]["payload"] == {"name": "n.txt", "parents": ["folder"]}
+    assert calls[0]["headers"]["X-Upload-Content-Type"] == "text/plain"
+    assert calls[1]["method"] == "PUT" and calls[1]["data"] == b"hello"
+
+
+def test_drive_upload_file_reads_a_local_file(monkeypatch, tmp_path):
+    drive_env(monkeypatch)
+    path = tmp_path / "report.pdf"
+    path.write_bytes(b"%PDF")
+    calls = stub_requests(monkeypatch, upload_handler({"id": "f1"}))
+    googlemcp_tools.drive_upload_file(DRIVE, "report.pdf", local_path=str(path))
+    assert calls[0]["payload"]["parents"] == ["root"]
+    assert calls[0]["headers"]["X-Upload-Content-Type"] == "application/pdf"
+    assert calls[1]["data"] == b"%PDF"
+
+
+def test_drive_upload_file_needs_exactly_one_source(monkeypatch):
+    drive_env(monkeypatch)
+    with pytest.raises(ValueError, match="exactly one of content"):
+        googlemcp_tools.drive_upload_file(DRIVE, "n.txt", content="a", local_path="/tmp/b")
+    with pytest.raises(ValueError, match="exactly one of content"):
+        googlemcp_tools.drive_upload_file(DRIVE, "n.txt")
+
+
+def test_drive_update_file_replaces_content_in_place(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, upload_handler({"id": "f1"}))
+    googlemcp_tools.drive_update_file(DRIVE, "f1", content='{"extracted": []}')
+    session = next(call for call in calls if call["method"] == "PATCH")
+    assert session["url"].endswith("/upload/drive/v3/files/f1") and session["payload"] == {}
+    assert session["headers"]["X-Upload-Content-Type"] == "application/json"  # kept from the file's own type
+    assert calls[-1]["data"] == b'{"extracted": []}'
+
+
+def test_upload_without_a_session_location_is_an_error(monkeypatch):
+    drive_env(monkeypatch)
+    stub_requests(monkeypatch, lambda *args: FakeResponse({}))
+    with pytest.raises(ValueError, match="no upload session"):
+        googlemcp_tools.drive_upload_file(DRIVE, "n.txt", content="hello")
+
+
+def test_drive_create_folder_sets_the_folder_type(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"id": "d1"}))
+    googlemcp_tools.drive_create_folder(DRIVE, "Notes")
+    assert calls[0]["payload"] == {"name": "Notes", "mimeType": googlemcp_tools.DRIVE_FOLDER_MIME, "parents": ["root"]}
+
+
+def test_drive_trash_file_is_a_recoverable_patch(monkeypatch):
+    drive_env(monkeypatch)
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"id": "f1"}))
+    googlemcp_tools.drive_trash_file(DRIVE, "f1")
+    googlemcp_tools.drive_trash_file(DRIVE, "f1", undo=True)
+    assert [call["method"] for call in calls] == ["PATCH", "PATCH"]
+    assert calls[0]["payload"] == {"trashed": True} and calls[1]["payload"] == {"trashed": False}
 
 
 # %%

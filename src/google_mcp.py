@@ -37,19 +37,22 @@ CREDENTIALS_ROOT = grandparent_dir
 _context = ""
 
 SERVER_INSTRUCTIONS = """
-Jason's own Google Calendar and Gmail, over his own Google Cloud OAuth client -
-independent of the model provider, so it behaves identically on AWS Bedrock and
-on Claude Enterprise.
+Jason's own Google Calendar, Gmail and Drive, over his own Google Cloud OAuth
+client - independent of the model provider, so it behaves identically on AWS
+Bedrock and on Claude Enterprise.
 
-Calendar sources come from <context>_calendarboard.yaml and mailboxes from
-<context>_googlemail.yaml in the sibling *_credentials repos. Both default to
-the only configured account when there is exactly one, so `source`/`mailbox`
-can usually be left out. Call list_accounts to see what is configured.
+Calendar sources come from <context>_calendarboard.yaml, mailboxes from
+<context>_googlemail.yaml and Drive accounts from <context>_googledrive.yaml in
+the sibling *_credentials repos. Each defaults to the only configured account
+when there is exactly one, so `source`/`mailbox`/`drive` can usually be left
+out. Call list_accounts to see what is configured.
 
-Writes are enabled: calendar create/update/delete and Gmail label/trash/send.
-Calendar writes default to sendUpdates="none" (no invite mail to attendees) -
-pass send_updates="all" deliberately when guests should be notified. Gmail
-trash is recoverable; calendar delete is not.
+Writes are enabled: calendar create/update/delete, Gmail label/trash/send and
+Drive upload/update/create-folder/trash. Calendar writes default to
+sendUpdates="none" (no invite mail to attendees) - pass send_updates="all"
+deliberately when guests should be notified. Gmail and Drive trash are
+recoverable and nothing here deletes a message or file permanently; calendar
+delete is not recoverable.
 """.strip()
 
 server = MCPServer(name="google", instructions=SERVER_INSTRUCTIONS, version="0.1.0")
@@ -87,15 +90,24 @@ def _calendar_sources():
     return [source for source in sources if source["type"] == "google_calendar"]
 
 
-def _mailboxes():
+def _accounts(kind):
+    """Every entry in the ``<context>_<kind>.yaml`` configs (``googlemail`` or ``googledrive``)."""
     if _context:
-        path = _pinned_config("googlemail")
+        path = _pinned_config(kind)
         if not path:
             return []
-        mailboxes, _ = gtools.load_mailboxes(CREDENTIALS_ROOT, REPO_ROOT, config_path=path)
+        accounts, _ = gtools.load_accounts(kind, CREDENTIALS_ROOT, REPO_ROOT, config_path=path)
     else:
-        mailboxes, _ = gtools.load_mailboxes(CREDENTIALS_ROOT, REPO_ROOT)
-    return mailboxes
+        accounts, _ = gtools.load_accounts(kind, CREDENTIALS_ROOT, REPO_ROOT)
+    return accounts
+
+
+def _mailboxes():
+    return _accounts("googlemail")
+
+
+def _drives():
+    return _accounts("googledrive")
 
 
 def _resolve(entries, name, label):
@@ -119,6 +131,10 @@ def _source(name=""):
 
 def _mailbox(name=""):
     return _resolve(_mailboxes(), name, "mailbox")
+
+
+def _drive(name=""):
+    return _resolve(_drives(), name, "drive")
 
 
 def _jsonable(value):
@@ -158,13 +174,16 @@ def _serialize_event(event):
 # Discovery #
 
 
-@server.tool(description="List the configured Google Calendar sources and Gmail mailboxes this server can reach.")
+@server.tool(
+    description="List the configured Google Calendar sources, Gmail mailboxes and Drive accounts this server can reach."
+)
 def list_accounts() -> dict:
     return {
         "calendar_sources": [
             {"name": source["name"], "config": source["_config"]} for source in _calendar_sources()
         ],
         "mailboxes": [{"name": mailbox["name"], "config": mailbox["_config"]} for mailbox in _mailboxes()],
+        "drives": [{"name": drive["name"], "config": drive["_config"]} for drive in _drives()],
     }
 
 
@@ -338,6 +357,17 @@ def gmail_search(query: str = "", max_results: int = 25, include_spam_trash: boo
     )
 
 
+@server.tool(
+    description=(
+        "Every message id (with its thread id) matching a Gmail query, following every page itself - no bodies and "
+        "no per-message fetch, so it scales to thousands. Use it to diff a mailbox against a record of what was "
+        "already processed, then gmail_get_message only the new ones."
+    )
+)
+def gmail_list_message_ids(query: str = "", include_spam_trash: bool = False, mailbox: str = "") -> list:
+    return gtools.gmail_list_message_ids(_mailbox(mailbox), query=query, include_spam_trash=include_spam_trash)
+
+
 @server.tool(description="One message in full: headers, decoded plain-text body, and attachment names/sizes.")
 def gmail_get_message(message_id: str, body_limit: int = 20000, mailbox: str = "") -> dict:
     return gtools.gmail_get_message(_mailbox(mailbox), message_id, body_limit=body_limit)
@@ -393,29 +423,157 @@ def gmail_send_message(
     )
 
 
+@server.tool(
+    description=(
+        "Save one Gmail attachment straight into a Drive folder, picked by its filename as gmail_get_message lists "
+        "it. Stored as-is, never converted to a Google Doc or Sheet; name defaults to the attachment's filename. "
+        "Nothing is written to local disk."
+    )
+)
+def gmail_save_attachment_to_drive(
+    message_id: str, filename: str, parent_id: str = "root", name: str = "", mailbox: str = "", drive: str = ""
+) -> dict:
+    return gtools.gmail_save_attachment_to_drive(
+        _mailbox(mailbox), _drive(drive), message_id, filename, parent_id=parent_id, name=name
+    )
+
+
+# %%
+# Drive tools #
+
+
+@server.tool(
+    description="The Drive account's own address and storage quota - the cheapest check that credentials work."
+)
+def drive_about(drive: str = "") -> dict:
+    return gtools.drive_about(_drive(drive))
+
+
+@server.tool(
+    description=(
+        "Search Drive with its own query syntax: name contains 'x', '<folder id>' in parents, "
+        "mimeType = 'application/vnd.google-apps.folder', modifiedTime > '2026-09-01T00:00:00'. Covers My Drive and "
+        "every shared drive. Trashed files are excluded unless the query mentions trashed itself."
+    )
+)
+def drive_search(query: str = "", max_results: int = 50, order_by: str = "modifiedTime desc", drive: str = "") -> list:
+    return gtools.drive_search(_drive(drive), query=query, max_results=max_results, order_by=order_by)
+
+
+@server.tool(description="One Drive file's name, type, size, parent folders, created/modified times and web link.")
+def drive_get_metadata(file_id: str, drive: str = "") -> dict:
+    return gtools.drive_get_metadata(_drive(drive), file_id)
+
+
+@server.tool(
+    description=(
+        "Read a Drive file as text: Google Docs and Slides export as plain text, Sheets as CSV of the first tab "
+        "(sheets_get_values reaches any tab), stored files decode as UTF-8. Binary files are refused - use "
+        "drive_download_file."
+    )
+)
+def drive_read_file(file_id: str, max_chars: int = 100000, drive: str = "") -> dict:
+    return gtools.drive_read_file(_drive(drive), file_id, max_chars=max_chars)
+
+
+@server.tool(
+    description=(
+        "Download a Drive file to a local path that does not exist yet (Google-native files exported as for "
+        "drive_read_file). Never overwrites."
+    )
+)
+def drive_download_file(file_id: str, local_path: str, drive: str = "") -> dict:
+    return gtools.drive_download_file(_drive(drive), file_id, local_path)
+
+
+@server.tool(
+    description=(
+        "Read one A1 range of a spreadsheet ('Tab name'!A1:Z50, or a bare tab name for the whole tab). render: "
+        "FORMATTED_VALUE (default), UNFORMATTED_VALUE, or FORMULA to see each cell's formula instead of its value."
+    )
+)
+def sheets_get_values(spreadsheet_id: str, cell_range: str, render: str = "FORMATTED_VALUE", drive: str = "") -> dict:
+    return gtools.sheets_get_values(_drive(drive), spreadsheet_id, cell_range, render=render)
+
+
+@server.tool(
+    description=(
+        "Create a file in a Drive folder (parent_id, default My Drive root) from text content or a local_path file - "
+        "pass exactly one. Stored exactly as given, never converted. mime_type is guessed from the name when omitted. "
+        "Drive allows duplicate names, so this always adds a new file; use drive_update_file to replace one."
+    )
+)
+def drive_upload_file(
+    name: str, parent_id: str = "root", content: str = "", local_path: str = "", mime_type: str = "", drive: str = ""
+) -> dict:
+    return gtools.drive_upload_file(
+        _drive(drive), name, parent_id=parent_id, content=content, local_path=local_path, mime_type=mime_type
+    )
+
+
+@server.tool(
+    description=(
+        "Replace an existing Drive file's content in place from text content or a local_path file, keeping its id, "
+        "name, folder and sharing."
+    )
+)
+def drive_update_file(
+    file_id: str, content: str = "", local_path: str = "", mime_type: str = "", drive: str = ""
+) -> dict:
+    return gtools.drive_update_file(
+        _drive(drive), file_id, content=content, local_path=local_path, mime_type=mime_type
+    )
+
+
+@server.tool(description="Create a folder in Drive (parent_id, default My Drive root).")
+def drive_create_folder(name: str, parent_id: str = "root", drive: str = "") -> dict:
+    return gtools.drive_create_folder(_drive(drive), name, parent_id=parent_id)
+
+
+@server.tool(
+    description=(
+        "Move a Drive file or folder to the trash, or restore it with undo=true. Recoverable for 30 days; there is "
+        "no permanent delete."
+    )
+)
+def drive_trash_file(file_id: str, undo: bool = False, drive: str = "") -> dict:
+    return gtools.drive_trash_file(_drive(drive), file_id, undo=undo)
+
+
 # %%
 # Entry point #
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Google Calendar + Gmail MCP stdio server.")
+    parser = argparse.ArgumentParser(description="Google Calendar, Gmail and Drive MCP stdio server.")
     parser.add_argument(
         "--context",
         default="",
         help="pin account discovery to one context's <context>_calendarboard.yaml / "
-        "<context>_googlemail.yaml instead of every cloned credentials repo",
+        "<context>_googlemail.yaml / <context>_googledrive.yaml instead of every cloned credentials repo",
+    )
+    parser.add_argument(
+        "--auth",
+        metavar="DRIVE",
+        default="",
+        help="run the one-time browser consent for the named <context>_googledrive.yaml entry, print the "
+        "token line for its env file, and exit instead of serving",
     )
     return parser.parse_args(argv)
 
 
 def main(argv=None):
     global _context
-    _context = parse_args(argv).context
+    args = parse_args(argv)
+    _context = args.context
+    if args.auth:
+        return gtools.run_drive_auth(gtools.find_by_name(_drives(), args.auth, "drive"))
     server.run(transport="stdio")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
 
 
 # %%

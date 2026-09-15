@@ -5,11 +5,11 @@ import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote, urlencode
+from urllib.parse import quote
 
 import requests
 import yaml
-from utils.google_oauth_tools import cached_access_token
+from utils.google_oauth_tools import cached_access_token, run_loopback_consent
 from utils.inventory_tools import credentials_context, find_credentials_dirs
 from utils.secret_tools import resolve_secret
 
@@ -20,8 +20,6 @@ SOURCE_TYPES = ("google_calendar", "outlook_calendar")
 DEFAULT_INTERVAL = 300
 DEFAULT_HTTP_TIMEOUT = 30
 
-GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_API = "https://www.googleapis.com/calendar/v3"
 # Consent is read/write so the refresh tokens minted by --auth keep working
 # when event-writing features land; the board itself only ever reads.
@@ -620,59 +618,17 @@ def _print_refresh_token(source, refresh_token):
 
 def run_google_auth(source):
     """
-    One-time interactive OAuth for a google_calendar source: opens the consent
-    URL, catches the redirect on a localhost loopback server, exchanges the
-    code, and prints the refresh token to store in the source's env file.
-    Google's device flow does not allow the Calendar scope, so the browser
-    must run on THIS machine (or with the shown port forwarded to it).
+    One-time interactive OAuth for a google_calendar source through the shared
+    loopback consent, printing the refresh token to store in the source's env
+    file.
     """
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-    from urllib.parse import parse_qs, urlparse
-
-    client_id = resolve_secret(source, "client_id_env")
-    client_secret = resolve_secret(source, "client_secret_env")
-    captured: dict = {}
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            query = parse_qs(urlparse(self.path).query)
-            if "code" in query or "error" in query:
-                captured.update({key: value[0] for key, value in query.items()})
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"calendar board: authorization received - return to the terminal")
-
-        def log_message(self, *args):
-            pass
-
-    server = HTTPServer(("127.0.0.1", 0), Handler)
-    redirect_uri = f"http://localhost:{server.server_port}"
-    url = GOOGLE_AUTH_URL + "?" + urlencode({
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": GOOGLE_SCOPE,
-        "access_type": "offline",  # offline + consent force a refresh token every time
-        "prompt": "consent",
-    })
-    print(f"Open this URL in a browser on THIS machine (redirect lands on {redirect_uri}):\n\n  {url}\n")
-    while "code" not in captured and "error" not in captured:
-        server.handle_request()
-    server.server_close()
-    if "error" in captured:
-        print(f"authorization failed: {captured['error']}")
-        return 1
-    response = requests.post(GOOGLE_TOKEN_URL, data={
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "code": captured["code"],
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code",
-    }, timeout=DEFAULT_HTTP_TIMEOUT)
-    payload = response.json()
-    if "refresh_token" not in payload:
-        print(f"token exchange failed ({response.status_code}): {response.text[:300]}")
+    payload = run_loopback_consent(
+        resolve_secret(source, "client_id_env"),
+        resolve_secret(source, "client_secret_env"),
+        GOOGLE_SCOPE,
+        "calendar board",
+    )
+    if payload is None:
         return 1
     _print_refresh_token(source, payload["refresh_token"])
     return 0

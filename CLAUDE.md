@@ -80,7 +80,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   at generate time, which is why no per-host payload exists. Doc:
   `docs/setup_google_mcp.md`.
 - **`google_mcp.py`** — stdio MCP server exposing one context's Google
-  Calendar plus Gmail (mailboxes from `<context>_googlemail.yaml`) to Claude
+  Calendar, Gmail (mailboxes from `<context>_googlemail.yaml`) and Drive
+  (`<context>_googledrive.yaml`, token minted by its own `--auth`) to Claude
   Code with read/write scope. Exists because the hosted claude.ai connectors
   die under `CLAUDE_CODE_USE_BEDROCK=1`; a local stdio server is
   provider-independent. dotfiles holds the code but declares no instance -

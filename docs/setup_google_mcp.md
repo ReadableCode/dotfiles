@@ -1,8 +1,8 @@
 # Google MCP — your own Calendar and Gmail in Claude Code
 
 `src/google_mcp.py` is a stdio MCP server that gives Claude Code read/write
-access to Google Calendar and Gmail **through your own Google Cloud OAuth
-client**. It exists because the hosted `claude.ai Google Calendar` /
+access to Google Calendar, Gmail and Drive **through your own Google Cloud
+OAuth client**. It exists because the hosted `claude.ai Google Calendar` /
 `claude.ai Gmail` connectors ride on the claude.ai account session: the moment a
 machine switches to AWS Bedrock (`CLAUDE_CODE_USE_BEDROCK=1`) there is no such
 session and those tools silently vanish.
@@ -134,7 +134,8 @@ server found in this project"), exactly as jira did. `claude mcp list` shows
 `⏸ Pending approval` until then.
 
 With `--context` the server reaches only that context's
-`<context>_calendarboard.yaml` / `<context>_googlemail.yaml`; a pinned context
+`<context>_calendarboard.yaml` / `<context>_googlemail.yaml` /
+`<context>_googledrive.yaml`; a pinned context
 whose repo is not cloned (or has no such config) reports no accounts rather
 than falling back to another context's. Run WITHOUT `--context` the server
 discovers **every** sibling `*_credentials` repo, selected by
@@ -171,7 +172,28 @@ Mailboxes are opt-in one at a time. A shared team inbox is a deliberate
 decision, not a default — this server has write scope, so listing one hands an
 agent the ability to label, trash and send from it.
 
-Both account types default to the only configured entry, so `source=` /
+**Drive** reads `<context>_googledrive.yaml`, the same shape as a mailbox:
+
+```yaml
+- name: acme_drive
+  type: google_drive
+  oauth_env: GMAIL_OAUTH_DEFAULT          # the same OAuth client JSON the mailbox uses
+  token_env: GOOGLE_DRIVE_TOKEN_DEFAULT   # google-auth "authorized user" JSON
+  env_file: acme.env
+```
+
+Drive is its own grant on that client, with the full `auth/drive` scope so
+files can be saved as well as read. No context's tooling mints a Drive token,
+so the server mints it itself, through the same loopback consent
+`calendar_board.py --auth` uses (`src/utils/google_oauth_tools.py`):
+
+```bash
+uv run python src/google_mcp.py --context acme --auth acme_drive
+```
+
+It prints one line, the token as single-line JSON, to add to the env file.
+
+All account types default to the only configured entry, so `source=` /
 `mailbox=` can be omitted on a single-account machine. `list_accounts` shows
 what is configured and which file declared it.
 
@@ -180,8 +202,8 @@ what is configured and which file declared it.
 Only needed for an account the calendar board has never authenticated.
 
 1. In [Google Cloud Console](https://console.cloud.google.com/) create or reuse
-   a project and enable **both** the Google Calendar API and the Gmail API.
-   Create an OAuth client of type **Desktop app**.
+   a project and enable the Google Calendar API, the Gmail API and, for Drive,
+   the Google Drive API. Create an OAuth client of type **Desktop app**.
 2. Set the consent screen to **Internal** (a Workspace org) or publish it.
    Leaving it in *Testing* caps refresh tokens at **7 days**, which shows up
    later as calendar and mail dying every week for no obvious reason.
@@ -197,9 +219,13 @@ Only needed for an account the calendar board has never authenticated.
    settings-only token competes in the OAuth client's per-account
    refresh-token pool with the first.
 
-Calendar consent is `auth/calendar` and mail consent is `gmail.modify` (plus
-`gmail.settings.basic` where filters are managed) — both read/write. No single
-token covers calendar and mail; they are separate grants.
+5. Drive: `uv run python src/google_mcp.py --context <context> --auth <drive>`
+   on a machine with a browser, then paste the printed line into the env file.
+
+Calendar consent is `auth/calendar`, mail consent is `gmail.modify` (plus
+`gmail.settings.basic` where filters are managed) and Drive consent is
+`auth/drive` — all read/write. No single token covers two of them; they are
+separate grants.
 
 ## Tools
 
@@ -207,14 +233,24 @@ Calendar: `calendar_agenda` (all calendars for a date range, the board's view),
 `calendar_list_calendars`, `calendar_search_events`, `calendar_get_event`,
 `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`.
 
-Mail: `gmail_search` (Gmail's own query syntax), `gmail_get_message`,
+Mail: `gmail_search` (Gmail's own query syntax), `gmail_list_message_ids`
+(every matching id, all pages, for diffing against a record), `gmail_get_message`,
 `gmail_list_labels`, `gmail_modify_message`, `gmail_trash_message`,
-`gmail_send_message`, `gmail_profile`.
+`gmail_send_message`, `gmail_save_attachment_to_drive`, `gmail_profile`.
+
+Drive: `drive_about`, `drive_search` (Drive's own query syntax, shared drives
+included), `drive_get_metadata`, `drive_read_file` (Docs and Slides as text,
+Sheets as CSV), `drive_download_file`, `sheets_get_values` (values or
+formulas), `drive_upload_file`, `drive_update_file`, `drive_create_folder`,
+`drive_trash_file`.
 
 Writes are real. Calendar writes default to `send_updates="none"` so editing an
 event does not mail its guests — pass `"all"` deliberately. Gmail trash is
-recoverable and `gmail.modify` cannot permanently delete; **calendar delete is
-not recoverable** through the API.
+recoverable and `gmail.modify` cannot permanently delete; Drive trash is
+recoverable for 30 days and the server has no permanent delete; **calendar
+delete is not recoverable** through the API. Drive uploads are stored exactly as
+sent, never converted to Google Docs or Sheets, and downloads never overwrite a
+local file.
 
 ## What the API will not tell you
 

@@ -74,7 +74,7 @@ agent tooling and declares its own overlay manifest (the opt-in form, see
 | Category | Home |
 |---|---|
 | Secrets: `.env`, tokens, keys, certs, OAuth tokens, gmail filters | `<context>_credentials` |
-| Context declarations: `<context>_hosts.json`, `_repos.yaml`, `_mcp_servers.yaml`, `_statusboard.yaml`, `_calendarboard.yaml`, `_googlemail.yaml` | `<context>_credentials` |
+| Context declarations: `<context>_hosts.json`, `_repos.yaml`, `_mcp_servers.yaml`, `_statusboard.yaml`, `_calendarboard.yaml`, `_googlemail.yaml`, `_googledrive.yaml` | `<context>_credentials` |
 | Client app payloads: `configuration.json`, workspaces, shell / PowerShell / ssh fragments, editor settings, git hooks that name no agent | `<context>_credentials` |
 | Working notes that become a repo's `CLAUDE.md` | `<context>_credentials` under a **neutral filename**; the dev overlay supplies the destination name |
 | Agent tooling: slash commands, skills, project allow lists, user-level Claude settings and `CLAUDE.md`, T3 Code settings, the per-repo `.mcp.json` manifest entry | `<context>_dev` (`personal_dev`; each client has its own) |

@@ -86,7 +86,7 @@ class Gmail:
         googlemail = context_config(context, "googlemail")
         if not googlemail:
             sys.exit(f"no {context}_googlemail.yaml found under {CREDENTIALS_ROOT}")
-        mailboxes, _ = gtools.load_mailboxes(CREDENTIALS_ROOT, REPO_ROOT, config_path=googlemail)
+        mailboxes, _ = gtools.load_accounts("googlemail", CREDENTIALS_ROOT, REPO_ROOT, config_path=googlemail)
         self.mailbox = gtools.find_by_name(mailboxes, mailbox_name, "mailbox")
         profile = self.get("profile")
         if profile.get("emailAddress", "").lower() != account.lower():
