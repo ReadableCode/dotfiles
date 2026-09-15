@@ -374,8 +374,16 @@ def cmd_transition_ticket(args):
         emit("\n".join(lines), {"key": args.key, "transitions": transitions})
         return
     wanted = args.to.strip().lower()
-    match = next((t for t in transitions
-                  if t["name"].lower() == wanted or (t["to"] or "").lower() == wanted), None)
+    # A workflow can offer two transitions with one name that land in different
+    # statuses, so a target-status match wins and an ambiguous match is refused
+    # rather than resolved by Jira's list order.
+    by_status = [t for t in transitions if (t["to"] or "").lower() == wanted]
+    candidates = by_status or [t for t in transitions if t["name"].lower() == wanted]
+    if len(candidates) > 1:
+        options = "; ".join(f"{t['id']} {t['name']} -> {t['to']}" for t in candidates)
+        raise SystemExit(f"{args.key}: {args.to!r} matches more than one transition ({options}); "
+                         "pass the target status instead")
+    match = candidates[0] if candidates else None
     if match is None and not args.dry_run:
         raise SystemExit(f"{args.key} offers no transition to {args.to!r}; offered: {names}")
     transition_id = match["id"] if match else "DRY"

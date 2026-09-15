@@ -457,6 +457,49 @@ def test_transition_ticket_matches_target_status_and_posts_its_id(monkeypatch, c
         "url": "https://example.atlassian.net/browse/ACME-401"}
 
 
+_SAME_NAMED = [
+    {"id": "2", "name": "In Progress", "to": {"name": "In Progress"}},
+    {"id": "11", "name": "To Do", "to": {"name": "Backlog"}},
+    {"id": "21", "name": "In Progress", "to": {"name": "On Hold"}},
+]
+
+
+@pytest.mark.parametrize("order", [_SAME_NAMED, list(reversed(_SAME_NAMED))], ids=["listed", "reversed"])
+@pytest.mark.parametrize("to, expected_id", [("In Progress", "2"), ("On Hold", "21")])
+def test_transition_ticket_prefers_target_status_over_a_shared_name(monkeypatch, capsys, order, to, expected_id):
+    _jira_env(monkeypatch)
+    posted = {}
+
+    def fake_http(method, url, headers, payload=None, **k):
+        if method == "POST":
+            posted.update(payload)
+            return {}
+        return {"transitions": order}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", to])
+    assert posted == {"transition": {"id": expected_id}}
+    assert capsys.readouterr().out.splitlines()[0] == f"ACME-401 -> {to}"
+
+
+def test_transition_ticket_refuses_an_ambiguous_name(monkeypatch):
+    _jira_env(monkeypatch)
+    calls = []
+
+    def fake_http(method, url, *a, **k):
+        calls.append(method)
+        return {"transitions": [
+            {"id": "2", "name": "Start", "to": {"name": "In Progress"}},
+            {"id": "21", "name": "Start", "to": {"name": "On Hold"}},
+        ]}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    with pytest.raises(SystemExit, match=r"'Start' matches more than one transition "
+                                         r"\(2 Start -> In Progress; 21 Start -> On Hold\)"):
+        ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "Start"])
+    assert calls == ["GET"]
+
+
 def test_transition_ticket_refuses_an_unknown_target(monkeypatch):
     _jira_env(monkeypatch)
     monkeypatch.setattr(ticket_pr, "http_json", lambda *a, **k: {"transitions": [
