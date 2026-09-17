@@ -8,7 +8,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
         --project ACME --type Task --summary "Do the thing"
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
-transition-ticket, create-pr, pr-comment, pr-status, rerun-job,
+transition-ticket, create-pr, pr-comment, pr-status, rerun-job, job-log,
 update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
@@ -1308,6 +1308,64 @@ def cmd_rerun_job(args):
     emit(f"job {args.job} queued: {url}", {"job": args.job, "url": url})
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Hand the redirect back instead of following it, so its Location can be read."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def github_job_log(repo, job, headers, timeout=120):
+    """
+    One Actions job's log as text. GitHub answers with a redirect to a signed
+    URL on its file store; that URL is fetched without the token, because the
+    store refuses a request that carries two kinds of authorization.
+    """
+    url = f"{GITHUB_API}/repos/{repo}/actions/jobs/{job}/logs"
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(urllib.request.Request(url, headers=headers), timeout=timeout) as response:
+            return response.read().decode(errors="replace")
+    except urllib.error.HTTPError as err:
+        location = err.headers.get("Location") if err.code in (301, 302, 303, 307, 308) else None
+        if not location:
+            raise SystemExit(f"GET {url} failed: HTTP {err.code}")
+    except urllib.error.URLError as err:
+        raise SystemExit(f"GET {url} failed: {err.reason}")
+    return http_bytes(location, {}, timeout=timeout).decode(errors="replace")
+
+
+def cmd_job_log(args):
+    """
+    Save one GitHub Actions job's log to disk (the job id is the number at the
+    end of a failed check's details URL, as pr-status prints it) and print the
+    lines matching --grep, so a failed linter or test job can be read without
+    opening the browser.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("job-log is GitHub-only")
+    if args.dry_run:
+        print(f"[dry-run] GET {GITHUB_API}/repos/{repo}/actions/jobs/{args.job}/logs")
+        emit("dry run", {"job": args.job, "path": None, "lines": 0, "matches": 0})
+        return
+    text = github_job_log(repo, args.job, github_headers())
+    out_dir = args.out_dir or os.path.join(tempfile.gettempdir(), "ticket_pr")
+    os.makedirs(out_dir, exist_ok=True)
+    path = os.path.join(out_dir, f"{repo.replace('/', '_')}_job_{args.job}.log")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(text)
+    lines = text.splitlines()
+    matches = []
+    if args.grep:
+        pattern = re.compile(args.grep, re.IGNORECASE)
+        matches = [line for line in lines if pattern.search(line)]
+        for line in matches[: args.max_lines]:
+            print(line)
+    emit(f"job {args.job}: {len(lines)} lines in {path}",
+         {"job": args.job, "path": path, "lines": len(lines), "matches": len(matches)})
+
+
 # ---------------------------------------------------------------- cli
 
 
@@ -1385,6 +1443,14 @@ def build_parser():
     rerun.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     rerun.add_argument("--job", required=True, help="job id from the check's details URL")
     rerun.set_defaults(func=cmd_rerun_job)
+
+    job_log = sub.add_parser("job-log", help="save one GitHub Actions job's log to disk, print the lines matching --grep")
+    job_log.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    job_log.add_argument("--job", required=True, help="job id from the check's details URL")
+    job_log.add_argument("--grep", help="case-insensitive regular expression; matching lines are printed")
+    job_log.add_argument("--max-lines", type=int, default=200, help="cap on printed matches (default 200)")
+    job_log.add_argument("--out-dir", help="where the log is saved (default: <tmp>/ticket_pr)")
+    job_log.set_defaults(func=cmd_job_log)
 
     status = sub.add_parser("pr-status", help="bucket a PR's checks into a green/failed report")
     status.add_argument("--repo", help="owner/name (default: parsed from origin remote)")

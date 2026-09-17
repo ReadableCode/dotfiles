@@ -624,6 +624,46 @@ def test_rerun_job_dry_run_hits_the_job_rerun_endpoint(monkeypatch, capsys):
     assert result == {"job": "123456", "url": "https://github.com/acme/widgets/actions/jobs/123456"}
 
 
+def test_job_log_dry_run_hits_the_job_logs_endpoint(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        ["--dry-run", "job-log", "--repo", "acme/widgets", "--job", "123456"],
+        monkeypatch, capsys,
+    )
+    assert "[dry-run] GET https://api.github.com/repos/acme/widgets/actions/jobs/123456/logs" in out
+    assert json.loads(out.strip().splitlines()[-1])["job"] == "123456"
+
+
+def test_job_log_saves_the_log_and_prints_the_matching_lines(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    calls = []
+
+    def fake_job_log(repo, job, headers, timeout=120):
+        calls.append((repo, job))
+        return "setup ok\nERROR: src/widget.py Imports are incorrectly sorted\nteardown ok\n"
+
+    monkeypatch.setattr(ticket_pr, "github_job_log", fake_job_log)
+    out = _run_cli(
+        ["job-log", "--repo", "acme/widgets", "--job", "123456", "--grep", "error",
+         "--out-dir", str(tmp_path)],
+        monkeypatch, capsys,
+    )
+    assert calls == [("acme/widgets", "123456")]
+    assert "ERROR: src/widget.py Imports are incorrectly sorted" in out
+    assert "setup ok" not in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["lines"] == 3 and result["matches"] == 1
+    with open(result["path"], encoding="utf-8") as handle:
+        assert handle.read().count("\n") == 3
+
+
+def test_job_log_is_github_only(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    with pytest.raises(SystemExit, match="GitHub-only"):
+        _run_cli(["job-log", "--repo", "bitbucket:ws/slug", "--job", "1"], monkeypatch, capsys)
+
+
 def test_create_pr_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "ACME-0-test-branch")
