@@ -1062,6 +1062,14 @@ a doc/automation task in this repo.
   total_requests` in `/metrics` confirms it. Fix: toggle server exposure off
   and on in T3 settings, then wait for `readyConnections: 4` in `/ready`
   (several minutes) before judging.
+- **Remote link stops connecting after 30 days**: a paired client's bearer
+  session expires 30 days after pairing and is not renewed by use, so the
+  environment goes dead while the server, Tailscale Serve and `curl` of the
+  tailnet URL all look healthy. The server's boot log shows `Rejected
+  authenticated session credential. reason: Session token expired.`, and
+  `t3 auth session list` on the server has no entry for that client. Fix:
+  `t3 auth pairing create` on the server and re-pair the environment from the
+  client inside the token's 5-minute TTL.
 - **"OAuth session expired" in T3 while other Claude sessions work**: two
   credential stores exist on a Mac, the keychain item and a leftover
   `~/.claude/.credentials.json` with a rotated-out refresh token, and the
