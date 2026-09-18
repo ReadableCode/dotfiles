@@ -8,7 +8,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
         --project ACME --type Task --summary "Do the thing"
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
-transition-ticket, create-pr, pr-comment, pr-status, rerun-job, job-log,
+transition-ticket, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
 update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
@@ -1335,6 +1335,36 @@ def github_job_log(repo, job, headers, timeout=120):
     return http_bytes(location, {}, timeout=timeout).decode(errors="replace")
 
 
+def cmd_update_pr(args):
+    """
+    Change an open PR's title and/or description. A PR opened before a design
+    changed describes work that is no longer there, which is what a reviewer
+    reads first; this rewrites it in place rather than burying a correction in
+    the comments.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("update-pr is GitHub-only")
+    body = body_text(args) if (args.body or args.body_file) else None
+    if args.title is None and body is None:
+        raise SystemExit("update-pr needs --title and/or --body/--body-file")
+    payload = {}
+    if args.title is not None:
+        payload["title"] = args.title
+    if body is not None:
+        payload["body"] = body
+    headers = github_headers()
+    number = args.pr or resolve_pr(repo, headers, None)["number"]
+    pull = http_json("PATCH", f"{GITHUB_API}/repos/{repo}/pulls/{number}",
+                     headers, payload, dry_run=args.dry_run)
+    if args.dry_run:
+        emit("dry run", {"pr": number, "updated": sorted(payload)})
+        return
+    emit(f"PR #{number} updated: {', '.join(sorted(payload))}",
+         {"pr": pull["number"], "url": pull["html_url"], "title": pull["title"],
+          "updated": sorted(payload)})
+
+
 def cmd_job_log(args):
     """
     Save one GitHub Actions job's log to disk (the job id is the number at the
@@ -1443,6 +1473,14 @@ def build_parser():
     rerun.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     rerun.add_argument("--job", required=True, help="job id from the check's details URL")
     rerun.set_defaults(func=cmd_rerun_job)
+
+    update_pr = sub.add_parser("update-pr", help="change an open PR's title and/or description")
+    update_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    update_pr.add_argument("--pr", help="PR number (default: current branch's open PR)")
+    update_pr.add_argument("--title", help="new title; left alone when omitted")
+    update_pr.add_argument("--body", help="new description text")
+    update_pr.add_argument("--body-file", help="file containing the new description")
+    update_pr.set_defaults(func=cmd_update_pr)
 
     job_log = sub.add_parser("job-log", help="save one GitHub Actions job's log to disk, print the lines matching --grep")
     job_log.add_argument("--repo", help="owner/name (default: parsed from origin remote)")

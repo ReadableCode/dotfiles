@@ -624,6 +624,52 @@ def test_rerun_job_dry_run_hits_the_job_rerun_endpoint(monkeypatch, capsys):
     assert result == {"job": "123456", "url": "https://github.com/acme/widgets/actions/jobs/123456"}
 
 
+def test_update_pr_dry_run_patches_the_pull(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        ["--dry-run", "update-pr", "--repo", "acme/widgets", "--pr", "7", "--title", "ACME-1: new"],
+        monkeypatch, capsys,
+    )
+    assert "[dry-run] PATCH https://api.github.com/repos/acme/widgets/pulls/7" in out
+    assert json.loads(out.strip().splitlines()[-1]) == {"pr": "7", "updated": ["title"]}
+
+
+def test_update_pr_sends_only_what_was_given(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    body_file = tmp_path / "body.md"
+    body_file.write_text("The design changed; here is what the branch does now.")
+    calls = []
+
+    def fake_http_json(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        return {"number": 7, "html_url": "https://github.com/acme/widgets/pull/7", "title": "kept"}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
+    out = _run_cli(
+        ["update-pr", "--repo", "acme/widgets", "--pr", "7", "--body-file", str(body_file)],
+        monkeypatch, capsys,
+    )
+    assert calls == [
+        ("PATCH", "https://api.github.com/repos/acme/widgets/pulls/7",
+         {"body": "The design changed; here is what the branch does now."}),
+    ]
+    assert json.loads(out.strip().splitlines()[-1])["updated"] == ["body"]
+
+
+def test_update_pr_needs_something_to_change(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    with pytest.raises(SystemExit, match="needs --title"):
+        _run_cli(["update-pr", "--repo", "acme/widgets", "--pr", "7"], monkeypatch, capsys)
+
+
+def test_update_pr_is_github_only(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    with pytest.raises(SystemExit, match="GitHub-only"):
+        _run_cli(["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--title", "x"],
+                 monkeypatch, capsys)
+
+
 def test_job_log_dry_run_hits_the_job_logs_endpoint(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
