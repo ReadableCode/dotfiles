@@ -1,5 +1,7 @@
 {
   "continueThreadsAfterServerUpdate": true,
+  "defaultRuntimeMode": "auto",
+  "projectSettingsFolded": true,
   "providerInstances": {
     "codex": {
       "config": {

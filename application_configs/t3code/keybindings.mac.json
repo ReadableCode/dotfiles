@@ -226,5 +226,55 @@
     "command": "rightPanel.close",
     "key": "mod+w",
     "when": "!terminalFocus"
+  },
+  {
+    "command": "thread.steerQueuedMessage",
+    "key": "mod+shift+enter",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.host",
+    "key": "mod+shift+h",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.effort",
+    "key": "mod+shift+e",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.mode",
+    "key": "mod+shift+a",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.workspace",
+    "key": "mod+shift+x",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.branch",
+    "key": "mod+shift+g",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "composer.previousWorktree",
+    "key": "mod+shift+l",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "pullRequest.copyNumber",
+    "key": "mod+shift+k",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "modelPicker.previousProvider",
+    "key": "mod+shift+arrowup",
+    "when": "modelPickerOpen"
+  },
+  {
+    "command": "modelPicker.nextProvider",
+    "key": "mod+shift+arrowdown",
+    "when": "modelPickerOpen"
   }
 ]
