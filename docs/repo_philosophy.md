@@ -104,6 +104,37 @@ secrets repo stays a secrets repo, and the agent tooling lives in a
 GitHub-private repo that cloud and web sessions can read, which the LAN-hosted
 credentials repo never can. It is cloned wherever the credentials repo is.
 
+## Where executable code lives
+
+The dev-repo table above says skills live in `<context>_dev`, which leaves open
+where a skill's own Python goes. The test is **the consumer list**, nothing else:
+
+- **Plural or remote consumers — `dotfiles/src/`.** `ticket_pr.py` serves all
+  three contexts; `host_facts.py` runs over ssh on machines that never clone a
+  dev repo. The command that calls one is a thin wrapper in the dev repo, not
+  the owner: `personal_host_facts`, `personal_chrome_bookmarks`,
+  `personal_pr_review` and each client's PR commands are all prose over
+  `python3 ~/GitHub/dotfiles/src/<tool>.py`.
+- **A skill's private implementation — inside the skill.**
+  `sort-scanned-documents` carries its scripts under its own `scripts/`, and
+  every caller is that skill's `SKILL.md`, `references/method.md` or a
+  per-folder `CLAUDE.md`. Nothing outside the skill references any of them.
+  Moving them to `dotfiles/src/` would split one skill's code across two repos
+  and manufacture a coupling it does not have.
+
+"Would I want this at a new job tomorrow?" decides whether **dotfiles** is
+cloned somewhere. It never decides whether a given file is shared:
+`chrome_bookmarks.py` is personal-only and lives in `dotfiles/src/` anyway.
+
+Duplication is not the escape hatch. A second copy of a guard eventually loses
+a refusal, and the copy without it is the one that does damage. When a second
+consumer appears, either it genuinely needs the machinery — promote it once, to
+`dotfiles/src/`, and let both callers reach it by absolute path — or it does
+not, and it resolves what it needs in two lines. `onedrive_paths.py` is the
+worked example: its refusals exist because the July 2026 run filed a batch into
+a *replica* of the taxonomy and lost a year, and a runbook that only reads one
+known folder carries none of that risk.
+
 ## personal-automation: recurring homelab jobs
 
 Things I do on a frequent basis to keep the homelab running — cron- or
@@ -118,6 +149,43 @@ run a homelab cron.
 Applications with their own lifecycle (deploys, users, data) get their own
 repos. Public ones stay standalone so they can be shared and used by others;
 they are not folded into the private grab-bag repo even when small.
+
+## Documents and accumulated data: the cloud store
+
+Not everything durable is code or configuration. Scanned paperwork, house
+documents, meeting notes and plain life facts accumulate, and none of them
+belong in a git repo. The OneDrive personal `Documents` tree and the Drive
+folders are that tier, and they are as much a part of the architecture as the
+repos above.
+
+- **Data in the cloud store, code and instructions in git.** `carlson-place` is
+  the shape: the documents and everything derived from them live in OneDrive,
+  the taxonomy, rules and runbook live in `personal_dev`, and the data folder
+  holds a one-line pointer back. Never copy scripts into the data folder.
+- **The ledger lives with the data, keyed by content.** `_catalog/` by sha256,
+  `metadata.json` by message id — so re-runs are idempotent and survive renames.
+  Both refuse to create a fresh record when one is missing or ambiguous, because
+  an empty ledger re-ingests everything as duplicates. Authored data
+  (preferences, notes with no upstream source) has nothing to re-ingest and
+  needs no ledger.
+- **Resolve the location, never type it.** A path written down as one machine's
+  literal breaks on the next Mac, and a wrong one is not a harmless miss: it is
+  a batch filed into a replica. Discovery refuses business accounts, checks for
+  expected markers, and stops rather than picking between two candidates.
+- **The session is anchored in a repo and reaches out to the data.** A session's
+  MCP servers and allow list arrive through the manifest's `per_context_repo`
+  expansion over `<context>_repos.yaml`, keyed to repo checkouts. Start a
+  session *in* a data folder and it has neither — no calendar, no Gmail, no
+  Drive. The data folder is a destination, never the working directory.
+- **A synced folder is never a deploy target.** Deploy-managed links are
+  symlinks with absolute machine-local targets. One inside OneDrive syncs to
+  every other machine, where the target is wrong or missing, and worse on
+  Windows.
+
+Sync conflicts are handled in the folder's own `CLAUDE.md`, not by architecture:
+reconcile any conflict copy before answering from the files. OneDrive
+cloud-only placeholders hydrate on read in a local shell; the *Resource deadlock
+avoided* failures on record are device-shell mounts, not local sessions.
 
 ## Naming new repos
 
