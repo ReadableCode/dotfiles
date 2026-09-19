@@ -969,6 +969,120 @@ fedora_release_upgrade() {
 # Offer a distro release upgrade, never past the policy ceiling. Idempotent:
 # on a machine already at the ceiling it prints where it stands and changes
 # nothing, which is the normal outcome on most runs.
+# Debian names a codename per release and apt sources carry the codename, not
+# the number, so an upgrade means rewriting every source line on the machine.
+# Mapped here rather than read from debian-distro-info: that package is not on a
+# stock Raspberry Pi OS, which is most of the Debian fleet.
+debian_codename_for() {
+    case "$1" in
+        10) echo buster ;;
+        11) echo bullseye ;;
+        12) echo bookworm ;;
+        13) echo trixie ;;
+        14) echo forky ;;
+        *) echo "" ;;
+    esac
+}
+
+# Every apt source file naming the running codename.
+debian_source_files() {
+    grep -rlE "(^|[[:space:]])$1(-[a-z]+)?([[:space:]]|/|$)" \
+        /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null | sort -u
+}
+
+# "<url> <suite>" for every enabled deb line naming the codename, options and
+# comments stripped.
+debian_repo_suites() {
+    local codename="$1" file
+    for file in $(debian_source_files "$codename"); do
+        sed -E 's/#.*//; s/^[[:space:]]*deb(-src)?[[:space:]]+(\[[^]]*\][[:space:]]+)?//' "$file" \
+            | awk -v c="$codename" 'NF >= 2 && $2 ~ "^" c "(-[a-z]+)?$" { print $1, $2 }'
+    done | sort -u
+}
+
+# Whether a repo really publishes the target suite. THIS is the failure mode of
+# a Debian release upgrade: one third-party source with no release for the new
+# codename makes `apt update` fail after the rewrite, leaving the machine half
+# switched with no packages resolvable. Probed BEFORE anything is edited, and a
+# single miss stops the whole upgrade.
+debian_suite_available() {
+    curl -fsS -o /dev/null --max-time 25 "${1%/}/dists/$2/Release" 2>/dev/null
+}
+
+debian_release_upgrade() {
+    local ver="$1" ceiling="$2" from to target blockers=0 line url suite want file
+
+    from="$(debian_codename_for "$ver")"
+    if [ -z "$from" ]; then
+        echo "Debian $ver has no codename mapped in this script, leaving the release alone."
+        return 0
+    fi
+    # One release at a time: Debian supports n -> n+1 only, and skipping is how
+    # you get an unbootable machine.
+    target=$((ver + 1))
+    if ! version_le "$target" "$ceiling"; then
+        echo "On $ver, which is as new as this machine is allowed to be. Nothing to do."
+        return 0
+    fi
+    to="$(debian_codename_for "$target")"
+    if [ -z "$to" ]; then
+        echo "Debian $target has no codename mapped in this script; not attempting an upgrade."
+        return 0
+    fi
+
+    echo ""
+    echo "Debian $target ($to) is within this host's ceiling of $ceiling."
+    echo "Checking every apt source publishes $to before changing anything:"
+    while read -r url suite; do
+        [ -z "$url" ] && continue
+        want="${suite/$from/$to}"
+        if debian_suite_available "$url" "$want"; then
+            echo "  ok       $url $want"
+        else
+            echo "  MISSING  $url $want"
+            blockers=$((blockers + 1))
+        fi
+    done <<< "$(debian_repo_suites "$from")"
+
+    if [ "$blockers" -gt 0 ]; then
+        echo ""
+        echo "WARNING: $blockers apt source(s) publish nothing for $to. Rewriting the codename"
+        echo "         anyway would break 'apt update' and strand this machine between releases."
+        echo "         Remove or repoint those sources, then run myupdater again."
+        return 0
+    fi
+
+    echo ""
+    echo "Answering yes will:"
+    echo "  - rewrite $from -> $to in /etc/apt/sources.list and /etc/apt/sources.list.d/"
+    echo "    (each file backed up alongside as .$from.bak)"
+    echo "  - run a full-upgrade onto Debian $target, keeping existing config files"
+    echo "    on any conffile conflict (--force-confold)"
+    echo "  - leave the reboot to you"
+    echo ""
+    confirm "Upgrade this machine from Debian $ver to $target now?" || return 0
+
+    for file in $(debian_source_files "$from"); do
+        sudo cp -n "$file" "$file.$from.bak" 2>/dev/null || true
+        sudo sed -i "s/\b$from\b/$to/g" "$file"
+        echo "  rewrote $file"
+    done
+
+    sudo apt-get update || {
+        echo "apt update failed after the rewrite; the .$from.bak files next to each source"
+        echo "put this machine back. Not upgrading."
+        return 1
+    }
+    sudo DEBIAN_FRONTEND=noninteractive apt-get -y \
+        -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+        full-upgrade || return 1
+    sudo apt-get -y --purge autoremove || true
+
+    echo ""
+    echo "Debian $target is installed. REBOOT this machine, then run myupdater again to"
+    echo "pick up anything the upgrade held back."
+}
+
 check_release_upgrade() {
     echo ""
     echo "############   Checking Distro Release   ############"
@@ -1030,12 +1144,7 @@ check_release_upgrade() {
         fedora_release_upgrade "$ver" "$ceiling"
         ;;
       debian)
-        if [ "$ver" = "$ceiling" ]; then
-            echo "Nothing to do."
-        else
-            echo "Debian $ceiling is within the ceiling, but a Debian release upgrade means"
-            echo "rewriting the codename in /etc/apt/sources.list by hand — not automated here."
-        fi
+        debian_release_upgrade "$ver" "$ceiling"
         ;;
       *)
         echo "No release-upgrade path implemented for '$id'; packages are current, release left alone."
