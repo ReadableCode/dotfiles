@@ -1,0 +1,65 @@
+#!/usr/bin/env sh
+# pre-push: refuse a push whose code does not pass this repo's own checks.
+# Deployed into dotfiles/.git/hooks/pre-push by the personal_dev overlay (see
+# dotfiles/docs/howto_formatting.md). Hooks are untracked, hence a manifest
+# entry.
+#
+# Pre-PUSH and not pre-commit on purpose: a commit is a local checkpoint and
+# should stay cheap, but nothing that reaches a remote should need a follow-up
+# "fix lint" commit. The context-leak check is the opposite trade and stays at
+# pre-commit, because a leaked identifier must never be written into history at
+# all, not merely kept off the remote.
+#
+# It runs THIS repo's own pinned tools through uv - the four commands CLAUDE.md
+# documents - rather than the pre-commit framework, which would be a second set
+# of linter pins alongside pyproject.toml and uv.lock and would drag in a
+# formatter this repo does not use.
+#
+# Fails closed: no uv, no push. `git push --no-verify` skips it, which is the
+# escape hatch for a push that has to go out now.
+
+set -e
+
+TOP="$(git rev-parse --show-toplevel)"
+
+# A push that only DELETES remote branches has no new code to check. git feeds
+# pre-push "<local ref> <local sha> <remote ref> <remote sha>" lines on stdin,
+# and a delete is the all-zero local sha.
+DELETES_ONLY=1
+SAW_REF=0
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+    [ -z "$local_sha" ] && continue
+    SAW_REF=1
+    case "$local_sha" in
+    *[!0]*) DELETES_ONLY=0 ;;
+    esac
+done
+if [ "$SAW_REF" = 1 ] && [ "$DELETES_ONLY" = 1 ]; then
+    exit 0
+fi
+
+if ! command -v uv > /dev/null 2>&1; then
+    echo "pre-push: uv is not installed, so this repo's checks cannot run; install uv or push with --no-verify" >&2
+    exit 1
+fi
+
+cd "$TOP"
+
+# Same four commands as CLAUDE.md's "Python environment & tooling" and "Tests",
+# in cheapest-first order so a formatting slip fails before the suite runs.
+# --check-only/--quiet: a hook reports, it never rewrites files under a push.
+run_check() {
+    echo "pre-push: $*"
+    if ! uv run "$@"; then
+        echo "pre-push: '$*' failed; fix it or push with --no-verify" >&2
+        exit 1
+    fi
+}
+
+run_check isort --check-only .
+run_check flake8 .
+run_check mypy .
+run_check pytest -q
+
+echo "pre-push: checks passed"
+exit 0

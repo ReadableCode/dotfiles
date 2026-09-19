@@ -1505,6 +1505,7 @@ MANIFEST_FREE_PAYLOADS = {
 OVERLAY_OWNED_PAYLOADS = {
     "autostart/start_x0vncserver.desktop": "personal_credentials",
     "git/hooks/pre-commit.context-leak": "personal_dev",
+    "git/hooks/pre-push.dotfiles-checks": "personal_dev",
     "claude/commands/init_worktree.md": "personal_dev",
     "claude/rules/working_rules.md": "personal_dev",
     "claude/settings.json": "personal_dev",
