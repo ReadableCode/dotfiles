@@ -228,19 +228,19 @@ list.
 | 22 | Plex | Plex | `Plex\Plex.lnk` |
 | - | YouTube | *(no YouTube web app installed on Windows)* | — |
 | - | YTMusic | *(no YouTube Music web app installed on Windows)* | — |
-| 23 | VNCViewer | VNC Viewer | `RealVNC\VNC Viewer.lnk` |
+| 23 | Screen Sharing | TigerVNC Viewer | `TigerVNC\TigerVNC Viewer 64-bit.lnk` |
 | 24 | GLKVM | GLKVM | `GLKVM.lnk` |
-| - | Moonlight | *(not installed — Sunshine is the host half, not the client)* | — |
-| 25 | Parsec | Parsec | `Parsec\Parsec.lnk` |
-| 26 | Tailscale | Tailscale | `Tailscale.lnk` |
-| 27 | OpenVPN | OpenVPN GUI | `OpenVPN\OpenVPN GUI.lnk` |
-| 28 | Wireguard | WireGuard | `WireGuard.lnk` |
-| 29 | Steam | Steam | `Steam\Steam.lnk` |
-| 30 | Epic Games | Epic Games Launcher | `Epic Games Launcher.lnk` |
-| 31 | Activity Monitor | Task Manager | `System Tools\Task Manager.lnk` |
+| 25 | Moonlight | Moonlight | `Moonlight Game Streaming\Moonlight.lnk` |
+| 26 | Parsec | Parsec | `Parsec\Parsec.lnk` |
+| 27 | Tailscale | Tailscale | `Tailscale.lnk` |
+| 28 | OpenVPN | OpenVPN GUI | `OpenVPN\OpenVPN GUI.lnk` |
+| 29 | Wireguard | WireGuard | `WireGuard.lnk` |
+| 30 | Steam | Steam | `Steam\Steam.lnk` |
+| 31 | Epic Games | Epic Games Launcher | `Epic Games Launcher.lnk` |
+| 32 | Activity Monitor | Task Manager | `System Tools\Task Manager.lnk` |
 | - | Xcode Beta | *(no Windows equivalent)* | — |
 | - | Device Hub | *(no Windows equivalent — Xcode component)* | — |
-| 32 | Stream Deck | Elgato Stream Deck | `Elgato\Stream Deck\Stream Deck.lnk` |
+| 33 | Stream Deck | Elgato Stream Deck | `Elgato\Stream Deck\Stream Deck.lnk` |
 
 `.lnk` identities are Start menu shortcut paths, under
 `%ProgramData%\Microsoft\Windows\Start Menu\Programs\` for machine-wide apps and
@@ -434,17 +434,26 @@ gsudo <command>
 
   - You can add this to your `.bashrc` or `.zshrc` file to automatically mount on startup.
 
-## VNC
+## Remote screens
 
-### VNC Connect (Viewer)
+### Moonlight (client)
 
-- If not using bootstrap script, install vnc-connect with winget:
-  - winget install -e --id RealVNC.VNC-Connect
-- Open vnc-connect and sign in if need to connect through their service, local may not need sign in (using tiger vnc or tight vnc servers)
+`moonlight-qt` in the choco list. Pairs with Sunshine on the host and streams a
+hardware-encoded desktop, so this is the one to use for a machine with a GPU.
+RyzenWhite already runs Sunshine on 47984/47989.
 
-### VNC Server (Server)
+### TigerVNC Viewer (client)
+
+`tigervnc` in the choco list. The fallback for everything Sunshine cannot serve:
+the Pis, headless boxes, and the login screen before any session exists.
+
+### TightVNC (server)
 
 - Follow instructions in [setup_vnc_server.md](./setup_vnc_server.md)
+
+RealVNC is deliberately absent. It moved direct IP connections to its Enterprise
+tier, leaving Home and Professional cloud-only, which makes it useless for
+reaching a machine on the LAN by address.
 
 ## Sleep Fixes
 

@@ -14,6 +14,31 @@ usable console session:
 Neither method supports Wayland. Both boxes keep `WaylandEnable=false` in
 `/etc/gdm3/custom.conf` for that reason.
 
+## Clients
+
+The servers here speak plain RFB with VncAuth on 5900/5901, so any standards
+compliant viewer works. One per platform, all free software, none of them
+reachable only through a vendor's cloud:
+
+| Platform | Client | Installed from |
+| --- | --- | --- |
+| macOS | Screen Sharing (built in) | nothing to install - the `vnc<host>` aliases open it |
+| Windows | TigerVNC Viewer | `app_lists/windows_apps_personal_choco.txt` |
+| Linux (apt) | TigerVNC Viewer | `app_lists/linux_apps.txt` |
+| Linux (Fedora) | TigerVNC Viewer | `app_lists/linux_apps_dnf.txt` |
+| Android | AVNC | F-Droid |
+| iOS | *(none - see below)* | |
+
+iOS has no free software VNC client: the only GPL-lineage app on the App Store
+is paid and ships no iOS source. Reach a GPU host from an iPad with Moonlight
+instead, which is GPL-3.0 and free on every platform. That covers RyzenWhite,
+which already runs Sunshine. It does not cover the Pis or a login screen, which
+is what this doc is for.
+
+RealVNC appears nowhere on the fleet. It moved direct IP connections to its
+Enterprise tier, leaving the free and Home tiers able to connect only through
+RealVNC's own cloud.
+
 ## Screen scraping (x0vncserver)
 
 Mirrors display `:0`, so it only shows something when a user is actually logged
@@ -143,7 +168,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now vncserver@1
 ```
 
-`@1` is the display number, so this listens on **5901**. Point VNC Viewer at
+`@1` is the display number, so this listens on **5901**. Point TigerVNC Viewer at
 `<host>:5901`, not the bare IP - a bare IP means 5900, which nothing is serving.
 
 ### Check

@@ -107,7 +107,7 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - YouTube
 - YTMusic
 - Phone Mirroring
-- VNCViewer
+- Screen Sharing
 - GLKVM
 - Moonlight
 - Parsec

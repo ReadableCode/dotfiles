@@ -826,6 +826,9 @@ sudo raspi-config
 
 ### Enable VNC
 
+Pi OS bookworm and later run a Wayland session, and `wayvnc` is the server that
+matches it. raspi-config's VNC toggle drives it:
+
 ```bash
 sudo raspi-config  # Interface Options -> VNC -> Enable
 ```
@@ -833,9 +836,17 @@ sudo raspi-config  # Interface Options -> VNC -> Enable
 Or manually:
 
 ```bash
-sudo apt install realvnc-vnc-server
-sudo systemctl enable vncserver-x11-serviced
+sudo apt install wayvnc
+sudo systemctl enable --now wayvnc
 ```
+
+On a bullseye Pi still running X11 there is no `wayvnc` candidate; upgrade the
+release, or use `tigervnc-scraping-server` per
+[setup_vnc_server.md](./setup_vnc_server.md).
+
+`realvnc-vnc-server` is deliberately not used. RealVNC moved direct IP
+connections to its Enterprise tier, so the free and Home tiers can only reach a
+Pi through RealVNC's cloud.
 
 ### GPIO and Hardware Tools
 

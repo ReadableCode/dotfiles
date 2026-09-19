@@ -13,3 +13,6 @@ libxcrypt-compat
 # containerd unpacks image layers with unpigz once it has seen it; a
 # `dnf autoremove` took pigz on JasonZephyrus and every pull failed after.
 pigz
+# VNC viewer. macOS has Screen Sharing built in and Windows takes the choco
+# package; Fedora has neither, so the client is named here.
+tigervnc

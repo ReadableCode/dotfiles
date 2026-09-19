@@ -14,6 +14,7 @@ gsudo
 hoppscotch
 logitech-options
 messenger
+moonlight-qt
 obs-studio
 parsec
 plex
@@ -26,11 +27,10 @@ steam
 sunshine
 synctrayzor
 tailscale
+tigervnc
 tightvnc
 unison
 vlc
-vnc-connect
-vnc-viewer
 vortex
 wireguard
 wiztree
