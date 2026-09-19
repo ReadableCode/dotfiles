@@ -126,6 +126,16 @@ is the one-paragraph orientation so an agent knows which file to open.
   the other clients' in a client's own two repos. Also the pre-commit hook
   the overlays deploy into those checkouts. Doc:
   `docs/repo_client_credentials.md`, "Context leak check".
+- **`app_removals.py`** — the app-list twin of `deploy_configs.py prune`:
+  uninstalls the packages `app_removals.yaml` (plus each overlay repo's
+  `<context>_app_removals.yaml`) says must not be installed, one prompt per
+  package after the manager's own dry run. Deliberately an explicit committed
+  list and not the negation of `app_lists/`: those name what should be
+  installed, so "absent from the Brewfile" would propose uninstalling every
+  dependency nobody named. A package an app list still names is never a
+  candidate, so re-adding beats a stale removal line. Step 7 of
+  `refresh_machine.py`, `--packages` only, so myupdater and not every
+  gitpullall. Doc: `docs/repo_app_removals.md`.
 - **`clone_repos.py`** — offers to clone every repo the cloned contexts'
   `<context>_repos.yaml` files declare for this machine; run by gitpullall
   between the pull and the deploy, and on elitedesk by its declared
@@ -140,7 +150,8 @@ is the one-paragraph orientation so an agent knows which file to open.
 - **`refresh_machine.py`** - the one implementation of `pullrepos`,
   `gitpullall` and `myupdater` on every platform: pull every repo, upgrade OS
   packages with `--packages` (`scripts/my_updater.sh` or `my_updater.ps1`),
-  clone, sync envs, deploy, prune, and the AutoHotkey fix on Windows. Both
+  clone, sync envs, deploy, prune, offer the `app_removals.py` uninstalls
+  (`--packages` only), and the AutoHotkey fix on Windows. Both
   shell profiles only launch it, so its `--help` is the one description of the
   steps. `--check` is the read-only twin: it fetches every repo to report what
   is behind and asks each other tool for its own check, writing nothing. Stdlib-only; its step headers and tldr-style help page come from

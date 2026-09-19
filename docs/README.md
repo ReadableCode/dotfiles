@@ -5,6 +5,7 @@ prefixes; nothing lives unprefixed.
 
 ## `repo_*` - How this repo constellation works
 
+- [repo_app_removals.md](repo_app_removals.md) - Uninstalling retired apps across the fleet
 - [repo_chrome_bookmarks.md](repo_chrome_bookmarks.md) - Chrome bookmarks as a repo file
 - [repo_client_credentials.md](repo_client_credentials.md) - Client Credentials Repos (`*_credentials`)
 - [repo_deploy_configs.md](repo_deploy_configs.md) - Deploying Configs with the Manifest

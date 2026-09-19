@@ -51,7 +51,10 @@ HELP_PAGE = """# refresh_machine
    runs `src/deploy_configs.py`
 6. prune config paths a removals file names and no manifest entry still wants
    runs `src/deploy_configs.py prune --apply`
-7. on windows only: bring autohotkey in line with the repo's v2 scripts
+7. with `--packages` only: offer to uninstall apps an app removals file retired, asking [y/N/q] per app
+   the app lists win: a package one of them still names is never offered
+   runs `src/app_removals.py`
+8. on windows only: bring autohotkey in line with the repo's v2 scripts
    runs `scripts/ensure_autohotkey_v2.ps1 -AutoFix -Full`
 
 ## examples
@@ -177,6 +180,10 @@ def check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only):
         Step("checking deployed configs", uv_python(dotfiles, "deploy_configs.py", "status", "--problems"), needs="uv"),
         Step("checking for configs to prune", uv_python(dotfiles, "deploy_configs.py", "prune"), needs="uv"),
     ]
+    if packages:
+        steps.append(
+            Step("checking for apps to remove", uv_python(dotfiles, "app_removals.py", "--list"), needs="uv")
+        )
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-Check"]))
@@ -208,6 +215,10 @@ def build_steps(git_dir, system, machine, packages=False, pull_only=False, check
         Step("deploying configs", uv_python(dotfiles, "deploy_configs.py"), needs="uv"),
         Step("pruning removed configs", uv_python(dotfiles, "deploy_configs.py", "prune", "--apply"), needs="uv"),
     ]
+    # packages only: this is a package-manager operation and it prompts, so it
+    # rides with myupdater rather than every gitpullall.
+    if packages:
+        steps.append(Step("checking for apps to remove", uv_python(dotfiles, "app_removals.py"), needs="uv"))
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-AutoFix", "-Full"]))

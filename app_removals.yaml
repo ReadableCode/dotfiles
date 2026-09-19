@@ -1,0 +1,70 @@
+# App removals — the committed list of packages that must NOT be installed.
+# Consumed by `src/app_removals.py` (see docs/repo_app_removals.md).
+#
+# The app_lists/ files are the other direction: they name what should be
+# installed. They are NOT an inventory of everything allowed to exist, so
+# "absent from the Brewfile" can never mean "uninstall it" — most of `brew list`
+# is dependencies nobody named, and each platform keeps its manual installs in
+# linux_apps_non_apt.md / mac_apps_non_brew.md. Retiring an app is an explicit
+# line here, the same way retiring a config path is a line in
+# deploy_removals.yaml.
+#
+# Schema: name (unique), manager (brew/cask/apt/dnf/flatpak/choco/winget),
+# package, optional hosts: and note:. The manager decides the platform, so no
+# platform key exists.
+#
+# A package some app list still names is never removed — the app list wins, and
+# the contradiction is printed. So re-adding a package beats a stale line here.
+#
+# Workflow: drop a package from an app list -> add it here -> every machine is
+# offered the removal on its next gitpullall, one package at a time, after its
+# manager's own dry run. Once every machine has run, the line can be dropped.
+
+# --- RealVNC, retired 2026-09-18 ---
+#
+# RealVNC moved direct IP connections to its Enterprise tier, leaving the free
+# and Home tiers able to reach a machine only through RealVNC's own cloud, which
+# makes every one of these useless on the LAN. Replaced by TigerVNC (clients),
+# wayvnc / tigervnc-scraping-server (Pi servers) and Moonlight for the GPU hosts.
+# See docs/setup_vnc_server.md.
+
+- name: realvnc_connect_viewer_cask
+  manager: cask
+  package: realvnc-connect-viewer
+  note: >-
+    The current cask name. Was `cask "vnc-viewer"` in app_lists/Brewfile until
+    2026-09-18; macOS needs no replacement because Screen Sharing is built in
+    and the `vnc<host>` aliases already open it.
+
+- name: realvnc_vnc_viewer_cask
+  manager: cask
+  package: vnc-viewer
+  note: >-
+    The pre-rename cask name. A Mac that installed it before homebrew renamed
+    the cask still has it recorded under this name.
+
+- name: realvnc_connect_choco
+  manager: choco
+  package: vnc-connect
+  note: RealVNC Connect. Dropped from app_lists/windows_apps_personal_choco.txt.
+
+- name: realvnc_viewer_choco
+  manager: choco
+  package: vnc-viewer
+  note: >-
+    RealVNC Viewer. Dropped from app_lists/windows_apps_personal_choco.txt in
+    favour of tigervnc. TightVNC stays as the Windows server.
+
+- name: realvnc_vnc_server_apt
+  manager: apt
+  package: realvnc-vnc-server
+  note: >-
+    The Raspberry Pi servers. bookworm and later replace it with wayvnc, which
+    raspi-config's VNC toggle now drives; a bullseye Pi has no wayvnc candidate,
+    so upgrade the release or use tigervnc-scraping-server first. Check the Pi
+    still has a working screen before agreeing to this one.
+
+- name: realvnc_vnc_viewer_apt
+  manager: apt
+  package: realvnc-vnc-viewer
+  note: Shipped alongside the Pi server image. Replaced by tigervnc-viewer.
