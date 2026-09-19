@@ -1,0 +1,38 @@
+{
+  // FOLDER-SCOPED ON PURPOSE. Nothing here may reach another repo.
+  //
+  // The user-level settings (personal_credentials/vscode/settings.json) keep
+  // black + isort + flake8 as the Python stack for every folder, and they must
+  // stay that way: sibling repos pin those tools in their own venvs and their
+  // own pre-commit configs, and at least one of them already carries a tracked
+  // .vscode/settings.json asserting black and explicitly turning ruff's code
+  // actions off. This repo swapped to ruff on 2026-09-19, so the override lives
+  // here and only here.
+  //
+  // Every setting below is resource-scoped, which is what makes a per-folder
+  // override work at all. ruff.importStrategy is window-scoped and is therefore
+  // deliberately absent - setting it anywhere would reach every repo, and a
+  // sibling whose venv has no ruff would start erroring on every file.
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      // The user-level value is "always", which invokes the isort extension.
+      // This repo has no isort; ruff sorts imports instead.
+      "source.organizeImports": "never",
+      "source.organizeImports.ruff": "explicit",
+      "source.fixAll.ruff": "explicit",
+    },
+  },
+  // Same contract as the user-level black-formatter.path / isort.path /
+  // flake8.path: run the tool from THIS folder's interpreter, so the version is
+  // the one uv.lock pins rather than whatever the extension bundles.
+  // ${interpreter} keeps it correct on every platform, unlike a hardcoded
+  // .venv/bin path that would break the Windows checkouts.
+  "ruff.path": ["${interpreter}", "-m", "ruff"],
+  // flake8 left this repo's venv with the ruff swap, and the user-level
+  // flake8.path is "${interpreter} -m flake8", so leaving the extension on would
+  // fail on every file here. isort and black need no equivalent: neither runs
+  // unless invoked, and the block above invokes ruff instead of both.
+  "flake8.enabled": false,
+}

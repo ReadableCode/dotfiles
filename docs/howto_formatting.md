@@ -31,6 +31,26 @@ Config, all under `[tool.ruff]`:
 `ruff format` is black-compatible. This repo did not previously run a
 formatter, so adopting it reformatted 38 files in one commit.
 
+## Format on save (this folder only)
+
+`.vscode/settings.json` in this repo points the Python formatter at ruff and
+turns the flake8 extension off, because this repo's venv no longer has flake8.
+
+It is **folder-scoped on purpose and must stay that way.** The user-level
+settings (`personal_credentials/vscode/settings.json`) keep black + isort +
+flake8 as the Python stack for every folder, and sibling repos depend on that:
+they pin those tools in their own venvs and their own `.pre-commit-config.yaml`,
+and at least one carries its own tracked `.vscode/settings.json` asserting black
+and explicitly turning ruff's code actions off. Changing the user-level file
+would reformat those repos with the wrong tool.
+
+Only resource-scoped settings can be overridden per folder.
+`ruff.importStrategy` is **window**-scoped, so it is deliberately absent here -
+setting it anywhere would reach every repo, and a sibling whose venv has no ruff
+would start erroring on every file. `ruff.path` is resource-scoped and uses the
+same `["${interpreter}", "-m", "ruff"]` contract the user-level file uses for
+black, isort and flake8, so the version is the one `uv.lock` pins.
+
 ## MyPy
 
 Ruff does not type-check, so mypy stays. `ignore_missing_imports = true` and
