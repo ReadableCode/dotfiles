@@ -217,12 +217,42 @@ def advice(rows, color):
     return "\n".join(out) + "\n" if out else ""
 
 
+def named_targets(paths, rows):
+    """Resolve explicitly agreed --worktree paths against the survey. Returns (rows, refusals).
+
+    The prompt is how a person agrees to each path; this is how an agent does, having shown the
+    table and been told which ones may go. Either way the rule is the same: only a path that was
+    named, and only one the survey already made a candidate. Any refusal cancels the whole run,
+    so a typo never removes the other worktrees that happened to be listed alongside it.
+    """
+    by_path = {row["path"]: row for row in rows}
+    targets, refused = [], []
+    for given in paths:
+        row = by_path.get(os.path.realpath(os.path.expanduser(given)))
+        if row is None:
+            refused.append(f"{given}: not a worktree under {WORKTREES_ROOT}")
+        elif not row["candidate"]:
+            refused.append(f"{row['label']}: {row['state']} - not a candidate")
+        elif row["blocked"]:
+            refused.append(f"{row['label']}: holds work that exists nowhere else")
+        else:
+            targets.append(row)
+    return targets, refused
+
+
 # ---------------------------------------------------------------- main
 
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(prog="sweep_worktrees.py", add_help=False)
     parser.add_argument("--remove", action="store_true", help="prompt once per candidate and remove it")
+    parser.add_argument(
+        "--worktree",
+        action="append",
+        default=[],
+        metavar="PATH",
+        help="with --remove: remove exactly these agreed paths and nothing else (repeatable)",
+    )
     parser.add_argument("--dry-run", action="store_true", help="with --remove: walk the prompts, change nothing")
     parser.add_argument("--root", default=WORKTREES_ROOT, help=argparse.SUPPRESS)
     parser.add_argument("--state", default=STATE_DB, help=argparse.SUPPRESS)
@@ -247,16 +277,24 @@ def main(argv=None):
     if not args.remove:
         print(f"{len(candidates)} candidate(s) - re-run with --remove to go through them one at a time")
         return 0
-    if not sys.stdin.isatty():
-        print("--remove needs a terminal: each candidate is agreed to one at a time")
+
+    if args.worktree:
+        targets, refused = named_targets(args.worktree, rows)
+        for message in refused:
+            print("refusing", message)
+        if refused:
+            return 1
+    elif sys.stdin.isatty():
+        targets = [
+            row for row in candidates if input(f"remove {row['label']} ({row['state']})? [y/N] ").strip().lower() == "y"
+        ]
+    else:
+        print("--remove with no terminal needs the agreed paths naming: --worktree PATH (repeatable)")
         return 1
 
     removed = 0
-    for row in candidates:
-        answer = input(f"remove {row['label']} ({row['state']})? [y/N] ").strip().lower()
-        if answer != "y":
-            print("  skipped")
-            continue
+    for row in targets:
+        print(row["label"])
         ok, lines = init_worktree.teardown(row["main"], row["path"], dry_run=args.dry_run, hostname=args.hostname)
         if not ok:
             print("  refused: this worktree holds work that exists nowhere else")
@@ -266,7 +304,7 @@ def main(argv=None):
         for label, status in lines:
             print(f"  {label + ':':<11}{status}")
         removed += 1
-    print(f"{removed} removed, {len(candidates) - removed} left")
+    print(f"{removed} removed, {len(targets) - removed} refused, {len(candidates) - len(targets)} not named")
     return 0
 
 

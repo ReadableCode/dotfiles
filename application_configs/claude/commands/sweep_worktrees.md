@@ -61,14 +61,22 @@ Same for `active`: a thread is running in it right now. Leave it.
 
 ## Step 3 — go through the candidates
 
-Report what the table says first, then:
+Report what the table says first and **ask Jason which candidates may go** —
+by name, not "all of them". Then pass back exactly the paths he agreed to:
 
 ```bash
-python3 ~/GitHub/dotfiles/src/sweep_worktrees.py --remove
+python3 ~/GitHub/dotfiles/src/sweep_worktrees.py --remove \
+  --worktree ~/.t3/worktrees/<repo>/<id> --worktree ~/.t3/worktrees/<repo>/<id>
 ```
 
-It prompts once per candidate, naming the worktree and its verdict, and
-removes only the ones answered `y`. Each removal is the same
+`--worktree` is repeatable and is the only way to sweep from a tool call: bare
+`--remove` prompts per candidate and so needs a terminal, which a command run
+does not have. Naming the paths is the same agreement the prompt is, just
+gathered in the conversation instead. Any path that is not a candidate cancels
+the whole run before anything is removed, so one wrong path never takes the
+others with it.
+
+Each removal is the same
 `init_worktree.teardown` `/remove_worktree` uses — workspace entry dropped,
 worktree removed, a spent `t3code/` placeholder branch retired, a ticket
 branch left alone — so there is no second delete path to reason about.

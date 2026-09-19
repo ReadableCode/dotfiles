@@ -153,8 +153,12 @@ one at a time by name.
 
 A candidate is still held back when `unpushed_work` finds work that exists
 nowhere else, and is never offered at the prompt. Everything else is printed
-first and agreed to one path at a time (`--remove`), which is the same rule the
-rest of the repo follows for a multi-target delete. The removal itself is
+first and agreed to one path at a time, which is the same rule the rest of the
+repo follows for a multi-target delete: `--remove` alone prompts per candidate
+at a terminal, and `--remove --worktree PATH` (repeatable) takes the paths
+agreed in conversation, which is how the command run does it since a tool call
+has no terminal. Either way only a named, already-qualified candidate goes, and
+one bad path cancels the run before anything is removed. The removal itself is
 `init_worktree.teardown`, the single implementation `/remove_worktree` uses, so
 the sweep has no delete of its own and cannot drift from it. Enumeration lives
 here and not in `init_worktree.py` on purpose: that script still only ever acts

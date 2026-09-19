@@ -180,3 +180,57 @@ def test_advice_is_empty_when_every_worktree_is_a_clean_candidate(tmp_path, monk
     path = os.path.realpath(str(tmp_path / "repo" / "t3code-1"))
     states = {path: {"thread": "1", "title": "", "branch": "", "state": "settled"}}
     assert sweep_worktrees.advice(sweep_worktrees.survey([path], states), color=False) == ""
+
+
+# ---------------------------------------------------------------- named targets
+
+
+@pytest.fixture
+def surveyed(tmp_path, monkeypatch, stub_git):
+    """A survey with one candidate, one unsettled, and one candidate holding unpushed work."""
+    monkeypatch.setattr(sweep_worktrees, "WORKTREES_ROOT", str(tmp_path))
+    paths = {name: os.path.realpath(str(tmp_path / "repo" / name)) for name in ("good", "unsettled", "blocked")}
+    states = {
+        paths["good"]: {"thread": "1", "title": "", "branch": "", "state": "settled"},
+        paths["unsettled"]: {"thread": "2", "title": "", "branch": "", "state": "unsettled"},
+        paths["blocked"]: {"thread": "3", "title": "", "branch": "", "state": "settled"},
+    }
+    monkeypatch.setattr(
+        sweep_worktrees.init_worktree,
+        "unpushed_work",
+        lambda path: ["1 uncommitted change(s)"] if path == paths["blocked"] else [],
+    )
+    return paths, sweep_worktrees.survey(list(paths.values()), states)
+
+
+def test_named_targets_accepts_a_candidate(surveyed):
+    paths, rows = surveyed
+    targets, refused = sweep_worktrees.named_targets([paths["good"]], rows)
+    assert refused == []
+    assert [row["path"] for row in targets] == [paths["good"]]
+
+
+def test_named_targets_refuses_an_unsettled_path(surveyed):
+    paths, rows = surveyed
+    targets, refused = sweep_worktrees.named_targets([paths["unsettled"]], rows)
+    assert targets == []
+    assert "unsettled - not a candidate" in refused[0]
+
+
+def test_named_targets_refuses_a_path_holding_unpushed_work(surveyed):
+    paths, rows = surveyed
+    targets, refused = sweep_worktrees.named_targets([paths["blocked"]], rows)
+    assert targets == [] and "exists nowhere else" in refused[0]
+
+
+def test_named_targets_refuses_an_unknown_path(surveyed):
+    _, rows = surveyed
+    targets, refused = sweep_worktrees.named_targets(["/tmp/not-a-worktree"], rows)
+    assert targets == [] and "not a worktree under" in refused[0]
+
+
+def test_one_bad_path_cancels_the_whole_run(surveyed):
+    """A typo alongside good paths must not remove the good ones: main returns 1 before touching any."""
+    paths, rows = surveyed
+    targets, refused = sweep_worktrees.named_targets([paths["good"], paths["unsettled"]], rows)
+    assert len(targets) == 1 and len(refused) == 1  # main() returns early on any refusal
