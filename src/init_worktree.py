@@ -134,6 +134,8 @@ def unpushed_work(worktree):
     base = default_branch(worktree)
     if base and is_ancestor("HEAD", base, worktree):
         return reasons  # every commit is already on the default branch; nothing here is unique
+    if base and is_squash_merged(worktree, base):
+        return reasons  # landed as one squashed commit; nothing here is unique either
     try:
         upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], worktree)
     except subprocess.CalledProcessError:
@@ -157,6 +159,36 @@ def is_ancestor(commit, branch, repo):
         stderr=subprocess.DEVNULL,
     )
     return probe.returncode == 0
+
+
+def is_squash_merged(repo, base):
+    """True when this branch's whole diff is already on `base`, landed as a single squashed commit.
+
+    Squash merging is the normal flow in some of these repos and not in others, so this is
+    evidence per branch, never an assumption about the repo. After a squash merge the branch's
+    commits are not ancestors of the default branch (the merge rewrote them into one) and the
+    remote branch is usually deleted with the PR, so `@{upstream}` is gone too - a branch whose
+    work is fully merged looks exactly like a branch that was never pushed. Building the
+    synthetic squash of this branch and asking git whether that patch is already upstream tells
+    the two apart. `commit-tree` leaves one unreferenced object behind, which gc collects.
+    """
+    try:
+        merge_base = git(["merge-base", "HEAD", base], repo)
+        tree = git(["rev-parse", "HEAD^{tree}"], repo)
+        if tree == git(["rev-parse", merge_base + "^{tree}"], repo):
+            return False  # the branch changes nothing; there is no squash to look for
+        env = dict(os.environ, GIT_AUTHOR_NAME="squash probe", GIT_AUTHOR_EMAIL="probe@localhost")
+        env.update(GIT_COMMITTER_NAME="squash probe", GIT_COMMITTER_EMAIL="probe@localhost")
+        squashed = subprocess.check_output(
+            ["git", "commit-tree", tree, "-p", merge_base, "-m", "squash probe"],
+            cwd=repo,
+            text=True,
+            env=env,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        return any(line.startswith("-") for line in git(["cherry", base, squashed], repo).splitlines())
+    except subprocess.CalledProcessError:
+        return False
 
 
 def retire_placeholder_branch(main, branch, dry_run=False):
@@ -198,6 +230,26 @@ def remove_worktree(main, worktree, dry_run=False):
         return "would remove"
     subprocess.check_call(["git", "worktree", "remove", "--force", worktree], cwd=main)
     return "removed" if not os.path.exists(worktree) else "removed from git, directory still present"
+
+
+def teardown(main, worktree, dry_run=False, hostname=None):
+    """Remove exactly this one worktree: its workspace entry, the worktree, a spent placeholder branch.
+
+    Returns ``(True, [(label, status), ...])`` on success, or ``(False, [reason, ...])`` when the
+    worktree holds work that exists nowhere else - in which case nothing at all has been touched.
+    The single path given is the only path acted on; callers that enumerate (sweep_worktrees.py)
+    call this once per worktree they were told to remove.
+    """
+    reasons = unpushed_work(worktree)
+    if reasons:
+        return False, reasons
+    branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
+    lines = [("workspace", update_workspace(main, worktree, None, remove=True, dry_run=dry_run, hostname=hostname))]
+    if os.path.realpath(os.getcwd()).startswith(worktree + os.sep) or os.path.realpath(os.getcwd()) == worktree:
+        os.chdir(main)  # the cwd is about to be deleted
+    lines.append(("worktree", remove_worktree(main, worktree, dry_run=dry_run)))
+    lines.append(("branch", retire_placeholder_branch(main, branch, dry_run=dry_run)))
+    return True, lines
 
 
 def default_branch(repo):
@@ -442,18 +494,14 @@ def main(argv=None):
     print(f"worktree: {worktree}\nmain:     {main}")
 
     if args.remove:
-        reasons = unpushed_work(worktree)
-        if reasons:
+        ok, lines = teardown(main, worktree, dry_run=args.dry_run, hostname=args.hostname)
+        if not ok:
             print("refusing to remove: this worktree holds work that exists nowhere else")
-            for reason in reasons:
+            for reason in lines:
                 print("  -", reason)
             return 1
-        branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
-        status = update_workspace(main, worktree, None, remove=True, dry_run=args.dry_run, hostname=args.hostname)
-        print("workspace:", status)
-        os.chdir(main)  # the cwd is about to be deleted
-        print("worktree: ", remove_worktree(main, worktree, dry_run=args.dry_run))
-        print("branch:   ", retire_placeholder_branch(main, branch, dry_run=args.dry_run))
+        for label, status in lines:
+            print(f"{label + ':':<11}{status}")
         return 0
 
     conflicts = 0

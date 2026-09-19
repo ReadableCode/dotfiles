@@ -356,3 +356,58 @@ def test_remove_keeps_a_placeholder_branch_that_has_its_own_commits(repos, tmp_p
     assert init_worktree.main(["--worktree", placeholder, "--remove", "--hostname", "envy"]) == 1
     assert "no upstream" in capsys.readouterr().out
     assert os.path.isdir(placeholder)
+
+
+# ---------------------------------------------------------------- squash merges
+
+
+def squash_onto_master(main, worktree, relpath, content):
+    """Land the worktree branch's net diff on master as ONE new commit, as a squash merge does."""
+    write(os.path.join(main, relpath), content)
+    git(["add", "--", relpath], main)  # exactly the branch's diff: anything else changes the patch-id
+    git(["commit", "-q", "-m", "ACME-2482: the squashed PR (#1030)"], main)
+
+
+def test_squash_merged_branch_is_not_treated_as_unpushed_work(repos, tmp_path):
+    """The real shape after a squash merge: branch not an ancestor of master, remote branch deleted."""
+    _, main, worktree = repos
+    write(os.path.join(worktree, "feature.py"), "one\n")
+    git(["add", "--", "feature.py"], worktree)
+    git(["commit", "-q", "-m", "ACME-2482: first"], worktree)
+    write(os.path.join(worktree, "feature.py"), "one\ntwo\n")
+    git(["add", "--", "feature.py"], worktree)
+    git(["commit", "-q", "-m", "ACME-2482: second"], worktree)
+    squash_onto_master(main, worktree, "feature.py", "one\ntwo\n")
+
+    assert not init_worktree.is_ancestor("HEAD", "master", worktree)  # the squash rewrote them
+    assert init_worktree.is_squash_merged(worktree, "master")
+    assert init_worktree.unpushed_work(worktree) == []
+
+
+def test_squash_probe_does_not_clear_a_branch_whose_work_never_landed(repos):
+    """Unique commits with no upstream stay refused — squash detection is evidence, not a bypass."""
+    _, main, worktree = repos
+    write(os.path.join(worktree, "feature.py"), "only here\n")
+    git(["add", "--", "feature.py"], worktree)
+    git(["commit", "-q", "-m", "ACME-2482: never merged"], worktree)
+
+    assert not init_worktree.is_squash_merged(worktree, "master")
+    assert any("no upstream" in reason for reason in init_worktree.unpushed_work(worktree))
+
+
+def test_squash_probe_ignores_a_branch_that_changes_nothing(repos):
+    """No diff versus the merge base means there is no squash to look for, whatever master did."""
+    _, main, worktree = repos
+    assert not init_worktree.is_squash_merged(worktree, "master")
+
+
+def test_squash_merged_worktree_can_then_be_removed(repos, tmp_path, capsys):
+    """End to end: the case that blocked two real worktrees now tears down."""
+    repo_parent, main, worktree = repos
+    write(os.path.join(worktree, "feature.py"), "landed\n")
+    git(["add", "--", "feature.py"], worktree)
+    git(["commit", "-q", "-m", "ACME-2482: landed"], worktree)
+    squash_onto_master(main, worktree, "feature.py", "landed\n")
+
+    assert init_worktree.main([f"--worktree={worktree}", "--remove", "--hostname=envy"]) == 0
+    assert not os.path.exists(worktree)

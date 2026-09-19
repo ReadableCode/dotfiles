@@ -115,11 +115,23 @@ is the one-paragraph orientation so an agent knows which file to open.
   Code makes one per thread under `~/.t3/worktrees/<repo>/`) up to parity
   with its main checkout: re-creates the deploy-managed gitignored links with
   absolute targets, adds a folder entry to this host's `<host>.code-workspace`,
-  runs `uv sync`. Wrapped by `/init_worktree`
+  runs `uv sync`. `--remove` is the teardown twin: it drops the workspace
+  entry, removes that one worktree and retires a spent `t3code/` placeholder
+  branch, refusing whenever the worktree holds work that exists nowhere else.
+  Wrapped by `/init_worktree` and `/remove_worktree`
   (`application_configs/claude/commands/`, deployed by the personal and dev
   overlays like every other user-level Claude file, so a client machine that
   must carry no Claude-named path never gets it). Doc:
   `docs/repo_init_worktree.md`.
+- **`sweep_worktrees.py`** — the other half: the leftovers from threads that
+  ended without tearing their worktree down. One row per directory under
+  `~/.t3/worktrees` matched against T3's own thread state
+  (`~/.t3/userdata/state.sqlite`, opened read-only while the app runs):
+  `settled` / `deleted` / `orphan` are candidates, `active` and `unsettled` are
+  sent back to their own thread, `unknown` (no state db) is never a candidate.
+  Removal is `init_worktree.teardown` called once per agreed path, so there is
+  one teardown implementation and this tool has no delete of its own. Wrapped
+  by `/sweep_worktrees`. Doc: `docs/repo_init_worktree.md`.
 - **`context_leak_check.py`** — refuses one context's identifiers inside
   another: derives each client's identifiers from its own credentials repo
   (so this file names none), forbids them in every other repo, and forbids
