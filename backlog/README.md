@@ -16,4 +16,3 @@ system on the day they were written, and infrastructure moves on its own.
 | [pi0's SD card is failing](pi0-failing-sd-card.md) | 2026-09-19 | open |
 | [pi4a grafana is two majors behind](pi4a-grafana-major-version-behind.md) | 2026-09-19 | open |
 | [stale local branches after squash merges](stale-local-branches-after-squash-merge.md) | 2026-09-19 | open |
-| [context_leak_check's docstring contradicts itself](context-leak-check-docstring-contradicts-itself.md) | 2026-09-19 | open |

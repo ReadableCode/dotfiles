@@ -193,10 +193,14 @@ org in `<context>_repos.yaml`, every host name and address in
 the dev repo whose manifest targets it, and an optional
 `<context>_identifiers.txt` for display names). Then:
 
-- the personal context's own repos (`personal_credentials`, `personal_dev`) may name anything;
+- the personal context's own repos (`personal_credentials`, LAN-hosted, and
+  `personal_dev`, GitHub-private) may name anything — the exemption is
+  theirs because they are private, not because they are personal;
 - a client's credentials or dev repo may not contain the other clients'
   identifiers;
-- every other repo, this one included, may not contain any client's.
+- every other repo, this one included, may not contain any client's. dotfiles
+  is public, so this is absolute: no client name, repo slug, ticket prefix or
+  hostname anywhere in it, scratch notes and backlog entries included.
 
 Run `uv run python src/context_leak_check.py` for the default sweep (dotfiles
 plus every credentials and dev repo), `--all` to also report on every other

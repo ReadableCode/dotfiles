@@ -19,15 +19,22 @@ sibling ``<context>_credentials`` repo, so this public file names no client:
 - one identifier per line from an optional ``<context>_identifiers.txt``
   (display names, anything not derivable)
 
-Rules, by the repo being scanned:
+Rules, by the repo being scanned. The line is VISIBILITY, not convenience:
 
-- the personal context's own repos (``personal_credentials``, ``personal_dev``,
-  any ``personal_*`` sibling): anything goes; they are the private places that
-  know every context by name.
-- a client context's credentials or dev repo: the OTHER clients' identifiers
-  are forbidden.
-- every other repo (dotfiles and the personal repos, public or not): every
-  client's identifiers are forbidden.
+- ``dotfiles`` - **public**, and cloned on every client machine: every
+  client's identifiers are forbidden. No client name, repo slug, ticket
+  prefix or hostname, in any file, including a scratch note or a backlog
+  entry. Use the ``acme`` placeholder. This is the bound that matters and
+  nothing below may weaken it.
+- a client context's credentials or dev repo - private: the OTHER clients'
+  identifiers are forbidden.
+- the personal context's own repos - ``personal_credentials`` (LAN-hosted)
+  and ``personal_dev`` (GitHub-private): anything goes. They are private
+  places that have to know every context by name; ``personal_credentials``
+  deploys them all and its generated deploy map enumerates every client repo
+  on purpose. The exemption is safe only because both are private, and it is
+  matched on the ``personal_`` name prefix - so a repo that is public must
+  never be named ``personal_*``.
 
 Usage:
   context_leak_check.py                   scan dotfiles + every credentials/dev repo (tracked files)
