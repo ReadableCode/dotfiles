@@ -159,11 +159,18 @@ ensure_uv() {
         return 0
     fi
     warn "uv missing"
+    # INSTALLER_NO_MODIFY_PATH: without it the installer appends a PATH line to
+    # ~/.bashrc, and that file is a SYMLINK INTO THIS REPO, so it writes through
+    # into tracked application_configs/bash/.bashrc and the checkout goes dirty -
+    # which then blocks every future `git pull --ff-only` on that machine. Found
+    # on two Pis whose checkouts had been stuck for a year for exactly this
+    # reason. The line is redundant anyway: .bashrc already puts ~/.local/bin on
+    # PATH itself.
     if confirm "install uv?"; then
-        run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+        run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh'
         [ -x "$HOME/.local/bin/uv" ] && PATH="$HOME/.local/bin:$PATH"
     else
-        note_manual "install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
+        note_manual "install uv: curl -LsSf https://astral.sh/uv/install.sh | env INSTALLER_NO_MODIFY_PATH=1 sh"
     fi
 }
 
