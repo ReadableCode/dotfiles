@@ -1482,7 +1482,9 @@ def build_parser():
     update_pr.add_argument("--body-file", help="file containing the new description")
     update_pr.set_defaults(func=cmd_update_pr)
 
-    job_log = sub.add_parser("job-log", help="save one GitHub Actions job's log to disk, print the lines matching --grep")
+    job_log = sub.add_parser(
+        "job-log", help="save one GitHub Actions job's log to disk, print the lines matching --grep"
+    )
     job_log.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     job_log.add_argument("--job", required=True, help="job id from the check's details URL")
     job_log.add_argument("--grep", help="case-insensitive regular expression; matching lines are printed")
