@@ -151,7 +151,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   `gitpullall` and `myupdater` on every platform: pull every repo, upgrade OS
   packages with `--packages` (`scripts/my_updater.sh` or `my_updater.ps1`),
   clone, sync envs, deploy, prune, offer the `app_removals.py` uninstalls
-  (`--packages` only), and the AutoHotkey fix on Windows. Both
+  (`--packages` only), and the AutoHotkey fix on Windows. A step whose tool is missing offers to install it with
+  `scripts/bootstrap.sh --only <tool>` (terminal only - an unattended run
+  still just reports), so a tool has one installer and a fresh box can
+  bring itself up. Both
   shell profiles only launch it, so its `--help` is the one description of the
   steps. `--check` is the read-only twin: it fetches every repo to report what
   is behind and asks each other tool for its own check, writing nothing. Stdlib-only; its step headers and tldr-style help page come from

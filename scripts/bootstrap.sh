@@ -20,6 +20,12 @@
 #   --dry-run           report what would happen and change nothing
 #   --yes               never prompt
 #   --skip-apps         skip the package install step
+#   --only STEP         run one dependency step and exit, to install a tool on
+#                       demand instead of bootstrapping a whole machine.
+#                       `--list-steps` names what it accepts. refresh_machine
+#                       uses this when a step's `needs` is missing, so a tool
+#                       has one installer and not two.
+#   --list-steps        print the steps --only accepts, one per line
 #   --help
 
 set -o pipefail
@@ -31,6 +37,9 @@ ASSUME_YES=""
 SKIP_APPS=""
 REPOS_ROOT=""
 CREDENTIALS_URLS=""
+ONLY_STEP=""
+# What --only accepts; each name has an ensure_<name> function below.
+ONLY_STEPS="git uv"
 MANUAL_NOTES=""
 
 # %%
@@ -49,6 +58,8 @@ skip() { printf '    %sskip%s    %s\n' "$C_GREEN" "$C_RESET" "$*"; }
 todo() { printf '    %swould%s   %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
 warn() { printf '    %swarn%s    %s\n' "$C_YELLOW" "$C_RESET" "$*"; }
 fail() { printf '    %sfail%s    %s\n' "$C_RED" "$C_RESET" "$*" >&2; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
 
 note_manual() { MANUAL_NOTES="$MANUAL_NOTES$1
 "; }
@@ -80,7 +91,9 @@ while [ $# -gt 0 ]; do
         --dry-run)     DRY_RUN=1; shift ;;
         --yes|-y)      ASSUME_YES=1; shift ;;
         --skip-apps)   SKIP_APPS=1; shift ;;
-        --help|-h)     sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --only)        ONLY_STEP="$2"; shift 2 ;;
+        --list-steps)  printf '%s\n' $ONLY_STEPS; exit 0 ;;
+        --help|-h)     sed -n '2,31p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)             fail "unknown option: $1"; exit 2 ;;
     esac
 done
@@ -111,6 +124,68 @@ ok "$PLATFORM ($(uname -s) $(uname -m))"
 [ -n "$DRY_RUN" ] && warn "dry run: nothing will be changed"
 
 # %%
+# Dependency steps #
+#
+# One implementation per tool, called both by the linear run below and by
+# `--only <tool>`. The second entrypoint is why refresh_machine can offer to
+# install a missing `needs` without carrying its own copy of the command: a tool
+# this repo's tooling depends on is installed HERE or nowhere.
+#
+# The dispatch sits above every step that changes the machine, so `--only uv` on
+# a Pi does not also reach the package-manager or clone steps.
+
+ensure_git() {
+    if have git; then
+        skip "git present ($(git --version))"
+        return 0
+    fi
+    warn "git missing"
+    case "$PLATFORM" in
+        mac)        run brew install git ;;
+        linux|wsl)  run sudo apt update && run sudo apt install -y git ;;
+        termux)     run pkg install -y git ;;
+    esac
+}
+
+ensure_uv() {
+    if have uv; then
+        skip "uv present ($(uv --version 2>/dev/null))"
+        return 0
+    fi
+    if [ "$PLATFORM" = "termux" ]; then
+        # uv has no termux build; the src/ tooling is skipped there instead of failing.
+        warn "uv is not available on termux - skipping the python steps"
+        note_manual "termux: src/ tooling (clone_repos, deploy_configs) needs uv and is not run here"
+        return 0
+    fi
+    warn "uv missing"
+    if confirm "install uv?"; then
+        run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
+        [ -x "$HOME/.local/bin/uv" ] && PATH="$HOME/.local/bin:$PATH"
+    else
+        note_manual "install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
+    fi
+}
+
+if [ -n "$ONLY_STEP" ]; then
+    case " $ONLY_STEPS " in
+        *" $ONLY_STEP "*)
+            step "$ONLY_STEP"
+            "ensure_$ONLY_STEP" || exit 1
+            if [ -z "$DRY_RUN" ] && ! have "$ONLY_STEP"; then
+                fail "$ONLY_STEP is still not on PATH"
+                exit 1
+            fi
+            exit 0
+            ;;
+        *)
+            fail "--only takes one of: $ONLY_STEPS"
+            exit 2
+            ;;
+    esac
+fi
+
+# %%
 # Repos root #
 
 step "Repos root"
@@ -133,7 +208,6 @@ DOTFILES_DIR="$REPOS_ROOT/dotfiles"
 # %%
 # Prerequisites #
 
-have() { command -v "$1" >/dev/null 2>&1; }
 
 step "Package manager"
 case "$PLATFORM" in
@@ -166,33 +240,10 @@ case "$PLATFORM" in
 esac
 
 step "git"
-if have git; then
-    skip "git present ($(git --version))"
-else
-    warn "git missing"
-    case "$PLATFORM" in
-        mac)        run brew install git ;;
-        linux|wsl)  run sudo apt update && run sudo apt install -y git ;;
-        termux)     run pkg install -y git ;;
-    esac
-fi
+ensure_git
 
 step "uv"
-if have uv; then
-    skip "uv present ($(uv --version 2>/dev/null))"
-elif [ "$PLATFORM" = "termux" ]; then
-    # uv has no termux build; the src/ tooling is skipped there instead of failing.
-    warn "uv is not available on termux - skipping the python steps"
-    note_manual "termux: src/ tooling (clone_repos, deploy_configs) needs uv and is not run here"
-else
-    warn "uv missing"
-    if confirm "install uv?"; then
-        run sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh'
-        [ -x "$HOME/.local/bin/uv" ] && PATH="$HOME/.local/bin:$PATH"
-    else
-        note_manual "install uv: curl -LsSf https://astral.sh/uv/install.sh | sh"
-    fi
-fi
+ensure_uv
 
 # %%
 # dotfiles #

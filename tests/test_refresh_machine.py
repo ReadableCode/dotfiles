@@ -235,3 +235,87 @@ def test_execute_runs_a_python_action_step():
 def test_summary_says_drift_in_check_mode():
     assert "reported drift" in refresh_machine.summary(["checking deployed configs"], 5, False, check=True)
     assert "all 5 steps ok" in refresh_machine.summary([], 5, False, check=True)
+
+
+# ---------------------------------------------------- missing-dependency offer
+
+
+def _needs_step():
+    return [refresh_machine.Step("deploying configs", ["deploy"], needs="uv")]
+
+
+def test_a_missing_tool_is_offered_and_the_step_then_runs(tmp_path, monkeypatch):
+    """The Pi case: no uv, so nothing could deploy and nothing offered to fix it."""
+    monkeypatch.setattr(refresh_machine.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(refresh_machine, "ask_yes_no", lambda question: True)
+    ran = []
+    installed = {"uv": False}
+
+    def run(argv):
+        ran.append(argv)
+        if "bootstrap.sh" in " ".join(argv):
+            installed["uv"] = True
+        return 0
+
+    out = io.StringIO()
+    failed = refresh_machine.execute(
+        _needs_step(), out, False, run=run, which=lambda n: "x" if installed["uv"] else None, dotfiles=str(tmp_path)
+    )
+    assert failed == []
+    assert ran[0] == ["bash", os.path.join(str(tmp_path), "scripts", "bootstrap.sh"), "--only", "uv", "--yes"]
+    assert ran[1] == ["deploy"], "the step must run once its tool exists"
+
+
+def test_declining_the_offer_fails_the_step_as_before(tmp_path, monkeypatch):
+    monkeypatch.setattr(refresh_machine.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(refresh_machine, "ask_yes_no", lambda question: False)
+    out = io.StringIO()
+    failed = refresh_machine.execute(
+        _needs_step(),
+        out,
+        False,
+        run=lambda argv: pytest.fail("ran something after declining"),
+        which=lambda n: None,
+        dotfiles=str(tmp_path),
+    )
+    assert failed == ["deploying configs"]
+    assert "not installed, so this step cannot run" in out.getvalue()
+
+
+def test_nothing_is_offered_without_a_terminal(tmp_path, monkeypatch):
+    """The elitedesk crontab must behave exactly as it did before the offer existed."""
+    monkeypatch.setattr(refresh_machine.sys.stdin, "isatty", lambda: False)
+    out = io.StringIO()
+    failed = refresh_machine.execute(
+        _needs_step(),
+        out,
+        False,
+        run=lambda argv: pytest.fail("installed unattended"),
+        which=lambda n: None,
+        dotfiles=str(tmp_path),
+    )
+    assert failed == ["deploying configs"]
+    assert "bootstrap" not in out.getvalue()
+
+
+def test_no_offer_when_the_dotfiles_path_is_unknown(monkeypatch):
+    monkeypatch.setattr(refresh_machine.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(refresh_machine, "ask_yes_no", lambda question: pytest.fail("asked with no installer"))
+    out = io.StringIO()
+    assert refresh_machine.execute(_needs_step(), out, False, which=lambda n: None) == ["deploying configs"]
+
+
+def test_a_failed_install_still_fails_the_step(tmp_path, monkeypatch):
+    monkeypatch.setattr(refresh_machine.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(refresh_machine, "ask_yes_no", lambda question: True)
+    out = io.StringIO()
+    failed = refresh_machine.execute(
+        _needs_step(), out, False, run=lambda argv: 1, which=lambda n: None, dotfiles=str(tmp_path)
+    )
+    assert failed == ["deploying configs"]
+    assert "bootstrap could not install uv" in out.getvalue()
+
+
+def test_bootstrap_argv_asks_the_repos_own_installer():
+    argv = refresh_machine.bootstrap_argv("/repos/dotfiles", "uv")
+    assert argv == ["bash", "/repos/dotfiles/scripts/bootstrap.sh", "--only", "uv", "--yes"]

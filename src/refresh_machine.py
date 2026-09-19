@@ -42,6 +42,7 @@ HELP_PAGE = """# refresh_machine
    runs `go_apps/git_puller -path $gitDir -r`
 2. with `--packages` only: upgrade os packages, before the deploy so a config an upgrade clobbers is linked again
    runs `scripts/my_updater.sh` on macos and linux, `scripts/my_updater.ps1` on windows
+   a step whose tool is missing offers to install it with `scripts/bootstrap.sh --only <tool>` first
 3. offer to clone repos this machine should have but is missing, asking [y/N/q] first
    the lists are each context's `<context>_repos.yaml`, which the pull just refreshed
    runs `src/clone_repos.py`
@@ -244,7 +245,48 @@ def run_pull(argv, out):
     return proc.returncode, unpulled
 
 
-def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which):
+def bootstrap_argv(dotfiles, need):
+    """The repo's own installer asked for one tool, so a tool has one install path and not two."""
+    return ["bash", os.path.join(dotfiles, "scripts", "bootstrap.sh"), "--only", need, "--yes"]
+
+
+def ask_yes_no(question):
+    """True only for an explicit yes. EOF or a bare Enter means no."""
+    try:
+        return input(question).strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
+
+
+def offer_dependency(need, dotfiles, out, color, run=run_plain, which=shutil.which, ask=None):
+    """
+    Offer to install a missing tool and report whether it is now on PATH.
+
+    Only the person at a terminal is asked. A cron or ssh run reports and fails
+    exactly as it did before this existed, so nothing ever installs itself
+    unattended - the elitedesk crontab must keep behaving the same.
+
+    The install is bootstrap's, never a copy of it: the reason a Pi could not
+    deploy was that it had no uv and nothing offered to fetch it, not that the
+    command was hard to write.
+    """
+    paint = terminal_style.paint
+    # resolved here rather than as a default argument, so the prompt stays
+    # substitutable from a test without the real input() ever being bound
+    ask = ask or ask_yes_no
+    if dotfiles is None or not sys.stdin.isatty():
+        return False
+    out.write(paint(f"   {need} is missing; scripts/bootstrap.sh can install it", "amber", color) + "\n")
+    out.flush()
+    if not ask(f"   install {need} now? [y/N] "):
+        return False
+    if run(bootstrap_argv(dotfiles, need)):
+        out.write(paint(f"   bootstrap could not install {need}", "red", color) + "\n")
+        return False
+    return bool(which(need))
+
+
+def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which, dotfiles=None):
     """Run every step, even after a failure. Returns the titles of the steps that failed."""
     paint = terminal_style.paint
     failed = []
@@ -252,9 +294,10 @@ def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which)
         out.write(("\n" if index else "") + terminal_style.section(step.title, color) + "\n")
         out.flush()
         if step.needs and not which(step.needs):
-            out.write(paint(f"   {step.needs} is not installed, so this step cannot run", "red", color) + "\n")
-            failed.append(step.title)
-            continue
+            if not offer_dependency(step.needs, dotfiles, out, color, run=run, which=which):
+                out.write(paint(f"   {step.needs} is not installed, so this step cannot run", "red", color) + "\n")
+                failed.append(step.title)
+                continue
         try:
             if step.action is not None:
                 code = step.action(out)
@@ -316,7 +359,7 @@ def main(argv=None, environ=None):
     color = terminal_style.use_color(out, environ)
     steps = build_steps(git_dir, platform.system(), platform.machine(), args.packages, args.pull_only, args.check)
     try:
-        failed = execute(steps, out, color)
+        failed = execute(steps, out, color, dotfiles=os.path.join(git_dir, "dotfiles"))
     except KeyboardInterrupt:
         out.write("\n" + terminal_style.paint("interrupted: the remaining steps did not run", "red", color) + "\n")
         return 130
