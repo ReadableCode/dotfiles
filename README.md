@@ -70,8 +70,8 @@ environment management. Python version is pinned in `.python-version`.
 
 The Bitwarden vault backup job (`src/bitwarden.py`,
 `Dockerfile-bitwarden_backup`, and the manual `bw export` instructions) is a
-homelab-only job and lives in the local `personal-automation` repo
-(`~/GitHub/personal-automation`), along with the Minecraft log tooling. See
+homelab-only job and lives in the local `personal_dev` repo
+(`~/GitHub/personal_dev`), along with the Minecraft log tooling. See
 that repo's README for the Docker build/run commands and the cutover
 checklist. Dotfiles itself stays focused on what every device needs: config
 deploy/pull and repo pulling.

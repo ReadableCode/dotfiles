@@ -84,8 +84,7 @@ the things that silently fail a plausible remote workflow.
   `/config/.storage` are root-owned, so it can read most config but write
   nothing. `.storage/http` and `auth*` are root-only even to read. Full
   config capture is `bash -l -c 'ha backups new'` (lands on BehemothBackups).
-  The old config-mirror script in personal-automation was retired for the
-  built-in backups.
+  The old config-mirror script was retired for the built-in backups.
 - Dashboards are managed from `server_configs/application_configs/homeassistant/haos/dashboards/`
   and pushed over the websocket API by
   `server_configs/scripts/deploy_homeassistant_dashboards.py` (`--dry-run`

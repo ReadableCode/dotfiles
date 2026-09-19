@@ -6,7 +6,7 @@ This doc is the canonical description of the **process** (which repo deploys
 what, how the auto-deploy loop and cron declarations work). Each repo's own
 README is canonical for its **contents**: `Docker/README.md` for the compose
 files, `server_configs/README.md` for the per-host configs,
-`personal-automation/README.md` for the jobs and their backups. Fix a fact
+`personal_dev/README.md` for the jobs and their backups. Fix a fact
 in the one that owns it and link from the other, rather than repeating it.
 
 ## Hosts

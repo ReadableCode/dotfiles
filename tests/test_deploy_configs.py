@@ -1715,7 +1715,7 @@ def test_no_prune_flag_parses():
     assert deploy_configs.parse_args(["deploy"]).no_prune is False
 
 
-def _git_repo(path, remote=True):
+def _git_repo(path, remote=True, pushed=True):
     os.makedirs(path, exist_ok=True)
     subprocess.run(["git", "-C", path, "init", "-q"], check=True)
     write_file(os.path.join(path, "f.txt"), "x")
@@ -1725,7 +1725,16 @@ def _git_repo(path, remote=True):
         check=True,
     )
     if remote:
-        subprocess.run(["git", "-C", path, "remote", "add", "origin", "git@example.com:x/y.git"], check=True)
+        if pushed:
+            # a real bare remote, actually pushed to: the prune guard asks git
+            # whether any commit is missing from the remotes, so a fixture whose
+            # origin was never pushed to looks like unpushed work and is kept
+            bare = path + ".remote.git"
+            subprocess.run(["git", "init", "-q", "--bare", bare], check=True)
+            subprocess.run(["git", "-C", path, "remote", "add", "origin", bare], check=True)
+            subprocess.run(["git", "-C", path, "push", "-q", "-u", "origin", "HEAD"], check=True)
+        else:
+            subprocess.run(["git", "-C", path, "remote", "add", "origin", "git@example.com:x/y.git"], check=True)
     return path
 
 
@@ -1749,6 +1758,14 @@ def test_prune_directory_removes_only_a_clean_remoted_git_checkout(tmp_path, cap
     deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
     assert not os.path.exists(repo)
     assert "REMOVED" in capsys.readouterr().out
+
+
+def test_prune_directory_skips_checkout_with_commits_not_on_its_remote(tmp_path, capsys):
+    """A clean tree can still be the only copy of work: commits ahead of the remote."""
+    repo = _git_repo(str(tmp_path / "unpushed_repo"), pushed=False)
+    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    assert os.path.exists(repo)
+    assert "not on its remote" in capsys.readouterr().out
 
 
 def test_prune_directory_skips_dirty_checkout_and_plain_dirs(tmp_path, capsys):

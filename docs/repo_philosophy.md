@@ -81,7 +81,8 @@ agent tooling and declares its own overlay manifest (the opt-in form, see
 | App-owned commands (a personal app's `.claude/commands/`) | the app repo; the context overlay links them |
 | Agent notes for a personal repo that does not advertise agent use | `personal_dev/claude/repo_notes/<repo>.md`, deployed as a gitignored `CLAUDE.md` link |
 | Context-free payloads (`init_worktree`, user `settings.json`, statusline, themes) and the generated `data/mcp/*.mcp.json` | `dotfiles` |
-| Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal-automation` for the homelab |
+| Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal_dev/ops/` for the homelab |
+| Executable code with only that context's consumers | `<context>_dev/src/` (`personal_dev/src/`; each client has its own `scripts/`) |
 
 Claude's auto-memory directories are **not** synced: they are machine-local by
 design, written by the agent without review, and accumulate rules and facts
@@ -115,6 +116,10 @@ where a skill's own Python goes. The test is **the consumer list**, nothing else
   the owner: `personal_host_facts`, `personal_chrome_bookmarks`,
   `personal_pr_review` and each client's PR commands are all prose over
   `python3 ~/GitHub/dotfiles/src/<tool>.py`.
+- **Only one context's consumers — that context's dev repo.** `personal_dev/src/`
+  for personal-only code, each client's own `scripts/` for theirs. This bucket
+  exists because a tool with a single personal consumer used to have nowhere
+  else to go and defaulted into `dotfiles/src/` by omission.
 - **A skill's private implementation — inside the skill.**
   `sort-scanned-documents` carries its scripts under its own `scripts/`, and
   every caller is that skill's `SKILL.md`, `references/method.md` or a
@@ -123,8 +128,23 @@ where a skill's own Python goes. The test is **the consumer list**, nothing else
   and manufacture a coupling it does not have.
 
 "Would I want this at a new job tomorrow?" decides whether **dotfiles** is
-cloned somewhere. It never decides whether a given file is shared:
-`chrome_bookmarks.py` is personal-only and lives in `dotfiles/src/` anyway.
+cloned somewhere. It never decides whether a given file is shared — the
+consumer list does.
+
+Two bounds sit on top of that test, because dotfiles is public and lands on
+every client machine: nothing that cannot be public, and nothing that cannot
+be exposed to every client. Within those bounds a tool does not need every
+context to want it. A general capability two or more contexts could use
+belongs here even when a third ignores it — a calendar integration that two
+contexts rely on and a third never touches still belongs here, because
+interfacing with a browser or a calendar is an ordinary thing for a person to
+want on any machine.
+
+`chrome_bookmarks.py` is the worked example of a tool crossing that line: it
+was personal-only and lived here as an exception, and once it took a
+`--context` and learned to write each context's bookmarks into that context's
+own credentials repo, it stopped being an exception and started earning the
+place it already had.
 
 Duplication is not the escape hatch. A second copy of a guard eventually loses
 a refusal, and the copy without it is the one that does damage. When a second
@@ -135,14 +155,25 @@ worked example: its refusals exist because the July 2026 run filed a batch into
 a *replica* of the taxonomy and lost a year, and a runbook that only reads one
 known folder carries none of that risk.
 
-## personal-automation: recurring homelab jobs
+## personal_dev: the personal context's code, jobs and tooling
 
-Things I do on a frequent basis to keep the homelab running — cron- or
-container-lifecycle jobs like the Bitwarden vault backup — live in the local
-`personal-automation` repo, not here. The distinction from dotfiles tooling:
-a homelab job runs on a schedule **on homelab machines**; dotfiles tooling
-must be **available on every machine**, including work ones that will never
-run a homelab cron.
+`personal_dev` is the personal context's repo in the same shape every
+`<client>_dev` already has: `claude/` for agent tooling, its own
+manifest and removals, a `pyproject.toml`, and `src/` for code whose only
+consumers are personal. Homelab jobs — the cron- and container-lifecycle work
+like the Bitwarden vault backup, the postgres and docker-app backups, log
+rotation, the usage monitor — live in its `ops/` tree.
+
+This supersedes the retired `personal-automation` repo (split out of dotfiles
+2026-07, folded into `personal_dev` 2026-09). Splitting personal code by
+*where it runs* put a second code repo beside a config-only `personal_dev`
+and left the personal context as the only one whose `*_dev` repo carried no
+code; the client repos never made that split, and neither should this one. A
+job that happens to run on the homelab is still personal-context code.
+
+The distinction from dotfiles tooling is unchanged and is about consumers,
+not schedules: dotfiles carries what more than one context could reach for,
+`personal_dev` carries what only the personal context will ever call.
 
 ## Apps: their own repos
 

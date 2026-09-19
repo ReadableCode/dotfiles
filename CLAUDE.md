@@ -20,7 +20,7 @@ context-specific lives in that context's sibling `*_credentials` repo (secrets,
 inventory, declarations, client payloads) or, if it names Claude or guides an
 agent, in that context's `<context>_dev` repo (`personal_dev` for the
 personal context; each client has its own), and recurring homelab jobs live in
-`personal-automation`. See
+that same `<context>_dev` repo. See
 `docs/repo_philosophy.md` before proposing to move something out.
 
 ## Repository layout
@@ -191,7 +191,7 @@ is the one-paragraph orientation so an agent knows which file to open.
   **`readable-utils`** package (github.com/ReadableCode/readable_utils), a uv
   git dependency pinned to a tag - no vendored copies. Homelab-only jobs
   (Bitwarden backup, Home Assistant/router pulls, log rotation) live in the
-  sibling `personal-automation` repo, not here. The status board TUI lives in
+  sibling `personal_dev` repo, not here. The status board TUI lives in
   the sibling `status_board` repo.
 
 Cron is **not** managed here. A host with scheduled jobs declares them in the

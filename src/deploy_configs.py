@@ -1315,11 +1315,12 @@ def classify_prune_target(dest, allow_directory=False):
 
 def classify_repo_directory(dest):
     """
-    Whether a directory named by a ``directory: true`` removal may go. Three
+    Whether a directory named by a ``directory: true`` removal may go. Four
     guards, each protecting a real failure mode: only git checkouts (anything
-    else was never a managed clone), only clean trees (uncommitted work), and
-    only repos WITH a remote - a remoteless repo is a git origin hub and
-    deleting it destroys the only copy.
+    else was never a managed clone), only clean trees (uncommitted work), only
+    repos WITH a remote - a remoteless repo is a git origin hub and deleting it
+    destroys the only copy - and only checkouts that are not ahead of their
+    remote, because a clean tree can still hold commits that exist nowhere else.
     """
     if not os.path.isdir(os.path.join(dest, ".git")):
         return False, "directory is not a git checkout - left in place"
@@ -1340,7 +1341,28 @@ def classify_repo_directory(dest):
         return False, "git checkout has uncommitted changes - left in place"
     if not remotes:
         return False, "git repo has NO remote (origin hub) - left in place"
-    return True, "clean git checkout with a remote"
+    ahead = unpushed_commits(dest)
+    if ahead:
+        return False, f"git checkout has {ahead} commit(s) not on its remote - left in place"
+    return True, "clean git checkout with a remote, nothing unpushed"
+
+
+def unpushed_commits(dest):
+    """
+    How many commits exist locally on any branch but on no remote-tracking ref.
+    Counted across all branches, not just the checked-out one: a removal deletes
+    the whole tree, so work parked on a side branch is just as lost. Returns 0
+    when git cannot answer, leaving the earlier guards to decide.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", dest, "rev-list", "--count", "--branches", "--not", "--remotes"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+        return int(out or 0)
+    except (OSError, subprocess.CalledProcessError, ValueError):
+        return 0
 
 
 def gutted_git_dir(dest):
