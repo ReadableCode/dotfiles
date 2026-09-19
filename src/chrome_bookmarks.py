@@ -43,22 +43,39 @@ def get_default_bookmarks_file_path(profile="Default"):
         raise OSError("Unsupported operating system")
 
 
-def repo_bookmarks_dir():
-    # personal_credentials is a sibling repo of dotfiles on every personal machine
+def repo_bookmarks_dir(context="personal"):
+    """
+    Where one context's bookmarks live: ``<context>_credentials/bookmarks``, a
+    sibling of dotfiles. The ``_credentials`` suffix is built here rather than
+    passed in on purpose - bookmarks are personal data and must never land in a
+    public repo, so the only expressible destination is a credentials repo.
+    Each context writes its own directory, so two contexts never mix.
+    """
     repo_parent = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    return os.path.join(repo_parent, "personal_credentials", "bookmarks")
+    return os.path.join(repo_parent, f"{context}_credentials", "bookmarks")
 
 
-def get_bookmarks_dir():
-    bookmarks_dir = repo_bookmarks_dir()
+def assert_credentials_dir(path):
+    """
+    Refuse any destination outside a ``*_credentials`` repo. Only reachable via
+    --output-dir; the default path cannot express a public target.
+    """
+    parts = os.path.abspath(path).split(os.sep)
+    if not any(part.endswith("_credentials") for part in parts):
+        raise ValueError(f"refusing to write bookmarks outside a credentials repo: {path}")
+    return path
+
+
+def get_bookmarks_dir(context="personal"):
+    bookmarks_dir = repo_bookmarks_dir(context)
     if not os.path.isdir(bookmarks_dir):
-        raise FileNotFoundError(f"bookmarks folder not found at {bookmarks_dir}")
+        raise FileNotFoundError(f"bookmarks folder not found at {bookmarks_dir} (is {context}_credentials cloned?)")
     return bookmarks_dir
 
 
-def get_repo_json_path(bookmarks_dir=None):
-    """The committed copy's path, whether or not personal_credentials is cloned."""
-    return os.path.join(bookmarks_dir or repo_bookmarks_dir(), f"{BASE_NAME}.json")
+def get_repo_json_path(bookmarks_dir=None, context="personal"):
+    """The committed copy's path, whether or not the credentials repo is cloned."""
+    return os.path.join(bookmarks_dir or repo_bookmarks_dir(context), f"{BASE_NAME}.json")
 
 
 def read_bookmarks(path):
@@ -258,12 +275,17 @@ def check_drift(bookmarks, repo_json_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
-            "Save Chrome bookmarks to the personal_credentials repo, collapsing the "
+            "Save Chrome bookmarks to that context's credentials repo, collapsing the "
             "duplicate folders Chrome Sync creates when a device reconnects. Writes "
             f"{BASE_NAME}.json (the editable copy) and {BASE_NAME}.html (for re-import "
             "through the Bookmark Manager). --check writes nothing and only reports "
             "drift. See docs/repo_chrome_bookmarks.md."
         )
+    )
+    parser.add_argument(
+        "--context",
+        default="personal",
+        help='context whose credentials repo receives the export (default "personal")',
     )
     parser.add_argument(
         "--profile",
@@ -276,7 +298,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--output-dir",
-        help="override output directory (default: personal_credentials/bookmarks)",
+        help=(
+            "override output directory (default: <context>_credentials/bookmarks); "
+            "must still be inside a credentials repo"
+        ),
     )
     parser.add_argument(
         "--check",
@@ -290,8 +315,9 @@ if __name__ == "__main__":
         sys.exit(f"bookmarks file not found: {source}")
     bookmarks = read_bookmarks(source)
     if args.check:
-        sys.exit(check_drift(bookmarks, get_repo_json_path()))
-    write_outputs(bookmarks, args.output_dir or get_bookmarks_dir())
+        sys.exit(check_drift(bookmarks, get_repo_json_path(context=args.context)))
+    destination = assert_credentials_dir(args.output_dir) if args.output_dir else get_bookmarks_dir(args.context)
+    write_outputs(bookmarks, destination)
 
 
 # %%
