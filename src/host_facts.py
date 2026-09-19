@@ -79,8 +79,9 @@ def collect_darwin(hw, notes):
     efficiency = run("sysctl", "-n", "hw.perflevel1.physicalcpu")
     if performance.isdigit() and efficiency.isdigit():
         notes.append(
-            "hybrid CPU: {} performance + {} efficiency cores - needs "
-            "core_groups, one clock cannot describe it".format(performance, efficiency)
+            "hybrid CPU: {} performance + {} efficiency cores - needs core_groups, one clock cannot describe it".format(
+                performance, efficiency
+            )
         )
 
     total = run("sysctl", "-n", "hw.memsize")
@@ -224,8 +225,14 @@ def collect():
 
     name = (os.environ.get("COMPUTERNAME") or platform.node() or "").split(".")[0]
     ordered = [
-        "cpu", "cores", "threads", "core_speed_ghz",
-        "memory_gb", "gpu", "motherboard", "model",
+        "cpu",
+        "cores",
+        "threads",
+        "core_speed_ghz",
+        "memory_gb",
+        "gpu",
+        "motherboard",
+        "model",
     ]
     return {
         "name": name,

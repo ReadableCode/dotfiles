@@ -8,6 +8,7 @@ import re
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from src import deploy_configs, deploy_map
 
 # %%
@@ -119,9 +120,14 @@ def fleet(tmp_path, monkeypatch):
     )
     write_yaml(
         str(github / "acme_credentials" / "acme_repos.yaml"),
-        {"defaults": {"provider": "github", "org": "acme"},
-         "repos": [{"name": "acme-app", "hosts": ["Envy"]}, {"name": "acme-lib", "exclude_hosts": ["Tower"]},
-                   {"name": "upstream-site", "dir": "local-site"}]},
+        {
+            "defaults": {"provider": "github", "org": "acme"},
+            "repos": [
+                {"name": "acme-app", "hosts": ["Envy"]},
+                {"name": "acme-lib", "exclude_hosts": ["Tower"]},
+                {"name": "upstream-site", "dir": "local-site"},
+            ],
+        },
     )
     return github
 
@@ -388,11 +394,11 @@ def test_machine_view_lists_every_declared_repo_with_its_clone_state(fleet):
     assert envy["contexts"] == ["dotfiles", "acme"]
     assert state(envy, "personal_credentials") == "other_context"  # Envy is in acme's inventory here, not personal's
     assert state(envy, "acme_credentials") == "credentials"
-    assert state(envy, "acme-app") == "cloned"          # hosts allow list names it
-    assert state(tower, "acme-app") == "not_listed"     # and not Tower
-    assert state(tower, "acme-lib") == "excluded"       # exclude_hosts wins
-    assert state(envy, "local-site") == "cloned"        # the checkout dir, not the upstream name
-    assert state(envy, "status_board") == "cloned"      # dotfiles' own repos file applies everywhere
+    assert state(envy, "acme-app") == "cloned"  # hosts allow list names it
+    assert state(tower, "acme-app") == "not_listed"  # and not Tower
+    assert state(tower, "acme-lib") == "excluded"  # exclude_hosts wins
+    assert state(envy, "local-site") == "cloned"  # the checkout dir, not the upstream name
+    assert state(envy, "status_board") == "cloned"  # dotfiles' own repos file applies everywhere
 
 
 def test_machine_view_reports_requires_the_clone_set_cannot_meet(fleet):
@@ -410,8 +416,10 @@ def test_a_host_joins_extra_contexts_through_its_inventory_record(fleet):
         inventory = json.load(file_handle)
     inventory["hosts"][1]["contexts"] = ["bravo"]  # Pi also holds bravo's credentials repo by hand
     write_json(hosts_path, inventory)
-    write_yaml(str(fleet / "bravo_credentials" / "bravo_repos.yaml"),
-               {"defaults": {"provider": "github", "org": "bravo"}, "repos": [{"name": "bravo-tool"}]})
+    write_yaml(
+        str(fleet / "bravo_credentials" / "bravo_repos.yaml"),
+        {"defaults": {"provider": "github", "org": "bravo"}, "repos": [{"name": "bravo-tool"}]},
+    )
     data = build(fleet)
     pi = next(h for h in data["hosts"] if h["id"] == "Pi")
     envy = next(h for h in data["hosts"] if h["id"] == "Envy")
@@ -424,16 +432,20 @@ def test_an_overlay_entry_only_applies_where_its_repo_is_cloned(fleet):
     # acme_dev opts in with its own manifest and is offered to Envy only; its
     # hosts-less entry must not show up on Pi or Tower even though this machine
     # (which draws the map) has the manifest loaded
-    write_yaml(str(fleet / "acme_credentials" / "acme_repos.yaml"),
-               {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme_dev", "hosts": ["Envy"]}]})
+    write_yaml(
+        str(fleet / "acme_credentials" / "acme_repos.yaml"),
+        {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme_dev", "hosts": ["Envy"]}]},
+    )
     touch(str(fleet / "acme_dev" / "tool.md"))
     write_yaml(
         str(fleet / "acme_dev" / "acme_dev_manifest.yaml"),
-        [{
-            "name": "acme_tool",
-            "repo": "tool.md",
-            "dest": {"darwin": "~/.tool", "linux": "~/.tool", "windows": "~/.tool"},
-        }],
+        [
+            {
+                "name": "acme_tool",
+                "repo": "tool.md",
+                "dest": {"darwin": "~/.tool", "linux": "~/.tool", "windows": "~/.tool"},
+            }
+        ],
     )
     data = build(fleet)
     tool = next(e for e in data["entries"] if e["id"] == "acme_tool")

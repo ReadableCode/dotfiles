@@ -7,8 +7,9 @@ import os
 import sys
 
 import yaml
-from config import grandparent_dir, parent_dir, templates_dir
 from readable_utils.host_tools import get_uppercase_hostname
+
+from config import grandparent_dir, parent_dir, templates_dir
 from deploy_configs import WORKTREE_HOST
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
@@ -126,7 +127,7 @@ def portable_path(path):
     path = path.replace("\\", "/")
     home = os.path.expanduser("~").replace("\\", "/").rstrip("/")
     if home and path.startswith(home):
-        path = "~" + path[len(home):]
+        path = "~" + path[len(home) :]
     return path
 
 
@@ -193,7 +194,7 @@ def dest_zone(dest, repo_parent):
     """
     prefix = repo_parent.rstrip("/") + "/"
     if dest.startswith(prefix):
-        rest = dest[len(prefix):]
+        rest = dest[len(prefix) :]
         return repo_parent if "/" not in rest else f"{repo_parent}/{rest.split('/')[0]}"
     parts = dest.split("/")
     if len(parts) == 2:
@@ -220,9 +221,7 @@ def map_context(base_dir, repo_root, overlay_dirs):
     if os.path.normpath(base_dir) == os.path.normpath(repo_root):
         return SHARED_CONTEXT
     context = overlay_context(base_dir)
-    credential_contexts = {
-        overlay_context(path) for path in overlay_dirs if path.endswith(CREDENTIALS_SUFFIX)
-    }
+    credential_contexts = {overlay_context(path) for path in overlay_dirs if path.endswith(CREDENTIALS_SUFFIX)}
     for known in sorted(credential_contexts, key=len, reverse=True):
         if context.startswith(f"{known}_"):
             return known
@@ -236,9 +235,7 @@ def build_contexts(entries):
         seen.setdefault(entry["ctx"], {"repos": set(), "manifests": set()})
         seen[entry["ctx"]]["repos"].add(entry["repo"])
         seen[entry["ctx"]]["manifests"].add(os.path.basename(entry["manifest"]))
-    order = ([SHARED_CONTEXT] if SHARED_CONTEXT in seen else []) + sorted(
-        key for key in seen if key != SHARED_CONTEXT
-    )
+    order = ([SHARED_CONTEXT] if SHARED_CONTEXT in seen else []) + sorted(key for key in seen if key != SHARED_CONTEXT)
     contexts = []
     for index, key in enumerate(order):
         manifests = sorted(seen[key]["manifests"])
@@ -307,8 +304,16 @@ def load_repo_declarations(repo_root, credentials_root):
     for path in sorted(find_credentials_dirs(credentials_root)):
         context = overlay_context(path)
         declarations.append(
-            {"ctx": context, "name": os.path.basename(path), "dir": os.path.basename(path),
-             "org": "", "provider": "", "hosts": [], "excludeHosts": [], "implicit": True}
+            {
+                "ctx": context,
+                "name": os.path.basename(path),
+                "dir": os.path.basename(path),
+                "org": "",
+                "provider": "",
+                "hosts": [],
+                "excludeHosts": [],
+                "implicit": True,
+            }
         )
         sources.append((context, os.path.join(path, f"{context}_repos.yaml")))
     for context, path in sources:
@@ -373,7 +378,7 @@ def required_checkouts(entry, repo_parent):
         path = portable_path(str(raw).replace("{repo_parent}", repo_parent))
         prefix = repo_parent.rstrip("/") + "/"
         if path.startswith(prefix):
-            names.append(path[len(prefix):].split("/")[0])
+            names.append(path[len(prefix) :].split("/")[0])
     return names
 
 
@@ -453,9 +458,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
     matrix = [[[ACTION_CODE["none"], None] for _ in hosts] for _ in mapped]
     variants = [["" for _ in hosts] for _ in mapped]
     for column, host in enumerate(hosts):
-        plan = deploy_configs.build_plan(
-            entries, host["os"], host["name"], repo_root, assume_requires=True
-        )
+        plan = deploy_configs.build_plan(entries, host["os"], host["name"], repo_root, assume_requires=True)
         for row in plan:
             index = entry_index[row["name"]]
             # an overlay manifest only loads where its repo is cloned; the planner
@@ -577,9 +580,7 @@ def _add_disk_view(mapped, entries, repo_root, credentials_root, repo_parent):
         dest_block = source.get("dest") or {}
         templates: dict = {}
         for platform_key in sorted(dest_block):
-            path = portable_path(
-                deploy_configs.expand_path(dest_block[platform_key], HOST_PLACEHOLDER, repo_root)
-            )
+            path = portable_path(deploy_configs.expand_path(dest_block[platform_key], HOST_PLACEHOLDER, repo_root))
             templates.setdefault(path, []).append(platform_key)
         entry["diskDests"] = [
             {"path": path, "platforms": platforms, "area": disk_area(path, repo_parent)}
@@ -611,8 +612,13 @@ def _build_disk_nodes(mapped, repo_parent):
         for dest in entry["diskDests"]:
             node = nodes.setdefault(
                 dest["path"],
-                {"path": dest["path"], "area": dest["area"], "zone": dest_zone(dest["path"], repo_parent),
-                 "entries": [], "platforms": []},
+                {
+                    "path": dest["path"],
+                    "area": dest["area"],
+                    "zone": dest_zone(dest["path"], repo_parent),
+                    "entries": [],
+                    "platforms": [],
+                },
             )
             node["entries"].append(entry["id"])
             node["platforms"] = sorted(set(node["platforms"]) | set(dest["platforms"]))
@@ -740,8 +746,7 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(
         description=(
-            "Regenerate the deployment map (every manifest entry, every machine) "
-            f"into the {OUTPUT_REPO} repo."
+            f"Regenerate the deployment map (every manifest entry, every machine) into the {OUTPUT_REPO} repo."
         )
     )
     parser.add_argument("--output-dir", default=None, help=f"override the output directory (default: {OUTPUT_REPO})")

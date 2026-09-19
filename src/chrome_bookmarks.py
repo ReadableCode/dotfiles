@@ -34,24 +34,18 @@ DIFF_PREVIEW_LINES = 20
 def get_default_bookmarks_file_path(profile="Default"):
     # sys.platform distinguishes macOS from Linux; os.name calls both "posix"
     if sys.platform == "darwin":
-        return os.path.expanduser(
-            f"~/Library/Application Support/Google/Chrome/{profile}/Bookmarks"
-        )
+        return os.path.expanduser(f"~/Library/Application Support/Google/Chrome/{profile}/Bookmarks")
     elif sys.platform.startswith("linux"):
         return os.path.expanduser(f"~/.config/google-chrome/{profile}/Bookmarks")
     elif os.name == "nt":
-        return os.path.join(
-            os.getenv("LOCALAPPDATA"), f"Google/Chrome/User Data/{profile}/Bookmarks"
-        )
+        return os.path.join(os.getenv("LOCALAPPDATA"), f"Google/Chrome/User Data/{profile}/Bookmarks")
     else:
         raise OSError("Unsupported operating system")
 
 
 def repo_bookmarks_dir():
     # personal_credentials is a sibling repo of dotfiles on every personal machine
-    repo_parent = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+    repo_parent = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     return os.path.join(repo_parent, "personal_credentials", "bookmarks")
 
 
@@ -104,9 +98,7 @@ def merge_children(children, path="", report=None):
             seen_urls.add(url)
             merged.append(child)
     for folder in folders_by_name.values():
-        folder["children"] = merge_children(
-            folder["children"], f"{path}/{folder.get('name', '')}", report
-        )
+        folder["children"] = merge_children(folder["children"], f"{path}/{folder.get('name', '')}", report)
     return merged
 
 

@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import config_test_utils  # noqa F401
 import pytest
+
 import google_mcp
 
 # %%
@@ -90,9 +91,7 @@ def test_time_field_treats_a_bare_date_as_all_day():
 
 
 def test_time_field_treats_a_timestamp_as_timed():
-    assert google_mcp._time_field("2026-08-27T10:00:00-05:00") == {
-        "dateTime": "2026-08-27T10:00:00-05:00"
-    }
+    assert google_mcp._time_field("2026-08-27T10:00:00-05:00") == {"dateTime": "2026-08-27T10:00:00-05:00"}
 
 
 # %%

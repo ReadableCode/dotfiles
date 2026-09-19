@@ -195,13 +195,17 @@ uv sync                      # install deps from pyproject.toml / uv.lock
 uv run python src/<script>.py
 ```
 
-Lint / format / type-check (config in `pyproject.toml`, `.flake8`, `.isort.cfg`):
+Lint / format / type-check (all config in `pyproject.toml`):
 
 ```bash
-uv run flake8 .              # max-line-length 120, max-complexity 15
-uv run isort .               # black profile
+uv run ruff format .         # the formatter; line-length 120
+uv run ruff check --fix .    # lint + import sorting (replaced flake8 + isort)
 uv run mypy .                # ignore_missing_imports = true
 ```
+
+`ruff` replaced `flake8` and `isort` on 2026-09-19, along with `.flake8`,
+`.isort.cfg` and a dead `[tool.flake8]` block. The pre-push hook runs the
+`--check` forms of these plus `pytest`; see `docs/howto_formatting.md`.
 
 ## Tests
 
@@ -247,8 +251,8 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
 - New docs: add a `docs/<prefix>_<topic>.md`, one topic per file, using one
   of the existing prefix families (`repo_`, `setup_`, `homelab_`, `howto_`,
   `plan_`) and add it to `docs/README.md`.
-- Match the style of nearby code; respect the flake8 line length (120) and run
-  isort before committing.
+- Match the style of nearby code; `uv run ruff format .` settles layout and line
+  length (120), so match intent and naming rather than hand-wrapping.
 - **Commit messages**: plain lowercase description of the change, matching the
   existing `git log` style ("update t3 setup", "improve deploy harnesses").
   No scope/app-name prefixes ("t3code:", "feat:", tool names) — a 2026-08-05

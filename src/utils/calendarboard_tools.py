@@ -9,6 +9,7 @@ from urllib.parse import quote
 
 import requests
 import yaml
+
 from utils.google_oauth_tools import cached_access_token, run_loopback_consent
 from utils.inventory_tools import credentials_context, find_credentials_dirs
 from utils.secret_tools import resolve_secret
@@ -164,9 +165,7 @@ def _validate_source(source, config_path):
             f"(type {source['type']}) is missing required keys: {', '.join(missing)}"
         )
     if source.get("order") is not None and not isinstance(source["order"], int):
-        raise ValueError(
-            f"Calendarboard source '{source['name']}' in {config_path}: 'order' must be an integer"
-        )
+        raise ValueError(f"Calendarboard source '{source['name']}' in {config_path}: 'order' must be an integer")
     for key in ("calendars", "exclude_calendars"):
         if source.get(key) is not None and not isinstance(source[key], list):
             raise ValueError(
@@ -264,7 +263,8 @@ def normalize_google_event(event, calendar_name):
         "details": {
             "location": event.get("location") or "",
             "organizer": (event.get("organizer") or {}).get("displayName")
-            or (event.get("organizer") or {}).get("email") or "",
+            or (event.get("organizer") or {}).get("email")
+            or "",
             "attendees": [
                 (
                     attendee.get("displayName") or attendee.get("email") or "?",
@@ -324,11 +324,13 @@ def normalize_graph_event(event, calendar_name):
         "details": {
             "location": (event.get("location") or {}).get("displayName") or "",
             "organizer": ((event.get("organizer") or {}).get("emailAddress") or {}).get("name")
-            or ((event.get("organizer") or {}).get("emailAddress") or {}).get("address") or "",
+            or ((event.get("organizer") or {}).get("emailAddress") or {}).get("address")
+            or "",
             "attendees": [
                 (
                     (attendee.get("emailAddress") or {}).get("name")
-                    or (attendee.get("emailAddress") or {}).get("address") or "?",
+                    or (attendee.get("emailAddress") or {}).get("address")
+                    or "?",
                     GRAPH_RESPONSE_MAP.get((attendee.get("status") or {}).get("response"), "needs_action"),
                 )
                 for attendee in event.get("attendees") or []
@@ -438,7 +440,7 @@ def mark_conflicts(events):
         event["conflict"] = False
     timed = [event for event in events if not event["all_day"] and event["response"] != "declined"]
     for index, first in enumerate(timed):
-        for second in timed[index + 1:]:
+        for second in timed[index + 1 :]:
             if first["start"] < second["end"] and second["start"] < first["end"]:
                 first["conflict"] = second["conflict"] = True
     return events
@@ -487,7 +489,8 @@ def fetch_google_events(source, window_start, window_end):
     headers = {"Authorization": f"Bearer {_google_access_token(source)}"}
     calendars = _google_paged(f"{GOOGLE_API}/users/me/calendarList", headers, {"minAccessRole": "reader"})
     selected = [
-        calendar for calendar in calendars
+        calendar
+        for calendar in calendars
         if calendar_selected(
             source,
             calendar.get("summaryOverride") or calendar.get("summary") or "",
@@ -566,7 +569,8 @@ def fetch_outlook_events(source, window_start, window_end):
     }
     calendars = _graph_paged(f"{GRAPH_API}/me/calendars", headers, {"$top": 50})
     selected = [
-        calendar for calendar in calendars
+        calendar
+        for calendar in calendars
         if calendar_selected(
             source,
             calendar.get("name") or "",
@@ -612,7 +616,7 @@ def fetch_source(source, window_start, window_end):
 def _print_refresh_token(source, refresh_token):
     var_name = source["refresh_token_env"]
     env_file = source.get("env_file", "your env file")
-    print("\nAuthorization complete. Add this line to " f"{env_file} in {source.get('_base_dir', '')}:\n")
+    print(f"\nAuthorization complete. Add this line to {env_file} in {source.get('_base_dir', '')}:\n")
     print(f"  {var_name}={refresh_token}\n")
 
 
@@ -654,11 +658,15 @@ def run_outlook_auth(source):
     print(f"\n{device['message']}\n")
     while True:
         time.sleep(device.get("interval", 5))
-        token_response = requests.post(f"{base}/token", data={
-            "client_id": client_id,
-            "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            "device_code": device["device_code"],
-        }, timeout=DEFAULT_HTTP_TIMEOUT)
+        token_response = requests.post(
+            f"{base}/token",
+            data={
+                "client_id": client_id,
+                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
+                "device_code": device["device_code"],
+            },
+            timeout=DEFAULT_HTTP_TIMEOUT,
+        )
         payload = token_response.json()
         if "refresh_token" in payload:
             _print_refresh_token(source, payload["refresh_token"])

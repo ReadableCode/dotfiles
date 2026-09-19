@@ -4,6 +4,7 @@
 import os
 
 import config_test_utils  # noqa F401
+
 from src import chrome_bookmarks
 
 # %%
@@ -58,9 +59,7 @@ def test_merge_children_collapses_same_name_folders_and_keeps_additions():
 def test_merge_children_keeps_same_url_in_different_folders():
     # A url that legitimately lives in two folders (Our Cash under Household
     # and under My Hosted Apps) is not a duplicate.
-    merged = chrome_bookmarks.merge_children(
-        [folder("A", [url("x", "http://x")]), folder("B", [url("x", "http://x")])]
-    )
+    merged = chrome_bookmarks.merge_children([folder("A", [url("x", "http://x")]), folder("B", [url("x", "http://x")])])
     assert [c["children"][0]["url"] for c in merged] == ["http://x", "http://x"]
 
 

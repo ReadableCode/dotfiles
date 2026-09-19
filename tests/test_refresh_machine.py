@@ -5,6 +5,7 @@ import os
 
 import config_test_utils  # noqa F401
 import pytest
+
 from src import refresh_machine, terminal_style
 
 
@@ -185,9 +186,7 @@ def test_check_steps_are_the_read_only_twins(tmp_path):
 
 def test_check_with_packages_asks_the_updater_for_its_own_check(tmp_path):
     git_dir = make_git_dir(tmp_path)
-    steps = refresh_machine.build_steps(
-        git_dir, "Linux", "x86_64", packages=True, check=True, which=lambda name: None
-    )
+    steps = refresh_machine.build_steps(git_dir, "Linux", "x86_64", packages=True, check=True, which=lambda name: None)
     assert steps[1].argv == ["bash", os.path.join(git_dir, "dotfiles", "scripts", "my_updater.sh"), "--check"]
 
 

@@ -4,6 +4,7 @@ import json
 import re
 
 import pytest
+
 from src import ticket_pr
 
 # ---------------------------------------------------------------- env files
@@ -102,9 +103,7 @@ def test_resolve_repo_parses_origin_urls(monkeypatch, url):
 
 
 def test_resolve_repo_explicit_wins(monkeypatch):
-    monkeypatch.setattr(
-        ticket_pr, "git_output", lambda *a: pytest.fail("should not call git")
-    )
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: pytest.fail("should not call git"))
     assert ticket_pr.resolve_repo("owner/name") == "owner/name"
 
 
@@ -122,20 +121,14 @@ def test_resolve_repo_parses_bitbucket_urls(monkeypatch, url):
 
 
 def test_resolve_provider_from_origin(monkeypatch):
-    monkeypatch.setattr(
-        ticket_pr, "git_output", lambda *a: "git@bitbucket.org:ws/slug.git"
-    )
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "git@bitbucket.org:ws/slug.git")
     assert ticket_pr.resolve_provider(None) == "bitbucket"
-    monkeypatch.setattr(
-        ticket_pr, "git_output", lambda *a: "git@github.com:owner/name.git"
-    )
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "git@github.com:owner/name.git")
     assert ticket_pr.resolve_provider(None) == "github"
 
 
 def test_resolve_provider_bitbucket_prefix(monkeypatch):
-    monkeypatch.setattr(
-        ticket_pr, "git_output", lambda *a: pytest.fail("should not call git")
-    )
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: pytest.fail("should not call git"))
     assert ticket_pr.resolve_provider("bitbucket:ws/slug") == "bitbucket"
     assert ticket_pr.resolve_repo("bitbucket:ws/slug") == "ws/slug"
 
@@ -198,32 +191,34 @@ def test_rollup_ignores_approval_gate_and_reports_green():
     assert report["pending"] == []
     assert report["passed"] == 2
     assert report["skipped"] == 1
-    assert report["ignored"] == [
-        {"name": "Mergeable: HelloTech approval", "bucket": "pending"}
-    ]
+    assert report["ignored"] == [{"name": "Mergeable: HelloTech approval", "bucket": "pending"}]
 
 
 def test_rollup_carries_a_failed_checks_details():
     entries = [
-        {"name": "SonarQube Code Analysis", "bucket": "fail",
-         "details": {"details_url": "https://sonar/x", "title": "Quality Gate failed",
-                     "summary": "2 new issues"}},
+        {
+            "name": "SonarQube Code Analysis",
+            "bucket": "fail",
+            "details": {"details_url": "https://sonar/x", "title": "Quality Gate failed", "summary": "2 new issues"},
+        },
         {"name": "linter", "bucket": "pass", "details": {"details_url": None}},
     ]
     report = ticket_pr.rollup(entries, [])
     assert report["failed"] == ["SonarQube Code Analysis"]
     assert report["failed_details"] == [
-        {"name": "SonarQube Code Analysis", "details_url": "https://sonar/x",
-         "title": "Quality Gate failed", "summary": "2 new issues"}
+        {
+            "name": "SonarQube Code Analysis",
+            "details_url": "https://sonar/x",
+            "title": "Quality Gate failed",
+            "summary": "2 new issues",
+        }
     ]
 
 
 def test_check_run_details_reads_output_and_link():
     run = {"details_url": "https://ci/run/1", "output": {"title": "t", "summary": "s"}}
-    assert ticket_pr.check_run_details(run) == {"details_url": "https://ci/run/1",
-                                                "title": "t", "summary": "s"}
-    assert ticket_pr.check_run_details({}) == {"details_url": None, "title": None,
-                                               "summary": None}
+    assert ticket_pr.check_run_details(run) == {"details_url": "https://ci/run/1", "title": "t", "summary": "s"}
+    assert ticket_pr.check_run_details({}) == {"details_url": None, "title": None, "summary": None}
 
 
 def test_rollup_not_green_on_failure_or_pending():
@@ -290,20 +285,32 @@ def test_get_ticket_reports_everything(monkeypatch, capsys, tmp_path):
             "updated": "2026-09-02T10:00:00.000+0000",
             "parent": {"key": "ACME-400"},
             "description": "Steps:\n1. run it\n2. watch it break",
-            "attachment": [{
-                "filename": "layout.png", "mimeType": "image/png", "size": 3,
-                "created": "2026-09-02T10:00:00.000+0000", "author": {"displayName": "Sam"},
-                "content": "https://example.atlassian.net/rest/api/3/attachment/content/1"}],
+            "attachment": [
+                {
+                    "filename": "layout.png",
+                    "mimeType": "image/png",
+                    "size": 3,
+                    "created": "2026-09-02T10:00:00.000+0000",
+                    "author": {"displayName": "Sam"},
+                    "content": "https://example.atlassian.net/rest/api/3/attachment/content/1",
+                }
+            ],
         },
     }
     # two pages of one comment each: the walker must follow startAt to total
     pages = {
-        "startAt=0": {"total": 2, "comments": [
-            {"author": {"displayName": "Alex"}, "created": "2026-09-01T10:00:00.000+0000",
-             "body": "Repro attached"}]},
-        "startAt=1": {"total": 2, "comments": [
-            {"author": {"displayName": "Sam"}, "created": "2026-09-02T10:00:00.000+0000",
-             "body": "On it"}]},
+        "startAt=0": {
+            "total": 2,
+            "comments": [
+                {"author": {"displayName": "Alex"}, "created": "2026-09-01T10:00:00.000+0000", "body": "Repro attached"}
+            ],
+        },
+        "startAt=1": {
+            "total": 2,
+            "comments": [
+                {"author": {"displayName": "Sam"}, "created": "2026-09-02T10:00:00.000+0000", "body": "On it"}
+            ],
+        },
     }
     calls = []
 
@@ -317,9 +324,7 @@ def test_get_ticket_reports_everything(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(ticket_pr, "http_bytes", lambda url, headers: b"png")
     ticket_pr.main(["get-ticket", "--key", "ACME-401", "--attachments-dir", str(tmp_path)])
     out = capsys.readouterr().out
-    assert out.splitlines()[0] == (
-        f"ACME-401 [In Progress] Fix the thing (2 comments, 1 attachments in {tmp_path})"
-    )
+    assert out.splitlines()[0] == (f"ACME-401 [In Progress] Fix the thing (2 comments, 1 attachments in {tmp_path})")
     result = json.loads(out.strip().splitlines()[-1])
     saved = tmp_path / "layout.png"
     assert saved.read_bytes() == b"png"
@@ -340,9 +345,16 @@ def test_get_ticket_reports_everything(monkeypatch, capsys, tmp_path):
             {"author": "Alex", "created": "2026-09-01T10:00:00.000+0000", "body": "Repro attached"},
             {"author": "Sam", "created": "2026-09-02T10:00:00.000+0000", "body": "On it"},
         ],
-        "attachments": [{
-            "filename": "layout.png", "author": "Sam", "created": "2026-09-02T10:00:00.000+0000",
-            "mime_type": "image/png", "size": 3, "path": str(saved)}],
+        "attachments": [
+            {
+                "filename": "layout.png",
+                "author": "Sam",
+                "created": "2026-09-02T10:00:00.000+0000",
+                "mime_type": "image/png",
+                "size": 3,
+                "path": str(saved),
+            }
+        ],
         "url": "https://example.atlassian.net/browse/ACME-401",
     }
     assert sum("/comment?" in c for c in calls) == 2
@@ -353,9 +365,9 @@ def test_search_tickets_dry_run_hits_the_cloud_search_endpoint(monkeypatch, caps
     monkeypatch.setenv("JIRA_USER", "user@example.com")
     monkeypatch.setenv("JIRA_TOKEN", "token")
     out = _run_cli(
-        ["--dry-run", "search-tickets", "--jql", 'project = ACME AND text ~ "thing"',
-         "--max-results", "5"],
-        monkeypatch, capsys,
+        ["--dry-run", "search-tickets", "--jql", 'project = ACME AND text ~ "thing"', "--max-results", "5"],
+        monkeypatch,
+        capsys,
     )
     assert (
         "[dry-run] GET https://example.atlassian.net/rest/api/3/search/jql"
@@ -369,13 +381,22 @@ def test_search_tickets_lists_hits_and_ends_with_json(monkeypatch, capsys):
     monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
     monkeypatch.setenv("JIRA_USER", "user@example.com")
     monkeypatch.setenv("JIRA_TOKEN", "token")
-    found = {"issues": [
-        {"key": "ACME-7", "fields": {
-            "summary": "Pod cannot reach Vault", "status": {"name": "Open"},
-            "issuetype": {"name": "Bug"}, "assignee": {"displayName": "Sam"},
-            "created": "2026-09-09T10:00:00.000+0000", "updated": "2026-09-10T10:00:00.000+0000"}},
-        {"key": "ACME-3", "fields": {"summary": "Older", "status": {"name": "Done"}}},
-    ]}
+    found = {
+        "issues": [
+            {
+                "key": "ACME-7",
+                "fields": {
+                    "summary": "Pod cannot reach Vault",
+                    "status": {"name": "Open"},
+                    "issuetype": {"name": "Bug"},
+                    "assignee": {"displayName": "Sam"},
+                    "created": "2026-09-09T10:00:00.000+0000",
+                    "updated": "2026-09-10T10:00:00.000+0000",
+                },
+            },
+            {"key": "ACME-3", "fields": {"summary": "Older", "status": {"name": "Done"}}},
+        ]
+    }
     monkeypatch.setattr(ticket_pr, "http_json", lambda m, url, *a, **k: found)
     ticket_pr.main(["search-tickets", "--jql", "project = ACME"])
     out = capsys.readouterr().out
@@ -384,8 +405,12 @@ def test_search_tickets_lists_hits_and_ends_with_json(monkeypatch, capsys):
     result = json.loads(out.strip().splitlines()[-1])
     assert result["jql"] == "project = ACME"
     assert result["tickets"][0] == {
-        "key": "ACME-7", "summary": "Pod cannot reach Vault", "status": "Open", "type": "Bug",
-        "assignee": "Sam", "created": "2026-09-09T10:00:00.000+0000",
+        "key": "ACME-7",
+        "summary": "Pod cannot reach Vault",
+        "status": "Open",
+        "type": "Bug",
+        "assignee": "Sam",
+        "created": "2026-09-09T10:00:00.000+0000",
         "updated": "2026-09-10T10:00:00.000+0000",
         "url": "https://example.atlassian.net/browse/ACME-7",
     }
@@ -400,23 +425,30 @@ def _jira_env(monkeypatch):
 
 def test_transition_ticket_dry_run_reads_then_posts(monkeypatch, capsys):
     _jira_env(monkeypatch)
-    out = _run_cli(["--dry-run", "transition-ticket", "--key", "ACME-401", "--to", "Done"],
-                   monkeypatch, capsys)
-    assert ("[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions"
-            "?expand=transitions.fields") in out
+    out = _run_cli(["--dry-run", "transition-ticket", "--key", "ACME-401", "--to", "Done"], monkeypatch, capsys)
+    assert (
+        "[dry-run] GET https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions?expand=transitions.fields"
+    ) in out
     assert "[dry-run] POST https://example.atlassian.net/rest/api/2/issue/ACME-401/transitions" in out
     assert json.loads(out.strip().splitlines()[-1])["status"] == "Done"
 
 
 def test_transition_ticket_lists_options_without_to(monkeypatch, capsys):
     _jira_env(monkeypatch)
-    offered = {"transitions": [
-        {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
-        {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}, "fields": {
-            "resolution": {"required": True, "allowedValues": [{"name": "Done"}, {"name": "Won't Do"}]},
-            "comment": {"required": False},
-        }},
-    ]}
+    offered = {
+        "transitions": [
+            {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
+            {
+                "id": "41",
+                "name": "Resolve",
+                "to": {"name": "Resolved"},
+                "fields": {
+                    "resolution": {"required": True, "allowedValues": [{"name": "Done"}, {"name": "Won't Do"}]},
+                    "comment": {"required": False},
+                },
+            },
+        ]
+    }
     calls = []
 
     def fake_http(method, url, *a, **k):
@@ -429,16 +461,22 @@ def test_transition_ticket_lists_options_without_to(monkeypatch, capsys):
     assert out.splitlines()[0] == "ACME-401 can move via: In Progress, Resolve"
     assert out.splitlines()[1] == "  Resolve needs resolution: Done, Won't Do"
     assert json.loads(out.strip().splitlines()[-1])["transitions"][1] == {
-        "id": "41", "name": "Resolve", "to": "Resolved", "required": {"resolution": ["Done", "Won't Do"]}}
+        "id": "41",
+        "name": "Resolve",
+        "to": "Resolved",
+        "required": {"resolution": ["Done", "Won't Do"]},
+    }
     assert calls == ["GET"]
 
 
 def test_transition_ticket_matches_target_status_and_posts_its_id(monkeypatch, capsys):
     _jira_env(monkeypatch)
-    offered = {"transitions": [
-        {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
-        {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}},
-    ]}
+    offered = {
+        "transitions": [
+            {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}},
+            {"id": "41", "name": "Resolve", "to": {"name": "Resolved"}},
+        ]
+    }
     posted = {}
 
     def fake_http(method, url, headers, payload=None, **k):
@@ -453,8 +491,11 @@ def test_transition_ticket_matches_target_status_and_posts_its_id(monkeypatch, c
     assert posted == {"transition": {"id": "41"}, "fields": {"resolution": {"name": "Done"}}}
     assert out.splitlines()[0] == "ACME-401 -> Resolved"
     assert json.loads(out.strip().splitlines()[-1]) == {
-        "key": "ACME-401", "status": "Resolved", "transition": "Resolve",
-        "url": "https://example.atlassian.net/browse/ACME-401"}
+        "key": "ACME-401",
+        "status": "Resolved",
+        "transition": "Resolve",
+        "url": "https://example.atlassian.net/browse/ACME-401",
+    }
 
 
 _SAME_NAMED = [
@@ -488,22 +529,30 @@ def test_transition_ticket_refuses_an_ambiguous_name(monkeypatch):
 
     def fake_http(method, url, *a, **k):
         calls.append(method)
-        return {"transitions": [
-            {"id": "2", "name": "Start", "to": {"name": "In Progress"}},
-            {"id": "21", "name": "Start", "to": {"name": "On Hold"}},
-        ]}
+        return {
+            "transitions": [
+                {"id": "2", "name": "Start", "to": {"name": "In Progress"}},
+                {"id": "21", "name": "Start", "to": {"name": "On Hold"}},
+            ]
+        }
 
     monkeypatch.setattr(ticket_pr, "http_json", fake_http)
-    with pytest.raises(SystemExit, match=r"'Start' matches more than one transition "
-                                         r"\(2 Start -> In Progress; 21 Start -> On Hold\)"):
+    with pytest.raises(
+        SystemExit,
+        match=r"'Start' matches more than one transition "
+        r"\(2 Start -> In Progress; 21 Start -> On Hold\)",
+    ):
         ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "Start"])
     assert calls == ["GET"]
 
 
 def test_transition_ticket_refuses_an_unknown_target(monkeypatch):
     _jira_env(monkeypatch)
-    monkeypatch.setattr(ticket_pr, "http_json", lambda *a, **k: {"transitions": [
-        {"id": "31", "name": "In Progress", "to": {"name": "In Progress"}}]})
+    monkeypatch.setattr(
+        ticket_pr,
+        "http_json",
+        lambda *a, **k: {"transitions": [{"id": "31", "name": "In Progress", "to": {"name": "In Progress"}}]},
+    )
     with pytest.raises(SystemExit, match="offers no transition to 'Done'; offered: In Progress"):
         ticket_pr.main(["transition-ticket", "--key", "ACME-401", "--to", "Done"])
 
@@ -521,7 +570,8 @@ def test_add_comment_dry_run(monkeypatch, capsys):
     assert '"body": "Sheet built, see link"' in out
     result = json.loads(out.strip().splitlines()[-1])
     assert result == {
-        "key": "ACME-401", "id": "0",
+        "key": "ACME-401",
+        "id": "0",
         "url": "https://example.atlassian.net/browse/ACME-401?focusedCommentId=0",
     }
 
@@ -563,7 +613,8 @@ def test_get_ticket_no_comments(monkeypatch, capsys):
     monkeypatch.setenv("JIRA_TOKEN", "token")
     issue = {"key": "ACME-402", "fields": {"summary": "Quiet", "status": {"name": "To Do"}}}
     monkeypatch.setattr(
-        ticket_pr, "http_json",
+        ticket_pr,
+        "http_json",
         lambda m, url, *a, **k: {"total": 0, "comments": []} if "/comment?" in url else issue,
     )
     ticket_pr.main(["get-ticket", "--key", "ACME-402"])
@@ -575,9 +626,18 @@ def test_get_ticket_no_comments(monkeypatch, capsys):
 def test_pr_comment_dry_run_posts_an_issue_comment(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
-        ["--dry-run", "pr-comment", "--repo", "acme/widgets", "--pr", "7",
-         "--body", "SonarQube-Integration-Ticket: https://example.atlassian.net/browse/ACME-1"],
-        monkeypatch, capsys,
+        [
+            "--dry-run",
+            "pr-comment",
+            "--repo",
+            "acme/widgets",
+            "--pr",
+            "7",
+            "--body",
+            "SonarQube-Integration-Ticket: https://example.atlassian.net/browse/ACME-1",
+        ],
+        monkeypatch,
+        capsys,
     )
     assert "[dry-run] POST https://api.github.com/repos/acme/widgets/issues/7/comments" in out
     assert '"body": "SonarQube-Integration-Ticket: https://example.atlassian.net/browse/ACME-1"' in out
@@ -594,30 +654,50 @@ def test_pr_comment_rejects_an_empty_body(monkeypatch):
 def test_pr_comment_bitbucket_posts_a_pr_comment(monkeypatch, capsys):
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
-    calls = _record_http(monkeypatch, {"/comments": {
-        "id": 91, "links": {"html": {"href": "https://bitbucket.org/ws/slug/pull-requests/7#comment-91"}}}})
+    calls = _record_http(
+        monkeypatch,
+        {
+            "/comments": {
+                "id": 91,
+                "links": {"html": {"href": "https://bitbucket.org/ws/slug/pull-requests/7#comment-91"}},
+            }
+        },
+    )
     ticket_pr.main(["pr-comment", "--repo", "bitbucket:ws/slug", "--pr", "7", "--body", "Rebased, ready again"])
-    assert calls == [("POST", "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/comments",
-                      {"content": {"raw": "Rebased, ready again"}})]
+    assert calls == [
+        (
+            "POST",
+            "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/comments",
+            {"content": {"raw": "Rebased, ready again"}},
+        )
+    ]
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1]) == {
-        "pr": "7", "comment_id": 91, "url": "https://bitbucket.org/ws/slug/pull-requests/7#comment-91"}
+        "pr": "7",
+        "comment_id": 91,
+        "url": "https://bitbucket.org/ws/slug/pull-requests/7#comment-91",
+    }
 
 
 def test_pr_comment_bitbucket_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
-    out = _run_cli(["--dry-run", "pr-comment", "--repo", "bitbucket:ws/slug", "--pr", "7", "--body", "hi"],
-                   monkeypatch, capsys)
+    out = _run_cli(
+        ["--dry-run", "pr-comment", "--repo", "bitbucket:ws/slug", "--pr", "7", "--body", "hi"], monkeypatch, capsys
+    )
     assert "[dry-run] POST https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/comments" in out
     assert json.loads(out.strip().splitlines()[-1]) == {
-        "pr": "7", "comment_id": 0, "url": "https://bitbucket.org/ws/slug/pull-requests/7"}
+        "pr": "7",
+        "comment_id": 0,
+        "url": "https://bitbucket.org/ws/slug/pull-requests/7",
+    }
 
 
 def test_rerun_job_dry_run_hits_the_job_rerun_endpoint(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
         ["--dry-run", "rerun-job", "--repo", "acme/widgets", "--job", "123456"],
-        monkeypatch, capsys,
+        monkeypatch,
+        capsys,
     )
     assert "[dry-run] POST https://api.github.com/repos/acme/widgets/actions/jobs/123456/rerun" in out
     result = json.loads(out.strip().splitlines()[-1])
@@ -628,7 +708,8 @@ def test_update_pr_dry_run_patches_the_pull(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
         ["--dry-run", "update-pr", "--repo", "acme/widgets", "--pr", "7", "--title", "ACME-1: new"],
-        monkeypatch, capsys,
+        monkeypatch,
+        capsys,
     )
     assert "[dry-run] PATCH https://api.github.com/repos/acme/widgets/pulls/7" in out
     assert json.loads(out.strip().splitlines()[-1]) == {"pr": "7", "updated": ["title"]}
@@ -647,11 +728,15 @@ def test_update_pr_sends_only_what_was_given(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
     out = _run_cli(
         ["update-pr", "--repo", "acme/widgets", "--pr", "7", "--body-file", str(body_file)],
-        monkeypatch, capsys,
+        monkeypatch,
+        capsys,
     )
     assert calls == [
-        ("PATCH", "https://api.github.com/repos/acme/widgets/pulls/7",
-         {"body": "The design changed; here is what the branch does now."}),
+        (
+            "PATCH",
+            "https://api.github.com/repos/acme/widgets/pulls/7",
+            {"body": "The design changed; here is what the branch does now."},
+        ),
     ]
     assert json.loads(out.strip().splitlines()[-1])["updated"] == ["body"]
 
@@ -666,15 +751,15 @@ def test_update_pr_is_github_only(monkeypatch, capsys):
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
     with pytest.raises(SystemExit, match="GitHub-only"):
-        _run_cli(["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--title", "x"],
-                 monkeypatch, capsys)
+        _run_cli(["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--title", "x"], monkeypatch, capsys)
 
 
 def test_job_log_dry_run_hits_the_job_logs_endpoint(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
         ["--dry-run", "job-log", "--repo", "acme/widgets", "--job", "123456"],
-        monkeypatch, capsys,
+        monkeypatch,
+        capsys,
     )
     assert "[dry-run] GET https://api.github.com/repos/acme/widgets/actions/jobs/123456/logs" in out
     assert json.loads(out.strip().splitlines()[-1])["job"] == "123456"
@@ -690,9 +775,9 @@ def test_job_log_saves_the_log_and_prints_the_matching_lines(monkeypatch, capsys
 
     monkeypatch.setattr(ticket_pr, "github_job_log", fake_job_log)
     out = _run_cli(
-        ["job-log", "--repo", "acme/widgets", "--job", "123456", "--grep", "error",
-         "--out-dir", str(tmp_path)],
-        monkeypatch, capsys,
+        ["job-log", "--repo", "acme/widgets", "--job", "123456", "--grep", "error", "--out-dir", str(tmp_path)],
+        monkeypatch,
+        capsys,
     )
     assert calls == [("acme/widgets", "123456")]
     assert "ERROR: src/widget.py Imports are incorrectly sorted" in out
@@ -808,9 +893,7 @@ def test_http_json_sends_no_content_type_without_a_body(monkeypatch):
 
 
 def test_github_prefix_pins_the_provider(monkeypatch):
-    monkeypatch.setattr(
-        ticket_pr, "git_output", lambda *a: pytest.fail("should not call git")
-    )
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: pytest.fail("should not call git"))
     assert ticket_pr.repo_spec("github:owner/name") == ("github", "owner/name")
     assert ticket_pr.repo_spec("bitbucket:ws/slug") == ("bitbucket", "ws/slug")
 
@@ -823,9 +906,14 @@ def test_review_queue_defaults_to_the_origin_repo(monkeypatch, capsys):
 
 def _bb_pull(pr_id, title, author, reviewers, participants=(), draft=False):
     return {
-        "id": pr_id, "title": title, "author": author, "reviewers": list(reviewers),
-        "participants": list(participants), "draft": draft,
-        "source": {"branch": {"name": f"ACME-{pr_id}"}}, "destination": {"branch": {"name": "master"}},
+        "id": pr_id,
+        "title": title,
+        "author": author,
+        "reviewers": list(reviewers),
+        "participants": list(participants),
+        "draft": draft,
+        "source": {"branch": {"name": f"ACME-{pr_id}"}},
+        "destination": {"branch": {"name": "master"}},
         "links": {"html": {"href": f"https://bitbucket.org/ws/slug/pull-requests/{pr_id}"}},
     }
 
@@ -864,7 +952,12 @@ def test_review_queue_bitbucket_marks_what_waits_on_me(monkeypatch, capsys):
     out = capsys.readouterr().out
     result = json.loads(out.strip().splitlines()[-1])
     assert {pr["pr"]: pr["skip"] for pr in result["prs"]} == {
-        1: None, 2: "own", 3: "not_requesting", 4: "draft", 5: "approved", 6: None,
+        1: None,
+        2: "own",
+        3: "not_requesting",
+        4: "draft",
+        5: "approved",
+        6: None,
     }
     assert result["prs"][5]["commits_since_my_approval"] == 1
     assert result["skipped"] == {"own": 1, "not_requesting": 1, "draft": 1, "approved": 1}
@@ -876,21 +969,29 @@ def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
 
     def pull(number, author, requested=(), draft=False):
         return {
-            "number": number, "title": f"PR {number}", "user": {"login": author}, "draft": draft,
+            "number": number,
+            "title": f"PR {number}",
+            "user": {"login": author},
+            "draft": draft,
             "requested_reviewers": [{"login": login} for login in requested],
-            "head": {"ref": f"b{number}"}, "base": {"ref": "main"},
+            "head": {"ref": f"b{number}"},
+            "base": {"ref": "main"},
             "html_url": f"https://github.com/owner/name/pull/{number}",
         }
 
     pulls = [pull(1, "sam", ["me"]), pull(2, "me"), pull(3, "sam"), pull(4, "sam", ["me"], draft=True)]
     monkeypatch.setattr(
-        ticket_pr, "http_json",
+        ticket_pr,
+        "http_json",
         lambda m, url, h, **k: {"login": "me"} if url.endswith("/user") else pulls,
     )
     ticket_pr.main(["review-queue", "--repo", "github:owner/name"])
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert {pr["pr"]: pr["skip"] for pr in result["prs"]} == {
-        1: None, 2: "own", 3: "not_requesting", 4: "draft",
+        1: None,
+        2: "own",
+        3: "not_requesting",
+        4: "draft",
     }
 
 
@@ -898,29 +999,65 @@ def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, t
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
     pull = {
-        "id": 7, "title": "Add the thing", "author": {"display_name": "Sam"}, "description": "why",
+        "id": 7,
+        "title": "Add the thing",
+        "author": {"display_name": "Sam"},
+        "description": "why",
         "source": {"branch": {"name": "ACME-7-thing"}, "commit": {"hash": "abc123"}},
         "destination": {"branch": {"name": "master"}},
         "links": {"html": {"href": "https://bitbucket.org/ws/slug/pull-requests/7"}},
     }
-    diffstat = {"values": [
-        {"status": "modified", "old": {"path": "src/a.py"}, "new": {"path": "src/a.py"},
-         "lines_added": 3, "lines_removed": 1},
-        {"status": "renamed", "old": {"path": "src/b.py"}, "new": {"path": "src/c.py"},
-         "lines_added": 0, "lines_removed": 9},
-    ]}
+    diffstat = {
+        "values": [
+            {
+                "status": "modified",
+                "old": {"path": "src/a.py"},
+                "new": {"path": "src/a.py"},
+                "lines_added": 3,
+                "lines_removed": 1,
+            },
+            {
+                "status": "renamed",
+                "old": {"path": "src/b.py"},
+                "new": {"path": "src/c.py"},
+                "lines_added": 0,
+                "lines_removed": 9,
+            },
+        ]
+    }
     # one collection holds general, inline and reply comments; deleted ones stay as tombstones
-    comments = {"values": [
-        {"id": 4, "user": {"display_name": "Alex"}, "created_on": "2026-09-14T10:00:00+00:00",
-         "content": {"raw": "Dropped it"}, "inline": {"path": "src/b.py", "from": 8, "to": None},
-         "parent": {"id": 1}},
-        {"id": 1, "user": {"display_name": "Sam"}, "created_on": "2026-09-13T09:00:00+00:00",
-         "content": {"raw": "Why remove the retry?"}, "inline": {"path": "src/b.py", "from": 8, "to": None}},
-        {"id": 2, "deleted": True, "user": {"display_name": "Sam"}, "created_on": "2026-09-13T09:30:00+00:00",
-         "content": {"raw": ""}},
-        {"id": 3, "user": {"display_name": "Alex"}, "created_on": "2026-09-14T09:00:00+00:00",
-         "content": {"raw": "Rebased on master"}},
-    ]}
+    comments = {
+        "values": [
+            {
+                "id": 4,
+                "user": {"display_name": "Alex"},
+                "created_on": "2026-09-14T10:00:00+00:00",
+                "content": {"raw": "Dropped it"},
+                "inline": {"path": "src/b.py", "from": 8, "to": None},
+                "parent": {"id": 1},
+            },
+            {
+                "id": 1,
+                "user": {"display_name": "Sam"},
+                "created_on": "2026-09-13T09:00:00+00:00",
+                "content": {"raw": "Why remove the retry?"},
+                "inline": {"path": "src/b.py", "from": 8, "to": None},
+            },
+            {
+                "id": 2,
+                "deleted": True,
+                "user": {"display_name": "Sam"},
+                "created_on": "2026-09-13T09:30:00+00:00",
+                "content": {"raw": ""},
+            },
+            {
+                "id": 3,
+                "user": {"display_name": "Alex"},
+                "created_on": "2026-09-14T09:00:00+00:00",
+                "content": {"raw": "Rebased on master"},
+            },
+        ]
+    }
     fetched = []
 
     def fake_bytes(url, headers):
@@ -944,20 +1081,52 @@ def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, t
     assert out_path.read_bytes() == b"diff --git a/src/a.py b/src/a.py\n"
     assert out.splitlines()[0] == f"PR #7 Add the thing: 2 files, 3 comments, diff in {out_path}"
     assert result == {
-        "pr": 7, "title": "Add the thing", "author": "Sam", "source": "ACME-7-thing",
-        "destination": "master", "head": "abc123", "description": "why",
+        "pr": 7,
+        "title": "Add the thing",
+        "author": "Sam",
+        "source": "ACME-7-thing",
+        "destination": "master",
+        "head": "abc123",
+        "description": "why",
         "url": "https://bitbucket.org/ws/slug/pull-requests/7",
         "files": [
             {"path": "src/a.py", "status": "modified", "previous_path": None, "additions": 3, "deletions": 1},
             {"path": "src/c.py", "status": "renamed", "previous_path": "src/b.py", "additions": 0, "deletions": 9},
         ],
         "comments": [
-            {"id": 1, "kind": "inline", "author": "Sam", "created": "2026-09-13T09:00:00+00:00",
-             "body": "Why remove the retry?", "path": "src/b.py", "line": 8, "reply_to": None, "state": None},
-            {"id": 3, "kind": "comment", "author": "Alex", "created": "2026-09-14T09:00:00+00:00",
-             "body": "Rebased on master", "path": None, "line": None, "reply_to": None, "state": None},
-            {"id": 4, "kind": "inline", "author": "Alex", "created": "2026-09-14T10:00:00+00:00",
-             "body": "Dropped it", "path": "src/b.py", "line": 8, "reply_to": 1, "state": None},
+            {
+                "id": 1,
+                "kind": "inline",
+                "author": "Sam",
+                "created": "2026-09-13T09:00:00+00:00",
+                "body": "Why remove the retry?",
+                "path": "src/b.py",
+                "line": 8,
+                "reply_to": None,
+                "state": None,
+            },
+            {
+                "id": 3,
+                "kind": "comment",
+                "author": "Alex",
+                "created": "2026-09-14T09:00:00+00:00",
+                "body": "Rebased on master",
+                "path": None,
+                "line": None,
+                "reply_to": None,
+                "state": None,
+            },
+            {
+                "id": 4,
+                "kind": "inline",
+                "author": "Alex",
+                "created": "2026-09-14T10:00:00+00:00",
+                "body": "Dropped it",
+                "path": "src/b.py",
+                "line": 8,
+                "reply_to": 1,
+                "state": None,
+            },
         ],
         "diff_path": str(out_path),
     }
@@ -966,24 +1135,57 @@ def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, t
 def test_pr_diff_github_reads_every_kind_of_comment(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     base = "https://api.github.com/repos/owner/name/pulls/12"
-    pull = {"number": 12, "title": "Retry the upload", "user": {"login": "sam"}, "body": "why",
-            "head": {"ref": "ACME-12-retry", "sha": "abc123"}, "base": {"ref": "main"},
-            "html_url": "https://github.com/owner/name/pull/12"}
+    pull = {
+        "number": 12,
+        "title": "Retry the upload",
+        "user": {"login": "sam"},
+        "body": "why",
+        "head": {"ref": "ACME-12-retry", "sha": "abc123"},
+        "base": {"ref": "main"},
+        "html_url": "https://github.com/owner/name/pull/12",
+    }
     # GitHub keeps them in three places: the conversation, diff lines, and review bodies
     responses = {
         f"{base}/files?": [{"filename": "src/a.py", "status": "modified", "additions": 3, "deletions": 1}],
         "/issues/12/comments?": [
-            {"id": 1, "user": {"login": "sam"}, "created_at": "2026-09-12T09:00:00Z", "body": "Ready for a look"}],
+            {"id": 1, "user": {"login": "sam"}, "created_at": "2026-09-12T09:00:00Z", "body": "Ready for a look"}
+        ],
         f"{base}/comments?": [
-            {"id": 3, "user": {"login": "sam"}, "created_at": "2026-09-13T11:00:00Z", "body": "Dropped it",
-             "path": "src/a.py", "line": None, "original_line": 40, "in_reply_to_id": 2},
-            {"id": 2, "user": {"login": "me"}, "created_at": "2026-09-13T10:00:00Z", "body": "Why the retry?",
-             "path": "src/a.py", "line": 40}],
+            {
+                "id": 3,
+                "user": {"login": "sam"},
+                "created_at": "2026-09-13T11:00:00Z",
+                "body": "Dropped it",
+                "path": "src/a.py",
+                "line": None,
+                "original_line": 40,
+                "in_reply_to_id": 2,
+            },
+            {
+                "id": 2,
+                "user": {"login": "me"},
+                "created_at": "2026-09-13T10:00:00Z",
+                "body": "Why the retry?",
+                "path": "src/a.py",
+                "line": 40,
+            },
+        ],
         f"{base}/reviews?": [
-            {"id": 9, "user": {"login": "me"}, "submitted_at": "2026-09-13T10:00:05Z",
-             "body": "One question inline", "state": "CHANGES_REQUESTED"},
-            {"id": 10, "user": {"login": "me"}, "submitted_at": "2026-09-14T08:00:00Z", "body": "",
-             "state": "APPROVED"}],
+            {
+                "id": 9,
+                "user": {"login": "me"},
+                "submitted_at": "2026-09-13T10:00:05Z",
+                "body": "One question inline",
+                "state": "CHANGES_REQUESTED",
+            },
+            {
+                "id": 10,
+                "user": {"login": "me"},
+                "submitted_at": "2026-09-14T08:00:00Z",
+                "body": "",
+                "state": "APPROVED",
+            },
+        ],
     }
     fetched = []
 
@@ -1002,15 +1204,50 @@ def test_pr_diff_github_reads_every_kind_of_comment(monkeypatch, capsys, tmp_pat
     assert out.splitlines()[0] == f"PR #12 Retry the upload: 1 files, 4 comments, diff in {out_path}"
     assert f"{base}/reviews?per_page=100&page=1" in fetched
     assert result["comments"] == [
-        {"id": 1, "kind": "comment", "author": "sam", "created": "2026-09-12T09:00:00Z",
-         "body": "Ready for a look", "path": None, "line": None, "reply_to": None, "state": None},
-        {"id": 2, "kind": "inline", "author": "me", "created": "2026-09-13T10:00:00Z",
-         "body": "Why the retry?", "path": "src/a.py", "line": 40, "reply_to": None, "state": None},
-        {"id": 9, "kind": "review", "author": "me", "created": "2026-09-13T10:00:05Z",
-         "body": "One question inline", "path": None, "line": None, "reply_to": None,
-         "state": "CHANGES_REQUESTED"},
-        {"id": 3, "kind": "inline", "author": "sam", "created": "2026-09-13T11:00:00Z",
-         "body": "Dropped it", "path": "src/a.py", "line": 40, "reply_to": 2, "state": None},
+        {
+            "id": 1,
+            "kind": "comment",
+            "author": "sam",
+            "created": "2026-09-12T09:00:00Z",
+            "body": "Ready for a look",
+            "path": None,
+            "line": None,
+            "reply_to": None,
+            "state": None,
+        },
+        {
+            "id": 2,
+            "kind": "inline",
+            "author": "me",
+            "created": "2026-09-13T10:00:00Z",
+            "body": "Why the retry?",
+            "path": "src/a.py",
+            "line": 40,
+            "reply_to": None,
+            "state": None,
+        },
+        {
+            "id": 9,
+            "kind": "review",
+            "author": "me",
+            "created": "2026-09-13T10:00:05Z",
+            "body": "One question inline",
+            "path": None,
+            "line": None,
+            "reply_to": None,
+            "state": "CHANGES_REQUESTED",
+        },
+        {
+            "id": 3,
+            "kind": "inline",
+            "author": "sam",
+            "created": "2026-09-13T11:00:00Z",
+            "body": "Dropped it",
+            "path": "src/a.py",
+            "line": 40,
+            "reply_to": 2,
+            "state": None,
+        },
     ]
 
 
@@ -1029,10 +1266,20 @@ def _record_http(monkeypatch, responses):
 def test_pr_review_bitbucket_posts_the_comment_before_the_vote(monkeypatch, capsys):
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
-    calls = _record_http(monkeypatch, {"/comments": {"id": 55},
-                                       "/request-changes": {"state": "changes_requested"}})
-    ticket_pr.main(["pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7",
-                    "--action", "request-changes", "--body", "The banner prints too early."])
+    calls = _record_http(monkeypatch, {"/comments": {"id": 55}, "/request-changes": {"state": "changes_requested"}})
+    ticket_pr.main(
+        [
+            "pr-review",
+            "--repo",
+            "bitbucket:ws/slug",
+            "--pr",
+            "7",
+            "--action",
+            "request-changes",
+            "--body",
+            "The banner prints too early.",
+        ]
+    )
     base = "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7"
     assert calls == [
         ("POST", f"{base}/comments", {"content": {"raw": "The banner prints too early."}}),
@@ -1055,20 +1302,29 @@ def test_pr_review_bitbucket_approve_is_one_bodiless_post(monkeypatch, capsys):
 
 def test_pr_review_github_submits_one_review(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    calls = _record_http(monkeypatch, {"/reviews": {
-        "state": "COMMENTED", "html_url": "https://github.com/owner/name/pull/12#pullrequestreview-1"}})
-    ticket_pr.main(["pr-review", "--repo", "github:owner/name", "--pr", "12",
-                    "--action", "comment", "--body", "Why the retry?"])
-    assert calls == [("POST", "https://api.github.com/repos/owner/name/pulls/12/reviews",
-                      {"event": "COMMENT", "body": "Why the retry?"})]
+    calls = _record_http(
+        monkeypatch,
+        {"/reviews": {"state": "COMMENTED", "html_url": "https://github.com/owner/name/pull/12#pullrequestreview-1"}},
+    )
+    ticket_pr.main(
+        ["pr-review", "--repo", "github:owner/name", "--pr", "12", "--action", "comment", "--body", "Why the retry?"]
+    )
+    assert calls == [
+        (
+            "POST",
+            "https://api.github.com/repos/owner/name/pulls/12/reviews",
+            {"event": "COMMENT", "body": "Why the retry?"},
+        )
+    ]
     assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["state"] == "COMMENTED"
 
 
 def test_pr_review_rejects_an_empty_body(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     with pytest.raises(SystemExit, match="empty review body"):
-        ticket_pr.main(["pr-review", "--repo", "github:owner/name", "--pr", "12",
-                        "--action", "request-changes", "--body", "  "])
+        ticket_pr.main(
+            ["pr-review", "--repo", "github:owner/name", "--pr", "12", "--action", "request-changes", "--body", "  "]
+        )
 
 
 def test_review_commands_dry_run(monkeypatch, capsys):
@@ -1076,11 +1332,13 @@ def test_review_commands_dry_run(monkeypatch, capsys):
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
     out = _run_cli(["--dry-run", "review-queue", "--repo", "bitbucket:ws/slug"], monkeypatch, capsys)
     assert "[dry-run] would list open PRs in bitbucket:ws/slug" in out
-    out = _run_cli(["--dry-run", "pr-diff", "--repo", "bitbucket:ws/slug", "--pr", "7"],
-                   monkeypatch, capsys)
+    out = _run_cli(["--dry-run", "pr-diff", "--repo", "bitbucket:ws/slug", "--pr", "7"], monkeypatch, capsys)
     assert json.loads(out.strip().splitlines()[-1])["dry_run"] is True
-    out = _run_cli(["--dry-run", "pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7",
-                    "--action", "approve"], monkeypatch, capsys)
+    out = _run_cli(
+        ["--dry-run", "pr-review", "--repo", "bitbucket:ws/slug", "--pr", "7", "--action", "approve"],
+        monkeypatch,
+        capsys,
+    )
     assert "[dry-run] POST https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7/approve" in out
 
 
@@ -1088,9 +1346,15 @@ def test_review_commands_dry_run(monkeypatch, capsys):
 
 
 def _github_pull(state, auto_merge=None):
-    return {"number": 12, "node_id": "PR_node", "html_url": "https://github.com/owner/name/pull/12",
-            "head": {"sha": "abc123"}, "mergeable": True, "mergeable_state": state,
-            "auto_merge": auto_merge}
+    return {
+        "number": 12,
+        "node_id": "PR_node",
+        "html_url": "https://github.com/owner/name/pull/12",
+        "head": {"sha": "abc123"},
+        "mergeable": True,
+        "mergeable_state": state,
+        "auto_merge": auto_merge,
+    }
 
 
 def test_merge_pr_dry_run_is_parseable(monkeypatch, capsys):
@@ -1102,21 +1366,23 @@ def test_merge_pr_dry_run_is_parseable(monkeypatch, capsys):
 
 def test_merge_pr_merges_a_clean_pr_pinned_to_its_head(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    calls = _record_http(monkeypatch, {"/merge": {"sha": "def456", "merged": True},
-                                       "/pulls/12": _github_pull("clean")})
+    calls = _record_http(monkeypatch, {"/merge": {"sha": "def456", "merged": True}, "/pulls/12": _github_pull("clean")})
     ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
     base = "https://api.github.com/repos/owner/name/pulls/12"
-    assert calls == [("GET", base, None),
-                     ("PUT", f"{base}/merge", {"merge_method": "squash", "sha": "abc123"})]
+    assert calls == [("GET", base, None), ("PUT", f"{base}/merge", {"merge_method": "squash", "sha": "abc123"})]
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert result["merged"] is True and result["sha"] == "def456"
 
 
 def test_merge_pr_enables_auto_merge_while_blocked(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    calls = _record_http(monkeypatch, {
-        "/graphql": {"data": {}},
-        "/pulls/12": [_github_pull("blocked"), _github_pull("blocked", {"merge_method": "squash"})]})
+    calls = _record_http(
+        monkeypatch,
+        {
+            "/graphql": {"data": {}},
+            "/pulls/12": [_github_pull("blocked"), _github_pull("blocked", {"merge_method": "squash"})],
+        },
+    )
     ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
     assert [call[:2] for call in calls] == [
         ("GET", "https://api.github.com/repos/owner/name/pulls/12"),
@@ -1138,8 +1404,12 @@ def test_merge_pr_refuses_a_pr_with_a_failing_check(monkeypatch):
 
 def test_merge_pr_reports_a_rejected_auto_merge(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
-    _record_http(monkeypatch, {
-        "/graphql": {"errors": [{"message": "Auto merge is not allowed for this repository"}]},
-        "/pulls/12": _github_pull("blocked")})
+    _record_http(
+        monkeypatch,
+        {
+            "/graphql": {"errors": [{"message": "Auto merge is not allowed for this repository"}]},
+            "/pulls/12": _github_pull("blocked"),
+        },
+    )
     with pytest.raises(SystemExit, match="Auto merge is not allowed"):
         ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])

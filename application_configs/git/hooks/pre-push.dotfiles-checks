@@ -10,10 +10,9 @@
 # pre-commit, because a leaked identifier must never be written into history at
 # all, not merely kept off the remote.
 #
-# It runs THIS repo's own pinned tools through uv - the four commands CLAUDE.md
+# It runs THIS repo's own pinned tools through uv - the commands CLAUDE.md
 # documents - rather than the pre-commit framework, which would be a second set
-# of linter pins alongside pyproject.toml and uv.lock and would drag in a
-# formatter this repo does not use.
+# of linter pins alongside pyproject.toml and uv.lock.
 #
 # Fails closed: no uv, no push. `git push --no-verify` skips it, which is the
 # escape hatch for a push that has to go out now.
@@ -45,19 +44,26 @@ fi
 
 cd "$TOP"
 
-# Same four commands as CLAUDE.md's "Python environment & tooling" and "Tests",
-# in cheapest-first order so a formatting slip fails before the suite runs.
-# --check-only/--quiet: a hook reports, it never rewrites files under a push.
+# The same commands as CLAUDE.md's "Python environment & tooling" and "Tests",
+# cheapest first so a formatting slip fails before the suite runs. ruff check
+# covers what flake8 and isort used to, in one pass.
+#
+# --check and no --fix: a hook REPORTS. Rewriting files mid-push would leave the
+# fixed versions outside the commits being pushed, so you would push the
+# unformatted code anyway and find a dirty tree afterwards. The message names
+# the one command that fixes it instead.
 run_check() {
     echo "pre-push: $*"
     if ! uv run "$@"; then
-        echo "pre-push: '$*' failed; fix it or push with --no-verify" >&2
+        echo "pre-push: '$*' failed. Fix with:" >&2
+        echo "    uv run ruff format . && uv run ruff check --fix ." >&2
+        echo "  then amend or commit. To push anyway: git push --no-verify" >&2
         exit 1
     fi
 }
 
-run_check isort --check-only .
-run_check flake8 .
+run_check ruff format --check .
+run_check ruff check .
 run_check mypy .
 run_check pytest -q
 

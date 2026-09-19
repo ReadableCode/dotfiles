@@ -78,14 +78,20 @@ def clear_token_cache():
 
 def consent_url(client_id, redirect_uri, scope):
     """The Google consent URL for ``scope``; offline + consent force a refresh token on every run."""
-    return GOOGLE_AUTH_URL + "?" + urlencode({
-        "client_id": client_id,
-        "redirect_uri": redirect_uri,
-        "response_type": "code",
-        "scope": scope,
-        "access_type": "offline",
-        "prompt": "consent",
-    })
+    return (
+        GOOGLE_AUTH_URL
+        + "?"
+        + urlencode(
+            {
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": scope,
+                "access_type": "offline",
+                "prompt": "consent",
+            }
+        )
+    )
 
 
 def run_loopback_consent(client_id, client_secret, scope, label):
@@ -122,13 +128,17 @@ def run_loopback_consent(client_id, client_secret, scope, label):
     if "error" in captured:
         print(f"authorization failed: {captured['error']}")
         return None
-    response = requests.post(GOOGLE_TOKEN_URL, data={
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "code": captured["code"],
-        "redirect_uri": redirect_uri,
-        "grant_type": "authorization_code",
-    }, timeout=DEFAULT_HTTP_TIMEOUT)
+    response = requests.post(
+        GOOGLE_TOKEN_URL,
+        data={
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": captured["code"],
+            "redirect_uri": redirect_uri,
+            "grant_type": "authorization_code",
+        },
+        timeout=DEFAULT_HTTP_TIMEOUT,
+    )
     payload = response.json()
     if "refresh_token" not in payload:
         print(f"token exchange failed ({response.status_code}): {response.text[:300]}")

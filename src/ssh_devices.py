@@ -8,13 +8,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import pandas as pd
 import paramiko
-from config import grandparent_dir, parent_dir
 from dotenv import load_dotenv
 from readable_utils.display_tools import (  # noqa F401
     pprint_df,
     pprint_dict,
     print_logger,
 )
+
+from config import grandparent_dir, parent_dir
 from utils.inventory_tools import find_inventory_paths
 
 # %%
@@ -183,9 +184,7 @@ def run_commands_on_hosts(dict_systems, dict_commands, password):
                     "port": port,
                     "command_name": command_name,
                 }
-                fut = executor.submit(
-                    run_command_on_host, host, user, port, password, command_text
-                )
+                fut = executor.submit(run_command_on_host, host, user, port, password, command_text)
                 future_to_meta[fut] = meta
 
         for fut in as_completed(future_to_meta):

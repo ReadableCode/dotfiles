@@ -66,9 +66,7 @@ def short_name(name):
 def load_hosts(git_dir, local_hostname=None, run=subprocess.run):
     """Every ssh-reachable machine with a shell, this one excluded."""
     script = os.path.join(git_dir, "dotfiles", "src", "ssh_aliases.py")
-    listed = run(
-        ["python3", script, "--format", "hosts", "--root", git_dir], capture_output=True, text=True
-    )
+    listed = run(["python3", script, "--format", "hosts", "--root", git_dir], capture_output=True, text=True)
     if listed.returncode:
         raise RuntimeError("listing hosts via {} failed: {}".format(script, listed.stderr.strip()))
     local = short_name(local_hostname if local_hostname is not None else socket.gethostname())

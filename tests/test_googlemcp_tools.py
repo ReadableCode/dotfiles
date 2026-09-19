@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, urlparse
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from utils import google_oauth_tools, googlemcp_tools
 
 # %%
@@ -283,16 +284,20 @@ def test_gmail_search_returns_summaries_from_metadata(monkeypatch):
     def handler(method, url, params, payload):
         if url.endswith("/messages"):
             return FakeResponse({"messages": [{"id": "m1"}, {"id": "m2"}]})
-        return FakeResponse({
-            "id": "m1",
-            "threadId": "t1",
-            "snippet": "hi",
-            "labelIds": ["INBOX", "UNREAD"],
-            "payload": {"headers": [
-                {"name": "From", "value": "a@b.com"},
-                {"name": "Subject", "value": "Hello"},
-            ]},
-        })
+        return FakeResponse(
+            {
+                "id": "m1",
+                "threadId": "t1",
+                "snippet": "hi",
+                "labelIds": ["INBOX", "UNREAD"],
+                "payload": {
+                    "headers": [
+                        {"name": "From", "value": "a@b.com"},
+                        {"name": "Subject", "value": "Hello"},
+                    ]
+                },
+            }
+        )
 
     calls = stub_requests(monkeypatch, handler)
     results = googlemcp_tools.gmail_search(MAILBOX, query="is:unread", max_results=2)
@@ -360,8 +365,11 @@ def test_gmail_get_message_lists_attachments(monkeypatch):
             "headers": [],
             "parts": [
                 {"mimeType": "text/plain", "body": {"data": b64("body")}},
-                {"filename": "book.xlsx", "mimeType": "application/vnd.ms-excel",
-                 "body": {"size": 42, "attachmentId": "a1"}},
+                {
+                    "filename": "book.xlsx",
+                    "mimeType": "application/vnd.ms-excel",
+                    "body": {"size": 42, "attachmentId": "a1"},
+                },
             ],
         },
     }
@@ -417,13 +425,17 @@ def test_gmail_send_message_threads_a_reply(monkeypatch):
 
     def handler(method, url, params, payload):
         if method == "GET":
-            return FakeResponse({
-                "threadId": "t1",
-                "payload": {"headers": [
-                    {"name": "Message-ID", "value": "<orig@mail>"},
-                    {"name": "References", "value": "<older@mail>"},
-                ]},
-            })
+            return FakeResponse(
+                {
+                    "threadId": "t1",
+                    "payload": {
+                        "headers": [
+                            {"name": "Message-ID", "value": "<orig@mail>"},
+                            {"name": "References", "value": "<older@mail>"},
+                        ]
+                    },
+                }
+            )
         return FakeResponse({"id": "m9", "threadId": "t1"})
 
     calls = stub_requests(monkeypatch, handler)
@@ -469,8 +481,12 @@ def test_calendar_get_event_keeps_creator_organizer_and_attendees(monkeypatch):
     assert event["organizer"] == {"email": "owner@x.com"}
     assert event["created"] == "2026-08-26T16:55:18.000Z"
     assert event["attendees"][1] == {
-        "email": "me@x.com", "name": "", "response": "needsAction",
-        "optional": True, "organizer": False, "self": True,
+        "email": "me@x.com",
+        "name": "",
+        "response": "needsAction",
+        "optional": True,
+        "organizer": False,
+        "self": True,
     }
 
 
@@ -531,17 +547,26 @@ def test_calendar_delete_event_reports_what_it_removed(monkeypatch):
     calendar_env(monkeypatch)
     calls = stub_requests(monkeypatch, lambda *args: FakeResponse({}))
     assert googlemcp_tools.calendar_delete_event(CALENDAR_SOURCE, "e1") == {
-        "id": "e1", "calendar_id": "primary", "deleted": True
+        "id": "e1",
+        "calendar_id": "primary",
+        "deleted": True,
     }
     assert calls[0]["method"] == "DELETE"
 
 
 def test_calendar_list_calendars_flags_the_primary(monkeypatch):
     calendar_env(monkeypatch)
-    stub_requests(monkeypatch, lambda *args: FakeResponse({"items": [
-        {"id": "p", "summary": "Mine", "primary": True, "accessRole": "owner"},
-        {"id": "t", "summaryOverride": "Renamed", "summary": "Team", "accessRole": "reader"},
-    ]}))
+    stub_requests(
+        monkeypatch,
+        lambda *args: FakeResponse(
+            {
+                "items": [
+                    {"id": "p", "summary": "Mine", "primary": True, "accessRole": "owner"},
+                    {"id": "t", "summaryOverride": "Renamed", "summary": "Team", "accessRole": "reader"},
+                ]
+            }
+        ),
+    )
     calendars = googlemcp_tools.calendar_list_calendars(CALENDAR_SOURCE)
     assert calendars[0]["primary"] is True
     assert calendars[1]["name"] == "Renamed"  # summaryOverride wins
@@ -609,8 +634,11 @@ ATTACHMENT_MESSAGE = {
         "headers": [],
         "parts": [
             {"mimeType": "text/plain", "body": {"data": b64("body")}},
-            {"filename": "book.xlsx", "mimeType": "application/vnd.ms-excel",
-             "body": {"size": 5, "attachmentId": "a1"}},
+            {
+                "filename": "book.xlsx",
+                "mimeType": "application/vnd.ms-excel",
+                "body": {"size": 5, "attachmentId": "a1"},
+            },
         ],
     },
 }
@@ -749,7 +777,7 @@ def test_drive_download_file_never_overwrites(monkeypatch, tmp_path):
 
 def test_sheets_get_values_can_return_formulas(monkeypatch):
     drive_env(monkeypatch)
-    formula = [["=IMPORTRANGE(\"x\", \"Tab!A1\")"]]
+    formula = [['=IMPORTRANGE("x", "Tab!A1")']]
     calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"range": "Tab!A1:B2", "values": formula}))
     result = googlemcp_tools.sheets_get_values(DRIVE, "s1", "Tab!A1:B2", render="FORMULA")
     assert result == {"range": "Tab!A1:B2", "values": formula}

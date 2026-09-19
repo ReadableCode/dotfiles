@@ -26,6 +26,7 @@ import os
 import sys
 
 import yaml
+
 from config import grandparent_dir, parent_dir
 from utils import googlemcp_tools as gtools
 from utils.inventory_tools import credentials_context, find_credentials_dirs
@@ -128,7 +129,7 @@ class Gmail:
     def batch_modify(self, ids, action):
         """Relabel only - the payload can carry nothing but label ids, so no trash/delete path exists."""
         for start in range(0, len(ids), BATCH_MODIFY_LIMIT):
-            self.post("messages/batchModify", {"ids": ids[start:start + BATCH_MODIFY_LIMIT], **action})
+            self.post("messages/batchModify", {"ids": ids[start : start + BATCH_MODIFY_LIMIT], **action})
 
 
 # %%
@@ -278,9 +279,7 @@ def parse_args(argv=None):
     parser.add_argument("--config", help="explicit yaml path instead of discovering it from --context")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plan", help="show what apply would do; no writes")
-    sub.add_parser(
-        "apply", help="create missing labels/filters, delete filters not in the yaml, backfill flagged ones"
-    )
+    sub.add_parser("apply", help="create missing labels/filters, delete filters not in the yaml, backfill flagged ones")
     backfill = sub.add_parser("backfill", help="apply each filter's labels to existing matching mail")
     backfill.add_argument("--only", nargs="*", help="filter names to limit to")
     backfill.add_argument("--execute", action="store_true", help="really relabel; default is count only")

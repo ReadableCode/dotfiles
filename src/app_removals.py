@@ -37,6 +37,7 @@ from dataclasses import dataclass, field
 
 import yaml
 from readable_utils.host_tools import get_uppercase_hostname
+
 from deploy_configs import REPO_ROOT, host_allowed, member_overlay_dirs
 from utils.inventory_tools import overlay_context
 
@@ -364,7 +365,7 @@ def show_simulation(entry, run=run_capture):
         return
     body = output.strip()
     print(paint(f"  {' '.join(manager.simulate)} {entry['package']}:", "dim"))
-    for line in (body.splitlines() or ["(no output)"]):
+    for line in body.splitlines() or ["(no output)"]:
         print(f"    {line}")
 
 
@@ -389,10 +390,12 @@ def run(list_only=False, assume_yes=False, entries=None, system=None, hostname=N
 
     removable, protected = candidates(entries, system=system, hostname=hostname)
     for entry in protected:
-        print(paint(
-            f"skipping {describe(entry)}: an app list still names it, so the app list wins",
-            "yellow",
-        ))
+        print(
+            paint(
+                f"skipping {describe(entry)}: an app list still names it, so the app list wins",
+                "yellow",
+            )
+        )
     if not removable:
         print(paint("No listed apps to remove are installed on this machine.", "green"))
         return 0

@@ -9,6 +9,7 @@ import subprocess
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from src import deploy_configs
 from utils.inventory_tools import (
     find_inventory_paths,
@@ -174,8 +175,9 @@ def test_load_manifests_discovers_overlays_and_resolves_repo_against_overlay_roo
     plan = deploy_configs.build_plan(entries, "darwin", "ENVY")
     rows = {row["name"]: row for row in plan}
     # main entry resolves against the dotfiles root, overlay entry against ITS repo root
-    assert rows["main_conf"]["repo"] == os.path.join(str(overlay_tree), "dotfiles", "application_configs",
-                                                     "app", "conf")
+    assert rows["main_conf"]["repo"] == os.path.join(
+        str(overlay_tree), "dotfiles", "application_configs", "app", "conf"
+    )
     assert rows["acme_conf"]["repo"] == os.path.join(str(overlay_tree), "acme_credentials", "configs", "acme.json")
     # {repo_parent} still expands against the DOTFILES parent, not the overlay repo
     assert rows["acme_conf"]["dest"] == os.path.join(str(overlay_tree), "some-repo", "acme.json")
@@ -286,8 +288,9 @@ def test_overlay_of_a_context_the_host_record_is_not_in_is_not_loaded(overlay_tr
     assert [os.path.basename(d) for d in loaded] == ["personal_credentials"]
     assert [(os.path.basename(d), context) for d, context in skipped] == [("acme_credentials", "acme")]
     # the record naming the context is the one thing that lets the overlay in
-    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
-                     [{"name": "Hub", "contexts": ["acme"]}])
+    write_records_at(
+        str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub", "contexts": ["acme"]}]
+    )
     _, manifest_paths = deploy_configs.load_manifests()
     assert [os.path.basename(path) for path in manifest_paths] == ["deploy_manifest.yaml", "acme_manifest.yaml"]
     assert deploy_configs.member_overlay_dirs()[1] == []
@@ -304,10 +307,14 @@ def test_opt_in_overlay_is_gated_by_the_context_whose_repos_file_declares_it(ove
     write_records_at(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), [{"name": "ACMEBOX"}])
     write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub"}])
     write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["acme_dev"])
-    write_manifest_at(str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
-                      [{"name": "acme_tool", "repo": "tool.md", "dest": {"darwin": "~/.tool"}}])
-    write_manifest_at(str(overlay_tree / "stray_dev" / "stray_dev_manifest.yaml"),
-                      [{"name": "stray_tool", "repo": "tool.md", "dest": {"darwin": "~/.stray"}}])
+    write_manifest_at(
+        str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
+        [{"name": "acme_tool", "repo": "tool.md", "dest": {"darwin": "~/.tool"}}],
+    )
+    write_manifest_at(
+        str(overlay_tree / "stray_dev" / "stray_dev_manifest.yaml"),
+        [{"name": "stray_tool", "repo": "tool.md", "dest": {"darwin": "~/.stray"}}],
+    )
     monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "HUB")
     assert deploy_configs.overlay_owner_context(str(overlay_tree / "acme_dev")) == "acme"
     assert deploy_configs.overlay_owner_context(str(overlay_tree / "stray_dev")) is None
@@ -361,8 +368,10 @@ def test_find_inventory_paths_reads_only_the_prefixed_name(tmp_path):
 
 def test_manifest_hosts_validate_against_union_of_inventories(overlay_tree):
     write_file(str(overlay_tree / "acme_credentials" / "acme_hosts.json"), '{"hosts": [{"name": "ACMEBOX"}]}')
-    write_file(str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
-               '{"hosts": [{"name": "Envy", "contexts": ["acme"]}]}')
+    write_file(
+        str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
+        '{"hosts": [{"name": "Envy", "contexts": ["acme"]}]}',
+    )
     write_manifest_at(
         str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
         [{"name": "acme_conf", "repo": "f1", "dest": {"darwin": "~/.f1"}, "hosts": ["ENVY", "ACMEBOX"]}],
@@ -397,8 +406,7 @@ def test_real_manifest_hosts_all_exist_in_union_inventory():
     entries, _ = deploy_configs.load_manifests()
     for entry in entries:
         for host in entry.get("hosts") or []:
-            assert str(host).split(".")[0].upper() in known_hosts, \
-                f"{entry['name']} targets unknown host {host}"
+            assert str(host).split(".")[0].upper() in known_hosts, f"{entry['name']} targets unknown host {host}"
 
 
 def test_real_manifests_are_valid_and_repo_paths_exist():
@@ -426,8 +434,9 @@ def test_real_manifests_are_valid_and_repo_paths_exist():
 def write_repos_file(path, names):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as file_handle:
-        yaml.safe_dump({"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": n} for n in names]},
-                       file_handle)
+        yaml.safe_dump(
+            {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": n} for n in names]}, file_handle
+        )
 
 
 def per_repo_entry(**overrides):
@@ -489,8 +498,14 @@ def test_per_context_repo_can_name_other_contexts_and_add_or_drop_repos(overlay_
     write_repos_file(str(overlay_tree / "dotfiles" / "dotfiles_repos.yaml"), ["dotfiles", "svc-b"])
     write_manifest_at(
         str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
-        [per_repo_entry(per_context_repo=["acme", "dotfiles"], extra_repos=["acme_credentials"],
-                        exclude_repos=["svc-b"], requires="{repo_parent}/acme_credentials")],
+        [
+            per_repo_entry(
+                per_context_repo=["acme", "dotfiles"],
+                extra_repos=["acme_credentials"],
+                exclude_repos=["svc-b"],
+                requires="{repo_parent}/acme_credentials",
+            )
+        ],
     )
 
     entries, _ = deploy_configs.load_manifests()
@@ -807,9 +822,7 @@ def test_deploy_fixes_dangling_old_name_workspace_link(tmp_path, fake_home, monk
     monkeypatch.setattr(deploy_configs, "REPO_ROOT", str(repo_root))
     monkeypatch.setattr(deploy_configs, "BACKUP_ROOT", str(repo_root / "data" / "config_backups"))
     monkeypatch.setattr(deploy_configs, "get_uppercase_hostname", lambda: "ENVY.LOCAL")
-    variant = write_file(
-        str(repo_root / "application_configs" / "vscode" / "workspace.envy.code-workspace"), "ws"
-    )
+    variant = write_file(str(repo_root / "application_configs" / "vscode" / "workspace.envy.code-workspace"), "ws")
     dest_template = "{repo_parent}/{host}.code-workspace"
     manifest_path = write_manifest(
         tmp_path,
@@ -968,8 +981,11 @@ def test_adopt_copies_newer_system_edit_into_repo_worktree_then_links(tmp_path):
     repo_root = str(tmp_path / "repo")
     repo_file, dest = _drifted_pair(tmp_path, "repo version", "in-app edit", newer="system")
     result = deploy_configs.deploy_config(
-        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
-        repo_root=repo_root, on_drift="adopt",
+        repo_file,
+        dest,
+        backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root,
+        on_drift="adopt",
     )
     assert result == "adopted"
     assert os.path.islink(dest)
@@ -987,8 +1003,11 @@ def test_adopt_still_replaces_when_repo_side_is_newer(tmp_path):
     repo_root = str(tmp_path / "repo")
     repo_file, dest = _drifted_pair(tmp_path, "pulled update", "stale pre-pull", newer="repo")
     result = deploy_configs.deploy_config(
-        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
-        repo_root=repo_root, on_drift="adopt",
+        repo_file,
+        dest,
+        backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root,
+        on_drift="adopt",
     )
     assert result == "replaced"
     with open(repo_file, encoding="utf-8") as file_handle:
@@ -1000,8 +1019,11 @@ def test_adopt_with_matching_content_just_relinks(tmp_path):
     repo_file = write_file(os.path.join(repo_root, "application_configs", "app", "conf"), "same")
     dest = write_file(str(tmp_path / "sys" / "conf"), "same")
     result = deploy_configs.deploy_config(
-        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
-        repo_root=repo_root, on_drift="adopt",
+        repo_file,
+        dest,
+        backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root,
+        on_drift="adopt",
     )
     assert result == "replaced"
     assert os.path.islink(dest)
@@ -1013,8 +1035,11 @@ def test_adopt_is_stable_after_adoption(tmp_path):
     # copy2 preserves the edit's mtime, so a second deploy is a plain no-op
     repo_root = str(tmp_path / "repo")
     repo_file, dest = _drifted_pair(tmp_path, "repo version", "in-app edit", newer="system")
-    kwargs = {"backup_root": os.path.join(repo_root, "data", "config_backups"),
-              "repo_root": repo_root, "on_drift": "adopt"}
+    kwargs = {
+        "backup_root": os.path.join(repo_root, "data", "config_backups"),
+        "repo_root": repo_root,
+        "on_drift": "adopt",
+    }
     assert deploy_configs.deploy_config(repo_file, dest, **kwargs) == "adopted"
     assert deploy_configs.deploy_config(repo_file, dest, **kwargs) == "noop"
 
@@ -1028,8 +1053,11 @@ def test_adopt_json_lands_in_canonical_form(tmp_path):
     os.utime(repo_file, (1000000, 1000000))
     os.utime(dest, (2000000, 2000000))
     result = deploy_configs.deploy_config(
-        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
-        repo_root=repo_root, on_drift="adopt",
+        repo_file,
+        dest,
+        backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root,
+        on_drift="adopt",
     )
     assert result == "adopted"
     expected = '{\n  "alpha": {\n    "a": [\n      3,\n      1,\n      2\n    ],\n    "b": 2\n  },\n  "zeta": 1\n}\n'
@@ -1047,8 +1075,11 @@ def test_adopt_json_format_only_drift_is_not_an_edit(tmp_path):
     os.utime(repo_file, (1000000, 1000000))
     os.utime(dest, (2000000, 2000000))
     result = deploy_configs.deploy_config(
-        repo_file, dest, backup_root=os.path.join(repo_root, "data", "config_backups"),
-        repo_root=repo_root, on_drift="adopt",
+        repo_file,
+        dest,
+        backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root,
+        on_drift="adopt",
     )
     assert result == "replaced"
     with open(repo_file, encoding="utf-8") as file_handle:
@@ -1062,8 +1093,11 @@ def test_adopt_invalid_json_falls_back_to_verbatim_copy(tmp_path):
     os.rename(repo_file, repo_file_json)
     dest_json = dest  # dest extension is irrelevant; adoption keys off the repo path
     result = deploy_configs.deploy_config(
-        repo_file_json, dest_json, backup_root=os.path.join(repo_root, "data", "config_backups"),
-        repo_root=repo_root, on_drift="adopt",
+        repo_file_json,
+        dest_json,
+        backup_root=os.path.join(repo_root, "data", "config_backups"),
+        repo_root=repo_root,
+        on_drift="adopt",
     )
     assert result == "adopted"
     with open(repo_file_json, encoding="utf-8") as file_handle:
@@ -1326,10 +1360,13 @@ def _removals(monkeypatch, entries):
 
 def test_prune_candidates_come_from_removals_and_skip_still_wanted_dests(monkeypatch, fake_home):
     """A dest some entry still wants is never pruned, even if a removals line names it."""
-    _removals(monkeypatch, [
-        {"name": "dead", "dest": {"darwin": "~/.gone"}},
-        {"name": "revived", "dest": {"darwin": "~/.keep"}},
-    ])
+    _removals(
+        monkeypatch,
+        [
+            {"name": "dead", "dest": {"darwin": "~/.gone"}},
+            {"name": "revived", "dest": {"darwin": "~/.keep"}},
+        ],
+    )
     entries = [{"name": "keep", "repo": "r.txt", "dest": {"darwin": "~/.keep"}}]
     candidates = deploy_configs.build_prune_candidates(entries, "darwin", "ENVY")
     assert [dest for dest, _, _ in candidates] == [os.path.join(str(fake_home), ".gone")]
@@ -1338,10 +1375,13 @@ def test_prune_candidates_come_from_removals_and_skip_still_wanted_dests(monkeyp
 
 def test_prune_candidates_respect_requires_and_hosts(monkeypatch, fake_home):
     """A repo this machine never cloned has no link to prune; a hosts filter still applies."""
-    _removals(monkeypatch, [
-        {"name": "uncloned", "dest": {"darwin": "~/.a"}, "requires": "~/never-cloned-repo"},
-        {"name": "other_host", "dest": {"darwin": "~/.b"}, "hosts": ["SOMEOTHERBOX"]},
-    ])
+    _removals(
+        monkeypatch,
+        [
+            {"name": "uncloned", "dest": {"darwin": "~/.a"}, "requires": "~/never-cloned-repo"},
+            {"name": "other_host", "dest": {"darwin": "~/.b"}, "hosts": ["SOMEOTHERBOX"]},
+        ],
+    )
     assert deploy_configs.build_prune_candidates([], "darwin", "ENVY") == []
 
 
@@ -1353,9 +1393,11 @@ def test_prune_takes_back_the_links_of_an_overlay_this_machine_is_not_in(overlay
     write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub"}])
     write_manifest_at(
         str(overlay_tree / "acme_credentials" / "acme_manifest.yaml"),
-        [{"name": "acme_shard", "repo": "shell/acme.sh", "dest": {"darwin": "~/.acme.sh"}},
-         {"name": "acme_note", "repo": "shell/note.md", "dest": {"darwin": "~/.acme_note.md"}},
-         {"name": "acme_dir", "repo": "shell/dir", "dest": {"darwin": "~/.acme_dir"}}],
+        [
+            {"name": "acme_shard", "repo": "shell/acme.sh", "dest": {"darwin": "~/.acme.sh"}},
+            {"name": "acme_note", "repo": "shell/note.md", "dest": {"darwin": "~/.acme_note.md"}},
+            {"name": "acme_dir", "repo": "shell/dir", "dest": {"darwin": "~/.acme_dir"}},
+        ],
     )
     shard = write_file(str(overlay_tree / "acme_credentials" / "shell" / "acme.sh"), "x")
     write_file(str(overlay_tree / "acme_credentials" / "shell" / "note.md"), "x")
@@ -1368,8 +1410,9 @@ def test_prune_takes_back_the_links_of_an_overlay_this_machine_is_not_in(overlay
     candidates = deploy_configs.build_prune_candidates([], "darwin", "HUB")
     assert candidates == [(link, "unloaded overlay:acme_shard", False)]
     # the record listing the context ends the take-back
-    write_records_at(str(overlay_tree / "personal_credentials" / "personal_hosts.json"),
-                     [{"name": "Hub", "contexts": ["acme"]}])
+    write_records_at(
+        str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub", "contexts": ["acme"]}]
+    )
     assert deploy_configs.build_prune_candidates([], "darwin", "HUB") == []
 
 
@@ -1396,9 +1439,7 @@ def test_prune_removes_dangling_symlink_and_leaves_real_dirs(tmp_path, fake_home
     real_dir = os.path.join(str(fake_home), "realdir")
     os.makedirs(real_dir, exist_ok=True)
 
-    deploy_configs.run_prune(
-        [(dangling, "removals:x", False), (real_dir, "removals:y", False)], apply_changes=True
-    )
+    deploy_configs.run_prune([(dangling, "removals:x", False), (real_dir, "removals:y", False)], apply_changes=True)
     assert not os.path.lexists(dangling), "a dangling symlink is still ours to remove"
     assert os.path.isdir(real_dir), "a real directory is never pruned"
 
@@ -1420,8 +1461,13 @@ def test_removals_expand_per_context_repo_like_a_manifest(overlay_tree, monkeypa
     write_repos_file(str(overlay_tree / "acme_credentials" / "acme_repos.yaml"), ["svc-a", "svc-b"])
     write_manifest_at(
         str(overlay_tree / "acme_credentials" / "acme_removals.yaml"),
-        [{"name": "removed_repo_commands", "dest": {"darwin": "{repo_parent}/{context_repo}/.claude/commands"},
-          "per_context_repo": True}],
+        [
+            {
+                "name": "removed_repo_commands",
+                "dest": {"darwin": "{repo_parent}/{context_repo}/.claude/commands"},
+                "per_context_repo": True,
+            }
+        ],
     )
 
     entries = deploy_configs.load_removals()
@@ -1469,9 +1515,7 @@ def test_real_removals_files_parse_and_name_no_still_wanted_dest():
             for row in deploy_configs.build_plan(entries, platform_key, "ENVY")
             if row["action"] == "apply" and row["dest"]
         }
-        targeted = {
-            deploy_configs.resolve_dest(entry, platform_key, "ENVY") for entry in removals
-        }
+        targeted = {deploy_configs.resolve_dest(entry, platform_key, "ENVY") for entry in removals}
         assert not (wanted & targeted), f"removals would delete a live dest on {platform_key}"
 
 
@@ -1528,7 +1572,7 @@ def _application_config_payloads():
         cwd=deploy_configs.REPO_ROOT,
         text=True,
     ).split("\n")
-    return {path[len("application_configs/"):] for path in tracked if path.strip()}
+    return {path[len("application_configs/") :] for path in tracked if path.strip()}
 
 
 def _allowed_variant_tokens():
@@ -1555,7 +1599,7 @@ def _covered_payloads(entries):
         candidates = [repo_path]
         for variant in glob.glob(os.path.join(glob.escape(directory), f"{glob.escape(base)}.*{ext}")):
             name = os.path.basename(variant)
-            token = name[len(base) + 1:len(name) - len(ext) or None]
+            token = name[len(base) + 1 : len(name) - len(ext) or None]
             if has_inventory and token.lower() not in allowed_tokens:
                 continue  # a context tag, which the resolver never picks up
             candidates.append(variant)
@@ -1686,13 +1730,17 @@ def _git_repo(path, remote=True):
 
 
 def test_directory_flag_flows_from_removals_entry(monkeypatch, fake_home):
-    _removals(monkeypatch, [
-        {"name": "dead_repo", "dest": {"darwin": "~/gone-repo"}, "directory": True},
-        {"name": "dead_file", "dest": {"darwin": "~/.gone-file"}},
-    ])
+    _removals(
+        monkeypatch,
+        [
+            {"name": "dead_repo", "dest": {"darwin": "~/gone-repo"}, "directory": True},
+            {"name": "dead_file", "dest": {"darwin": "~/.gone-file"}},
+        ],
+    )
     candidates = deploy_configs.build_prune_candidates([], "darwin", "ENVY")
     assert [(os.path.basename(dest), allow) for dest, _, allow in candidates] == [
-        (".gone-file", False), ("gone-repo", True),
+        (".gone-file", False),
+        ("gone-repo", True),
     ]
 
 
@@ -1708,9 +1756,7 @@ def test_prune_directory_skips_dirty_checkout_and_plain_dirs(tmp_path, capsys):
     write_file(os.path.join(dirty, "uncommitted.txt"), "wip")
     plain = str(tmp_path / "plain_dir")
     os.makedirs(plain)
-    deploy_configs.run_prune(
-        [(dirty, "removals:x", True), (plain, "removals:y", True)], apply_changes=True
-    )
+    deploy_configs.run_prune([(dirty, "removals:x", True), (plain, "removals:y", True)], apply_changes=True)
     out = capsys.readouterr().out
     assert os.path.isdir(dirty) and "uncommitted changes" in out
     assert os.path.isdir(plain) and "not a git checkout" in out

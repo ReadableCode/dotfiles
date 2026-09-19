@@ -9,6 +9,7 @@ import subprocess
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from src import claude_mcp
 from utils import mcpservers_tools as mtools
 
@@ -497,7 +498,8 @@ def test_print_redacts_secrets_and_writes_nothing(clones, capsys):
 def _run_git(repo_dir, *args):
     subprocess.run(
         ["git", "-C", repo_dir, "-c", "user.email=t@t", "-c", "user.name=t", *args],
-        check=True, capture_output=True,
+        check=True,
+        capture_output=True,
     )
 
 
@@ -536,8 +538,9 @@ def test_sync_warnings_flag_unpushed_declarations(tmp_path):
 def test_sync_warnings_flag_a_stale_clone_after_fetch(tmp_path):
     clone, config_path = _tracked_clone(tmp_path, "acme_credentials")
     other = str(tmp_path / "other")
-    subprocess.run(["git", "clone", "-q", str(tmp_path / "acme_credentials_origin.git"), other],
-                   check=True, capture_output=True)
+    subprocess.run(
+        ["git", "clone", "-q", str(tmp_path / "acme_credentials_origin.git"), other], check=True, capture_output=True
+    )
     with open(os.path.join(other, "acme_credentials_mcp_servers.yaml"), "a", encoding="utf-8") as handle:
         handle.write("# newer\n")
     _run_git(other, "commit", "-aqm", "newer upstream declaration")

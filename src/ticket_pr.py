@@ -84,7 +84,7 @@ def parse_env_file(path):
             if not line or line.startswith("#") or "=" not in line:
                 continue
             if line.startswith("export "):
-                line = line[len("export "):]
+                line = line[len("export ") :]
             key, _, val = line.partition("=")
             key, val = key.strip(), val.strip()
             if len(val) >= 2 and val[0] == val[-1] and val[0] in "'\"":
@@ -108,8 +108,7 @@ def require_env(*names):
     missing = [name for name, val in zip(names, values) if not val]
     if missing:
         raise SystemExit(
-            f"missing required env var(s): {', '.join(missing)} "
-            "(set them in the environment or pass --env-file)"
+            f"missing required env var(s): {', '.join(missing)} (set them in the environment or pass --env-file)"
         )
     return values if len(values) > 1 else values[0]
 
@@ -228,15 +227,15 @@ def cmd_create_ticket(args):
                 print(f"WARNING: no Jira user matched {assignee!r}; leaving ticket unassigned")
             else:
                 fields["assignee"] = field
-    response = http_json("POST", f"{base}/rest/api/2/issue", headers,
-                         payload={"fields": fields}, dry_run=args.dry_run)
+    response = http_json("POST", f"{base}/rest/api/2/issue", headers, payload={"fields": fields}, dry_run=args.dry_run)
     key = response["key"] if response else "DRY-0"
     url = f"{base}/browse/{key}"
     emit(f"Created {key}: {url}", {"key": key, "url": url})
 
 
-JIRA_TICKET_FIELDS = ("summary,status,issuetype,priority,assignee,reporter,labels,"
-                      "created,updated,parent,description,attachment")
+JIRA_TICKET_FIELDS = (
+    "summary,status,issuetype,priority,assignee,reporter,labels,created,updated,parent,description,attachment"
+)
 
 
 def cmd_get_ticket(args):
@@ -275,8 +274,7 @@ def cmd_get_ticket(args):
     if result["attachments"]:
         saved = f", {len(result['attachments'])} attachments in {directory}"
     emit(
-        f"{result['key']} [{result['status']}] {result['summary']} "
-        f"({len(result['comments'])} comments{saved})",
+        f"{result['key']} [{result['status']}] {result['summary']} ({len(result['comments'])} comments{saved})",
         result,
     )
 
@@ -290,14 +288,16 @@ def jira_attachments(headers, attachments, directory):
         path = os.path.join(directory, attachment["filename"])
         with open(path, "wb") as handle:
             handle.write(http_bytes(attachment["content"], headers))
-        saved.append({
-            "filename": attachment["filename"],
-            "author": (attachment.get("author") or {}).get("displayName"),
-            "created": attachment.get("created"),
-            "mime_type": attachment.get("mimeType"),
-            "size": attachment.get("size"),
-            "path": path,
-        })
+        saved.append(
+            {
+                "filename": attachment["filename"],
+                "author": (attachment.get("author") or {}).get("displayName"),
+                "created": attachment.get("created"),
+                "mime_type": attachment.get("mimeType"),
+                "size": attachment.get("size"),
+                "path": path,
+            }
+        )
     return saved
 
 
@@ -312,28 +312,31 @@ def cmd_search_tickets(args):
     endpoint that replaced /rest/api/2/search.
     """
     base, headers = jira_base(), jira_headers()
-    query = urllib.parse.urlencode({
-        "jql": args.jql,
-        "fields": JIRA_SEARCH_FIELDS,
-        "maxResults": args.max_results,
-    })
-    found = http_json("GET", f"{base}/rest/api/3/search/jql?{query}", headers,
-                      dry_run=args.dry_run)
+    query = urllib.parse.urlencode(
+        {
+            "jql": args.jql,
+            "fields": JIRA_SEARCH_FIELDS,
+            "maxResults": args.max_results,
+        }
+    )
+    found = http_json("GET", f"{base}/rest/api/3/search/jql?{query}", headers, dry_run=args.dry_run)
     if found is None:  # dry run
         return
     tickets = []
     for issue in found.get("issues") or []:
         fields = issue.get("fields") or {}
-        tickets.append({
-            "key": issue.get("key"),
-            "summary": fields.get("summary"),
-            "status": (fields.get("status") or {}).get("name"),
-            "type": (fields.get("issuetype") or {}).get("name"),
-            "assignee": (fields.get("assignee") or {}).get("displayName"),
-            "created": fields.get("created"),
-            "updated": fields.get("updated"),
-            "url": f"{base}/browse/{issue.get('key')}",
-        })
+        tickets.append(
+            {
+                "key": issue.get("key"),
+                "summary": fields.get("summary"),
+                "status": (fields.get("status") or {}).get("name"),
+                "type": (fields.get("issuetype") or {}).get("name"),
+                "assignee": (fields.get("assignee") or {}).get("displayName"),
+                "created": fields.get("created"),
+                "updated": fields.get("updated"),
+                "url": f"{base}/browse/{issue.get('key')}",
+            }
+        )
     lines = [f"{len(tickets)} ticket(s) for: {args.jql}"]
     lines += [f"  {t['key']} [{t['status']}] {t['summary']}" for t in tickets]
     emit("\n".join(lines), {"jql": args.jql, "tickets": tickets})
@@ -350,21 +353,21 @@ def cmd_transition_ticket(args):
     """
     base, headers = jira_base(), jira_headers()
     url = f"{base}/rest/api/2/issue/{args.key}/transitions"
-    offered = http_json("GET", f"{url}?expand=transitions.fields", headers,
-                        dry_run=args.dry_run) or {}
+    offered = http_json("GET", f"{url}?expand=transitions.fields", headers, dry_run=args.dry_run) or {}
     transitions = []
     for t in offered.get("transitions") or []:
         required = {}
         for field_id, field in (t.get("fields") or {}).items():
             if field.get("required"):
-                required[field_id] = [v.get("name") or v.get("value")
-                                      for v in field.get("allowedValues") or []]
-        transitions.append({
-            "id": t["id"],
-            "name": t["name"],
-            "to": (t.get("to") or {}).get("name"),
-            "required": required,
-        })
+                required[field_id] = [v.get("name") or v.get("value") for v in field.get("allowedValues") or []]
+        transitions.append(
+            {
+                "id": t["id"],
+                "name": t["name"],
+                "to": (t.get("to") or {}).get("name"),
+                "required": required,
+            }
+        )
     names = ", ".join(t["name"] for t in transitions)
     if not args.to:
         lines = [f"{args.key} can move via: {names or '(none offered)'}"]
@@ -381,8 +384,9 @@ def cmd_transition_ticket(args):
     candidates = by_status or [t for t in transitions if t["name"].lower() == wanted]
     if len(candidates) > 1:
         options = "; ".join(f"{t['id']} {t['name']} -> {t['to']}" for t in candidates)
-        raise SystemExit(f"{args.key}: {args.to!r} matches more than one transition ({options}); "
-                         "pass the target status instead")
+        raise SystemExit(
+            f"{args.key}: {args.to!r} matches more than one transition ({options}); pass the target status instead"
+        )
     match = candidates[0] if candidates else None
     if match is None and not args.dry_run:
         raise SystemExit(f"{args.key} offers no transition to {args.to!r}; offered: {names}")
@@ -392,9 +396,15 @@ def cmd_transition_ticket(args):
         payload["fields"] = {"resolution": {"name": args.resolution}}
     http_json("POST", url, headers, payload=payload, dry_run=args.dry_run)
     landed = (match or {}).get("to") or (match or {}).get("name") or args.to
-    emit(f"{args.key} -> {landed}",
-         {"key": args.key, "status": landed, "transition": (match or {}).get("name") or args.to,
-          "url": f"{base}/browse/{args.key}"})
+    emit(
+        f"{args.key} -> {landed}",
+        {
+            "key": args.key,
+            "status": landed,
+            "transition": (match or {}).get("name") or args.to,
+            "url": f"{base}/browse/{args.key}",
+        },
+    )
 
 
 def cmd_add_comment(args):
@@ -403,8 +413,9 @@ def cmd_add_comment(args):
     body = body_text(args)
     if not body.strip():
         raise SystemExit("empty comment: pass --body or --body-file")
-    response = http_json("POST", f"{base}/rest/api/2/issue/{args.key}/comment", headers,
-                         payload={"body": body}, dry_run=args.dry_run)
+    response = http_json(
+        "POST", f"{base}/rest/api/2/issue/{args.key}/comment", headers, payload={"body": body}, dry_run=args.dry_run
+    )
     comment_id = response["id"] if response else "0"
     url = f"{base}/browse/{args.key}?focusedCommentId={comment_id}"
     emit(f"Commented on {args.key}: {url}", {"key": args.key, "id": comment_id, "url": url})
@@ -422,11 +433,13 @@ def jira_comments(base, headers, key, page_size=100):
         page = http_json("GET", f"{base}/rest/api/2/issue/{key}/comment?{query}", headers)
         batch = page.get("comments", [])
         for comment in batch:
-            comments.append({
-                "author": (comment.get("author") or {}).get("displayName"),
-                "created": comment.get("created"),
-                "body": comment.get("body") or "",
-            })
+            comments.append(
+                {
+                    "author": (comment.get("author") or {}).get("displayName"),
+                    "created": comment.get("created"),
+                    "body": comment.get("body") or "",
+                }
+            )
         start += len(batch)
         if not batch or start >= page.get("total", 0):
             return comments
@@ -455,8 +468,7 @@ def github_token():
         if token:
             return token
     raise SystemExit(
-        "no GitHub token: set GITHUB_TOKEN_ENV=<var naming the PAT> "
-        "(or GITHUB_TOKEN directly) in the env file"
+        "no GitHub token: set GITHUB_TOKEN_ENV=<var naming the PAT> (or GITHUB_TOKEN directly) in the env file"
     )
 
 
@@ -577,13 +589,19 @@ def bb_resolve_pr(repo, headers, number):
 
 def bb_pr_url(pull, repo):
     return (pull.get("links", {}).get("html", {}) or {}).get(
-        "href", f"https://bitbucket.org/{repo}/pull-requests/{pull.get('id', 0)}")
+        "href", f"https://bitbucket.org/{repo}/pull-requests/{pull.get('id', 0)}"
+    )
 
 
 def bb_post_comment(repo, number, body, headers, dry_run=False):
     """POST one PR comment (Bitbucket wants the text under content.raw); None on a dry run."""
-    return http_json("POST", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}/comments",
-                     headers, payload={"content": {"raw": body}}, dry_run=dry_run)
+    return http_json(
+        "POST",
+        f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}/comments",
+        headers,
+        payload={"content": {"raw": body}},
+        dry_run=dry_run,
+    )
 
 
 def bucket_bitbucket_status(status):
@@ -604,16 +622,14 @@ def cmd_create_pr(args):
 
     if resolve_provider(args.repo) == "bitbucket":
         if args.label:
-            print("WARNING: --label is ignored on Bitbucket (PRs have no label API)",
-                  file=sys.stderr)
+            print("WARNING: --label is ignored on Bitbucket (PRs have no label API)", file=sys.stderr)
         headers = bitbucket_headers()
         base = args.base
         if not base:
             if args.dry_run:
                 base = "<default-branch>"
             else:
-                base = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}",
-                                 headers)["mainbranch"]["name"]
+                base = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}", headers)["mainbranch"]["name"]
         payload = {
             "title": args.title,
             "description": body,
@@ -621,12 +637,15 @@ def cmd_create_pr(args):
             "destination": {"branch": {"name": base}},
             "draft": args.draft,
         }
-        response = http_json("POST", f"{BITBUCKET_API}/repositories/{repo}/pullrequests",
-                             headers, payload=payload, dry_run=args.dry_run)
+        response = http_json(
+            "POST", f"{BITBUCKET_API}/repositories/{repo}/pullrequests", headers, payload=payload, dry_run=args.dry_run
+        )
         number = response["id"] if response else 0
         url = bb_pr_url(response or {}, repo)
-        emit(f"Created {'draft ' if args.draft else ''}PR #{number}: {url}",
-             {"number": number, "url": url, "draft": args.draft})
+        emit(
+            f"Created {'draft ' if args.draft else ''}PR #{number}: {url}",
+            {"number": number, "url": url, "draft": args.draft},
+        )
         return
 
     headers = github_headers()
@@ -637,16 +656,22 @@ def cmd_create_pr(args):
         else:
             base = http_json("GET", f"{GITHUB_API}/repos/{repo}", headers)["default_branch"]
     payload = {"title": args.title, "head": head, "base": base, "body": body, "draft": args.draft}
-    response = http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls", headers,
-                         payload=payload, dry_run=args.dry_run)
+    response = http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls", headers, payload=payload, dry_run=args.dry_run)
     number = response["number"] if response else 0
     url = response["html_url"] if response else f"https://github.com/{repo}/pull/0"
     if args.label:
         # Labels live on the issues endpoint; add them after the PR exists.
-        http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{number}/labels", headers,
-                  payload={"labels": args.label}, dry_run=args.dry_run)
-    emit(f"Created {'draft ' if args.draft else ''}PR #{number}: {url}",
-         {"number": number, "url": url, "labels": args.label, "draft": args.draft})
+        http_json(
+            "POST",
+            f"{GITHUB_API}/repos/{repo}/issues/{number}/labels",
+            headers,
+            payload={"labels": args.label},
+            dry_run=args.dry_run,
+        )
+    emit(
+        f"Created {'draft ' if args.draft else ''}PR #{number}: {url}",
+        {"number": number, "url": url, "labels": args.label, "draft": args.draft},
+    )
 
 
 def bucket_check_run(run):
@@ -699,8 +724,7 @@ def collect_check_entries(repo, sha, headers):
     check_runs_visible = True
     while True:
         query = urllib.parse.urlencode({"per_page": CHECKS_PER_PAGE, "page": page})
-        data = http_json("GET", f"{GITHUB_API}/repos/{repo}/commits/{sha}/check-runs?{query}",
-                         headers, tolerate=(403,))
+        data = http_json("GET", f"{GITHUB_API}/repos/{repo}/commits/{sha}/check-runs?{query}", headers, tolerate=(403,))
         if data is None:
             check_runs_visible = False
             break
@@ -716,11 +740,14 @@ def collect_check_entries(repo, sha, headers):
     combined = http_json("GET", f"{GITHUB_API}/repos/{repo}/commits/{sha}/status", headers)
     for status in combined.get("statuses", []):  # already latest-per-context
         name = status.get("context") or "<unnamed>"
-        latest[name] = ("", bucket_commit_status(status),
-                        {"details_url": status.get("target_url"),
-                         "title": status.get("description"), "summary": None})
-    entries = [{"name": name, "bucket": bucket, "details": details}
-               for name, (_, bucket, details) in sorted(latest.items())]
+        latest[name] = (
+            "",
+            bucket_commit_status(status),
+            {"details_url": status.get("target_url"), "title": status.get("description"), "summary": None},
+        )
+    entries = [
+        {"name": name, "bucket": bucket, "details": details} for name, (_, bucket, details) in sorted(latest.items())
+    ]
     return entries, check_runs_visible
 
 
@@ -757,8 +784,10 @@ def cmd_pr_status(args):
     provider = resolve_provider(args.repo)
     if args.dry_run:
         print(f"[dry-run] would poll checks for PR #{args.pr or '<current branch>'} in {repo}")
-        emit("dry run", {"failed": [], "pending": [], "passed": 0, "skipped": 0,
-                         "ignored": [], "green": True, "dry_run": True})
+        emit(
+            "dry run",
+            {"failed": [], "pending": [], "passed": 0, "skipped": 0, "ignored": [], "green": True, "dry_run": True},
+        )
         return
     headers = bitbucket_headers() if provider == "bitbucket" else github_headers()
     deadline = time.monotonic() + args.timeout
@@ -767,12 +796,14 @@ def cmd_pr_status(args):
         if provider == "bitbucket":
             pull = bb_resolve_pr(repo, headers, args.pr)
             sha = pull["source"]["commit"]["hash"]
-            statuses = bb_paginate(
-                f"{BITBUCKET_API}/repositories/{repo}/commit/{sha}/statuses", headers)
+            statuses = bb_paginate(f"{BITBUCKET_API}/repositories/{repo}/commit/{sha}/statuses", headers)
             entries = sorted(
-                ({"name": s.get("key") or s.get("name") or "<unnamed>",
-                  "bucket": bucket_bitbucket_status(s)} for s in statuses),
-                key=lambda e: e["name"])
+                (
+                    {"name": s.get("key") or s.get("name") or "<unnamed>", "bucket": bucket_bitbucket_status(s)}
+                    for s in statuses
+                ),
+                key=lambda e: e["name"],
+            )
             check_runs_visible = True  # one status system; nothing hidden by token type
         else:
             pull = resolve_pr(repo, headers, args.pr)
@@ -784,8 +815,7 @@ def cmd_pr_status(args):
         if time.monotonic() >= deadline:
             report["timed_out"] = True
             break
-        print(f"waiting on {len(report['pending'])} check(s): "
-              f"{', '.join(report['pending'][:5])} ...", flush=True)
+        print(f"waiting on {len(report['pending'])} check(s): {', '.join(report['pending'][:5])} ...", flush=True)
         time.sleep(args.interval)
     if provider == "bitbucket":
         report.update({"pr": pull["id"], "url": bb_pr_url(pull, repo)})
@@ -799,13 +829,18 @@ def cmd_pr_status(args):
         if detail.get("details_url"):
             print(f"  {detail['details_url']}")
     if not report["check_runs_visible"]:
-        print("WARNING: check runs (GitHub Actions) are NOT visible to this token - "
-              "fine-grained PATs cannot be granted the Checks permission (GitHub limitation); "
-              "this report covers legacy commit statuses only")
-    emit(f"PR #{report['pr']} checks: {state} "
-         f"(pass={report['passed']} fail={len(report['failed'])} "
-         f"pending={len(report['pending'])} skip={report['skipped']} "
-         f"ignored={len(report['ignored'])})", report)
+        print(
+            "WARNING: check runs (GitHub Actions) are NOT visible to this token - "
+            "fine-grained PATs cannot be granted the Checks permission (GitHub limitation); "
+            "this report covers legacy commit statuses only"
+        )
+    emit(
+        f"PR #{report['pr']} checks: {state} "
+        f"(pass={report['passed']} fail={len(report['failed'])} "
+        f"pending={len(report['pending'])} skip={report['skipped']} "
+        f"ignored={len(report['ignored'])})",
+        report,
+    )
 
 
 def cmd_update_branch(args):
@@ -830,27 +865,40 @@ def cmd_update_branch(args):
     pull = resolve_pr(repo, headers, args.pr)
     number, base = pull["number"], pull["base"]["ref"]
     # Compare base..head: "behind_by" is how many base commits the branch lacks.
-    comparison = http_json(
-        "GET", f"{GITHUB_API}/repos/{repo}/compare/{base}...{pull['head']['sha']}", headers)
+    comparison = http_json("GET", f"{GITHUB_API}/repos/{repo}/compare/{base}...{pull['head']['sha']}", headers)
     behind = (comparison or {}).get("behind_by", 0)
     if not behind:
-        emit(f"PR #{number} is already up to date with {base}",
-             {"pr": number, "base": base, "behind_by": 0, "updated": False,
-              "url": pull["html_url"]})
+        emit(
+            f"PR #{number} is already up to date with {base}",
+            {"pr": number, "base": base, "behind_by": 0, "updated": False, "url": pull["html_url"]},
+        )
         return
     # 422 = the merge would conflict, or the branch moved since the sha we sent.
     result = http_json(
-        "PUT", f"{GITHUB_API}/repos/{repo}/pulls/{number}/update-branch", headers,
-        payload={"expected_head_sha": pull["head"]["sha"]}, tolerate=(422,))
+        "PUT",
+        f"{GITHUB_API}/repos/{repo}/pulls/{number}/update-branch",
+        headers,
+        payload={"expected_head_sha": pull["head"]["sha"]},
+        tolerate=(422,),
+    )
     if result is None:
         raise SystemExit(
             f"PR #{number} is {behind} commit(s) behind {base} and GitHub refused the update "
             f"(HTTP 422). Usually a merge conflict, sometimes a concurrent push. Merge {base} "
-            f"into the branch by hand, resolve, and push.")
-    emit(f"PR #{number} updated from {base} (was {behind} commit(s) behind) - "
-         f"this pushes a merge commit, so CI will re-run",
-         {"pr": number, "base": base, "behind_by": behind, "updated": True,
-          "message": result.get("message"), "url": pull["html_url"]})
+            f"into the branch by hand, resolve, and push."
+        )
+    emit(
+        f"PR #{number} updated from {base} (was {behind} commit(s) behind) - "
+        f"this pushes a merge commit, so CI will re-run",
+        {
+            "pr": number,
+            "base": base,
+            "behind_by": behind,
+            "updated": True,
+            "message": result.get("message"),
+            "url": pull["html_url"],
+        },
+    )
 
 
 def bb_find_member(workspace, headers, query):
@@ -871,10 +919,11 @@ def cmd_request_review(args):
         pull = None if args.dry_run else bb_resolve_pr(repo, headers, args.pr)
         number = pull["id"] if pull else (args.pr or 0)
         workspace = repo.split("/")[0]
-        reviewers = [] if args.dry_run else [
-            {"account_id": r["account_id"]} for r in pull.get("reviewers", [])
-            if r.get("account_id")
-        ]
+        reviewers = (
+            []
+            if args.dry_run
+            else [{"account_id": r["account_id"]} for r in pull.get("reviewers", []) if r.get("account_id")]
+        )
         for name in args.reviewer:
             if args.dry_run:
                 print(f"[dry-run] would look up workspace member {name!r}")
@@ -888,21 +937,25 @@ def cmd_request_review(args):
         # Requesting review means the PR is done cooking - clear the draft flag
         # in the same PUT that sets the reviewers.
         was_draft = bool(pull and pull.get("draft"))
-        payload = {"title": pull["title"] if pull else "<title>", "reviewers": reviewers,
-                   "draft": False}
-        http_json("PUT", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
-                  headers, payload=payload, dry_run=args.dry_run)
+        payload = {"title": pull["title"] if pull else "<title>", "reviewers": reviewers, "draft": False}
+        http_json(
+            "PUT",
+            f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
+            headers,
+            payload=payload,
+            dry_run=args.dry_run,
+        )
         if args.dry_run:
             return
-        refreshed = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}",
-                              headers)
+        refreshed = http_json("GET", f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}", headers)
         if refreshed.get("draft"):
             raise SystemExit(f"PR #{number} is still marked draft after the update")
-        names = [r.get("display_name") or r.get("nickname") or "?"
-                 for r in refreshed.get("reviewers", [])]
+        names = [r.get("display_name") or r.get("nickname") or "?" for r in refreshed.get("reviewers", [])]
         ready_note = " (marked ready for review)" if was_draft else ""
-        emit(f"Requested review on PR #{number} from: {', '.join(names)}{ready_note}",
-             {"number": number, "requested_reviewers": names, "marked_ready": was_draft})
+        emit(
+            f"Requested review on PR #{number} from: {', '.join(names)}{ready_note}",
+            {"number": number, "requested_reviewers": names, "marked_ready": was_draft},
+        )
         return
 
     headers = github_headers()
@@ -914,16 +967,22 @@ def cmd_request_review(args):
     if args.dry_run:
         print(f"[dry-run] would mark PR #{number} ready for review if still a draft")
     elif was_draft:
-        mutation = ("mutation($id: ID!) { markPullRequestReadyForReview("
-                    "input: {pullRequestId: $id}) { pullRequest { isDraft } } }")
-        result = http_json("POST", GITHUB_GRAPHQL, headers,
-                           payload={"query": mutation,
-                                    "variables": {"id": pull["node_id"]}})
+        mutation = (
+            "mutation($id: ID!) { markPullRequestReadyForReview("
+            "input: {pullRequestId: $id}) { pullRequest { isDraft } } }"
+        )
+        result = http_json(
+            "POST", GITHUB_GRAPHQL, headers, payload={"query": mutation, "variables": {"id": pull["node_id"]}}
+        )
         if result.get("errors"):
-            raise SystemExit(f"failed to mark PR #{number} ready for review: "
-                             f"{result['errors']}")
-    http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls/{number}/requested_reviewers", headers,
-              payload={"reviewers": args.reviewer}, dry_run=args.dry_run)
+            raise SystemExit(f"failed to mark PR #{number} ready for review: {result['errors']}")
+    http_json(
+        "POST",
+        f"{GITHUB_API}/repos/{repo}/pulls/{number}/requested_reviewers",
+        headers,
+        payload={"reviewers": args.reviewer},
+        dry_run=args.dry_run,
+    )
     if args.dry_run:
         return
     refreshed = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers)
@@ -932,11 +991,12 @@ def cmd_request_review(args):
     logins = [user["login"] for user in refreshed.get("requested_reviewers", [])]
     missing = [login for login in args.reviewer if login not in logins]
     if missing:
-        raise SystemExit(f"review request did not stick for: {', '.join(missing)} "
-                         f"(currently requested: {logins})")
+        raise SystemExit(f"review request did not stick for: {', '.join(missing)} (currently requested: {logins})")
     ready_note = " (marked ready for review)" if was_draft else ""
-    emit(f"Requested review on PR #{number} from: {', '.join(logins)}{ready_note}",
-         {"number": number, "requested_reviewers": logins, "marked_ready": was_draft})
+    emit(
+        f"Requested review on PR #{number} from: {', '.join(logins)}{ready_note}",
+        {"number": number, "requested_reviewers": logins, "marked_ready": was_draft},
+    )
 
 
 MERGE_METHODS = ("merge", "rebase", "squash")
@@ -957,8 +1017,10 @@ def cmd_merge_pr(args):
     if provider != "github":
         raise SystemExit("merge-pr is GitHub-only")
     if args.dry_run:
-        print(f"[dry-run] would {args.method}-merge PR #{args.pr or '<current branch>'} in {repo}, "
-              "or enable auto-merge while it waits on approval or checks")
+        print(
+            f"[dry-run] would {args.method}-merge PR #{args.pr or '<current branch>'} in {repo}, "
+            "or enable auto-merge while it waits on approval or checks"
+        )
         emit("dry run", {"merged": False, "auto_merge": False, "dry_run": True})
         return
     headers = github_headers()
@@ -974,31 +1036,42 @@ def cmd_merge_pr(args):
     state = pull.get("mergeable_state")
     result = {"pr": number, "mergeable_state": state, "url": pull["html_url"]}
     if state in MERGE_NOW_STATES:
-        merged = http_json("PUT", f"{pull_url}/merge", headers,
-                           payload={"merge_method": args.method, "sha": pull["head"]["sha"]})
-        emit(f"PR #{number} merged ({args.method}): {merged.get('sha')}",
-             {**result, "merge_method": args.method, "merged": True, "auto_merge": False,
-              "sha": merged.get("sha")})
+        merged = http_json(
+            "PUT", f"{pull_url}/merge", headers, payload={"merge_method": args.method, "sha": pull["head"]["sha"]}
+        )
+        emit(
+            f"PR #{number} merged ({args.method}): {merged.get('sha')}",
+            {**result, "merge_method": args.method, "merged": True, "auto_merge": False, "sha": merged.get("sha")},
+        )
         return
     if state != "blocked":
-        raise SystemExit(f"PR #{number} can neither merge nor queue auto-merge from mergeable_state "
-                         f"{state!r}: dirty is a conflict, behind needs update-branch, unstable is "
-                         f"a failing or pending check (pr-status), draft needs request-review")
+        raise SystemExit(
+            f"PR #{number} can neither merge nor queue auto-merge from mergeable_state "
+            f"{state!r}: dirty is a conflict, behind needs update-branch, unstable is "
+            f"a failing or pending check (pr-status), draft needs request-review"
+        )
     if not pull.get("auto_merge"):
-        mutation = ("mutation($id: ID!, $method: PullRequestMergeMethod!) { "
-                    "enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method}) "
-                    "{ pullRequest { autoMergeRequest { mergeMethod } } } }")
-        response = http_json("POST", GITHUB_GRAPHQL, headers,
-                             payload={"query": mutation,
-                                      "variables": {"id": pull["node_id"], "method": args.method.upper()}})
+        mutation = (
+            "mutation($id: ID!, $method: PullRequestMergeMethod!) { "
+            "enablePullRequestAutoMerge(input: {pullRequestId: $id, mergeMethod: $method}) "
+            "{ pullRequest { autoMergeRequest { mergeMethod } } } }"
+        )
+        response = http_json(
+            "POST",
+            GITHUB_GRAPHQL,
+            headers,
+            payload={"query": mutation, "variables": {"id": pull["node_id"], "method": args.method.upper()}},
+        )
         if response.get("errors"):
             raise SystemExit(f"failed to enable auto-merge on PR #{number}: {response['errors']}")
         pull = http_json("GET", pull_url, headers)
         if not pull.get("auto_merge"):
             raise SystemExit(f"PR #{number} shows no auto-merge after the enable mutation")
     method = pull["auto_merge"].get("merge_method") or args.method
-    emit(f"PR #{number} will {method}-merge automatically once its approval and required checks land",
-         {**result, "merge_method": method, "merged": False, "auto_merge": True})
+    emit(
+        f"PR #{number} will {method}-merge automatically once its approval and required checks land",
+        {**result, "merge_method": method, "merged": False, "auto_merge": True},
+    )
 
 
 # ---------------------------------------------------------------- review
@@ -1038,13 +1111,23 @@ def github_queue(repo, headers, me):
         author = pull["user"]["login"]
         requested = me in [user["login"] for user in pull.get("requested_reviewers", [])]
         draft = bool(pull.get("draft"))
-        entries.append({
-            "provider": "github", "repo": repo, "pr": pull["number"], "title": pull["title"],
-            "author": author, "source": pull["head"]["ref"], "destination": pull["base"]["ref"],
-            "url": pull["html_url"], "draft": draft, "review_requested": requested,
-            "my_state": None, "commits_since_my_approval": None,
-            "skip": queue_skip(author == me, draft, requested, False),
-        })
+        entries.append(
+            {
+                "provider": "github",
+                "repo": repo,
+                "pr": pull["number"],
+                "title": pull["title"],
+                "author": author,
+                "source": pull["head"]["ref"],
+                "destination": pull["base"]["ref"],
+                "url": pull["html_url"],
+                "draft": draft,
+                "review_requested": requested,
+                "my_state": None,
+                "commits_since_my_approval": None,
+                "skip": queue_skip(author == me, draft, requested, False),
+            }
+        )
     return entries
 
 
@@ -1059,25 +1142,32 @@ def bitbucket_queue(repo, headers, me):
     entries = []
     for pull in bb_paginate(f"{base_url}?state=OPEN&pagelen=50&fields={BB_QUEUE_FIELDS}", headers):
         author = pull.get("author") or {}
-        mine = next((p for p in pull.get("participants", [])
-                     if (p.get("user") or {}).get("uuid") == me), {})
+        mine = next((p for p in pull.get("participants", []) if (p.get("user") or {}).get("uuid") == me), {})
         state = mine.get("state")
         since = None
         if state == "approved":
             approved_at = datetime.fromisoformat(mine["participated_on"])
-            commits = http_json("GET", f"{base_url}/{pull['id']}/commits?pagelen=50&fields=values.date",
-                                headers)
+            commits = http_json("GET", f"{base_url}/{pull['id']}/commits?pagelen=50&fields=values.date", headers)
             since = sum(datetime.fromisoformat(c["date"]) > approved_at for c in commits.get("values", []))
         draft = bool(pull.get("draft") or DRAFT_TITLE.match(pull["title"]))
         requested = me in [r.get("uuid") for r in pull.get("reviewers", [])]
-        entries.append({
-            "provider": "bitbucket", "repo": repo, "pr": pull["id"], "title": pull["title"],
-            "author": author.get("display_name"), "source": pull["source"]["branch"]["name"],
-            "destination": pull["destination"]["branch"]["name"],
-            "url": bb_pr_url(pull, repo), "draft": draft, "review_requested": requested,
-            "my_state": state, "commits_since_my_approval": since,
-            "skip": queue_skip(author.get("uuid") == me, draft, requested, state == "approved" and not since),
-        })
+        entries.append(
+            {
+                "provider": "bitbucket",
+                "repo": repo,
+                "pr": pull["id"],
+                "title": pull["title"],
+                "author": author.get("display_name"),
+                "source": pull["source"]["branch"]["name"],
+                "destination": pull["destination"]["branch"]["name"],
+                "url": bb_pr_url(pull, repo),
+                "draft": draft,
+                "review_requested": requested,
+                "my_state": state,
+                "commits_since_my_approval": since,
+                "skip": queue_skip(author.get("uuid") == me, draft, requested, state == "approved" and not since),
+            }
+        )
     return entries
 
 
@@ -1116,20 +1206,35 @@ def cmd_review_queue(args):
         print(f"{pr['url']} {pr['title']}{note}")
     waiting = sum(not pr["skip"] for pr in prs)
     counts = ", ".join(f"{n} {reason}" for reason, n in skipped.items()) or "none"
-    emit(f"{waiting} awaiting review; skipped {sum(skipped.values())}: {counts}",
-         {"prs": prs, "skipped": skipped})
+    emit(f"{waiting} awaiting review; skipped {sum(skipped.values())}: {counts}", {"prs": prs, "skipped": skipped})
 
 
 def github_pr_files(repo, number, headers):
-    return [{"path": f["filename"], "status": f["status"], "previous_path": f.get("previous_filename"),
-             "additions": f["additions"], "deletions": f["deletions"]}
-            for f in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/files", headers)]
+    return [
+        {
+            "path": f["filename"],
+            "status": f["status"],
+            "previous_path": f.get("previous_filename"),
+            "additions": f["additions"],
+            "deletions": f["deletions"],
+        }
+        for f in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/files", headers)
+    ]
 
 
 def pr_comment_entry(kind, comment_id, author, created, body, path=None, line=None, reply_to=None, state=None):
     """One PR comment in the shape both providers report."""
-    return {"id": comment_id, "kind": kind, "author": author, "created": created, "body": body or "",
-            "path": path, "line": line, "reply_to": reply_to, "state": state}
+    return {
+        "id": comment_id,
+        "kind": kind,
+        "author": author,
+        "created": created,
+        "body": body or "",
+        "path": path,
+        "line": line,
+        "reply_to": reply_to,
+        "state": state,
+    }
 
 
 def github_pr_comments(repo, number, headers):
@@ -1141,18 +1246,35 @@ def github_pr_comments(repo, number, headers):
     """
     comments = []
     for c in github_paginate(f"{GITHUB_API}/repos/{repo}/issues/{number}/comments", headers):
-        comments.append(pr_comment_entry("comment", c["id"], (c.get("user") or {}).get("login"),
-                                         c.get("created_at"), c.get("body")))
+        comments.append(
+            pr_comment_entry("comment", c["id"], (c.get("user") or {}).get("login"), c.get("created_at"), c.get("body"))
+        )
     for c in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/comments", headers):
         # line is null once the diff moves past the comment; original_line still places it
-        comments.append(pr_comment_entry("inline", c["id"], (c.get("user") or {}).get("login"),
-                                         c.get("created_at"), c.get("body"), path=c.get("path"),
-                                         line=c.get("line") or c.get("original_line"),
-                                         reply_to=c.get("in_reply_to_id")))
+        comments.append(
+            pr_comment_entry(
+                "inline",
+                c["id"],
+                (c.get("user") or {}).get("login"),
+                c.get("created_at"),
+                c.get("body"),
+                path=c.get("path"),
+                line=c.get("line") or c.get("original_line"),
+                reply_to=c.get("in_reply_to_id"),
+            )
+        )
     for r in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/reviews", headers):
         if (r.get("body") or "").strip():
-            comments.append(pr_comment_entry("review", r["id"], (r.get("user") or {}).get("login"),
-                                             r.get("submitted_at"), r.get("body"), state=r.get("state")))
+            comments.append(
+                pr_comment_entry(
+                    "review",
+                    r["id"],
+                    (r.get("user") or {}).get("login"),
+                    r.get("submitted_at"),
+                    r.get("body"),
+                    state=r.get("state"),
+                )
+            )
     return sorted(comments, key=lambda c: c["created"] or "")
 
 
@@ -1170,11 +1292,18 @@ def bitbucket_pr_comments(repo, number, headers):
         if c.get("deleted"):
             continue
         inline = c.get("inline") or {}
-        comments.append(pr_comment_entry("inline" if inline else "comment", c["id"],
-                                         (c.get("user") or {}).get("display_name"), c.get("created_on"),
-                                         (c.get("content") or {}).get("raw"), path=inline.get("path"),
-                                         line=inline.get("to") or inline.get("from"),
-                                         reply_to=(c.get("parent") or {}).get("id")))
+        comments.append(
+            pr_comment_entry(
+                "inline" if inline else "comment",
+                c["id"],
+                (c.get("user") or {}).get("display_name"),
+                c.get("created_on"),
+                (c.get("content") or {}).get("raw"),
+                path=inline.get("path"),
+                line=inline.get("to") or inline.get("from"),
+                reply_to=(c.get("parent") or {}).get("id"),
+            )
+        )
     return sorted(comments, key=lambda c: c["created"] or "")
 
 
@@ -1185,8 +1314,7 @@ def cmd_pr_diff(args):
     own and never sees a PR without its discussion.
     """
     provider, repo = repo_spec(args.repo)
-    path = args.out or os.path.join(tempfile.gettempdir(), "ticket_pr",
-                                    f"{repo.replace('/', '_')}_{args.pr}.diff")
+    path = args.out or os.path.join(tempfile.gettempdir(), "ticket_pr", f"{repo.replace('/', '_')}_{args.pr}.diff")
     if args.dry_run:
         print(f"[dry-run] would fetch PR #{args.pr} in {provider}:{repo} and write its diff to {path}")
         emit("dry run", {"pr": args.pr, "diff_path": path, "dry_run": True})
@@ -1197,17 +1325,25 @@ def cmd_pr_diff(args):
         pull = http_json("GET", base_url, headers)
         # diff and diffstat 302 to a signed URL; urllib follows it with the auth header
         diff = http_bytes(f"{base_url}/diff", headers)
-        files = [{"path": (s.get("new") or s.get("old") or {}).get("path"), "status": s.get("status"),
-                  "previous_path": (s.get("old") or {}).get("path") if s.get("status") == "renamed" else None,
-                  "additions": s.get("lines_added"), "deletions": s.get("lines_removed")}
-                 for s in bb_paginate(f"{base_url}/diffstat", headers)]
+        files = [
+            {
+                "path": (s.get("new") or s.get("old") or {}).get("path"),
+                "status": s.get("status"),
+                "previous_path": (s.get("old") or {}).get("path") if s.get("status") == "renamed" else None,
+                "additions": s.get("lines_added"),
+                "deletions": s.get("lines_removed"),
+            }
+            for s in bb_paginate(f"{base_url}/diffstat", headers)
+        ]
         comments = bitbucket_pr_comments(repo, args.pr, headers)
         result = {
-            "pr": pull["id"], "title": pull["title"],
+            "pr": pull["id"],
+            "title": pull["title"],
             "author": (pull.get("author") or {}).get("display_name"),
             "source": pull["source"]["branch"]["name"],
             "destination": pull["destination"]["branch"]["name"],
-            "head": pull["source"]["commit"]["hash"], "description": pull.get("description") or "",
+            "head": pull["source"]["commit"]["hash"],
+            "description": pull.get("description") or "",
             "url": bb_pr_url(pull, repo),
         }
     else:
@@ -1218,16 +1354,20 @@ def cmd_pr_diff(args):
         files = github_pr_files(repo, args.pr, headers)
         comments = github_pr_comments(repo, args.pr, headers)
         result = {
-            "pr": pull["number"], "title": pull["title"], "author": pull["user"]["login"],
-            "source": pull["head"]["ref"], "destination": pull["base"]["ref"],
-            "head": pull["head"]["sha"], "description": pull.get("body") or "", "url": pull["html_url"],
+            "pr": pull["number"],
+            "title": pull["title"],
+            "author": pull["user"]["login"],
+            "source": pull["head"]["ref"],
+            "destination": pull["base"]["ref"],
+            "head": pull["head"]["sha"],
+            "description": pull.get("body") or "",
+            "url": pull["html_url"],
         }
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     with open(path, "wb") as handle:
         handle.write(diff)
     result.update({"files": files, "comments": comments, "diff_path": path})
-    emit(f"PR #{result['pr']} {result['title']}: {len(files)} files, {len(comments)} comments, diff in {path}",
-         result)
+    emit(f"PR #{result['pr']} {result['title']}: {len(files)} files, {len(comments)} comments, diff in {path}", result)
 
 
 def cmd_pr_review(args):
@@ -1253,19 +1393,24 @@ def cmd_pr_review(args):
             response = http_json("POST", f"{base_url}/{args.action}", headers, dry_run=args.dry_run)
             state = response.get("state") if response else args.action
         url = f"https://bitbucket.org/{repo}/pull-requests/{args.pr}"
-        emit(f"PR #{args.pr} {args.action}: {state} {url}",
-             {"pr": args.pr, "action": args.action, "state": state, "comment_id": comment_id, "url": url})
+        emit(
+            f"PR #{args.pr} {args.action}: {state} {url}",
+            {"pr": args.pr, "action": args.action, "state": state, "comment_id": comment_id, "url": url},
+        )
         return
     headers = github_headers()
     payload = {"event": REVIEW_EVENTS[args.action]}
     if body:
         payload["body"] = body
-    response = http_json("POST", f"{GITHUB_API}/repos/{repo}/pulls/{args.pr}/reviews", headers,
-                         payload=payload, dry_run=args.dry_run)
+    response = http_json(
+        "POST", f"{GITHUB_API}/repos/{repo}/pulls/{args.pr}/reviews", headers, payload=payload, dry_run=args.dry_run
+    )
     state = response["state"] if response else REVIEW_EVENTS[args.action]
     url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
-    emit(f"PR #{args.pr} {args.action}: {state} {url}",
-         {"pr": args.pr, "action": args.action, "state": state, "url": url})
+    emit(
+        f"PR #{args.pr} {args.action}: {state} {url}",
+        {"pr": args.pr, "action": args.action, "state": state, "url": url},
+    )
 
 
 def cmd_pr_comment(args):
@@ -1283,14 +1428,19 @@ def cmd_pr_comment(args):
         response = bb_post_comment(repo, args.pr, body, bitbucket_headers(), args.dry_run)
         comment_id = response["id"] if response else 0
         url = (((response or {}).get("links") or {}).get("html") or {}).get(
-            "href", f"https://bitbucket.org/{repo}/pull-requests/{args.pr}")
+            "href", f"https://bitbucket.org/{repo}/pull-requests/{args.pr}"
+        )
     else:
-        response = http_json("POST", f"{GITHUB_API}/repos/{repo}/issues/{args.pr}/comments",
-                             github_headers(), payload={"body": body}, dry_run=args.dry_run)
+        response = http_json(
+            "POST",
+            f"{GITHUB_API}/repos/{repo}/issues/{args.pr}/comments",
+            github_headers(),
+            payload={"body": body},
+            dry_run=args.dry_run,
+        )
         comment_id = response["id"] if response else 0
         url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
-    emit(f"PR #{args.pr} comment {comment_id}: {url}",
-         {"pr": args.pr, "comment_id": comment_id, "url": url})
+    emit(f"PR #{args.pr} comment {comment_id}: {url}", {"pr": args.pr, "comment_id": comment_id, "url": url})
 
 
 def cmd_rerun_job(args):
@@ -1302,8 +1452,9 @@ def cmd_rerun_job(args):
     provider, repo = repo_spec(args.repo)
     if provider != "github":
         raise SystemExit("rerun-job is GitHub-only")
-    http_json("POST", f"{GITHUB_API}/repos/{repo}/actions/jobs/{args.job}/rerun",
-              github_headers(), dry_run=args.dry_run)
+    http_json(
+        "POST", f"{GITHUB_API}/repos/{repo}/actions/jobs/{args.job}/rerun", github_headers(), dry_run=args.dry_run
+    )
     url = f"https://github.com/{repo}/actions/jobs/{args.job}"
     emit(f"job {args.job} queued: {url}", {"job": args.job, "url": url})
 
@@ -1355,14 +1506,14 @@ def cmd_update_pr(args):
         payload["body"] = body
     headers = github_headers()
     number = args.pr or resolve_pr(repo, headers, None)["number"]
-    pull = http_json("PATCH", f"{GITHUB_API}/repos/{repo}/pulls/{number}",
-                     headers, payload, dry_run=args.dry_run)
+    pull = http_json("PATCH", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers, payload, dry_run=args.dry_run)
     if args.dry_run:
         emit("dry run", {"pr": number, "updated": sorted(payload)})
         return
-    emit(f"PR #{number} updated: {', '.join(sorted(payload))}",
-         {"pr": pull["number"], "url": pull["html_url"], "title": pull["title"],
-          "updated": sorted(payload)})
+    emit(
+        f"PR #{number} updated: {', '.join(sorted(payload))}",
+        {"pr": pull["number"], "url": pull["html_url"], "title": pull["title"], "updated": sorted(payload)},
+    )
 
 
 def cmd_job_log(args):
@@ -1392,8 +1543,10 @@ def cmd_job_log(args):
         matches = [line for line in lines if pattern.search(line)]
         for line in matches[: args.max_lines]:
             print(line)
-    emit(f"job {args.job}: {len(lines)} lines in {path}",
-         {"job": args.job, "path": path, "lines": len(lines), "matches": len(matches)})
+    emit(
+        f"job {args.job}: {len(lines)} lines in {path}",
+        {"job": args.job, "path": path, "lines": len(lines), "matches": len(matches)},
+    )
 
 
 # ---------------------------------------------------------------- cli
@@ -1401,11 +1554,14 @@ def cmd_job_log(args):
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        description="Jira ticket + GitHub/Bitbucket PR workflow harness (see module docstring)")
-    parser.add_argument("--env-file", action="append", default=[],
-                        help="dotenv file(s) to load; repeatable; real env vars win")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="print requests instead of sending them; return canned ids")
+        description="Jira ticket + GitHub/Bitbucket PR workflow harness (see module docstring)"
+    )
+    parser.add_argument(
+        "--env-file", action="append", default=[], help="dotenv file(s) to load; repeatable; real env vars win"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="print requests instead of sending them; return canned ids"
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     ticket = sub.add_parser("create-ticket", help="create a Jira ticket, print its key + URL")
@@ -1413,24 +1569,22 @@ def build_parser():
     ticket.add_argument("--type", default="Task", help="issue type name (default: Task)")
     ticket.add_argument("--summary", required=True)
     ticket.add_argument("--description", default="")
-    ticket.add_argument("--assignee",
-                        help="email/name to assign (default: JIRA_USER; 'none' to skip)")
+    ticket.add_argument("--assignee", help="email/name to assign (default: JIRA_USER; 'none' to skip)")
     ticket.add_argument("--label", action="append", default=[], help="label; repeatable")
     ticket.set_defaults(func=cmd_create_ticket)
 
     get_ticket = sub.add_parser(
-        "get-ticket",
-        help="fetch everything on a Jira ticket: fields, description, comments, attachments")
+        "get-ticket", help="fetch everything on a Jira ticket: fields, description, comments, attachments"
+    )
     get_ticket.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
-    get_ticket.add_argument("--attachments-dir",
-                            help="where attachments are saved (default: <tmp>/ticket_pr/<KEY>)")
+    get_ticket.add_argument("--attachments-dir", help="where attachments are saved (default: <tmp>/ticket_pr/<KEY>)")
     get_ticket.set_defaults(func=cmd_get_ticket)
 
     search = sub.add_parser("search-tickets", help="list the Jira tickets matching a JQL query")
-    search.add_argument("--jql", required=True,
-                        help='JQL, e.g. \'project = ACME AND text ~ "dag-name" ORDER BY created DESC\'')
-    search.add_argument("--max-results", type=int, default=50,
-                        help="cap on the number of tickets listed (default 50)")
+    search.add_argument(
+        "--jql", required=True, help="JQL, e.g. 'project = ACME AND text ~ \"dag-name\" ORDER BY created DESC'"
+    )
+    search.add_argument("--max-results", type=int, default=50, help="cap on the number of tickets listed (default 50)")
     search.set_defaults(func=cmd_search_tickets)
 
     comment = sub.add_parser("add-comment", help="post a comment on a Jira ticket")
@@ -1439,12 +1593,12 @@ def build_parser():
     comment.add_argument("--body-file", help="file containing the comment text")
     comment.set_defaults(func=cmd_add_comment)
 
-    transition = sub.add_parser("transition-ticket",
-                                help="move a Jira ticket to another status; no --to lists the options")
+    transition = sub.add_parser(
+        "transition-ticket", help="move a Jira ticket to another status; no --to lists the options"
+    )
     transition.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
     transition.add_argument("--to", help="transition or target status name as Jira shows it, e.g. Done")
-    transition.add_argument("--resolution",
-                            help="resolution name when the transition's screen requires one, e.g. Done")
+    transition.add_argument("--resolution", help="resolution name when the transition's screen requires one, e.g. Done")
     transition.set_defaults(func=cmd_transition_ticket)
 
     create_pr = sub.add_parser("create-pr", help="open a GitHub PR for the current branch")
@@ -1454,12 +1608,13 @@ def build_parser():
     create_pr.add_argument("--body-file", help="file containing the PR body")
     create_pr.add_argument("--head", help="head branch (default: current branch)")
     create_pr.add_argument("--base", help="base branch (default: repo default branch)")
-    create_pr.add_argument("--draft", action="store_true", default=True,
-                           help="open as a draft PR (the default)")
-    create_pr.add_argument("--no-draft", dest="draft", action="store_false",
-                           help="open ready for review instead of as a draft")
-    create_pr.add_argument("--label", action="append", default=[],
-                           help="PR label to add after creation; repeatable (GitHub only)")
+    create_pr.add_argument("--draft", action="store_true", default=True, help="open as a draft PR (the default)")
+    create_pr.add_argument(
+        "--no-draft", dest="draft", action="store_false", help="open ready for review instead of as a draft"
+    )
+    create_pr.add_argument(
+        "--label", action="append", default=[], help="PR label to add after creation; repeatable (GitHub only)"
+    )
     create_pr.set_defaults(func=cmd_create_pr)
 
     pr_comment = sub.add_parser("pr-comment", help="post a plain comment on a GitHub or Bitbucket PR")
@@ -1495,17 +1650,21 @@ def build_parser():
     status = sub.add_parser("pr-status", help="bucket a PR's checks into a green/failed report")
     status.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     status.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
-    status.add_argument("--ignore", action="append", default=[],
-                        help="ignore checks whose name contains this substring; repeatable "
-                             "(e.g. --ignore approval for human-approval gates)")
-    status.add_argument("--wait", action="store_true",
-                        help="poll until no checks are pending (returns early on any failure)")
+    status.add_argument(
+        "--ignore",
+        action="append",
+        default=[],
+        help="ignore checks whose name contains this substring; repeatable "
+        "(e.g. --ignore approval for human-approval gates)",
+    )
+    status.add_argument(
+        "--wait", action="store_true", help="poll until no checks are pending (returns early on any failure)"
+    )
     status.add_argument("--interval", type=int, default=90, help="poll interval seconds")
     status.add_argument("--timeout", type=int, default=3600, help="max wait seconds")
     status.set_defaults(func=cmd_pr_status)
 
-    update = sub.add_parser("update-branch",
-                            help="merge the base branch into the PR branch (GitHub only)")
+    update = sub.add_parser("update-branch", help="merge the base branch into the PR branch (GitHub only)")
     update.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     update.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
     update.set_defaults(func=cmd_update_branch)
@@ -1513,27 +1672,33 @@ def build_parser():
     review = sub.add_parser("request-review", help="request PR reviewers via the REST API")
     review.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     review.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
-    review.add_argument("--reviewer", action="append", required=True,
-                        help="GitHub login / Bitbucket nickname or display name; repeatable")
+    review.add_argument(
+        "--reviewer",
+        action="append",
+        required=True,
+        help="GitHub login / Bitbucket nickname or display name; repeatable",
+    )
     review.set_defaults(func=cmd_request_review)
 
-    merge = sub.add_parser("merge-pr",
-                           help="merge a PR now, or enable auto-merge while it waits (GitHub only)")
+    merge = sub.add_parser("merge-pr", help="merge a PR now, or enable auto-merge while it waits (GitHub only)")
     merge.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     merge.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
-    merge.add_argument("--method", choices=MERGE_METHODS, default="squash",
-                       help="merge method (default: squash)")
+    merge.add_argument("--method", choices=MERGE_METHODS, default="squash", help="merge method (default: squash)")
     merge.set_defaults(func=cmd_merge_pr)
 
-    queue = sub.add_parser("review-queue",
-                           help="open PRs across repos, each marked with whether it waits on this account")
-    queue.add_argument("--repo", action="append",
-                       help="github:owner/name or bitbucket:workspace/slug; repeatable "
-                            "(default: parsed from origin remote)")
+    queue = sub.add_parser(
+        "review-queue", help="open PRs across repos, each marked with whether it waits on this account"
+    )
+    queue.add_argument(
+        "--repo",
+        action="append",
+        help="github:owner/name or bitbucket:workspace/slug; repeatable (default: parsed from origin remote)",
+    )
     queue.set_defaults(func=cmd_review_queue)
 
-    pr_diff = sub.add_parser("pr-diff",
-                             help="a PR's metadata, file stats and every comment, with its full diff on disk")
+    pr_diff = sub.add_parser(
+        "pr-diff", help="a PR's metadata, file stats and every comment, with its full diff on disk"
+    )
     pr_diff.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     pr_diff.add_argument("--pr", type=int, required=True, help="PR number")
     pr_diff.add_argument("--out", help="diff path (default: <tmp>/ticket_pr/<owner>_<name>_<pr>.diff)")

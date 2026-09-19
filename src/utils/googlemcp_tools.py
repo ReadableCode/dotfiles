@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import requests
 import yaml
+
 from utils.google_oauth_tools import (
     GOOGLE_TOKEN_URL,
     cached_access_token,
@@ -374,10 +375,7 @@ def _gmail_summary(raw):
 
 def _header_map(payload):
     """MIME headers as a lowercased-name -> value dict."""
-    return {
-        (header.get("name") or "").lower(): header.get("value") or ""
-        for header in (payload.get("headers") or [])
-    }
+    return {(header.get("name") or "").lower(): header.get("value") or "" for header in (payload.get("headers") or [])}
 
 
 def gmail_get_message(mailbox, message_id, body_limit=20000):
@@ -472,9 +470,7 @@ def gmail_trash_message(mailbox, message_id, undo=False):
     does not try to.
     """
     action = "untrash" if undo else "trash"
-    raw = _request(
-        "POST", f"{GMAIL_API}/users/me/messages/{quote(message_id)}/{action}", gmail_headers(mailbox)
-    )
+    raw = _request("POST", f"{GMAIL_API}/users/me/messages/{quote(message_id)}/{action}", gmail_headers(mailbox))
     return {"id": raw.get("id"), "labels": raw.get("labelIds", []), "action": action}
 
 
@@ -705,8 +701,10 @@ def drive_upload_file(drive, name, parent_id="root", content="", local_path="", 
     new file - drive_update_file replaces an existing one.
     """
     data = _content_bytes(content, local_path)
-    mime_type = mime_type or mimetypes.guess_type(local_path or name)[0] or (
-        "text/plain" if content else "application/octet-stream"
+    mime_type = (
+        mime_type
+        or mimetypes.guess_type(local_path or name)[0]
+        or ("text/plain" if content else "application/octet-stream")
     )
     return _upload(drive, "POST", f"{DRIVE_UPLOAD_API}/files", {"name": name, "parents": [parent_id]}, data, mime_type)
 

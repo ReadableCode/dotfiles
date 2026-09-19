@@ -7,10 +7,11 @@ import textwrap
 import time
 from datetime import date, datetime, timedelta
 
-from config import grandparent_dir, parent_dir
 from rich.console import Console
 from rich.style import Style
 from rich.text import Text
+
+from config import grandparent_dir, parent_dir
 from utils.calendarboard_tools import (
     assign_lanes,
     events_for_day,
@@ -56,7 +57,7 @@ RESPONSE_BLOCK_COLORS = {
     "needs_action": "cyan",
 }
 
-GRID_GUTTER = 6         # "07:00 " time-axis column
+GRID_GUTTER = 6  # "07:00 " time-axis column
 GRID_SLOT_CHOICES = (30, 15, 60)  # minutes per grid row, cycled by the zoom key
 
 
@@ -223,9 +224,7 @@ def _pack_grid_columns(columns_data, day, start_hour, slot_minutes, total_slots,
         column_day = column.get("day", day)
         anchor = datetime(column_day.year, column_day.month, column_day.day, start_hour)
         anchor = anchor.replace(tzinfo=tz) if tz else anchor.astimezone()
-        packed.append(
-            _column_cells(column["events"] if column["ok"] else [], anchor, slot_minutes, total_slots, tz)
-        )
+        packed.append(_column_cells(column["events"] if column["ok"] else [], anchor, slot_minutes, total_slots, tz))
         now_slot = None
         if now is not None:
             offset = (now.astimezone(tz) - anchor).total_seconds() / 60
@@ -280,9 +279,7 @@ def grid_renderable(columns_data, day, width, tz=None, slot_minutes=30, now=None
             else:
                 fill, fill_style = " ", ""
             text.append(fill if fill != " " else " ", style=fill_style)
-            _append_column_cells(
-                text, cells, _lane_widths(column_width, lane_count), slot, fill, fill_style, tz
-            )
+            _append_column_cells(text, cells, _lane_widths(column_width, lane_count), slot, fill, fill_style, tz)
     return text
 
 
@@ -329,9 +326,7 @@ def day_slices(columns, view_date):
     the COMBINED slice, so a meeting in one source lights up when it collides
     with a meeting in another - the whole point of the side-by-side layout.
     """
-    per_column = [
-        (column, events_for_day(column.events, view_date) if column.ok else []) for column in columns
-    ]
+    per_column = [(column, events_for_day(column.events, view_date) if column.ok else []) for column in columns]
     mark_conflicts([event for _, day_events in per_column for event in day_events])
     return per_column
 
@@ -728,14 +723,10 @@ def build_source_column():
             first = span_days(self.app.view_date, self.app.day_span)[0]
             window = (first - timedelta(days=WINDOW_BEFORE_DAYS), first + timedelta(days=WINDOW_AFTER_DAYS))
             _column_begin_refresh(self)
-            self.run_worker(
-                lambda: self._fetch(window), thread=True, group=self.source["name"], exclusive=True
-            )
+            self.run_worker(lambda: self._fetch(window), thread=True, group=self.source["name"], exclusive=True)
 
         def _fetch(self, window):
-            result = fetch_source(
-                self.source, local_midnight(window[0]), local_midnight(window[1] + timedelta(days=1))
-            )
+            result = fetch_source(self.source, local_midnight(window[0]), local_midnight(window[1] + timedelta(days=1)))
             self.app.call_from_thread(_column_store, self, result, window)
 
     return SourceColumn
@@ -927,8 +918,7 @@ def run_once(sources, start_day, days, grid=False):
         day = start_day + timedelta(days=offset)
         console.rule(f"[bold]{day.strftime('%A %Y-%m-%d')}[/bold]")
         per_source = [
-            (source, result, events_for_day(result.events, day) if result.ok else [])
-            for source, result in results
+            (source, result, events_for_day(result.events, day) if result.ok else []) for source, result in results
         ]
         mark_conflicts([event for _, _, day_events in per_source for event in day_events])
         if grid:

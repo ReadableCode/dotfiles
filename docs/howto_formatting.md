@@ -1,94 +1,63 @@
 # Formatting
 
-## Flake8
+Two tools, all configured in `pyproject.toml`. There is no `.flake8`, no
+`.isort.cfg` and no `.pre-commit-config.yaml` in this repo.
 
-- To list and count the formatting issues with flake8:
+## Ruff
 
-  ```bash
-  (flake8 | grep './' | head -n 20) 2>/dev/null && flake8 | grep './' | wc -l
-  ```
+`ruff` is both the formatter and the linter, and replaced `flake8` + `isort` on
+2026-09-19. It also replaced `.flake8`, `.isort.cfg` and a `[tool.flake8]`
+block that flake8 never read (it has no pyproject support). The old
+`.isort.cfg` additionally carried ten `known_third_party` names copied from a
+work repo - `brand_tools`, `concur_schemas`, `ap_vendor_split_hc_us` and
+friends - none of which have ever existed here.
 
-  - To auto format with flake8:
+```bash
+uv run ruff format .          # apply the formatter
+uv run ruff format --check .  # report only
+uv run ruff check --fix .     # lint + import sorting, fixing what it can
+uv run ruff check .           # report only
+```
 
-    ```bash
-    flake8 --ignore=E501,W503 --max-line-length=88 --exclude=src/proto
-    ```
+Config, all under `[tool.ruff]`:
 
-## Black
+| Setting | Value | Was |
+| --- | --- | --- |
+| `line-length` | 120 | `.flake8 max-line-length` |
+| `lint.select` | `E`, `W`, `F`, `C90`, `I` | flake8's default set plus isort |
+| `lint.ignore` | `E203` | `.flake8 extend-ignore` (`W503` has no ruff equivalent) |
+| `lint.mccabe.max-complexity` | 15 | `.flake8 max-complexity` |
 
-- To list and count the formatting issues with black:
-  
-  - To list changes black would make:
-
-      ```bash
-      black --check .
-      ```
-
-  - To auto format with black:
-
-      ```bash
-      black .
-      ```
-
-## Isort
-
-- To list and count the formatting issues with isort:
-
-  - To list changes isort would make:
-  
-    ```bash
-    isort --profile black --check-only .
-    ```
-  
-  - To auto format with isort:
-  
-    ```bash
-    isort --profile black .
-    ```
+`ruff format` is black-compatible. This repo did not previously run a
+formatter, so adopting it reformatted 38 files in one commit.
 
 ## MyPy
 
-- To list and count the formatting issues with mypy:
+Ruff does not type-check, so mypy stays. `ignore_missing_imports = true` and
+`show_error_codes = true` in `pyproject.toml`.
 
-  - Must be run from Project root directory on src directory
+```bash
+uv run mypy .
+```
 
-  - To see what changes need to be made:
-  
-    ```bash
-    mypy src/.
-    ```
+## Tests
 
-  - To auto format with mypy:
+```bash
+uv run pytest
+```
 
-    ```bash
-    mypy src/. --strict
-    ```
-
-## Running precommit
-
-- Install
-  
-    ```bash
-    pre-commit install
-    ```
-
-- Run
-
-  - To auto format with pre-commit:
-  
-    ```bash
-    pre-commit run --all-files
-    ```
+Fast unit tests only, no external deps or credentials, so a plain run is always
+safe.
 
 ## Git hooks in this repo
 
-Two hooks, deployed by the personal_dev overlay as symlinks into
-`.git/hooks/` (hooks are untracked, so they need a manifest entry):
+Two hooks, deployed by the personal_dev overlay as symlinks into `.git/hooks/`
+(hooks are untracked, so they need a manifest entry):
 
 | Hook | Payload | Runs |
 | --- | --- | --- |
 | `pre-commit` | `application_configs/git/hooks/pre-commit.context-leak` | `src/context_leak_check.py --staged` |
-| `pre-push` | `application_configs/git/hooks/pre-push.dotfiles-checks` | `isort --check-only .`, `flake8 .`, `mypy .`, `pytest -q` |
+| `pre-push` | `application_configs/git/hooks/pre-push.dotfiles-checks` | `ruff format --check .`, `ruff check .`, `mypy .`, `pytest -q` |
 
 The split is deliberate. A leaked client identifier must never enter history at
 all, so that check has to be the earlier one. Formatting is the opposite trade:
@@ -96,12 +65,15 @@ a local commit stays cheap, but nothing should reach the remote needing a
 follow-up "fix lint" commit, which is what happened when a 122-character line
 sat on `master` for a day in September 2026.
 
-`pre-push` runs this repo's own uv-pinned tools, the same four commands
-CLAUDE.md documents. It deliberately does **not** use the `pre-commit`
-framework: that would pin a second set of linter versions beside
-`pyproject.toml` and `uv.lock`, and would pull in a formatter this repo does not
-use. Both hooks fail closed - a missing `uv` is a refused push, never a silent
-skip.
+`pre-push` runs the `--check` forms and never rewrites files. Fixing during a
+push would leave the corrected versions *outside* the commits being pushed, so
+the unformatted code would go out anyway and leave a dirty tree behind. When it
+fails it prints the one command that fixes it:
 
-A push that only deletes remote branches skips the checks (nothing new is going
-out). `git push --no-verify` is the escape hatch.
+```bash
+uv run ruff format . && uv run ruff check --fix .
+```
+
+Both hooks fail closed - a missing `uv` is a refused push, never a silent skip.
+A push that only deletes remote branches skips the checks. `git push
+--no-verify` is the escape hatch.

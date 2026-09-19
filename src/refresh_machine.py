@@ -131,9 +131,7 @@ def fetch_behind(entry):
     fetched = subprocess.run(["git", "-C", path, "fetch", "--quiet"], capture_output=True, text=True)
     if fetched.returncode:
         return name, 0, "fetch failed (offline or no remote)"
-    counted = subprocess.run(
-        ["git", "-C", path, "rev-list", "--count", "HEAD..@{u}"], capture_output=True, text=True
-    )
+    counted = subprocess.run(["git", "-C", path, "rev-list", "--count", "HEAD..@{u}"], capture_output=True, text=True)
     if counted.returncode:
         return name, 0, "no upstream branch"
     return name, int(counted.stdout.strip() or 0), ""
@@ -181,9 +179,7 @@ def check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only):
         Step("checking for configs to prune", uv_python(dotfiles, "deploy_configs.py", "prune"), needs="uv"),
     ]
     if packages:
-        steps.append(
-            Step("checking for apps to remove", uv_python(dotfiles, "app_removals.py", "--list"), needs="uv")
-        )
+        steps.append(Step("checking for apps to remove", uv_python(dotfiles, "app_removals.py", "--list"), needs="uv"))
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-Check"]))
@@ -318,9 +314,7 @@ def main(argv=None, environ=None):
         return 1
     out = sys.stdout
     color = terminal_style.use_color(out, environ)
-    steps = build_steps(
-        git_dir, platform.system(), platform.machine(), args.packages, args.pull_only, args.check
-    )
+    steps = build_steps(git_dir, platform.system(), platform.machine(), args.packages, args.pull_only, args.check)
     try:
         failed = execute(steps, out, color)
     except KeyboardInterrupt:

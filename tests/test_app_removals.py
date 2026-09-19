@@ -6,6 +6,7 @@ import os
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from src import app_removals
 
 # %%

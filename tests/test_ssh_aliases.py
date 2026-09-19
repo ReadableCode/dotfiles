@@ -5,6 +5,7 @@ import os
 
 import config_test_utils  # noqa F401
 import pytest
+
 from src import ssh_aliases
 
 # ---------------------------------------------------------------- helpers

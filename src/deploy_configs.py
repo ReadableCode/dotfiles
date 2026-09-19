@@ -14,8 +14,9 @@ import sys
 import time
 
 import yaml
-from config import grandparent_dir, parent_dir
 from readable_utils.host_tools import get_uppercase_hostname
+
+from config import grandparent_dir, parent_dir
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
     credentials_context,
@@ -186,8 +187,10 @@ def create_link(repo_path, system_path):
         # os.link cannot hard-link directories, so the Windows fallback is files-only
         if system == "Windows" and not os.path.isdir(repo_path):
             os.link(repo_path, system_path)
-            print("  symlink denied - created a hard link instead; after git pull, "
-                  "run status/deploy to catch and fix orphaned hard links")
+            print(
+                "  symlink denied - created a hard link instead; after git pull, "
+                "run status/deploy to catch and fix orphaned hard links"
+            )
             return "hardlinked"
         raise
 
@@ -416,8 +419,7 @@ def deploy_config(
         if refresh == "relink" and link_is_stale(repo_path, system_path):
             os.remove(system_path)
             action = create_link(repo_path, system_path)
-            print(f"  repo file changed since the link was made - re-{action} {system_path}"
-                  f"\n         -> {repo_path}")
+            print(f"  repo file changed since the link was made - re-{action} {system_path}\n         -> {repo_path}")
             return "relinked"
         print(f"  already deployed: {system_path}")
         return "noop"
@@ -437,8 +439,7 @@ def deploy_config(
     if not repo_exists and system_exists:
         return _ingest_system_file(repo_path, system_path, ingest_system_if_exists)
     if repo_exists and system_exists:
-        return _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root,
-                                    on_drift)
+        return _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root, on_drift)
     print(f"  nothing to deploy: neither {repo_path} nor {system_path} exists")
     return "missing"
 
@@ -455,8 +456,7 @@ def _ingest_system_file(repo_path, system_path, ingest_system_if_exists):
     return "ingested"
 
 
-def _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root,
-                         on_drift="replace"):
+def _replace_system_file(repo_path, system_path, replace_system_if_exists, backup_root, repo_root, on_drift="replace"):
     if not replace_system_if_exists:
         print(f"  both versions exist; skipping replacement of {system_path} - no changes made")
         return "skipped"
@@ -465,8 +465,10 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
     adopting = on_drift == "adopt" and drift_is_newer_local_edit(repo_path, system_path)
     if adopting:
         adopt_system_file(system_path, repo_path)
-        print("  adopted the newer system edits into the repo file - the worktree is now dirty; "
-              "git diff to review, then commit or revert")
+        print(
+            "  adopted the newer system edits into the repo file - the worktree is now dirty; "
+            "git diff to review, then commit or revert"
+        )
     if os.path.isdir(system_path):
         force_rmtree(system_path)
     else:
@@ -619,9 +621,7 @@ def _parse_manifest_file(manifest_path):
             )
         refresh = entry.get("refresh", "none")
         if refresh not in ("none", "relink"):
-            raise ValueError(
-                f"Manifest entry {entry['name']} has invalid refresh: {refresh} (use 'none' or 'relink')"
-            )
+            raise ValueError(f"Manifest entry {entry['name']} has invalid refresh: {refresh} (use 'none' or 'relink')")
         requires = entry.get("requires")
         if requires is not None:
             paths = requires if isinstance(requires, list) else [requires]
@@ -1000,8 +1000,10 @@ def classify_entry(repo_path, system_path, refresh="none"):
             return "BROKEN_LINK", f"dangling link -> {os.readlink(system_path)}"
         if os.path.realpath(system_path) == os.path.realpath(repo_path):
             if refresh == "relink" and link_is_stale(repo_path, system_path):
-                return ("STALE_LINK",
-                        "link resolves to repo file but predates its content; the app still holds the old copy")
+                return (
+                    "STALE_LINK",
+                    "link resolves to repo file but predates its content; the app still holds the old copy",
+                )
             return "OK", "link resolves to repo file"
         return "WRONG_TARGET", f"link resolves to {os.path.realpath(system_path)}"
     if os.path.isdir(system_path):
@@ -1016,15 +1018,17 @@ def classify_entry(repo_path, system_path, refresh="none"):
 def planned_action(status, on_drift="replace"):
     """Human description of what deploy would do for a given status."""
     if status == "NOT_A_LINK" and on_drift == "adopt":
-        return ("deploy would back up the system file, adopt its content into the repo working tree if it is "
-                "the newer diverging side (git diff to review), then replace it with a link to the repo version")
+        return (
+            "deploy would back up the system file, adopt its content into the repo working tree if it is "
+            "the newer diverging side (git diff to review), then replace it with a link to the repo version"
+        )
     descriptions = {
         "OK": "no action needed",
         "NOT_DEPLOYED": "deploy would create symlink at destination",
         "BROKEN_LINK": "deploy would remove the stale link and create symlink",
         "WRONG_TARGET": "deploy would remove the stale link and create symlink",
         "NOT_A_LINK": "deploy would back up the system file to data/config_backups, then replace it with a link "
-                      "to the repo version",
+        "to the repo version",
         "STALE_LINK": "deploy would re-create the link so the app re-reads the pulled content",
         "REPO_MISSING": "nothing to deploy (repo file missing)",
     }
@@ -1037,8 +1041,13 @@ def print_unhealthy_row(status, row, detail, name_width):
     print(paint(f"      {detail}", "dim"))
     print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'))}", "dim"))
     if status == "NOT_A_LINK" and row.get("adopt_elsewhere"):
-        print(paint(f"         (on_drift: adopt entries adopt only on {WORKTREE_HOST}; here the repo copy "
-                    "wins and the app's rewrite lives on in the backup)", "dim"))
+        print(
+            paint(
+                f"         (on_drift: adopt entries adopt only on {WORKTREE_HOST}; here the repo copy "
+                "wins and the app's rewrite lives on in the backup)",
+                "dim",
+            )
+        )
 
 
 def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
@@ -1113,8 +1122,9 @@ def run_deploy(plan):
     """
     info = [row for row in plan if row["action"] != "apply"]
     apply_rows = [row for row in plan if row["action"] == "apply"]
-    healthy = [row for row in apply_rows
-               if classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))[0] == "OK"]
+    healthy = [
+        row for row in apply_rows if classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))[0] == "OK"
+    ]
     work = [row for row in apply_rows if row not in healthy]
     counts = {"changed": 0, "noop": len(healthy), "skipped": 0}
 
@@ -1122,8 +1132,9 @@ def run_deploy(plan):
         print_section("Changes", len(work), "cyan")
         for row in work:
             print("  " + paint(row["name"], "bold"))
-            result = deploy_config(row["repo"], row["dest"], on_drift=row.get("on_drift", "replace"),
-                                   refresh=row.get("refresh", "none"))
+            result = deploy_config(
+                row["repo"], row["dest"], on_drift=row.get("on_drift", "replace"), refresh=row.get("refresh", "none")
+            )
             if result == "noop":
                 counts["noop"] += 1
             elif result in ("skipped", "missing"):
@@ -1132,11 +1143,13 @@ def run_deploy(plan):
                 counts["changed"] += 1
         print()
 
-    print(paint(
-        f"Deploy complete: {counts['changed']} changed, {counts['noop']} already deployed, "
-        f"{counts['skipped']} skipped, {len(info)} not applicable here",
-        "green" if not counts["skipped"] else "yellow",
-    ))
+    print(
+        paint(
+            f"Deploy complete: {counts['changed']} changed, {counts['noop']} already deployed, "
+            f"{counts['skipped']} skipped, {len(info)} not applicable here",
+            "green" if not counts["skipped"] else "yellow",
+        )
+    )
     return 0
 
 
@@ -1224,6 +1237,7 @@ def force_rmtree(path):
     WinError 5, so a plain rmtree dies partway through a checkout and leaves a
     gutted .git behind. Clear the attribute and retry the failed operation.
     """
+
     def on_error(func, target, _exc_info):
         try:
             os.chmod(target, stat.S_IWRITE)
@@ -1313,9 +1327,7 @@ def classify_repo_directory(dest):
         dirty = subprocess.check_output(
             ["git", "-C", dest, "status", "--porcelain"], text=True, stderr=subprocess.DEVNULL
         ).strip()
-        remotes = subprocess.check_output(
-            ["git", "-C", dest, "remote"], text=True, stderr=subprocess.DEVNULL
-        ).strip()
+        remotes = subprocess.check_output(["git", "-C", dest, "remote"], text=True, stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         if gutted_git_dir(dest):
             # an earlier prune died partway through this same removal (Windows
@@ -1342,10 +1354,7 @@ def gutted_git_dir(dest):
     git_dir = os.path.join(dest, ".git")
     if not os.path.isdir(git_dir):
         return False
-    return not (
-        os.path.exists(os.path.join(git_dir, "HEAD"))
-        and os.path.exists(os.path.join(git_dir, "config"))
-    )
+    return not (os.path.exists(os.path.join(git_dir, "HEAD")) and os.path.exists(os.path.join(git_dir, "config")))
 
 
 def run_prune(candidates, apply_changes=False):
@@ -1394,10 +1403,12 @@ def run_prune(candidates, apply_changes=False):
         print(paint("nothing to prune", "green"))
         return 0
     verb = "removed" if apply_changes else "would remove"
-    print(paint(
-        f"Prune complete: {verb} {removed}, skipped {skipped}, already absent {absent}",
-        "yellow" if skipped else "green",
-    ))
+    print(
+        paint(
+            f"Prune complete: {verb} {removed}, skipped {skipped}, already absent {absent}",
+            "yellow" if skipped else "green",
+        )
+    )
     return 0
 
 
@@ -1406,9 +1417,7 @@ def run_prune(candidates, apply_changes=False):
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(
-        description="Deploy the configs in deploy_manifest.yaml for the current machine."
-    )
+    parser = argparse.ArgumentParser(description="Deploy the configs in deploy_manifest.yaml for the current machine.")
     parser.add_argument(
         "command",
         nargs="?",
@@ -1542,9 +1551,11 @@ def main(argv=None):
         overlays = ", ".join(os.path.basename(path) for path in manifest_paths[1:])
         manifests_label += f" + {len(manifest_paths) - 1} overlays ({overlays})"
     print(f"manifests: {manifests_label}")
-    for overlay_dir, context in ([] if args.manifest else member_overlay_dirs()[1]):
-        print(f"overlay not loaded: {os.path.basename(overlay_dir)} (this machine's inventory record "
-              f"is not in context {context})")
+    for overlay_dir, context in [] if args.manifest else member_overlay_dirs()[1]:
+        print(
+            f"overlay not loaded: {os.path.basename(overlay_dir)} (this machine's inventory record "
+            f"is not in context {context})"
+        )
     print()
     # The per-context MCP files are generated by the deploy and LINKED by it (the
     # per-repo .mcp.json entries point at data/mcp/), so generation has to run

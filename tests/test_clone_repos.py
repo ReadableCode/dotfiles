@@ -6,6 +6,7 @@ import os
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from src import clone_repos
 
 # %%
@@ -131,8 +132,11 @@ def test_defaults_supply_the_block_list_to_every_entry(git_dir):
 
 
 def test_repos_of_a_context_the_host_record_is_not_in_are_not_offered(git_dir, monkeypatch, capsys):
-    write_repos_config(str(git_dir / "acme_credentials"), "acme",
-                       {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme-app"}]})
+    write_repos_config(
+        str(git_dir / "acme_credentials"),
+        "acme",
+        {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme-app"}]},
+    )
     write_inventory(str(git_dir / "acme_credentials"), "acme", ["ACMEBOX"])
     write_inventory(str(git_dir / "personal_credentials"), "personal", ["HUB"])
     monkeypatch.setattr(clone_repos, "get_uppercase_hostname", lambda: "HUB")

@@ -11,8 +11,9 @@ import sys
 from datetime import date, datetime, timedelta
 
 with contextlib.redirect_stdout(sys.stderr):
-    from config import grandparent_dir, parent_dir  # noqa: E402
     from mcp.server.mcpserver import MCPServer  # noqa: E402
+
+    from config import grandparent_dir, parent_dir  # noqa: E402
     from utils import googlemcp_tools as gtools  # noqa: E402
     from utils.calendarboard_tools import (  # noqa: E402
         fetch_google_events,
@@ -179,9 +180,7 @@ def _serialize_event(event):
 )
 def list_accounts() -> dict:
     return {
-        "calendar_sources": [
-            {"name": source["name"], "config": source["_config"]} for source in _calendar_sources()
-        ],
+        "calendar_sources": [{"name": source["name"], "config": source["_config"]} for source in _calendar_sources()],
         "mailboxes": [{"name": mailbox["name"], "config": mailbox["_config"]} for mailbox in _mailboxes()],
         "drives": [{"name": drive["name"], "config": drive["_config"]} for drive in _drives()],
     }
@@ -331,9 +330,7 @@ def calendar_update_event(
 def calendar_delete_event(
     event_id: str, calendar_id: str = "primary", send_updates: str = "none", source: str = ""
 ) -> dict:
-    return gtools.calendar_delete_event(
-        _source(source), event_id, calendar_id=calendar_id, send_updates=send_updates
-    )
+    return gtools.calendar_delete_event(_source(source), event_id, calendar_id=calendar_id, send_updates=send_updates)
 
 
 # %%
@@ -520,9 +517,7 @@ def drive_upload_file(
 def drive_update_file(
     file_id: str, content: str = "", local_path: str = "", mime_type: str = "", drive: str = ""
 ) -> dict:
-    return gtools.drive_update_file(
-        _drive(drive), file_id, content=content, local_path=local_path, mime_type=mime_type
-    )
+    return gtools.drive_update_file(_drive(drive), file_id, content=content, local_path=local_path, mime_type=mime_type)
 
 
 @server.tool(description="Create a folder in Drive (parent_id, default My Drive root).")

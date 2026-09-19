@@ -126,9 +126,22 @@ def _read_ssh_hosts(credentials_dir):
 # Hostnames under these domains are third-party services every context uses
 # (Google APIs, GitHub, AWS, ...); a URL to one identifies nobody.
 GENERIC_URL_DOMAINS = (
-    "google.com", "googleapis.com", "googleusercontent.com", "github.com", "githubusercontent.com",
-    "amazonaws.com", "microsoft.com", "microsoftonline.com", "office.com", "graph.microsoft.com",
-    "slack.com", "ntfy.sh", "openai.com", "anthropic.com", "cloudflare.com", "bitbucket.org",
+    "google.com",
+    "googleapis.com",
+    "googleusercontent.com",
+    "github.com",
+    "githubusercontent.com",
+    "amazonaws.com",
+    "microsoft.com",
+    "microsoftonline.com",
+    "office.com",
+    "graph.microsoft.com",
+    "slack.com",
+    "ntfy.sh",
+    "openai.com",
+    "anthropic.com",
+    "cloudflare.com",
+    "bitbucket.org",
 )
 
 
@@ -325,9 +338,7 @@ def scan_repo(repo_dir, contexts, staged=False):
     if not rules:
         return []
     patterns = [
-        (context, ident, _pattern(ident))
-        for context, info in rules.items()
-        for ident in sorted(info["identifiers"])
+        (context, ident, _pattern(ident)) for context, info in rules.items() for ident in sorted(info["identifiers"])
     ]
     hits = []
     for path in staged_files(repo_dir) if staged else tracked_files(repo_dir):
@@ -387,8 +398,10 @@ def main(argv=None):
         hits = scan_repo(repo, contexts, staged=args.staged)
         report(hits, repo)
         if hits:
-            print(f"context-leak: {len(hits)} hit(s) in {os.path.basename(repo)} - another context's identifier "
-                  f"must not appear here; describe the pattern generically instead")
+            print(
+                f"context-leak: {len(hits)} hit(s) in {os.path.basename(repo)} - another context's identifier "
+                f"must not appear here; describe the pattern generically instead"
+            )
             return 1
         return 0
     for repo in default_scan_set(parent, contexts):
@@ -407,8 +420,7 @@ def main(argv=None):
     outcome = "FAILED" if failed else "clean"
     repo_count = len(default_scan_set(parent, contexts))
     ident_count = sum(len(i["identifiers"]) for i in contexts.values())
-    print(f"context-leak: {outcome} across {repo_count} repos, "
-          f"{ident_count} identifiers from {len(contexts)} contexts")
+    print(f"context-leak: {outcome} across {repo_count} repos, {ident_count} identifiers from {len(contexts)} contexts")
     return 1 if failed else 0
 
 

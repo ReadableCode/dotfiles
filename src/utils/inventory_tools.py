@@ -92,10 +92,7 @@ def load_inventory_hostnames(inventory_path):
     """
     with open(inventory_path, "r", encoding="utf-8") as file_handle:
         inventory = json.load(file_handle)
-    return {
-        str(host["name"]).split(".")[0].upper()
-        for host in inventory.get("hosts", [])
-    }
+    return {str(host["name"]).split(".")[0].upper() for host in inventory.get("hosts", [])}
 
 
 def load_union_inventory_hostnames(credentials_root):

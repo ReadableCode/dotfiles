@@ -98,7 +98,7 @@ def main_checkout(path):
     """The repo's main working tree - first entry of `git worktree list`."""
     for line in git(["worktree", "list", "--porcelain"], path).splitlines():
         if line.startswith("worktree "):
-            return os.path.realpath(line[len("worktree "):])
+            return os.path.realpath(line[len("worktree ") :])
     raise RuntimeError("git worktree list returned no worktrees")
 
 
@@ -137,8 +137,10 @@ def unpushed_work(worktree):
     try:
         upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], worktree)
     except subprocess.CalledProcessError:
-        reasons.append(f"branch {branch} has commits not on {base or 'the default branch'} and no upstream - "
-                       f"push it first (git push -u origin {branch})")
+        reasons.append(
+            f"branch {branch} has commits not on {base or 'the default branch'} and no upstream - "
+            f"push it first (git push -u origin {branch})"
+        )
         return reasons
     ahead = git(["rev-list", "--count", f"{upstream}..HEAD"], worktree)
     if ahead != "0":
@@ -148,8 +150,12 @@ def unpushed_work(worktree):
 
 def is_ancestor(commit, branch, repo):
     """True when every commit reachable from `commit` is also reachable from `branch`."""
-    probe = subprocess.run(["git", "merge-base", "--is-ancestor", commit, branch], cwd=repo,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    probe = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", commit, branch],
+        cwd=repo,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     return probe.returncode == 0
 
 
@@ -174,7 +180,7 @@ def registered_worktrees(main):
     paths = []
     for line in git(["worktree", "list", "--porcelain"], main).splitlines():
         if line.startswith("worktree "):
-            paths.append(os.path.realpath(line[len("worktree "):]))
+            paths.append(os.path.realpath(line[len("worktree ") :]))
     return paths
 
 
@@ -348,12 +354,12 @@ def add_workspace_folder(text, anchor_path, name, path):
     if existing:
         if existing.group("name") == name:
             return text, "present"
-        return text[: existing.start("name")] + name + text[existing.end("name"):], "relabeled"
+        return text[: existing.start("name")] + name + text[existing.end("name") :], "relabeled"
     match = _folder_block_re(anchor_path).search(text)
     if not match:
         return text, "no anchor"
     block = WORKSPACE_ENTRY.format(indent=match.group("indent"), name=name, path=path)
-    return text[: match.end()] + block + text[match.end():], "added"
+    return text[: match.end()] + block + text[match.end() :], "added"
 
 
 def remove_workspace_folder(text, path):
@@ -361,7 +367,7 @@ def remove_workspace_folder(text, path):
     match = _folder_block_re(path).search(text)
     if not match:
         return text, "absent"
-    return text[: match.start()] + text[match.end():], "removed"
+    return text[: match.start()] + text[match.end() :], "removed"
 
 
 def workspace_relpath(repo_parent, path):
@@ -414,8 +420,11 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--worktree", default=os.getcwd(), help="path inside the worktree (default: cwd)")
     parser.add_argument("--label", help="workspace folder label suffix (default: ticket key from the branch)")
-    parser.add_argument("--remove", action="store_true",
-                        help="leaving: drop the workspace entry and delete this one worktree (refuses unpushed work)")
+    parser.add_argument(
+        "--remove",
+        action="store_true",
+        help="leaving: drop the workspace entry and delete this one worktree (refuses unpushed work)",
+    )
     parser.add_argument("--no-workspace", action="store_true", help="do not touch the VS Code workspace file")
     parser.add_argument("--no-sync", action="store_true", help="do not run uv sync")
     parser.add_argument("--dry-run", action="store_true", help="report what would happen, change nothing")
@@ -458,8 +467,10 @@ def main(argv=None):
     if not args.no_workspace:
         label = args.label or derive_label(worktree) or os.path.basename(worktree)
         if not args.label and label == os.path.basename(worktree):
-            print("no ticket in the branch or its commits yet - labelling with the directory name; "
-                  "re-run with --label once the ticket exists (or now, with a short description)")
+            print(
+                "no ticket in the branch or its commits yet - labelling with the directory name; "
+                "re-run with --label once the ticket exists (or now, with a short description)"
+            )
         print("workspace:", update_workspace(main, worktree, label, dry_run=args.dry_run, hostname=args.hostname))
     if not args.no_sync:
         print("uv sync:", sync_venv(worktree, dry_run=args.dry_run))

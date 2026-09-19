@@ -50,9 +50,7 @@ def format_duration(seconds: float) -> str:
     return f"{h}h {m}m {s}s"
 
 
-def send_notification(
-    server, topic, title, body, priority, tags, username=None, password=None
-):
+def send_notification(server, topic, title, body, priority, tags, username=None, password=None):
     """POST to ntfy. Never raise — notify failure must not break the user's workflow."""
     url = f"{server.rstrip('/')}/{topic}"
     headers = {
@@ -62,9 +60,7 @@ def send_notification(
     }
     auth = (username, password) if username and password else None
     try:
-        requests.post(
-            url, data=body.encode("utf-8"), headers=headers, auth=auth, timeout=10
-        )
+        requests.post(url, data=body.encode("utf-8"), headers=headers, auth=auth, timeout=10)
     except requests.RequestException as e:
         print(f"[ntfyme] notification failed: {e}", file=sys.stderr)
 

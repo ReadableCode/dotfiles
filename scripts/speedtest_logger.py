@@ -161,9 +161,7 @@ def query_speedtest_results_df():
             """
         )
         rows = pg_cursor.fetchall()
-        return pd.DataFrame(
-            rows, columns=["timestamp", "ping_ms", "download_mbps", "upload_mbps"]
-        )
+        return pd.DataFrame(rows, columns=["timestamp", "ping_ms", "download_mbps", "upload_mbps"])
     finally:
         pg_cursor.close()
         release_connection(pg_conn)

@@ -263,9 +263,7 @@ HOSTS_FORMAT = "hosts"  # json, one record per host rather than per alias
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument(
-        "--format", choices=sorted(RENDERERS) + [HOSTS_FORMAT], required=True, help="output syntax"
-    )
+    parser.add_argument("--format", choices=sorted(RENDERERS) + [HOSTS_FORMAT], required=True, help="output syntax")
     parser.add_argument(
         "--root",
         default=DEFAULT_ROOT,

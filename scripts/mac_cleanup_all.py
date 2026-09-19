@@ -38,15 +38,16 @@ from stat import S_ISREG
 # %%
 # Config — edit these when running as ipython cells (CLI flags override) #
 
-DELETE = False               # False = dry run; True = actually delete
+DELETE = False  # False = dry run; True = actually delete
 POWERLOG_THRESHOLD_GB = 2.0  # only purge powerlog DB above this size
 LOGSTORE_THRESHOLD_GB = 2.0  # only erase the unified log store above this size
-STAGING_AGE_DAYS = 1.0       # brew staging younger than this may be a live install
+STAGING_AGE_DAYS = 1.0  # brew staging younger than this may be a live install
 BAR_WIDTH = 50
 
 
 # %%
 # Shared helpers #
+
 
 def real_home() -> Path:
     """User's home even under sudo (sudo python3 keeps HOME=/var/root)."""
@@ -98,7 +99,7 @@ def dir_size(path: Path) -> int:
 
 
 def human(nbytes: float) -> str:
-    if abs(nbytes) >= 1024 ** 3:
+    if abs(nbytes) >= 1024**3:
         return f"{nbytes / 1024**3:.2f} GB"
     return f"{nbytes / 1024**2:.0f} MB"
 
@@ -362,7 +363,10 @@ PACKAGE_CACHES = [
 def tool_cache_dir(query: list[str]) -> Path | None:
     """Where the tool itself says its cache is, or None if it cannot say."""
     result = subprocess.run(
-        ["zsh", "-lic", " ".join(query)], capture_output=True, text=True, check=False,
+        ["zsh", "-lic", " ".join(query)],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if result.returncode != 0:
         return None
@@ -458,7 +462,9 @@ def kill_holders(directory: Path) -> None:
             name = (
                 subprocess.run(
                     ["ps", "-p", str(holder), "-o", "comm="],
-                    capture_output=True, text=True, check=False,
+                    capture_output=True,
+                    text=True,
+                    check=False,
                 ).stdout.strip()
                 or "unknown"
             )
@@ -490,7 +496,7 @@ def cleanup_powerlog(delete: bool, threshold_gb: float) -> int:
         print(f"found: {path} ({human(size)})")
     print(f"subtotal: {human(total)} (threshold: {threshold_gb} GB)")
 
-    if total / 1024 ** 3 < threshold_gb:
+    if total / 1024**3 < threshold_gb:
         print("below threshold, nothing to do")
         return 0
     if not delete:
@@ -532,7 +538,7 @@ def cleanup_logstore(delete: bool, threshold_gb: float) -> int:
         report("found", path, size)
     print(f"subtotal: {human(total)} (threshold: {threshold_gb} GB)")
 
-    if total / 1024 ** 3 < threshold_gb:
+    if total / 1024**3 < threshold_gb:
         print("below threshold, nothing to do")
         return 0
     if not delete:
@@ -549,19 +555,26 @@ def cleanup_logstore(delete: bool, threshold_gb: float) -> int:
 # %%
 # Main: disk snapshot -> run all cleanups -> disk snapshot -> reclaimed delta #
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--delete", action="store_true", help="actually delete (default: dry run)")
     parser.add_argument(
-        "--threshold-gb", type=float, default=POWERLOG_THRESHOLD_GB,
+        "--threshold-gb",
+        type=float,
+        default=POWERLOG_THRESHOLD_GB,
         help=f"powerlog: only act above this size (default: {POWERLOG_THRESHOLD_GB})",
     )
     parser.add_argument(
-        "--logstore-threshold-gb", type=float, default=LOGSTORE_THRESHOLD_GB,
+        "--logstore-threshold-gb",
+        type=float,
+        default=LOGSTORE_THRESHOLD_GB,
         help=f"logstore: only erase above this size (default: {LOGSTORE_THRESHOLD_GB})",
     )
     parser.add_argument(
-        "--staging-age-days", type=float, default=STAGING_AGE_DAYS,
+        "--staging-age-days",
+        type=float,
+        default=STAGING_AGE_DAYS,
         help=f"brew staging: only remove entries older than this (default: {STAGING_AGE_DAYS})",
     )
     # parse_known_args so this also runs inside an ipython kernel (which adds its own argv)
@@ -594,8 +607,10 @@ def main() -> None:
         reclaimed = after.free - before.free
         print(f"reclaimed: {human(reclaimed)} (free {human(before.free)} -> {human(after.free)})")
         if reported and reclaimed < reported // 2:
-            print("note: free space grew less than deleted size — APFS purgeable space "
-                  "or lingering file holders may release it shortly")
+            print(
+                "note: free space grew less than deleted size — APFS purgeable space "
+                "or lingering file holders may release it shortly"
+            )
     else:
         print("dry run — rerun with --delete (or DELETE = True) to purge")
 

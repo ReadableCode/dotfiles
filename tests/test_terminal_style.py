@@ -6,6 +6,7 @@ import re
 import config_test_utils  # noqa F401
 import pytest
 from readable_utils import design_tokens
+
 from src import terminal_style
 
 PAGE = """# demo

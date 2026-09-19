@@ -5,6 +5,7 @@ import subprocess
 
 import config_test_utils  # noqa F401
 import pytest
+
 from src import init_worktree
 
 # ---------------------------------------------------------------- helpers

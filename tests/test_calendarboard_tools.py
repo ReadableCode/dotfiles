@@ -7,6 +7,7 @@ from datetime import date, datetime, timezone
 import config_test_utils  # noqa F401
 import pytest
 import yaml
+
 from utils import calendarboard_tools
 
 # %%
@@ -137,9 +138,9 @@ def test_parse_iso_datetime_handles_both_apis():
     # Google: Z suffix (3.10 fromisoformat rejects it raw)
     assert calendarboard_tools.parse_iso_datetime("2026-07-25T14:00:00Z") == utc(2026, 7, 25, 14, 0)
     # Graph: naive with 7-digit fractional seconds, meaning UTC via the Prefer header
-    assert calendarboard_tools.parse_iso_datetime(
-        "2026-07-25T14:00:00.0000000", assume_utc=True
-    ) == utc(2026, 7, 25, 14, 0)
+    assert calendarboard_tools.parse_iso_datetime("2026-07-25T14:00:00.0000000", assume_utc=True) == utc(
+        2026, 7, 25, 14, 0
+    )
 
 
 # %%
@@ -165,10 +166,17 @@ def test_normalize_google_timed_event_maps_self_response():
 
 
 def test_normalize_google_organizer_and_solo_events():
-    organizer = {"summary": "1:1", "organizer": {"self": True},
-                 "start": {"dateTime": "2026-07-25T10:00:00Z"}, "end": {"dateTime": "2026-07-25T11:00:00Z"}}
-    solo = {"summary": "focus block",
-            "start": {"dateTime": "2026-07-25T10:00:00Z"}, "end": {"dateTime": "2026-07-25T11:00:00Z"}}
+    organizer = {
+        "summary": "1:1",
+        "organizer": {"self": True},
+        "start": {"dateTime": "2026-07-25T10:00:00Z"},
+        "end": {"dateTime": "2026-07-25T11:00:00Z"},
+    }
+    solo = {
+        "summary": "focus block",
+        "start": {"dateTime": "2026-07-25T10:00:00Z"},
+        "end": {"dateTime": "2026-07-25T11:00:00Z"},
+    }
     assert calendarboard_tools.normalize_google_event(organizer, "c")["response"] == "organizer"
     assert calendarboard_tools.normalize_google_event(solo, "c")["response"] == "accepted"
 
@@ -306,8 +314,8 @@ def test_grid_hour_range_defaults_and_widens_never_narrows():
 def test_grid_hour_range_clamps_overnight_spillover():
     tz = timezone.utc
     day = date(2026, 7, 25)
-    overnight = event(utc(2026, 7, 24, 23), utc(2026, 7, 25, 1))   # started yesterday
-    redeye = event(utc(2026, 7, 25, 23), utc(2026, 7, 26, 1))      # ends tomorrow
+    overnight = event(utc(2026, 7, 24, 23), utc(2026, 7, 25, 1))  # started yesterday
+    redeye = event(utc(2026, 7, 25, 23), utc(2026, 7, 26, 1))  # ends tomorrow
     assert calendarboard_tools.grid_hour_range([overnight], day, tz=tz) == (0, 19)
     assert calendarboard_tools.grid_hour_range([redeye], day, tz=tz) == (7, 24)
 
@@ -378,9 +386,7 @@ def test_grid_hour_lines_sit_on_the_row_boundary():
     def row_styles(index):
         start = sum(len(line) + 1 for line in lines[:index])
         return {
-            str(span.style)
-            for span in rendered.spans
-            if span.start < start + len(lines[index]) and span.end > start
+            str(span.style) for span in rendered.spans if span.start < start + len(lines[index]) and span.end > start
         }
 
     assert any("underline" in style for style in row_styles(hour_rows["09:00"] - 1))
@@ -448,16 +454,26 @@ def test_fetch_google_events_selects_calendars_and_normalizes(monkeypatch):
     def fake_get(url, headers=None, params=None, timeout=None):
         calls.append((url, params))
         if url.endswith("/users/me/calendarList"):
-            return FakeResponse({"items": [
-                {"id": "primary-id", "summary": "Main", "primary": True},
-                {"id": "team-id", "summary": "Team"},
-                {"id": "junk-id", "summary": "Birthdays"},
-            ]})
-        return FakeResponse({"items": [{
-            "summary": "Standup",
-            "start": {"dateTime": "2026-07-25T09:00:00Z"},
-            "end": {"dateTime": "2026-07-25T09:30:00Z"},
-        }]})
+            return FakeResponse(
+                {
+                    "items": [
+                        {"id": "primary-id", "summary": "Main", "primary": True},
+                        {"id": "team-id", "summary": "Team"},
+                        {"id": "junk-id", "summary": "Birthdays"},
+                    ]
+                }
+            )
+        return FakeResponse(
+            {
+                "items": [
+                    {
+                        "summary": "Standup",
+                        "start": {"dateTime": "2026-07-25T09:00:00Z"},
+                        "end": {"dateTime": "2026-07-25T09:30:00Z"},
+                    }
+                ]
+            }
+        )
 
     monkeypatch.setattr(calendarboard_tools.requests, "get", fake_get)
     monkeypatch.setattr(calendarboard_tools, "_google_access_token", lambda source: "tok")
@@ -488,21 +504,31 @@ def test_fetch_outlook_events_requests_utc_and_pages(monkeypatch):
         if url.endswith("/me/calendars"):
             return FakeResponse({"value": [{"id": "cal1", "name": "Calendar", "isDefaultCalendar": True}]})
         if "page2" in url:
-            return FakeResponse({"value": [{
-                "subject": "Later",
-                "responseStatus": {"response": "accepted"},
-                "start": {"dateTime": "2026-07-25T15:00:00.0000000", "timeZone": "UTC"},
-                "end": {"dateTime": "2026-07-25T16:00:00.0000000", "timeZone": "UTC"},
-            }]})
-        return FakeResponse({
-            "value": [{
-                "subject": "Sync",
-                "responseStatus": {"response": "notResponded"},
-                "start": {"dateTime": "2026-07-25T14:00:00.0000000", "timeZone": "UTC"},
-                "end": {"dateTime": "2026-07-25T15:00:00.0000000", "timeZone": "UTC"},
-            }],
-            "@odata.nextLink": "https://graph.microsoft.com/v1.0/page2",
-        })
+            return FakeResponse(
+                {
+                    "value": [
+                        {
+                            "subject": "Later",
+                            "responseStatus": {"response": "accepted"},
+                            "start": {"dateTime": "2026-07-25T15:00:00.0000000", "timeZone": "UTC"},
+                            "end": {"dateTime": "2026-07-25T16:00:00.0000000", "timeZone": "UTC"},
+                        }
+                    ]
+                }
+            )
+        return FakeResponse(
+            {
+                "value": [
+                    {
+                        "subject": "Sync",
+                        "responseStatus": {"response": "notResponded"},
+                        "start": {"dateTime": "2026-07-25T14:00:00.0000000", "timeZone": "UTC"},
+                        "end": {"dateTime": "2026-07-25T15:00:00.0000000", "timeZone": "UTC"},
+                    }
+                ],
+                "@odata.nextLink": "https://graph.microsoft.com/v1.0/page2",
+            }
+        )
 
     monkeypatch.setattr(calendarboard_tools.requests, "get", fake_get)
     monkeypatch.setattr(calendarboard_tools, "_graph_access_token", lambda source: "tok")

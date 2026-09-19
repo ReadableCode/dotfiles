@@ -4,6 +4,7 @@ import json
 import os
 
 import config_test_utils  # noqa F401
+
 from src import updater_policy
 
 # ---------------------------------------------------------------- helpers
@@ -90,9 +91,7 @@ def test_hosts_are_found_across_all_sibling_inventories(tmp_path):
 def test_main_prints_value_and_where_lists_inventories(tmp_path, capsys):
     inventory_path = write_inventory(tmp_path, "acme", [WORKSTATION])
     assert (
-        updater_policy.main(
-            ["--root", str(tmp_path), "--local-hostname", "workstation-1", "release_ceiling.ubuntu"]
-        )
+        updater_policy.main(["--root", str(tmp_path), "--local-hostname", "workstation-1", "release_ceiling.ubuntu"])
         == 0
     )
     assert capsys.readouterr().out.strip() == "26.04"

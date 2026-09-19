@@ -7,8 +7,9 @@ import subprocess
 import sys
 
 import yaml
-from config import grandparent_dir
 from readable_utils.host_tools import get_uppercase_hostname
+
+from config import grandparent_dir
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
     find_overlay_dirs,
@@ -243,11 +244,15 @@ def member_entries(entries, hostname):
     nothing from it. A machine no inventory lists keeps everything.
     """
     member = host_member_contexts(hostname, GIT_DIR)
-    skipped_contexts = sorted({
-        entry["_context"] for entry in entries
-        if member is not None and entry["_context"] not in member
-        and os.path.basename(os.path.dirname(entry["_config"])).endswith(CREDENTIALS_SUFFIX)
-    })
+    skipped_contexts = sorted(
+        {
+            entry["_context"]
+            for entry in entries
+            if member is not None
+            and entry["_context"] not in member
+            and os.path.basename(os.path.dirname(entry["_config"])).endswith(CREDENTIALS_SUFFIX)
+        }
+    )
     for context in skipped_contexts:
         print(paint(f"skipping {context} repos: this machine's inventory record is not in that context", "dim"))
     return [entry for entry in entries if entry["_context"] not in skipped_contexts]

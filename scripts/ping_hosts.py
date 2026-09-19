@@ -65,9 +65,7 @@ async def stream_ping_df(hosts, timeout_s: float = 1.0):
     for coro in asyncio.as_completed(tasks):
         row = await coro
         results.append(row)
-        yield pd.DataFrame(results).sort_values(
-            ["category", "alias", "target"]
-        ).reset_index(drop=True)
+        yield pd.DataFrame(results).sort_values(["category", "alias", "target"]).reset_index(drop=True)
 
 
 def ping_all_now(hosts, timeout_s: float = 1.0):

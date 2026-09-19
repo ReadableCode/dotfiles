@@ -6,6 +6,7 @@ import os
 import subprocess
 
 import yaml
+
 from utils.inventory_tools import find_overlay_dirs, overlay_context
 from utils.secret_tools import resolve_secret
 
@@ -161,9 +162,7 @@ def _all_in_environment(env_secrets):
 
 
 def _git_output(repo_dir, *args):
-    return subprocess.check_output(
-        ["git", "-C", repo_dir, *args], text=True, stderr=subprocess.DEVNULL
-    ).strip()
+    return subprocess.check_output(["git", "-C", repo_dir, *args], text=True, stderr=subprocess.DEVNULL).strip()
 
 
 def sync_warnings(config_paths):
@@ -181,9 +180,9 @@ def sync_warnings(config_paths):
         try:
             ahead, behind = (
                 int(count)
-                for count in _git_output(
-                    repo_dir, "rev-list", "--left-right", "--count", "@{upstream}...HEAD"
-                ).split()[::-1]
+                for count in _git_output(repo_dir, "rev-list", "--left-right", "--count", "@{upstream}...HEAD").split()[
+                    ::-1
+                ]
             )
         except (subprocess.CalledProcessError, OSError, ValueError):
             continue  # not a repo, detached, or no upstream: nothing to compare
