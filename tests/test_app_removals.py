@@ -299,6 +299,7 @@ def test_declining_keeps_the_package(monkeypatch):
     monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: ([dict(CASK_ENTRY)], []))
     monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "package_present", lambda *a, **k: True)
     monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "n")
     monkeypatch.setattr(app_removals, "remove_package", lambda *a, **k: pytest.fail("removed after declining"))
     assert app_removals.run(entries=[dict(CASK_ENTRY)]) == 0
@@ -310,6 +311,7 @@ def test_quit_stops_before_the_remaining_apps(monkeypatch):
     monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: ([first, second], []))
     monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "package_present", lambda *a, **k: True)
     monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "q")
     monkeypatch.setattr(app_removals, "remove_package", lambda *a, **k: pytest.fail("removed after quitting"))
     assert app_removals.run(entries=[first, second]) == 0
@@ -319,6 +321,7 @@ def test_a_failed_removal_is_a_non_zero_exit(monkeypatch):
     monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: ([dict(CASK_ENTRY)], []))
     monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "package_present", lambda *a, **k: True)
     monkeypatch.setattr(app_removals, "remove_package", lambda *a, **k: False)
     assert app_removals.run(assume_yes=True, entries=[dict(CASK_ENTRY)]) == 1
 
@@ -337,3 +340,81 @@ def test_the_repos_own_app_removals_file_parses():
 
 
 # %%
+
+
+# %%
+# One uninstall taking another entry's package #
+
+
+def test_a_package_an_earlier_removal_took_is_skipped_not_failed(monkeypatch, capsys):
+    """
+    homebrew lists `vnc-viewer` and `realvnc-connect-viewer` separately but they
+    are one cask (the old name is an alias of the renamed one), so uninstalling
+    either empties both. The second entry must skip, not try and fail.
+    """
+    first = {"name": "renamed", "manager": "cask", "package": "realvnc-connect-viewer"}
+    second = dict(CASK_ENTRY)
+    gone = set()
+
+    monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: ([first, second], []))
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "y")
+    # both names vanish together, which is what brew actually does
+    monkeypatch.setattr(app_removals, "package_present", lambda entry, *a, **k: not gone)
+
+    def remove(entry, **kwargs):
+        gone.add(entry["package"])
+        return True
+
+    monkeypatch.setattr(app_removals, "remove_package", remove)
+
+    assert app_removals.run(entries=[first, second]) == 0
+    output = capsys.readouterr().out
+    assert "already gone" in output
+    assert gone == {"realvnc-connect-viewer"}
+
+
+def test_presence_is_rechecked_without_the_cache_before_removing(monkeypatch):
+    """The removal loop must not reuse the set collected before the first uninstall."""
+    calls = []
+
+    def fake_present(entry, cache=None, **kwargs):
+        calls.append(cache)
+        return True
+
+    monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: ([dict(CASK_ENTRY)], []))
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "n")
+    monkeypatch.setattr(app_removals, "package_present", fake_present)
+
+    app_removals.run(entries=[dict(CASK_ENTRY)])
+    assert calls == [None], "the pre-removal check must pass no cache"
+
+
+def test_package_present_reuses_a_cache_when_given_one():
+    queries = []
+
+    def run(argv):
+        queries.append(argv)
+        return 0, "vnc-viewer\n"
+
+    cache: dict = {}
+    entry = dict(CASK_ENTRY)
+    assert app_removals.package_present(entry, cache, run=run)
+    assert app_removals.package_present(entry, cache, run=run)
+    assert len(queries) == 1
+
+
+def test_package_present_without_a_cache_asks_every_time():
+    queries = []
+
+    def run(argv):
+        queries.append(argv)
+        return 0, "vnc-viewer\n"
+
+    entry = dict(CASK_ENTRY)
+    app_removals.package_present(entry, run=run)
+    app_removals.package_present(entry, run=run)
+    assert len(queries) == 2

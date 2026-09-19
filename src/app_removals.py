@@ -297,6 +297,29 @@ def winget_present(package, run=run_capture):
 # Candidates #
 
 
+def package_present(entry, cache=None, run=run_capture):
+    """
+    Whether this entry's package is installed right now.
+
+    ``cache`` is a dict the caller reuses to ask each manager once across many
+    entries. Pass None to force a fresh query, which is what the removal loop
+    does: two entries can name the SAME underlying package (homebrew keeps the
+    old name as an alias of a renamed cask, and lists both), so one uninstall
+    can take the other entry's package with it. Acting on a set collected
+    before the first removal then tries to uninstall something already gone.
+    """
+    manager = manager_for(entry["manager"])
+    if manager.name == "winget":
+        return winget_present(entry["package"], run=run)
+    if cache is None:
+        names = installed_packages(manager, run=run)
+    else:
+        if manager.name not in cache:
+            cache[manager.name] = installed_packages(manager, run=run)
+        names = cache[manager.name]
+    return None if names is None else entry["package"].lower() in names
+
+
 def candidates(entries, system=None, hostname=None, app_lists=APP_LISTS, run=run_capture):
     """
     (removable, protected) for this machine.
@@ -316,14 +339,7 @@ def candidates(entries, system=None, hostname=None, app_lists=APP_LISTS, run=run
         if entry["package"] in wanted_packages(manager, app_lists):
             protected.append(entry)
             continue
-        if manager.name == "winget":
-            present = winget_present(entry["package"], run=run)
-        else:
-            if manager.name not in cache:
-                cache[manager.name] = installed_packages(manager, run=run)
-            names = cache[manager.name]
-            present = None if names is None else entry["package"].lower() in names
-        if present:
+        if package_present(entry, cache, run=run):
             removable.append(entry)
     return removable, protected
 
@@ -415,6 +431,14 @@ def run(list_only=False, assume_yes=False, entries=None, system=None, hostname=N
     failures = 0
     for entry in removable:
         print()
+        # Re-ask, because an earlier answer in this same loop may already have
+        # taken this package: `vnc-viewer` was homebrew's alias for the renamed
+        # `realvnc-connect-viewer`, listed separately but one cask, so removing
+        # either emptied both. Uninstalling what is already gone is an error the
+        # person then has to read and dismiss.
+        if not package_present(entry):
+            print(paint(f"  {entry['package']} is already gone (an earlier removal took it)", "dim"))
+            continue
         show_simulation(entry)
         answer = "y" if assume_yes else prompt_yes_no_quit(f"Uninstall {describe(entry)}?")
         if answer == "q":
