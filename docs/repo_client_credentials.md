@@ -87,11 +87,18 @@ See `docs/repo_philosophy.md` for the full category table.
   inventory gets fixed instead of going unnoticed. An unreadable inventory
   *file* is the softer case — it warns and only costs that context.
 
-  A host may also declare `vnc_aliases` (with an optional `vnc_hostname` when
-  the screen-sharing target differs from the ssh one, e.g. a Tailscale address).
-  These become `open vnc://user@host` aliases and are emitted **on macOS only**,
-  in whichever shell asked — the gate is the platform, not the shell, because
-  nothing off macOS has a `vnc://` handler.
+  vnc aliases are **derived, never declared**: each `ssh<stem>` alias on a host
+  whose `os` is `macos`, `windows` or `linux` gets a matching `vnc<stem>`, so
+  `sshryzenwhite` implies `vncryzenwhite` and the two lists cannot drift apart.
+  They are emitted **on macOS only**, in whichever shell asked — the gate is the
+  platform, not the shell, because nothing off macOS has a `vnc://` handler. The
+  `os` gate is what keeps an android tablet or a network switch from getting an
+  alias that could never connect.
+
+  Two optional keys tune the target: `vnc_hostname` when screen sharing answers
+  on a different address from ssh (a Tailscale name), and `vnc_port` when the
+  server is not on 5900 — nukbuntu's headless Xtigervnc is on `:1`, so it
+  declares `5901` and its alias carries it.
 
 ### Inventory `jump:` — hosts behind a VPN another machine holds
 

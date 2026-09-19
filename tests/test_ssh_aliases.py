@@ -109,15 +109,22 @@ VNC_HOST = {
     "name": "envy",
     "hostname": "192.168.1.20",
     "user": "jason",
+    "os": "macos",
     "aliases": ["sshenvy"],
-    "vnc_aliases": ["vncenvy"],
 }
 
 
-def test_vnc_aliases_are_macos_only(tmp_path):
+def test_a_vnc_alias_is_derived_from_the_ssh_one(tmp_path):
+    """No host declares vnc aliases: sshenvy implies vncenvy, so the two cannot disagree."""
     write_inventory(tmp_path, "personal", [VNC_HOST])
     assert "vncenvy" not in aliases(tmp_path, include_vnc=False)
     assert aliases(tmp_path, include_vnc=True)["vncenvy"] == "open vnc://jason@192.168.1.20"
+
+
+def test_every_ssh_alias_on_a_host_gets_its_own_vnc_twin(tmp_path):
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["sshenvy", "sshdesk"])])
+    generated = aliases(tmp_path, include_vnc=True)
+    assert generated["vncenvy"] == generated["vncdesk"] == "open vnc://jason@192.168.1.20"
 
 
 def test_vnc_hostname_overrides_the_ssh_target(tmp_path):
@@ -127,8 +134,30 @@ def test_vnc_hostname_overrides_the_ssh_target(tmp_path):
     assert generated["sshenvy"] == "ssh jason@192.168.1.20"
 
 
+def test_vnc_port_is_appended_only_when_it_is_not_the_default(tmp_path):
+    """A headless Xtigervnc on :1 answers on 5901, and a bare IP means 5900."""
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_port=5901)])
+    assert aliases(tmp_path, include_vnc=True)["vncenvy"] == "open vnc://jason@192.168.1.20:5901"
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_port=5900)])
+    assert aliases(tmp_path, include_vnc=True)["vncenvy"] == "open vnc://jason@192.168.1.20"
+
+
+def test_a_host_that_cannot_serve_a_screen_gets_no_vnc_alias(tmp_path):
+    """An android tablet or a switch would only get an alias that never connects."""
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, os="android")])
+    generated = aliases(tmp_path, include_vnc=True)
+    assert "vncenvy" not in generated
+    assert generated["sshenvy"] == "ssh jason@192.168.1.20"
+
+
+def test_an_alias_not_named_for_the_ssh_convention_derives_nothing(tmp_path):
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["box"])])
+    assert aliases(tmp_path, include_vnc=True) == {"box": "ssh jason@192.168.1.20"}
+
+
 def test_userless_host_still_gets_its_vnc_alias(tmp_path):
-    write_inventory(tmp_path, "personal", [{"name": "tv", "hostname": "10.0.0.9", "vnc_aliases": ["vnctv"]}])
+    host = {"name": "tv", "hostname": "10.0.0.9", "os": "linux", "aliases": ["sshtv"]}
+    write_inventory(tmp_path, "personal", [host])
     assert aliases(tmp_path, include_vnc=True) == {"vnctv": "open vnc://10.0.0.9"}
 
 
@@ -205,8 +234,8 @@ def test_alias_names_that_are_not_bare_words_are_a_hard_error(tmp_path, bad_name
     assert "personal_hosts.json" in str(raised.value)
 
 
-def test_a_bad_vnc_alias_name_is_a_hard_error_too(tmp_path):
-    write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_aliases=["vnc envy"])])
+def test_a_bad_alias_name_fails_before_a_vnc_twin_is_derived(tmp_path):
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["ssh envy"])])
     with pytest.raises(ValueError):
         aliases(tmp_path, include_vnc=True)
 

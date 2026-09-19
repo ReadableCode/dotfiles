@@ -33,10 +33,14 @@ it is already inside the VPN and the target is direct. Needs non-interactive
 key auth to both hops and AllowTcpForwarding on the jump's sshd (the default,
 and true of Windows OpenSSH Server).
 
-A host may also declare ``vnc_aliases`` (plus an optional ``vnc_hostname`` when
-the screen-sharing target differs from the ssh one, e.g. a Tailscale address).
-Those become ``open vnc://user@host`` aliases and are emitted on macOS only, in
-whichever shell asked - nothing else has a vnc:// handler.
+vnc aliases are DERIVED from the ssh ones rather than declared: every
+``ssh<stem>`` alias on a host that can run a screen server gets a matching
+``vnc<stem>``, so ``sshryzenwhite`` implies ``vncryzenwhite`` and nothing has to
+be listed twice. They are emitted on macOS only, in whichever shell asked -
+nothing else has a vnc:// handler. A host may tune the target with
+``vnc_hostname`` (when screen sharing answers on a different address from ssh,
+e.g. a Tailscale name) and ``vnc_port`` (when the server is not on 5900, as with
+a headless Xtigervnc on :1).
 
 Anything wrong with an inventory - a file that will not parse, an alias name
 that is not a bare word - raises and exits non-zero, so the shells define
@@ -76,6 +80,22 @@ def host_names(host):
 def short_name(name):
     """Lowercase pre-dot form of a hostname, the form machines are compared by."""
     return str(name).split(".")[0].lower()
+
+
+# ssh aliases are named ``ssh<stem>``; the vnc alias for the same box is the same
+# stem behind ``vnc``. Deriving instead of declaring is why no host carries a
+# vnc alias list: the two can no longer disagree, and a new machine gets its vnc
+# alias the moment it gets an ssh one.
+SSH_ALIAS_PREFIX = "ssh"
+VNC_ALIAS_PREFIX = "vnc"
+
+# Only these can run a screen server. Everything else in the inventories - an
+# android tablet, a network switch, a games console - would get an alias that
+# could never connect.
+VNC_CAPABLE_OS = ("macos", "windows", "linux")
+
+# The port a vnc:// URL means when it carries none.
+DEFAULT_VNC_PORT = 5900
 
 
 def host_user(host):
@@ -157,6 +177,27 @@ def checked_alias_name(name, inventory_path):
     return str(name)
 
 
+def vnc_alias_for(ssh_alias):
+    """``sshenvy`` -> ``vncenvy``; None for an alias not named after the ssh convention."""
+    name = str(ssh_alias)
+    if not name.startswith(SSH_ALIAS_PREFIX) or len(name) == len(SSH_ALIAS_PREFIX):
+        return None
+    return VNC_ALIAS_PREFIX + name[len(SSH_ALIAS_PREFIX) :]
+
+
+def vnc_command(host):
+    """The ``open vnc://...`` command line for a host, or None if it cannot serve a screen."""
+    if str(host.get("os", "")).lower() not in VNC_CAPABLE_OS:
+        return None
+    target = host.get("vnc_hostname") or host_target(host)
+    if not target:
+        return None
+    user = host_user(host)
+    port = host.get("vnc_port")
+    suffix = "" if not port or int(port) == DEFAULT_VNC_PORT else ":{}".format(int(port))
+    return "open vnc://{}{}{}".format(user + "@" if user else "", target, suffix)
+
+
 def inventory_aliases(inventory_path, local_short, include_vnc):
     """
     Alias definitions from one hosts.json-style inventory, as
@@ -165,23 +206,15 @@ def inventory_aliases(inventory_path, local_short, include_vnc):
     hosts = load_hosts(inventory_path)
     definitions = []
     for host in hosts:
+        screen = vnc_command(host) if include_vnc else None
         for alias in host.get("aliases") or []:
-            # A host with no user cannot make an ssh alias; its vnc aliases still can.
+            name = checked_alias_name(alias, inventory_path)
+            # A host with no user cannot make an ssh alias; its vnc alias still can.
             if host_user(host):
-                definitions.append((checked_alias_name(alias, inventory_path), ssh_command(host, hosts, local_short)))
-        if not include_vnc:
-            continue
-        # vnc_hostname lets the screen-sharing target differ from the ssh one -
-        # e.g. a Tailscale address reachable off-LAN.
-        vnc_target = host.get("vnc_hostname") or host_target(host)
-        user = host_user(host)
-        for alias in host.get("vnc_aliases") or []:
-            definitions.append(
-                (
-                    checked_alias_name(alias, inventory_path),
-                    "open vnc://{}{}".format(user + "@" if user else "", vnc_target),
-                )
-            )
+                definitions.append((name, ssh_command(host, hosts, local_short)))
+            vnc_name = vnc_alias_for(name)
+            if screen and vnc_name:
+                definitions.append((checked_alias_name(vnc_name, inventory_path), screen))
     return definitions
 
 
