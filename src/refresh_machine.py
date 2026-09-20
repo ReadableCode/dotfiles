@@ -55,7 +55,7 @@ HELP_PAGE = """# refresh_machine
 7. with `--packages` only: offer to uninstall apps an app removals file retired, asking [y/N/q] per app
    the app lists win: a package one of them still names is never offered
    runs `src/app_removals.py`
-7b. with `--install-missing` only: offer to install app_lists entries this machine does not have
+7b. `installmissing` only: offer to install app_lists entries this machine does not have
    deliberately NOT part of a plain pull or update - installing apps is a thing you ask for
    runs the `scripts/install_*` for this machine's package managers
 8. on windows only: bring autohotkey in line with the repo's v2 scripts
@@ -75,9 +75,9 @@ HELP_PAGE = """# refresh_machine
 
 `pullrepos`
 
-- install anything in app_lists/ this machine is missing (`--install-missing`):
+- gitpullall plus an offer of every app_lists entry this machine is missing:
 
-`gitpullall --install-missing`
+`installmissing`
 
 - report what is behind, stale or undeployed, changing nothing (`--check`):
 
@@ -392,7 +392,7 @@ def parse_args(argv):
     parser.add_argument(
         "--install-missing",
         action="store_true",
-        help="also offer to install app_lists entries this machine does not have (never automatic)",
+        help="what `installmissing` runs: also offer the app_lists entries this machine lacks",
     )
     return parser.parse_args(argv)
 

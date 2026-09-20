@@ -163,9 +163,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   `gitpullall` and `myupdater` on every platform: pull every repo, upgrade OS
   packages with `--packages` (`scripts/my_updater.sh` or `my_updater.ps1`),
   clone, sync envs, deploy, prune, offer the `app_removals.py` uninstalls
-  (`--packages` only), offer the app_lists installs (`--install-missing`
-  only, never automatic - a pull must not install software), and the
-  AutoHotkey fix on Windows. A step whose tool is missing offers to install it with
+  (`--packages` only), offer the app_lists installs (the
+  `installmissing` command only, never automatic - a pull must not install
+  software), and the AutoHotkey fix on Windows. The shells wrap it as
+  `pullrepos` / `gitpullall` / `myupdater` / `installmissing`, one flag each. A step whose tool is missing offers to install it with
   `scripts/bootstrap.sh --only <tool>` (terminal only - an unattended run
   still just reports), so a tool has one installer and a fresh box can
   bring itself up. Both

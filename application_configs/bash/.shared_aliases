@@ -215,7 +215,8 @@ function gsw() {
 }
 
 # _refresh_machine ARGS...: run src/refresh_machine.py, the one implementation
-# of pullrepos, gitpullall and myupdater for every shell (the PowerShell profile
+# of pullrepos, gitpullall, myupdater and installmissing for every shell (the
+# PowerShell profile
 # launches the same script). Stdlib-only, so a bare python3 runs it before uv
 # is installed.
 function _refresh_machine() {
@@ -271,6 +272,15 @@ function gitpullall() {
 # gitpullall plus OS package updates before the deploy (refresh_machine.py --packages; --help shows what happens).
 function myupdater() {
     _refresh_machine --packages "$@"
+}
+
+# gitpullall plus an offer of every app_lists entry this machine is missing
+# (refresh_machine.py --install-missing; --help shows what happens). Its own
+# command rather than something gitpullall or myupdater do: an app list gaining
+# an entry is not the same as asking for it here, so installing software is
+# always something you came to do.
+function installmissing() {
+    _refresh_machine --install-missing "$@"
 }
 
 ### tmux ###
