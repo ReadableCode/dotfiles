@@ -225,6 +225,33 @@ existing mixed-case names (`Cash_Flow_Commander`, `Book-Bot`, `CrownCentral`)
 stay as they are: renaming one touches every manifest, workspace, clone list
 and deploy script that names it, for no functional gain.
 
+### A repo named `personal_*` is private, always
+
+`dotfiles` is the only public repo in this layout. Every repo named
+`personal_*` - `personal_credentials` (LAN-hosted) and `personal_dev`
+(GitHub-private) today, and any future sibling - is **private by design**, and
+a new one must be created private before it is first pushed.
+
+This is not a preference. `src/context_leak_check.py` grants the personal
+repos a blanket exemption from the client-identifier rules, and it matches
+them on the **name prefix**, not on visibility:
+
+    if name == PERSONAL_CONTEXT or name.startswith(PERSONAL_CONTEXT + "_"):
+        return {}
+
+So a public repo named `personal_anything` would be silently exempt from every
+check that keeps client names, repo slugs, ticket prefixes and hostnames out
+of public view - and these repos genuinely carry all of those. They have to:
+`personal_credentials` deploys every context and its generated deploy map
+enumerates every client repo on one page, which is the whole point of the
+exemption.
+
+The prefix is therefore load-bearing. Two ways to stay safe, and both matter:
+a repo that must be public is never named `personal_*`, and a repo named
+`personal_*` is never made public. If a personal repo ever needs to be public,
+rename it out of the prefix first, then let the leak check scan it as an
+ordinary repo before the visibility changes.
+
 ## Shared `src/utils/`
 
 Several personal repos need the same wrappers (Google Sheets via pygsheets,

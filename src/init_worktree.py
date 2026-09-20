@@ -161,7 +161,7 @@ def is_ancestor(commit, branch, repo):
     return probe.returncode == 0
 
 
-def is_squash_merged(repo, base):
+def is_squash_merged(repo, base, ref="HEAD"):
     """True when this branch's whole diff is already on `base`, landed as a single squashed commit.
 
     Squash merging is the normal flow in some of these repos and not in others, so this is
@@ -173,8 +173,8 @@ def is_squash_merged(repo, base):
     the two apart. `commit-tree` leaves one unreferenced object behind, which gc collects.
     """
     try:
-        merge_base = git(["merge-base", "HEAD", base], repo)
-        tree = git(["rev-parse", "HEAD^{tree}"], repo)
+        merge_base = git(["merge-base", ref, base], repo)
+        tree = git(["rev-parse", ref + "^{tree}"], repo)
         if tree == git(["rev-parse", merge_base + "^{tree}"], repo):
             return False  # the branch changes nothing; there is no squash to look for
         env = dict(os.environ, GIT_AUTHOR_NAME="squash probe", GIT_AUTHOR_EMAIL="probe@localhost")
@@ -191,13 +191,41 @@ def is_squash_merged(repo, base):
         return False
 
 
+def has_upstream(repo, branch):
+    """True when `branch` still has an upstream that resolves - a deleted remote branch counts as none."""
+    probe = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", f"{branch}@{{upstream}}"],
+        cwd=repo,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    return probe.returncode == 0
+
+
+def ticket_branch_note(main, branch):
+    """Why a ticket branch is being left behind, told accurately rather than hopefully.
+
+    "it goes when its remote does" is only true while a remote branch exists. After a squash
+    merge the PR deletes it, so the local branch has nothing left to follow and will sit there
+    forever unless it is deleted by hand - which is safe, because the work is on the default
+    branch. Saying so is the difference between a branch someone is waiting on and one they can
+    drop; see backlog/stale-local-branches-after-squash-merge.md for sweeping them in bulk.
+    """
+    if has_upstream(main, branch):
+        return "left in place (pushed; it goes when its remote does)"
+    base = default_branch(main)
+    if base and (is_ancestor(branch, base, main) or is_squash_merged(main, base, ref=branch)):
+        return f"left in place (merged into {base}, remote branch already gone - safe to delete locally)"
+    return "left in place (no upstream and not on the default branch - check it before deleting)"
+
+
 def retire_placeholder_branch(main, branch, dry_run=False):
     """Delete a `t3code/` placeholder branch once its worktree is gone and its tip is on the default branch.
 
-    A ticket branch is never touched here; it is pushed and goes when its remote does.
+    A ticket branch is never deleted here, only described: see `ticket_branch_note`.
     """
     if not branch.startswith("t3code/"):
-        return f"{branch} left in place (pushed; it goes when its remote does)"
+        return f"{branch} {ticket_branch_note(main, branch)}"
     base = default_branch(main)
     if not base or not is_ancestor(branch, base, main):
         return f"{branch} left in place (placeholder with commits not on {base or 'the default branch'})"

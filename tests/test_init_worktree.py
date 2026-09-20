@@ -411,3 +411,36 @@ def test_squash_merged_worktree_can_then_be_removed(repos, tmp_path, capsys):
 
     assert init_worktree.main([f"--worktree={worktree}", "--remove", "--hostname=envy"]) == 0
     assert not os.path.exists(worktree)
+
+
+# ---------------------------------------------------------------- ticket branch messages
+
+
+def test_ticket_branch_with_a_live_remote_says_it_goes_with_its_remote(repos, tmp_path):
+    _, main, worktree = repos
+    with_remote(main, worktree, tmp_path)
+    note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
+    assert note == "left in place (pushed; it goes when its remote does)"
+
+
+def test_squash_merged_ticket_branch_says_its_remote_is_already_gone(repos, tmp_path):
+    """The real post-squash shape: no upstream left to follow, but the work is on master."""
+    _, main, worktree = repos
+    write(os.path.join(worktree, "feature.py"), "landed\n")
+    git(["add", "--", "feature.py"], worktree)
+    git(["commit", "-q", "-m", "ACME-2482: landed"], worktree)
+    squash_onto_master(main, worktree, "feature.py", "landed\n")
+
+    note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
+    assert "remote branch already gone" in note and "safe to delete locally" in note
+    assert "goes when its remote does" not in note
+
+
+def test_ticket_branch_that_never_landed_is_not_called_safe(repos):
+    _, main, worktree = repos
+    write(os.path.join(worktree, "feature.py"), "only here\n")
+    git(["add", "--", "feature.py"], worktree)
+    git(["commit", "-q", "-m", "ACME-2482: never merged"], worktree)
+
+    note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
+    assert "check it before deleting" in note and "safe to delete" not in note
