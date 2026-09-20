@@ -843,6 +843,40 @@ Running notes from daily use — each is either an upstream candidate
 ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
 a doc/automation task in this repo.
 
+- **A newly deployed slash command stays invisible until the SERVER restarts
+  (upstream)**: deploy a new `~/.claude/commands/<name>.md` link while T3 is
+  running and it never appears in the picker, no matter how many new threads
+  are opened. Measured 2026-09-19: the macOS app process had been up since
+  Sep 17 19:34, the command symlink was created Sep 19 17:24, and the command
+  was still absent ~46 h later with no restart in between. It is not a slow
+  cache and it is not a deploy fault — `deploy_configs.py` reports the entry
+  clean and the symlink resolves.
+
+  **It is the server side that holds the list, not the client.** The 0.0.31
+  schemas carry `slashCommands` on the *provider* snapshot
+  (`ServerProviderSlashCommand`), which the server builds from one probe of
+  `claude` run in its own working directory and streams to clients. Reloading
+  a window or opening a thread re-reads nothing. So on a systemd Linux server
+  the fix is `systemctl --user restart t3code.service`, and a client
+  reconnecting on its own will not help; on the macOS/Windows desktop app the
+  server ships inside the app process tree, so quitting and reopening the app
+  is the same action.
+
+  **There is a refresh RPC, and it is worth trying before a restart**: the
+  server exposes `server.refreshProviders` (`WsServerRefreshProvidersRpc`).
+  Whatever UI control calls it — provider or agent settings is the likely
+  home — should re-probe and pick up new commands without a restart. *Not yet
+  verified from the UI*: the control was not identifiable in the minified
+  bundle, so the restart above is the only route confirmed to work.
+
+  Two consequences worth remembering. A command added mid-session is unusable
+  in that session even though the agent itself can see it — the harness
+  re-reads the command list per turn, so it appears in the agent's context
+  while remaining absent from the human's picker, and those two surfaces
+  disagreeing is expected rather than a bug. And on a machine that deploys
+  commands by cron (elitedesk), the link lands correctly but nobody driving
+  that server's UI sees it until the service is bounced.
+
 - **No verbose transcript view (upstream)**: T3 has no equivalent of Claude
   Code's verbose mode — tool calls render as truncated summaries with no
   setting, keybinding command, or provider option to expand them (confirmed
