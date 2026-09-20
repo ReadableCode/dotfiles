@@ -22,12 +22,19 @@ reachable only through a vendor's cloud:
 
 | Platform | Client | Installed from |
 | --- | --- | --- |
-| macOS | Screen Sharing (built in) | nothing to install - the `vnc<host>` aliases open it |
+| macOS | TigerVNC Viewer | `app_lists/Brewfile` (`cask "tigervnc"`) |
 | Windows | TigerVNC Viewer | `app_lists/windows_apps_personal_choco.txt` |
 | Linux (apt) | TigerVNC Viewer | `app_lists/linux_apps.txt` |
 | Linux (Fedora) | TigerVNC Viewer | `app_lists/linux_apps_dnf.txt` |
 | Android | AVNC | F-Droid |
 | iOS | *(none - see below)* | |
+
+**macOS Screen Sharing cannot reach the Pis.** wayvnc offers only VeNCrypt (19),
+RSA-AES (129) and RA2 (5); Screen Sharing speaks only VNC Auth (2) and Apple ARD
+(30), so it fails at negotiation before asking for a password. This was found
+the hard way on 2026-09-20 - the built-in client had been assumed sufficient.
+TigerVNC speaks all of them, which is why every platform now uses it and the
+`vnc<host>` aliases launch `vncviewer` rather than `open vnc://`.
 
 iOS has no free software VNC client: the only GPL-lineage app on the App Store
 is paid and ships no iOS source. Reach a GPU host from an iPad with Moonlight

@@ -36,11 +36,18 @@ and true of Windows OpenSSH Server).
 vnc aliases are DERIVED from the ssh ones rather than declared: every
 ``ssh<stem>`` alias on a host that can run a screen server gets a matching
 ``vnc<stem>``, so ``sshryzenwhite`` implies ``vncryzenwhite`` and nothing has to
-be listed twice. They are emitted on macOS only, in whichever shell asked -
-nothing else has a vnc:// handler. A host may tune the target with
-``vnc_hostname`` (when screen sharing answers on a different address from ssh,
-e.g. a Tailscale name) and ``vnc_port`` (when the server is not on 5900, as with
-a headless Xtigervnc on :1).
+be listed twice. A host may tune the target with ``vnc_hostname`` (when the
+screen server answers on a different address from ssh, e.g. a Tailscale name)
+and ``vnc_port`` (when it is not on 5900, as with a headless Xtigervnc on :1).
+
+Every platform gets these, and they all launch TigerVNC's ``vncviewer``. They
+used to be macOS-only and run ``open vnc://``, which hands the connection to
+Screen Sharing - and Screen Sharing cannot talk to the fleet any more. wayvnc,
+which every Pi now runs, offers only VeNCrypt, RSA-AES and RA2; Screen Sharing
+speaks only VNC Auth and Apple ARD, so it fails at negotiation before it ever
+asks for a password (proven against pi4a, 2026-09-20). TigerVNC speaks all of
+them, so one viewer covers wayvnc on the Pis, TightVNC on the Windows boxes and
+Screen Sharing on the Macs.
 
 Anything wrong with an inventory - a file that will not parse, an alias name
 that is not a bare word - raises and exits non-zero, so the shells define
@@ -94,8 +101,27 @@ VNC_ALIAS_PREFIX = "vnc"
 # could never connect.
 VNC_CAPABLE_OS = ("macos", "windows", "linux")
 
-# The port a vnc:// URL means when it carries none.
+# The port a vnc target means when it carries none.
 DEFAULT_VNC_PORT = 5900
+
+# How to launch TigerVNC's viewer per platform token. macOS needs the full path
+# because the cask installs an .app rather than something on PATH; the choco and
+# apt packages both put ``vncviewer`` on PATH.
+VNC_VIEWERS = {
+    "darwin": "/Applications/TigerVNC.app/Contents/MacOS/vncviewer",
+    "linux": "vncviewer",
+    "windows": "vncviewer",
+}
+
+
+def viewer_for_platform(platform_token):
+    """The vncviewer command for a platform token, defaulting to a bare ``vncviewer``."""
+    token = str(platform_token or "").lower()
+    if token.startswith("darwin") or token == "mac":
+        return VNC_VIEWERS["darwin"]
+    if token.startswith("win"):
+        return VNC_VIEWERS["windows"]
+    return VNC_VIEWERS["linux"]
 
 
 def host_user(host):
@@ -185,20 +211,25 @@ def vnc_alias_for(ssh_alias):
     return VNC_ALIAS_PREFIX + name[len(SSH_ALIAS_PREFIX) :]
 
 
-def vnc_command(host):
-    """The ``open vnc://...`` command line for a host, or None if it cannot serve a screen."""
+def vnc_command(host, platform_token):
+    """
+    The vncviewer command line for a host, or None if it cannot serve a screen.
+
+    The port is always explicit as ``host::port``. TigerVNC reads a single colon
+    as a DISPLAY NUMBER, so ``host:5900`` would mean display 5900 rather than the
+    port, which is why the doubled form is not optional. No user is passed: the
+    viewer prompts, and wayvnc's PAM auth wants the box's own login.
+    """
     if str(host.get("os", "")).lower() not in VNC_CAPABLE_OS:
         return None
     target = host.get("vnc_hostname") or host_target(host)
     if not target:
         return None
-    user = host_user(host)
-    port = host.get("vnc_port")
-    suffix = "" if not port or int(port) == DEFAULT_VNC_PORT else ":{}".format(int(port))
-    return "open vnc://{}{}{}".format(user + "@" if user else "", target, suffix)
+    port = int(host.get("vnc_port") or DEFAULT_VNC_PORT)
+    return "{} {}::{}".format(viewer_for_platform(platform_token), target, port)
 
 
-def inventory_aliases(inventory_path, local_short, include_vnc):
+def inventory_aliases(inventory_path, local_short, platform_token):
     """
     Alias definitions from one hosts.json-style inventory, as
     ``[(name, command), ...]`` in inventory order.
@@ -206,7 +237,7 @@ def inventory_aliases(inventory_path, local_short, include_vnc):
     hosts = load_hosts(inventory_path)
     definitions = []
     for host in hosts:
-        screen = vnc_command(host) if include_vnc else None
+        screen = vnc_command(host, platform_token)
         for alias in host.get("aliases") or []:
             name = checked_alias_name(alias, inventory_path)
             # A host with no user cannot make an ssh alias; its vnc alias still can.
@@ -218,7 +249,7 @@ def inventory_aliases(inventory_path, local_short, include_vnc):
     return definitions
 
 
-def collect_aliases(root, local_short, include_vnc):
+def collect_aliases(root, local_short, platform_token):
     """
     Every alias definition contributed by every ``*_credentials`` inventory
     under ``root``. Later definitions win on a name collision, matching what a
@@ -226,7 +257,7 @@ def collect_aliases(root, local_short, include_vnc):
     """
     definitions = []
     for inventory_path in find_inventory_paths(root):
-        definitions += inventory_aliases(inventory_path, local_short, include_vnc)
+        definitions += inventory_aliases(inventory_path, local_short, platform_token)
 
     deduped = {}
     for name, command in definitions:
@@ -310,7 +341,7 @@ def parse_args(argv):
     parser.add_argument(
         "--platform",
         default=sys.platform,
-        help="platform token gating macOS-only vnc aliases (defaults to sys.platform)",
+        help="platform token picking the vncviewer path for vnc aliases (defaults to sys.platform)",
     )
     return parser.parse_args(argv)
 
@@ -321,7 +352,7 @@ def main(argv=None):
     if args.format == HOSTS_FORMAT:
         print(json.dumps(collect_hosts(args.root, local_short), indent=2))
         return 0
-    definitions = collect_aliases(args.root, local_short, args.platform.startswith("darwin"))
+    definitions = collect_aliases(args.root, local_short, args.platform)
     rendered = RENDERERS[args.format](definitions)
     if rendered:
         print(rendered)

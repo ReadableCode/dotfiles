@@ -90,10 +90,14 @@ See `docs/repo_philosophy.md` for the full category table.
   vnc aliases are **derived, never declared**: each `ssh<stem>` alias on a host
   whose `os` is `macos`, `windows` or `linux` gets a matching `vnc<stem>`, so
   `sshryzenwhite` implies `vncryzenwhite` and the two lists cannot drift apart.
-  They are emitted **on macOS only**, in whichever shell asked — the gate is the
-  platform, not the shell, because nothing off macOS has a `vnc://` handler. The
-  `os` gate is what keeps an android tablet or a network switch from getting an
-  alias that could never connect.
+  The `os` gate is what keeps an android tablet or a network switch from getting
+  an alias that could never connect.
+
+  They are emitted on **every** platform and all launch TigerVNC's `vncviewer`
+  (macOS by its in-bundle path, Windows and Linux from `PATH`). They used to be
+  macOS-only and ran `open vnc://`, which hands the connection to Screen Sharing
+  — and Screen Sharing cannot reach wayvnc, which every Pi now runs. See
+  `docs/setup_vnc_server.md`, "Clients".
 
   Two optional keys tune the target: `vnc_hostname` when screen sharing answers
   on a different address from ssh (a Tailscale name), and `vnc_port` when the

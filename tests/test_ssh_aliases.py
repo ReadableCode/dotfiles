@@ -21,9 +21,9 @@ def write_inventory(root, context, hosts, filename=None):
     return path
 
 
-def aliases(root, local_hostname="somewhere-else", include_vnc=False):
+def aliases(root, local_hostname="somewhere-else", platform_token="linux"):
     """The generated alias set as a dict, the way a shell would end up with it."""
-    return dict(ssh_aliases.collect_aliases(str(root), ssh_aliases.short_name(local_hostname), include_vnc))
+    return dict(ssh_aliases.collect_aliases(str(root), ssh_aliases.short_name(local_hostname), platform_token))
 
 
 # ---------------------------------------------------------------- ssh commands
@@ -117,48 +117,61 @@ VNC_HOST = {
 def test_a_vnc_alias_is_derived_from_the_ssh_one(tmp_path):
     """No host declares vnc aliases: sshenvy implies vncenvy, so the two cannot disagree."""
     write_inventory(tmp_path, "personal", [VNC_HOST])
-    assert "vncenvy" not in aliases(tmp_path, include_vnc=False)
-    assert aliases(tmp_path, include_vnc=True)["vncenvy"] == "open vnc://jason@192.168.1.20"
+    assert aliases(tmp_path)["vncenvy"] == "vncviewer 192.168.1.20::5900"
+
+
+def test_the_viewer_command_follows_the_platform(tmp_path):
+    """
+    Screen Sharing cannot reach wayvnc (it offers only VeNCrypt/RSA-AES/RA2), so
+    every platform launches TigerVNC. macOS needs the in-bundle path.
+    """
+    write_inventory(tmp_path, "personal", [VNC_HOST])
+    mac = aliases(tmp_path, platform_token="darwin")["vncenvy"]
+    win = aliases(tmp_path, platform_token="win32")["vncenvy"]
+    assert mac == "/Applications/TigerVNC.app/Contents/MacOS/vncviewer 192.168.1.20::5900"
+    assert win == "vncviewer 192.168.1.20::5900"
+    assert "open vnc://" not in mac
 
 
 def test_every_ssh_alias_on_a_host_gets_its_own_vnc_twin(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["sshenvy", "sshdesk"])])
-    generated = aliases(tmp_path, include_vnc=True)
-    assert generated["vncenvy"] == generated["vncdesk"] == "open vnc://jason@192.168.1.20"
+    generated = aliases(tmp_path)
+    assert generated["vncenvy"] == generated["vncdesk"] == "vncviewer 192.168.1.20::5900"
 
 
 def test_vnc_hostname_overrides_the_ssh_target(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_hostname="envy.tail1234.ts.net")])
-    generated = aliases(tmp_path, include_vnc=True)
-    assert generated["vncenvy"] == "open vnc://jason@envy.tail1234.ts.net"
+    generated = aliases(tmp_path)
+    assert generated["vncenvy"] == "vncviewer envy.tail1234.ts.net::5900"
     assert generated["sshenvy"] == "ssh jason@192.168.1.20"
 
 
-def test_vnc_port_is_appended_only_when_it_is_not_the_default(tmp_path):
-    """A headless Xtigervnc on :1 answers on 5901, and a bare IP means 5900."""
+def test_the_port_is_always_explicit_with_a_double_colon(tmp_path):
+    """TigerVNC reads a single colon as a display number, so host:5900 would mean display 5900."""
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_port=5901)])
-    assert aliases(tmp_path, include_vnc=True)["vncenvy"] == "open vnc://jason@192.168.1.20:5901"
+    assert aliases(tmp_path)["vncenvy"] == "vncviewer 192.168.1.20::5901"
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_port=5900)])
-    assert aliases(tmp_path, include_vnc=True)["vncenvy"] == "open vnc://jason@192.168.1.20"
+    assert aliases(tmp_path)["vncenvy"] == "vncviewer 192.168.1.20::5900"
 
 
 def test_a_host_that_cannot_serve_a_screen_gets_no_vnc_alias(tmp_path):
     """An android tablet or a switch would only get an alias that never connects."""
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, os="android")])
-    generated = aliases(tmp_path, include_vnc=True)
+    generated = aliases(tmp_path, platform_token="linux")
     assert "vncenvy" not in generated
     assert generated["sshenvy"] == "ssh jason@192.168.1.20"
 
 
 def test_an_alias_not_named_for_the_ssh_convention_derives_nothing(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["box"])])
-    assert aliases(tmp_path, include_vnc=True) == {"box": "ssh jason@192.168.1.20"}
+    assert aliases(tmp_path, platform_token="linux") == {"box": "ssh jason@192.168.1.20"}
 
 
 def test_userless_host_still_gets_its_vnc_alias(tmp_path):
+    """The viewer prompts for credentials, so a host with no ssh user still gets a vnc alias."""
     host = {"name": "tv", "hostname": "10.0.0.9", "os": "linux", "aliases": ["sshtv"]}
     write_inventory(tmp_path, "personal", [host])
-    assert aliases(tmp_path, include_vnc=True) == {"vnctv": "open vnc://10.0.0.9"}
+    assert aliases(tmp_path) == {"vnctv": "vncviewer 10.0.0.9::5900"}
 
 
 # ---------------------------------------------------------------- discovery
@@ -237,7 +250,7 @@ def test_alias_names_that_are_not_bare_words_are_a_hard_error(tmp_path, bad_name
 def test_a_bad_alias_name_fails_before_a_vnc_twin_is_derived(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["ssh envy"])])
     with pytest.raises(ValueError):
-        aliases(tmp_path, include_vnc=True)
+        aliases(tmp_path, platform_token="linux")
 
 
 def test_a_bad_alias_name_stops_the_cli_with_a_nonzero_exit(tmp_path):
@@ -317,13 +330,15 @@ def test_main_emits_nothing_when_there_is_nothing_to_emit(tmp_path, capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_vnc_gating_follows_the_platform_flag(tmp_path, capsys):
+def test_vnc_aliases_are_emitted_on_every_platform(tmp_path, capsys):
+    """They used to be macOS-only because only macOS had a vnc:// handler; now every platform runs TigerVNC."""
     write_inventory(tmp_path, "personal", [VNC_HOST])
     common = ["--format", "bash", "--root", str(tmp_path), "--local-hostname", "elsewhere"]
     ssh_aliases.main(common + ["--platform", "darwin"])
-    assert "vncenvy" in capsys.readouterr().out
+    assert "TigerVNC.app" in capsys.readouterr().out
     ssh_aliases.main(common + ["--platform", "win32"])
-    assert "vncenvy" not in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "vncenvy" in out and "TigerVNC.app" not in out
 
 
 def test_hosts_format_lists_one_record_per_host_with_its_ssh_line(tmp_path, capsys):
