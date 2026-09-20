@@ -18,27 +18,59 @@ def test_platform_key_maps_the_usual_tokens():
 
 def test_macos_uses_the_in_bundle_path():
     """The cask installs an .app, so there is nothing named vncviewer on PATH."""
-    viewer, installer, app_list = vnc_connect.viewer_plan("darwin")
+    viewer, package, app_list, argv = vnc_connect.viewer_plan("darwin")
     assert viewer == vnc_connect.MAC_VIEWER
-    assert installer == "scripts/install_mac_apps.sh"
-    assert app_list == "app_lists/Brewfile"
+    assert (package, app_list) == ("tigervnc", "app_lists/Brewfile")
+    assert argv == ["brew", "install", "--cask", "tigervnc"]
 
 
 def test_windows_takes_the_choco_list():
-    viewer, installer, app_list = vnc_connect.viewer_plan("windows")
+    viewer, package, app_list, argv = vnc_connect.viewer_plan("windows")
     assert viewer == "vncviewer"
-    assert "chocolatey" in installer
-    assert app_list == "app_lists/windows_apps_personal_choco.txt"
+    assert (package, app_list) == ("tigervnc", "app_lists/windows_apps_personal_choco.txt")
+    assert argv == ["choco", "install", "tigervnc", "-y"]
 
 
-def test_linux_picks_the_installer_for_the_package_manager_present(monkeypatch):
-    """Fedora and Debian keep separate lists; the wrong one reports everything missing."""
+def test_the_install_is_one_package_not_the_whole_app_list():
+    """Typing vncpi4 asks for a viewer, not for every pending app on the machine."""
+    for key in ("darwin", "windows"):
+        argv = vnc_connect.viewer_plan(key)[3]
+        assert "tigervnc" in argv
+        assert not any("install_mac_apps" in part or "chocolatey.ps1" in part for part in argv)
+
+
+def test_linux_names_the_viewer_the_way_its_own_distro_does(monkeypatch):
+    """Debian ships tigervnc-viewer, Fedora ships tigervnc; the lists differ too."""
     monkeypatch.setattr(vnc_connect.shutil, "which", lambda name: "/usr/bin/apt-get" if name == "apt-get" else None)
-    assert vnc_connect.linux_installer() == ("scripts/install_linux_apps.sh", "app_lists/linux_apps.txt")
+    package, app_list, argv = vnc_connect.linux_plan()
+    assert (package, app_list) == ("tigervnc-viewer", "app_lists/linux_apps.txt")
+    assert argv[:3] == ["sudo", "apt-get", "install"]
     monkeypatch.setattr(vnc_connect.shutil, "which", lambda name: "/usr/bin/dnf" if name == "dnf" else None)
-    assert vnc_connect.linux_installer() == ("scripts/install_linux_apps_dnf.sh", "app_lists/linux_apps_dnf.txt")
+    package, app_list, argv = vnc_connect.linux_plan()
+    assert (package, app_list) == ("tigervnc", "app_lists/linux_apps_dnf.txt")
     monkeypatch.setattr(vnc_connect.shutil, "which", lambda name: None)
-    assert vnc_connect.linux_installer() == (None, None)
+    assert vnc_connect.linux_plan() == (None, None, None)
+
+
+# %%
+# The app list stays authoritative #
+
+
+def test_the_shipped_app_lists_declare_the_viewer():
+    """If this fails the alias cannot install anything, which is the point of the guard."""
+    assert vnc_connect.declared_in_app_list("tigervnc", "app_lists/Brewfile")
+    assert vnc_connect.declared_in_app_list("tigervnc", "app_lists/windows_apps_personal_choco.txt")
+    assert vnc_connect.declared_in_app_list("tigervnc-viewer", "app_lists/linux_apps.txt")
+
+
+def test_a_package_no_app_list_names_is_refused(monkeypatch, capsys):
+    """Installing something the lists do not name is exactly the drift they exist to stop."""
+    monkeypatch.setattr(vnc_connect, "find_viewer", lambda viewer: None)
+    monkeypatch.setattr(vnc_connect, "declared_in_app_list", lambda package, app_list: False)
+    monkeypatch.setattr(vnc_connect.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(vnc_connect, "ask_yes_no", lambda q: pytest.fail("prompted for an undeclared package"))
+    assert vnc_connect.connect("host", platform_token="darwin", run=lambda argv: 0) == 1
+    assert "not named in" in capsys.readouterr().out
 
 
 # %%
@@ -63,8 +95,8 @@ def test_an_installed_viewer_is_launched_without_prompting(monkeypatch):
 # The install offer #
 
 
-def test_a_missing_viewer_offers_the_installer_then_launches(monkeypatch, capsys):
-    """The whole point: say which list names it and offer the repo's own installer."""
+def test_a_missing_viewer_offers_just_the_viewer_then_launches(monkeypatch, capsys):
+    """Install the one package the list names, then connect."""
     state = {"installed": False}
     monkeypatch.setattr(vnc_connect, "find_viewer", lambda viewer: "/bin/vncviewer" if state["installed"] else None)
     monkeypatch.setattr(vnc_connect.sys.stdin, "isatty", lambda: True)
@@ -76,9 +108,8 @@ def test_a_missing_viewer_offers_the_installer_then_launches(monkeypatch, capsys
         return 0
 
     assert vnc_connect.connect("host", platform_token="darwin", run=run, ask=lambda q: True) == 0
-    out = capsys.readouterr().out
-    assert "app_lists/Brewfile" in out and "scripts/install_mac_apps.sh" in out
-    assert "install_mac_apps.sh" in " ".join(calls[0])
+    assert "app_lists/Brewfile" in capsys.readouterr().out
+    assert calls[0] == ["brew", "install", "--cask", "tigervnc"]
     assert calls[1][1] == "host::5900", "must launch once the viewer exists"
 
 

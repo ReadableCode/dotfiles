@@ -6,7 +6,7 @@ What the ``vnc<host>`` aliases actually run. They used to invoke the viewer
 directly, which meant a machine that had never run its app-list installer got a
 bare ``command not found`` - or, on macOS, silence, because the alias pointed at
 a path inside an .app that was not there. Neither says the one useful thing:
-which list names the viewer and which installer installs it.
+that the viewer is missing, and offers to fetch it.
 
 Stdlib-only and one file for every platform, the same contract as
 ``ssh_aliases.py``: the shells eval what that generator prints, so anything it
@@ -50,31 +50,72 @@ def platform_key(platform_token=None):
     return "linux"
 
 
-def linux_installer():
+def linux_plan():
     """
-    The app-list installer for this Linux box, chosen by the package manager it
-    actually has. Fedora and Debian keep separate lists, so the wrong one would
-    report every package missing.
+    (package, app list, install argv) for this Linux box, chosen by the package
+    manager it actually has. Fedora and Debian name the viewer differently and
+    keep separate lists, so the wrong one is both the wrong name and the wrong
+    file.
     """
     if shutil.which("apt-get"):
-        return "scripts/install_linux_apps.sh", "app_lists/linux_apps.txt"
+        return (
+            "tigervnc-viewer",
+            "app_lists/linux_apps.txt",
+            ["sudo", "apt-get", "install", "-y", "tigervnc-viewer"],
+        )
     if shutil.which("dnf"):
-        return "scripts/install_linux_apps_dnf.sh", "app_lists/linux_apps_dnf.txt"
-    return None, None
+        return "tigervnc", "app_lists/linux_apps_dnf.txt", ["sudo", "dnf", "install", "-y", "tigervnc"]
+    return None, None, None
 
 
 def viewer_plan(key):
-    """(viewer command, installer script, app list) for a platform key."""
+    """
+    (viewer command, package, app list, install argv) for a platform key.
+
+    The install is ONE package, not the whole app list. Running the list
+    installer to get a viewer would offer every other pending app on the
+    machine, which is not what someone typing ``vncpi4`` asked for. The package
+    name still has to appear in the app list before anything is installed (see
+    ``declared_in_app_list``), so the list stays the record of what belongs
+    here and this cannot drift from it.
+    """
     if key == "darwin":
-        return MAC_VIEWER, "scripts/install_mac_apps.sh", "app_lists/Brewfile"
+        return MAC_VIEWER, "tigervnc", "app_lists/Brewfile", ["brew", "install", "--cask", "tigervnc"]
     if key == "windows":
         return (
             "vncviewer",
-            "scripts/install_windows_apps_with_chocolatey.ps1",
+            "tigervnc",
             "app_lists/windows_apps_personal_choco.txt",
+            ["choco", "install", "tigervnc", "-y"],
         )
-    installer, app_list = linux_installer()
-    return "vncviewer", installer, app_list
+    package, app_list, argv = linux_plan()
+    return "vncviewer", package, app_list, argv
+
+
+def declared_in_app_list(package, app_list):
+    """
+    Whether the app list actually names this package.
+
+    The guard that keeps app_lists/ authoritative: if the viewer is not on the
+    list, installing it here would put something on the machine that its own
+    record does not name - exactly the drift the lists exist to prevent.
+    """
+    if not package or not app_list:
+        return False
+    path = os.path.join(REPO_ROOT, app_list)
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            body = handle.read()
+    except OSError:
+        return False
+    for line in body.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if not line:
+            continue
+        # a Brewfile says `cask "tigervnc"`; the plain lists say `tigervnc`
+        if line == package or line.endswith('"{}"'.format(package)):
+            return True
+    return False
 
 
 def find_viewer(viewer):
@@ -96,37 +137,36 @@ def ask_yes_no(question):
         return False
 
 
-def installer_argv(key, installer):
-    """How to run this platform's app-list installer."""
-    path = os.path.join(REPO_ROOT, installer)
-    if key == "windows":
-        shell = shutil.which("pwsh") or shutil.which("powershell") or "powershell"
-        return [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path]
-    return ["bash", path]
-
-
-def offer_install(key, viewer, installer, app_list, ask=None, run=subprocess.call):
+def offer_install(viewer, package, app_list, install_argv, ask=None, run=subprocess.call):
     """
-    Offer to run the app-list installer, returning the viewer path once present.
+    Offer to install just the viewer, returning its path once present.
 
-    The installer is the repo's own, not a hand-written ``brew install`` here:
-    the app lists are the single record of what a machine should have, and a
-    second install path is how a machine ends up with something its list does
-    not name. It installs the whole pending list and prompts for itself, which
-    is why this only offers rather than running it unasked.
+    ONE package, using the same manager and the same name the app list declares
+    - not the whole-list installer. Someone typing ``vncpi4`` asked for a
+    viewer, and ``install_mac_apps.sh`` would put every other pending app on the
+    machine in front of them.
+
+    The app list is still the authority: nothing installs unless the list names
+    the package, so this can never add something the machine's own record does
+    not account for. ``installmissing`` remains the way to work through a whole
+    list deliberately.
     """
     ask = ask or ask_yes_no
     print(f"The VNC viewer is not installed on this machine (looked for {viewer}).")
-    if not installer:
-        print("No app-list installer matches this machine's package manager; install TigerVNC by hand.")
+    if not package or not install_argv:
+        print("No known package manager on this machine; install TigerVNC by hand.")
         return None
-    print(f"It is named in {app_list} and installed by {installer}.")
+    if not declared_in_app_list(package, app_list):
+        print(f"{package} is not named in {app_list}, so it is not installed from here.")
+        print(f"Add it to {app_list} first, then run installmissing.")
+        return None
+    print(f"{package} is named in {app_list}.")
     if not sys.stdin.isatty():
-        print("Not running on a terminal, so not prompting. Run that installer, then try again.")
+        print(f"Not running on a terminal, so not prompting. Install {package}, then try again.")
         return None
-    if not ask(f"Run {installer} now? [y/N] "):
+    if not ask("Install {} now? [y/N] ".format(" ".join(install_argv))):
         return None
-    run(installer_argv(key, installer))
+    run(install_argv)
     return find_viewer(viewer)
 
 
@@ -141,11 +181,10 @@ def connect(target, port=DEFAULT_VNC_PORT, platform_token=None, run=subprocess.c
     The doubled colon is not optional: TigerVNC reads ``host:5900`` as display
     number 5900, and only ``host::5900`` as a port.
     """
-    key = platform_key(platform_token)
-    viewer, installer, app_list = viewer_plan(key)
+    viewer, package, app_list, install_argv = viewer_plan(platform_key(platform_token))
     found = find_viewer(viewer)
     if not found:
-        found = offer_install(key, viewer, installer, app_list, ask=ask, run=run)
+        found = offer_install(viewer, package, app_list, install_argv, ask=ask, run=run)
     if not found:
         return 1
     return run([found, f"{target}::{int(port)}"])
