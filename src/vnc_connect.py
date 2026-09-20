@@ -39,6 +39,14 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # an absolute path; choco and apt/dnf both put ``vncviewer`` on PATH.
 MAC_VIEWER = "/Applications/TigerVNC.app/Contents/MacOS/vncviewer"
 
+# RemoteResize defaults to on: the viewer asks the server to match the desktop
+# to the local window every time that window changes. wayvnc drives a headless
+# Pi whose output cannot be resized, so it refuses, and the viewer logs
+# "SetDesktopSize failed: 4" on every resize for the whole session. Turning it
+# off keeps the remote at its own size and stops the noise; nothing is lost,
+# because the resize was never going to succeed.
+VIEWER_ARGS = ["-RemoteResize=0"]
+
 
 def platform_key(platform_token=None):
     """darwin / windows / linux from a sys.platform-style token."""
@@ -187,7 +195,7 @@ def connect(target, port=DEFAULT_VNC_PORT, platform_token=None, run=subprocess.c
         found = offer_install(viewer, package, app_list, install_argv, ask=ask, run=run)
     if not found:
         return 1
-    return run([found, f"{target}::{int(port)}"])
+    return run([found] + VIEWER_ARGS + [f"{target}::{int(port)}"])
 
 
 # %%

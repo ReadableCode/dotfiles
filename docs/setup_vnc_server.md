@@ -29,6 +29,22 @@ reachable only through a vendor's cloud:
 | Android | AVNC | F-Droid |
 | iOS | *(none - see below)* | |
 
+The `vnc<host>` aliases pick the viewer from the **target**, not from the
+machine you are sitting at: Mac to Mac opens Screen Sharing (`open vnc://`),
+everything else runs `src/vnc_connect.py`, which launches TigerVNC. macOS's own
+server offers VNC Auth and Apple ARD, so Screen Sharing is both available and
+better there - ARD auth, clipboard, retina - and nothing needs installing.
+
+`vnc_connect.py` passes `-RemoteResize=0`. TigerVNC otherwise asks the server to
+match the desktop to the local window on every resize, and wayvnc on a headless
+Pi cannot resize its output, so it refuses and the viewer logs
+`SetDesktopSize failed: 4` for the rest of the session.
+
+The first connection to each Pi warns that the certificate is untrusted and
+that `CN=raspberrypi` does not match the hostname. That is wayvnc's self-signed
+certificate, generated per Pi by `wayvnc-generate-keys.service`. Accepting it
+pins that key for the host, so it only asks once.
+
 **macOS Screen Sharing cannot reach the Pis.** wayvnc offers only VeNCrypt (19),
 RSA-AES (129) and RA2 (5); Screen Sharing speaks only VNC Auth (2) and Apple ARD
 (30), so it fails at negotiation before asking for a password. This was found

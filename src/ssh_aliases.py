@@ -111,6 +111,12 @@ DEFAULT_VNC_PORT = 5900
 VNC_CONNECT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vnc_connect.py")
 
 
+def is_mac(token):
+    """Whether a platform token or a host ``os`` value means macOS."""
+    text = str(token or "").lower()
+    return text.startswith("darwin") or text in ("mac", "macos")
+
+
 def viewer_for_platform(platform_token):
     """The interpreter+script prefix the vnc aliases run. Kept a function so tests can see it."""
     del platform_token  # vnc_connect.py resolves the viewer itself, per platform
@@ -208,17 +214,29 @@ def vnc_command(host, platform_token):
     """
     The vncviewer command line for a host, or None if it cannot serve a screen.
 
-    The target and port are passed separately; vnc_connect.py joins them as
-    ``host::port`` because TigerVNC reads a single colon as a DISPLAY NUMBER. No
-    user is passed: the viewer prompts, and wayvnc's PAM auth wants the box's
-    own login.
+    Mac to Mac uses Screen Sharing, everything else uses TigerVNC through
+    vnc_connect.py. The viewer depends on the TARGET, not just this machine:
+    macOS's own server offers VNC Auth and Apple ARD, so Screen Sharing is both
+    available and better there (ARD auth, clipboard, retina), and there is
+    nothing to install. wayvnc offers neither of those types, which is why every
+    other target needs TigerVNC.
+
+    For the TigerVNC path the target and port are passed separately and
+    vnc_connect.py joins them as ``host::port``, because TigerVNC reads a single
+    colon as a DISPLAY NUMBER. No user is passed there: the viewer prompts, and
+    wayvnc's PAM auth wants the box's own login.
     """
-    if str(host.get("os", "")).lower() not in VNC_CAPABLE_OS:
+    host_os = str(host.get("os", "")).lower()
+    if host_os not in VNC_CAPABLE_OS:
         return None
     target = host.get("vnc_hostname") or host_target(host)
     if not target:
         return None
     port = int(host.get("vnc_port") or DEFAULT_VNC_PORT)
+    if is_mac(platform_token) and is_mac(host_os):
+        user = host_user(host)
+        suffix = "" if port == DEFAULT_VNC_PORT else ":{}".format(port)
+        return "open vnc://{}{}{}".format(user + "@" if user else "", target, suffix)
     return "{} {} {}".format(viewer_for_platform(platform_token), target, port)
 
 

@@ -82,7 +82,8 @@ def test_the_port_is_doubled_so_it_is_not_read_as_a_display(monkeypatch):
     seen = {}
     monkeypatch.setattr(vnc_connect, "find_viewer", lambda viewer: "/bin/vncviewer")
     vnc_connect.connect("10.0.0.5", 5901, platform_token="linux", run=lambda argv: seen.update(argv=argv) or 0)
-    assert seen["argv"] == ["/bin/vncviewer", "10.0.0.5::5901"]
+    assert seen["argv"][0] == "/bin/vncviewer"
+    assert seen["argv"][-1] == "10.0.0.5::5901"
 
 
 def test_an_installed_viewer_is_launched_without_prompting(monkeypatch):
@@ -110,7 +111,7 @@ def test_a_missing_viewer_offers_just_the_viewer_then_launches(monkeypatch, caps
     assert vnc_connect.connect("host", platform_token="darwin", run=run, ask=lambda q: True) == 0
     assert "app_lists/Brewfile" in capsys.readouterr().out
     assert calls[0] == ["brew", "install", "--cask", "tigervnc"]
-    assert calls[1][1] == "host::5900", "must launch once the viewer exists"
+    assert calls[1][-1] == "host::5900", "must launch once the viewer exists"
 
 
 def test_declining_the_offer_does_not_launch(monkeypatch):
@@ -138,3 +139,20 @@ def test_a_linux_box_with_no_known_package_manager_says_so(monkeypatch, capsys):
 
 
 # %%
+
+
+# %%
+# Viewer arguments #
+
+
+def test_remote_resize_is_turned_off(monkeypatch):
+    """
+    wayvnc drives a headless Pi whose output cannot be resized, so the viewer's
+    default RemoteResize logs "SetDesktopSize failed: 4" on every window change
+    for the whole session. Nothing is lost by disabling it.
+    """
+    seen = {}
+    monkeypatch.setattr(vnc_connect, "find_viewer", lambda viewer: "/bin/vncviewer")
+    vnc_connect.connect("host", platform_token="linux", run=lambda argv: seen.update(argv=argv) or 0)
+    assert "-RemoteResize=0" in seen["argv"]
+    assert seen["argv"].index("-RemoteResize=0") < seen["argv"].index("host::5900")
