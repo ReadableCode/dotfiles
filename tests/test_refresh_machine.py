@@ -319,3 +319,46 @@ def test_a_failed_install_still_fails_the_step(tmp_path, monkeypatch):
 def test_bootstrap_argv_asks_the_repos_own_installer():
     argv = refresh_machine.bootstrap_argv("/repos/dotfiles", "uv")
     assert argv == ["bash", "/repos/dotfiles/scripts/bootstrap.sh", "--only", "uv", "--yes"]
+
+
+# ------------------------------------------------- opt-in app-list installs
+
+
+def test_installing_missing_apps_is_never_part_of_a_plain_run(tmp_path):
+    """Adding an entry to an app list is not the same as asking for it on this machine."""
+    plain = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", which=lambda n: "/bin/" + n)
+    updates = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", packages=True, which=lambda n: "/bin/" + n)
+    for steps in (plain, updates):
+        assert not any("installing missing" in step.title for step in steps)
+
+
+def test_install_missing_adds_the_platform_installer(tmp_path):
+    steps = refresh_machine.build_steps(
+        str(tmp_path), "Darwin", "arm64", install_missing=True, which=lambda n: "/bin/" + n
+    )
+    titles = [s.title for s in steps]
+    assert "installing missing mac apps" in titles
+    argv = next(s.argv for s in steps if s.title == "installing missing mac apps")
+    assert argv[0] == "bash" and argv[1].endswith("scripts/install_mac_apps.sh")
+
+
+def test_linux_gets_every_package_manager_it_actually_has(tmp_path):
+    """An apt box with flatpak needs both lists, so this is not first-match."""
+    present = {"apt-get", "flatpak"}
+    installers = refresh_machine.app_list_installers(
+        str(tmp_path), "Linux", which=lambda n: "/bin/" + n if n in present else None
+    )
+    titles = [title for title, _ in installers]
+    assert titles == ["installing missing apt apps", "installing missing flatpaks"]
+
+
+def test_a_linux_box_with_no_known_manager_gets_no_installer(tmp_path):
+    assert refresh_machine.app_list_installers(str(tmp_path), "Linux", which=lambda n: None) == []
+
+
+def test_windows_runs_the_choco_installer_through_powershell(tmp_path):
+    installers = refresh_machine.app_list_installers(str(tmp_path), "Windows", which=lambda n: "/bin/" + n)
+    title, argv = installers[0]
+    assert title == "installing missing choco apps"
+    assert argv[0].endswith("pwsh") and "-NoProfile" in argv
+    assert argv[-1].endswith("install_windows_apps_with_chocolatey.ps1")

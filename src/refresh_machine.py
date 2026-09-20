@@ -55,6 +55,9 @@ HELP_PAGE = """# refresh_machine
 7. with `--packages` only: offer to uninstall apps an app removals file retired, asking [y/N/q] per app
    the app lists win: a package one of them still names is never offered
    runs `src/app_removals.py`
+7b. with `--install-missing` only: offer to install app_lists entries this machine does not have
+   deliberately NOT part of a plain pull or update - installing apps is a thing you ask for
+   runs the `scripts/install_*` for this machine's package managers
 8. on windows only: bring autohotkey in line with the repo's v2 scripts
    runs `scripts/ensure_autohotkey_v2.ps1 -AutoFix -Full`
 
@@ -71,6 +74,10 @@ HELP_PAGE = """# refresh_machine
 - only pull every repo (`--pull-only`):
 
 `pullrepos`
+
+- install anything in app_lists/ this machine is missing (`--install-missing`):
+
+`gitpullall --install-missing`
 
 - report what is behind, stale or undeployed, changing nothing (`--check`):
 
@@ -187,7 +194,43 @@ def check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only):
     return steps
 
 
-def build_steps(git_dir, system, machine, packages=False, pull_only=False, check=False, which=shutil.which):
+def app_list_installers(dotfiles, system, which=shutil.which):
+    """
+    The app-list installer(s) this machine's package managers call for, as
+    (title, argv) pairs.
+
+    These are the same scripts bootstrap runs, not a second install path: the
+    app_lists files are the one record of what a machine should have. Each one
+    reports installed vs pending and prompts once, with numbers to skip, so the
+    choice stays per package without this having to reimplement it.
+
+    Linux can legitimately answer to several - an apt box with flatpak - so this
+    returns every manager present rather than the first.
+    """
+    scripts = os.path.join(dotfiles, "scripts")
+
+    def script(name):
+        return os.path.join(scripts, name)
+
+    if system == "Darwin":
+        return [("installing missing mac apps", ["bash", script("install_mac_apps.sh")])]
+    if system == "Windows":
+        shell = which("pwsh") or which("powershell") or "powershell"
+        prefix = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+        return [("installing missing choco apps", prefix + [script("install_windows_apps_with_chocolatey.ps1")])]
+    found = []
+    if which("apt-get"):
+        found.append(("installing missing apt apps", ["bash", script("install_linux_apps.sh")]))
+    if which("dnf"):
+        found.append(("installing missing dnf apps", ["bash", script("install_linux_apps_dnf.sh")]))
+    if which("flatpak"):
+        found.append(("installing missing flatpaks", ["bash", script("install_linux_apps_flatpak.sh")]))
+    return found
+
+
+def build_steps(
+    git_dir, system, machine, packages=False, pull_only=False, check=False, install_missing=False, which=shutil.which
+):
     """The steps this run takes, in order."""
     dotfiles = os.path.join(git_dir, "dotfiles")
     windows = system == "Windows"
@@ -216,6 +259,11 @@ def build_steps(git_dir, system, machine, packages=False, pull_only=False, check
     # rides with myupdater rather than every gitpullall.
     if packages:
         steps.append(Step("checking for apps to remove", uv_python(dotfiles, "app_removals.py"), needs="uv"))
+    # Opt-in only. A pull or an update must never start installing software on
+    # its own; adding an entry to an app list is not the same as asking for it
+    # on this machine.
+    if install_missing:
+        steps += [Step(title, argv) for title, argv in app_list_installers(dotfiles, system, which)]
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-AutoFix", "-Full"]))
@@ -341,6 +389,11 @@ def parse_args(argv):
     mode.add_argument("--packages", action="store_true", help="upgrade os packages between the pull and the deploy")
     mode.add_argument("--pull-only", action="store_true", help="pull every repo and stop")
     parser.add_argument("--check", action="store_true", help="report what would change, write nothing")
+    parser.add_argument(
+        "--install-missing",
+        action="store_true",
+        help="also offer to install app_lists entries this machine does not have (never automatic)",
+    )
     return parser.parse_args(argv)
 
 
@@ -357,7 +410,15 @@ def main(argv=None, environ=None):
         return 1
     out = sys.stdout
     color = terminal_style.use_color(out, environ)
-    steps = build_steps(git_dir, platform.system(), platform.machine(), args.packages, args.pull_only, args.check)
+    steps = build_steps(
+        git_dir,
+        platform.system(),
+        platform.machine(),
+        args.packages,
+        args.pull_only,
+        args.check,
+        args.install_missing,
+    )
     try:
         failed = execute(steps, out, color, dotfiles=os.path.join(git_dir, "dotfiles"))
     except KeyboardInterrupt:

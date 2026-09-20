@@ -163,7 +163,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   `gitpullall` and `myupdater` on every platform: pull every repo, upgrade OS
   packages with `--packages` (`scripts/my_updater.sh` or `my_updater.ps1`),
   clone, sync envs, deploy, prune, offer the `app_removals.py` uninstalls
-  (`--packages` only), and the AutoHotkey fix on Windows. A step whose tool is missing offers to install it with
+  (`--packages` only), offer the app_lists installs (`--install-missing`
+  only, never automatic - a pull must not install software), and the
+  AutoHotkey fix on Windows. A step whose tool is missing offers to install it with
   `scripts/bootstrap.sh --only <tool>` (terminal only - an unattended run
   still just reports), so a tool has one installer and a fresh box can
   bring itself up. Both
@@ -173,6 +175,14 @@ is the one-paragraph orientation so an agent knows which file to open.
   **`terminal_style.py`**, whose terminal-navy tokens copy
   `readable_utils.design_tokens` (a test keeps them equal). A help page lives
   in the tool that does the work, never in a shell alias.
+- **`vnc_connect.py`** — what the `vnc<host>` aliases actually run. Launches
+  TigerVNC at `host::port` (the doubled colon matters: TigerVNC reads a single
+  one as a display number) and, when the viewer is missing, names the app list
+  that declares it and offers to run that platform's `scripts/install_*`
+  rather than failing with `command not found`. Stdlib-only like
+  `ssh_aliases.py`, one file for every platform. TigerVNC and not the native
+  client because wayvnc offers only VeNCrypt/RSA-AES/RA2 and macOS Screen
+  Sharing speaks neither. Doc: `docs/setup_vnc_server.md`, "Clients".
 - **`fleet_check.py`** - asks every ssh-reachable machine in the inventories the
   same read-only question at once (default `gitpullall --check`) and prints one
   row per host: ok, drift, unreachable, failed, or no command. Hosts and their

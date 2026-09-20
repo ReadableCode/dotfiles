@@ -104,24 +104,17 @@ VNC_CAPABLE_OS = ("macos", "windows", "linux")
 # The port a vnc target means when it carries none.
 DEFAULT_VNC_PORT = 5900
 
-# How to launch TigerVNC's viewer per platform token. macOS needs the full path
-# because the cask installs an .app rather than something on PATH; the choco and
-# apt packages both put ``vncviewer`` on PATH.
-VNC_VIEWERS = {
-    "darwin": "/Applications/TigerVNC.app/Contents/MacOS/vncviewer",
-    "linux": "vncviewer",
-    "windows": "vncviewer",
-}
+# The aliases call src/vnc_connect.py rather than the viewer directly, so a
+# machine that has never run its app-list installer is told which list names the
+# viewer and offered the installer, instead of a bare "command not found" - or,
+# on macOS, silence from a path inside an .app that is not there.
+VNC_CONNECT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vnc_connect.py")
 
 
 def viewer_for_platform(platform_token):
-    """The vncviewer command for a platform token, defaulting to a bare ``vncviewer``."""
-    token = str(platform_token or "").lower()
-    if token.startswith("darwin") or token == "mac":
-        return VNC_VIEWERS["darwin"]
-    if token.startswith("win"):
-        return VNC_VIEWERS["windows"]
-    return VNC_VIEWERS["linux"]
+    """The interpreter+script prefix the vnc aliases run. Kept a function so tests can see it."""
+    del platform_token  # vnc_connect.py resolves the viewer itself, per platform
+    return "python3 {}".format(VNC_CONNECT)
 
 
 def host_user(host):
@@ -215,10 +208,10 @@ def vnc_command(host, platform_token):
     """
     The vncviewer command line for a host, or None if it cannot serve a screen.
 
-    The port is always explicit as ``host::port``. TigerVNC reads a single colon
-    as a DISPLAY NUMBER, so ``host:5900`` would mean display 5900 rather than the
-    port, which is why the doubled form is not optional. No user is passed: the
-    viewer prompts, and wayvnc's PAM auth wants the box's own login.
+    The target and port are passed separately; vnc_connect.py joins them as
+    ``host::port`` because TigerVNC reads a single colon as a DISPLAY NUMBER. No
+    user is passed: the viewer prompts, and wayvnc's PAM auth wants the box's
+    own login.
     """
     if str(host.get("os", "")).lower() not in VNC_CAPABLE_OS:
         return None
@@ -226,7 +219,7 @@ def vnc_command(host, platform_token):
     if not target:
         return None
     port = int(host.get("vnc_port") or DEFAULT_VNC_PORT)
-    return "{} {}::{}".format(viewer_for_platform(platform_token), target, port)
+    return "{} {} {}".format(viewer_for_platform(platform_token), target, port)
 
 
 def inventory_aliases(inventory_path, local_short, platform_token):

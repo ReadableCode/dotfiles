@@ -114,44 +114,49 @@ VNC_HOST = {
 }
 
 
+def vnc_call(target, port=5900):
+    """What a vnc alias should run: the wrapper, which resolves the viewer per platform."""
+    return "python3 {} {} {}".format(ssh_aliases.VNC_CONNECT, target, port)
+
+
 def test_a_vnc_alias_is_derived_from_the_ssh_one(tmp_path):
     """No host declares vnc aliases: sshenvy implies vncenvy, so the two cannot disagree."""
     write_inventory(tmp_path, "personal", [VNC_HOST])
-    assert aliases(tmp_path)["vncenvy"] == "vncviewer 192.168.1.20::5900"
+    assert aliases(tmp_path)["vncenvy"] == vnc_call("192.168.1.20")
 
 
-def test_the_viewer_command_follows_the_platform(tmp_path):
+def test_every_platform_calls_the_same_wrapper(tmp_path):
     """
     Screen Sharing cannot reach wayvnc (it offers only VeNCrypt/RSA-AES/RA2), so
-    every platform launches TigerVNC. macOS needs the in-bundle path.
+    the alias never hands the connection to it. vnc_connect.py picks the viewer,
+    which keeps that decision in one place instead of in the alias text.
     """
     write_inventory(tmp_path, "personal", [VNC_HOST])
     mac = aliases(tmp_path, platform_token="darwin")["vncenvy"]
     win = aliases(tmp_path, platform_token="win32")["vncenvy"]
-    assert mac == "/Applications/TigerVNC.app/Contents/MacOS/vncviewer 192.168.1.20::5900"
-    assert win == "vncviewer 192.168.1.20::5900"
+    assert mac == win == vnc_call("192.168.1.20")
     assert "open vnc://" not in mac
 
 
 def test_every_ssh_alias_on_a_host_gets_its_own_vnc_twin(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["sshenvy", "sshdesk"])])
     generated = aliases(tmp_path)
-    assert generated["vncenvy"] == generated["vncdesk"] == "vncviewer 192.168.1.20::5900"
+    assert generated["vncenvy"] == generated["vncdesk"] == vnc_call("192.168.1.20")
 
 
 def test_vnc_hostname_overrides_the_ssh_target(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_hostname="envy.tail1234.ts.net")])
     generated = aliases(tmp_path)
-    assert generated["vncenvy"] == "vncviewer envy.tail1234.ts.net::5900"
+    assert generated["vncenvy"] == vnc_call("envy.tail1234.ts.net")
     assert generated["sshenvy"] == "ssh jason@192.168.1.20"
 
 
-def test_the_port_is_always_explicit_with_a_double_colon(tmp_path):
-    """TigerVNC reads a single colon as a display number, so host:5900 would mean display 5900."""
+def test_a_non_default_port_reaches_the_wrapper(tmp_path):
+    """nukbuntu's headless Xtigervnc is on 5901; vnc_connect.py turns it into host::5901."""
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_port=5901)])
-    assert aliases(tmp_path)["vncenvy"] == "vncviewer 192.168.1.20::5901"
+    assert aliases(tmp_path)["vncenvy"] == vnc_call("192.168.1.20", 5901)
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_port=5900)])
-    assert aliases(tmp_path)["vncenvy"] == "vncviewer 192.168.1.20::5900"
+    assert aliases(tmp_path)["vncenvy"] == vnc_call("192.168.1.20", 5900)
 
 
 def test_a_host_that_cannot_serve_a_screen_gets_no_vnc_alias(tmp_path):
@@ -171,7 +176,7 @@ def test_userless_host_still_gets_its_vnc_alias(tmp_path):
     """The viewer prompts for credentials, so a host with no ssh user still gets a vnc alias."""
     host = {"name": "tv", "hostname": "10.0.0.9", "os": "linux", "aliases": ["sshtv"]}
     write_inventory(tmp_path, "personal", [host])
-    assert aliases(tmp_path) == {"vnctv": "vncviewer 10.0.0.9::5900"}
+    assert aliases(tmp_path) == {"vnctv": vnc_call("10.0.0.9")}
 
 
 # ---------------------------------------------------------------- discovery
@@ -335,10 +340,9 @@ def test_vnc_aliases_are_emitted_on_every_platform(tmp_path, capsys):
     write_inventory(tmp_path, "personal", [VNC_HOST])
     common = ["--format", "bash", "--root", str(tmp_path), "--local-hostname", "elsewhere"]
     ssh_aliases.main(common + ["--platform", "darwin"])
-    assert "TigerVNC.app" in capsys.readouterr().out
+    assert "vnc_connect.py" in capsys.readouterr().out
     ssh_aliases.main(common + ["--platform", "win32"])
-    out = capsys.readouterr().out
-    assert "vncenvy" in out and "TigerVNC.app" not in out
+    assert "vncenvy" in capsys.readouterr().out
 
 
 def test_hosts_format_lists_one_record_per_host_with_its_ssh_line(tmp_path, capsys):
