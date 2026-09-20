@@ -1009,6 +1009,89 @@ debian_suite_available() {
     curl -fsS -o /dev/null --max-time 25 "${1%/}/dists/$2/Release" 2>/dev/null
 }
 
+# Packages dpkg has unpacked but not configured. `rc` is a removed package
+# whose conffiles remain, which is normal after any upgrade and not a fault;
+# anything else (iU half-installed, iF failed-config, iH half-configured) means
+# the transaction did not finish.
+debian_unconfigured_packages() {
+    dpkg -l 2>/dev/null | awk 'NR > 5 && $1 !~ /^ii/ && $1 !~ /^rc/ { print $2 }'
+}
+
+# Refuse to call a release upgrade done when the machine would not survive the
+# reboot. Every check here is one that actually fired on the pi fleet on
+# 2026-09-19, and each was invisible until something broke:
+#
+#   - half-configured packages: trixie's lxpanel collided with the pi archive's
+#     obsolete lxplug-batt over one file, dpkg stopped, and ~490 packages -
+#     systemd, udev, openssh-server, libc-bin among them - were left unpacked.
+#     `apt-get full-upgrade` had already exited non-zero, but nothing said the
+#     machine was now unbootable.
+#   - raspi-firmware failing to configure: bookworm moved the boot partition to
+#     /boot/firmware and its postinst aborts when that is not mounted, so the
+#     new kernel never reaches the boot partition.
+#   - sshd: a headless box whose sshd will not start is a box you have lost.
+#
+# Returns non-zero if a reboot would be unsafe. Reports everything rather than
+# stopping at the first, so one pass names the whole job.
+debian_upgrade_verify() {
+    local problems=0 unconfigured count firmware
+
+    echo ""
+    echo "Verifying this machine is safe to reboot:"
+
+    unconfigured="$(debian_unconfigured_packages)"
+    count="$(printf '%s' "$unconfigured" | grep -c . || true)"
+    if [ "$count" -gt 0 ]; then
+        echo "  FAIL     $count package(s) unpacked but not configured, e.g.:"
+        printf '%s\n' "$unconfigured" | head -n 8 | sed 's/^/             /'
+        echo "           Fix with: sudo dpkg --configure -a"
+        echo "           If dpkg reports a file owned by two packages, remove the obsolete"
+        echo "           one rather than forcing the overwrite."
+        problems=$((problems + 1))
+    else
+        echo "  ok       every package is fully configured"
+    fi
+
+    if command -v sshd > /dev/null 2>&1 || [ -x /usr/sbin/sshd ]; then
+        if sudo /usr/sbin/sshd -t 2> /dev/null; then
+            echo "  ok       sshd config parses"
+        else
+            echo "  FAIL     sshd will not start, so this machine would come back unreachable:"
+            sudo /usr/sbin/sshd -t 2>&1 | sed 's/^/             /'
+            problems=$((problems + 1))
+        fi
+        if systemctl is-enabled ssh > /dev/null 2>&1 || systemctl is-enabled sshd > /dev/null 2>&1; then
+            echo "  ok       ssh starts at boot"
+        else
+            echo "  FAIL     ssh is not enabled at boot"
+            problems=$((problems + 1))
+        fi
+    fi
+
+    # Raspberry Pi only: the package that puts the kernel on the boot partition.
+    if dpkg -l raspi-firmware 2>/dev/null | grep -q '^[a-z][a-zA-Z]'; then
+        firmware="$(dpkg -l raspi-firmware 2>/dev/null | awk '/raspi-firmware/ { print $1 }' | tail -n1)"
+        if [ "$firmware" = "ii" ]; then
+            echo "  ok       raspi-firmware is configured"
+        else
+            echo "  FAIL     raspi-firmware is '$firmware', so the boot partition may not have"
+            echo "           this release's kernel. On a bullseye -> bookworm upgrade this is"
+            echo "           usually the boot partition still being mounted at /boot instead of"
+            echo "           /boot/firmware; see docs/howto_debian_release_upgrade.md."
+            problems=$((problems + 1))
+        fi
+    fi
+
+    echo ""
+    if [ "$problems" -gt 0 ]; then
+        echo "DO NOT REBOOT: $problems check(s) failed. Fix them, then re-run myupdater;"
+        echo "               it re-runs these checks without repeating the upgrade."
+        return 1
+    fi
+    echo "Safe to reboot."
+    return 0
+}
+
 debian_release_upgrade() {
     local ver="$1" ceiling="$2" from to target blockers=0 line url suite want file
 
@@ -1021,7 +1104,13 @@ debian_release_upgrade() {
     # you get an unbootable machine.
     target=$((ver + 1))
     if ! version_le "$target" "$ceiling"; then
-        echo "On $ver, which is as new as this machine is allowed to be. Nothing to do."
+        echo "On $ver, which is as new as this machine is allowed to be."
+        # Not necessarily healthy: a previous run may have stopped mid-transaction.
+        if [ -n "$(debian_unconfigured_packages)" ]; then
+            debian_upgrade_verify || return 1
+        else
+            echo "Nothing to do."
+        fi
         return 0
     fi
     to="$(debian_codename_for "$target")"
@@ -1073,14 +1162,41 @@ debian_release_upgrade() {
         echo "put this machine back. Not upgrading."
         return 1
     }
+
+    local stalled=""
     sudo DEBIAN_FRONTEND=noninteractive apt-get -y \
         -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
-        full-upgrade || return 1
+        full-upgrade || stalled=1
+
+    # A full-upgrade that exits non-zero has almost always stopped mid-unpack
+    # with packages left unconfigured, and saying nothing here is how a machine
+    # gets rebooted in that state. Configuring what is already unpacked and
+    # retrying once clears the common causes without forcing anything; whatever
+    # is left is reported by debian_upgrade_verify below rather than guessed at.
+    if [ -n "$stalled" ]; then
+        echo ""
+        echo "The upgrade stopped partway. Configuring what is already unpacked and"
+        echo "retrying once before reporting."
+        sudo DEBIAN_FRONTEND=noninteractive dpkg --configure -a 2>&1 | tail -n 5 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -y \
+            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+            -f install 2>&1 | tail -n 5 || true
+        sudo DEBIAN_FRONTEND=noninteractive apt-get -y \
+            -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold \
+            full-upgrade 2>&1 | tail -n 5 || true
+    fi
+
     sudo apt-get -y --purge autoremove || true
 
+    if ! debian_upgrade_verify; then
+        return 1
+    fi
+
     echo ""
-    echo "Debian $target is installed. REBOOT this machine, then run myupdater again to"
-    echo "pick up anything the upgrade held back."
+    echo "Debian $target is installed and verified. Reboot when ready, then run myupdater"
+    echo "again to pick up anything the upgrade held back. Allow several minutes for the"
+    echo "reboot: a release upgrade stops a lot of services and the box can answer ping"
+    echo "while sshd is already down."
 }
 
 check_release_upgrade() {

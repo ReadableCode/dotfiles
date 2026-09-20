@@ -72,6 +72,7 @@ prefixes; nothing lives unprefixed.
 
 ## `howto_*` - Techniques and reference notes
 
+- [howto_debian_release_upgrade.md](howto_debian_release_upgrade.md) - Debian/Pi OS release upgrades and their pitfalls
 - [howto_diagnose_shelly_crash.md](howto_diagnose_shelly_crash.md) - Diagnosing a Shelly crash
 - [howto_finding_files.md](howto_finding_files.md) - Find Artifacts of Syncing Issues
 - [howto_finding_strings_vscode.md](howto_finding_strings_vscode.md) - String Replacement with VSCode

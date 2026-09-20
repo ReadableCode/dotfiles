@@ -844,6 +844,9 @@ On a bullseye Pi still running X11 there is no `wayvnc` candidate; upgrade the
 release, or use `tigervnc-scraping-server` per
 [setup_vnc_server.md](./setup_vnc_server.md).
 
+Release upgrades on these run through `myupdater`; the pitfalls are in
+[howto_debian_release_upgrade.md](./howto_debian_release_upgrade.md).
+
 `realvnc-vnc-server` is deliberately not used. RealVNC moved direct IP
 connections to its Enterprise tier, so the free and Home tiers can only reach a
 Pi through RealVNC's cloud.
