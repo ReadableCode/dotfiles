@@ -14,5 +14,5 @@ system on the day they were written, and infrastructure moves on its own.
 | Issue | Found | Status |
 |-------|-------|--------|
 | [pi0's SD card is failing](pi0-failing-sd-card.md) | 2026-09-19 | open |
-| [pi4a grafana is two majors behind](pi4a-grafana-major-version-behind.md) | 2026-09-19 | open |
+| [pi4a is on the 2023 Foundation kernel](pi4a-old-foundation-kernel.md) | 2026-09-20 | open |
 | [stale local branches after squash merges](stale-local-branches-after-squash-merge.md) | 2026-09-19 | open |
