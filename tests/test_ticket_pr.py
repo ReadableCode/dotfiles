@@ -1462,6 +1462,36 @@ def test_merge_pr_refuses_a_pr_with_a_failing_check(monkeypatch):
     assert calls == [("GET", "https://api.github.com/repos/owner/name/pulls/12", None)]
 
 
+def test_merge_pr_disables_a_queued_auto_merge(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(
+        monkeypatch,
+        {
+            "/graphql": {"data": {}},
+            "/pulls/12": [_github_pull("blocked", {"merge_method": "squash"}), _github_pull("blocked")],
+        },
+    )
+    ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12", "--disable-auto-merge"])
+    assert [call[:2] for call in calls] == [
+        ("GET", "https://api.github.com/repos/owner/name/pulls/12"),
+        ("POST", "https://api.github.com/graphql"),
+        ("GET", "https://api.github.com/repos/owner/name/pulls/12"),
+    ]
+    assert "disablePullRequestAutoMerge" in calls[1][2]["query"]
+    assert calls[1][2]["variables"] == {"id": "PR_node"}
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["auto_merge"] is False and result["changed"] is True and result["merged"] is False
+
+
+def test_merge_pr_disable_is_a_no_op_without_auto_merge(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/pulls/12": _github_pull("blocked")})
+    ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12", "--disable-auto-merge"])
+    assert calls == [("GET", "https://api.github.com/repos/owner/name/pulls/12", None)]
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["auto_merge"] is False and result["changed"] is False
+
+
 def test_merge_pr_reports_a_rejected_auto_merge(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     _record_http(

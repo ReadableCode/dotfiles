@@ -1091,10 +1091,15 @@ def cmd_merge_pr(args):
     they land; GitHub refuses auto-merge on a PR that can already merge, hence
     the split. Any other state (a conflict, a base that must be current, a
     failing check, a draft) is reported for a human rather than worked around.
+    --disable-auto-merge does the one opposite thing: it clears a queued
+    auto-merge so an approval no longer merges the PR on its own.
     """
     provider, repo = repo_spec(args.repo)
     if provider != "github":
         raise SystemExit("merge-pr is GitHub-only")
+    if args.disable_auto_merge:
+        _disable_auto_merge(args, repo)
+        return
     if args.dry_run:
         print(
             f"[dry-run] would {args.method}-merge PR #{args.pr or '<current branch>'} in {repo}, "
@@ -1151,6 +1156,33 @@ def cmd_merge_pr(args):
         f"PR #{number} will {method}-merge automatically once its approval and required checks land",
         {**result, "merge_method": method, "merged": False, "auto_merge": True},
     )
+
+
+def _disable_auto_merge(args, repo):
+    """Clear a PR's queued auto-merge; a PR with none is reported, not an error."""
+    if args.dry_run:
+        print(f"[dry-run] would disable auto-merge on PR #{args.pr or '<current branch>'} in {repo}")
+        emit("dry run", {"auto_merge": False, "dry_run": True})
+        return
+    headers = github_headers()
+    pull = resolve_pr(repo, headers, args.pr)
+    number = pull["number"]
+    pull_url = f"{GITHUB_API}/repos/{repo}/pulls/{number}"
+    result = {"pr": number, "url": pull["html_url"], "merged": False, "auto_merge": False}
+    if not pull.get("auto_merge"):
+        emit(f"PR #{number} has no auto-merge queued", {**result, "changed": False})
+        return
+    mutation = (
+        "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) "
+        "{ pullRequest { autoMergeRequest { mergeMethod } } } }"
+    )
+    response = http_json("POST", GITHUB_GRAPHQL, headers, payload={"query": mutation, "variables": {"id": pull["node_id"]}})
+    if response.get("errors"):
+        raise SystemExit(f"failed to disable auto-merge on PR #{number}: {response['errors']}")
+    pull = http_json("GET", pull_url, headers)
+    if pull.get("auto_merge"):
+        raise SystemExit(f"PR #{number} still shows auto-merge after the disable mutation")
+    emit(f"PR #{number} auto-merge disabled; it now waits for a manual merge", {**result, "changed": True})
 
 
 # ---------------------------------------------------------------- review
@@ -1763,6 +1795,9 @@ def build_parser():
     merge.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     merge.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
     merge.add_argument("--method", choices=MERGE_METHODS, default="squash", help="merge method (default: squash)")
+    merge.add_argument(
+        "--disable-auto-merge", action="store_true", help="clear a queued auto-merge instead of merging or queueing"
+    )
     merge.set_defaults(func=cmd_merge_pr)
 
     queue = sub.add_parser(
