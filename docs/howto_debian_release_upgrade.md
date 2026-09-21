@@ -140,6 +140,11 @@ Two self-inflicted ones worth remembering:
 
 - `pgrep -f apt-get` **matches your own ssh command line**, so it never reports
   idle. Test `sudo fuser /var/lib/dpkg/lock-frontend` instead.
+- `pkill -f <pattern>` has the same flaw with teeth: if the pattern appears
+  anywhere in the ssh command you are running, `pkill` **kills your own
+  session**, and everything after it in that command never runs. The output
+  simply stops mid-script, which reads like the machine died. Kill by PID (the
+  service's own pid file) or match the executable with `pkill -x <name>`.
 - `!` in a double-quoted `awk` sent through `tmux send-keys` hits bash history
   expansion (`-bash: !~: event not found`) and the command silently never runs.
   Put anything non-trivial in a script file and run that.
