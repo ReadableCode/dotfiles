@@ -779,6 +779,74 @@ def rollup(entries, ignore_substrings):
     }
 
 
+def review_rollup_bitbucket(pull):
+    """
+    A Bitbucket PR's review state from its own payload: lifecycle state, draft
+    flag and one vote per reviewer. Bitbucket lists reviewers with no vote in
+    ``reviewers`` and everyone who acted in ``participants`` (role REVIEWER,
+    state approved / changes_requested / null), so the two are merged.
+    """
+    votes = {(u or {}).get("display_name"): None for u in pull.get("reviewers", [])}
+    for part in pull.get("participants", []):
+        name = (part.get("user") or {}).get("display_name")
+        if part.get("role") == "REVIEWER" or part.get("state"):
+            votes[name] = part.get("state") or votes.get(name)
+    return review_summary(pull.get("state") or "OPEN", bool(pull.get("draft")), votes)
+
+
+def review_rollup_github(pull, reviews):
+    """
+    A GitHub PR's review state: lifecycle (MERGED beats CLOSED), draft flag and
+    the latest real vote per login. COMMENTED never replaces a vote and a
+    DISMISSED review clears one; a login still in requested_reviewers has no
+    vote yet.
+    """
+    votes = {(u or {}).get("login"): None for u in pull.get("requested_reviewers", [])}
+    for review in sorted(reviews, key=lambda r: r.get("submitted_at") or ""):
+        login = (review.get("user") or {}).get("login")
+        state = (review.get("state") or "").upper()
+        if state == "APPROVED":
+            votes[login] = "approved"
+        elif state == "CHANGES_REQUESTED":
+            votes[login] = "changes_requested"
+        elif state == "DISMISSED":
+            votes[login] = None
+    if pull.get("merged") or pull.get("merged_at"):
+        state = "MERGED"
+    else:
+        state = "OPEN" if pull.get("state") == "open" else "CLOSED"
+    return review_summary(state, bool(pull.get("draft")), votes)
+
+
+def review_summary(state, draft, votes):
+    votes = {name: vote for name, vote in votes.items() if name}
+    return {
+        "state": state,
+        "draft": draft,
+        "reviewers": votes,
+        "approved_by": sorted(n for n, v in votes.items() if v == "approved"),
+        "changes_requested_by": sorted(n for n, v in votes.items() if v == "changes_requested"),
+        "awaiting": sorted(n for n, v in votes.items() if v is None),
+        "approved": any(v == "approved" for v in votes.values()),
+    }
+
+
+def review_line(review):
+    """One human line for the review state, printed before the checks line."""
+    if review["state"] != "OPEN":
+        return f"PR is {review['state']}"
+    parts = []
+    if review["approved_by"]:
+        parts.append("approved by " + ", ".join(review["approved_by"]))
+    if review["changes_requested_by"]:
+        parts.append("changes requested by " + ", ".join(review["changes_requested_by"]))
+    if review["awaiting"]:
+        parts.append("awaiting " + ", ".join(review["awaiting"]))
+    if review["draft"]:
+        parts.append("still a draft")
+    return "review: " + ("; ".join(parts) if parts else "no reviewers")
+
+
 def cmd_pr_status(args):
     repo = resolve_repo(args.repo)
     provider = resolve_provider(args.repo)
@@ -786,7 +854,16 @@ def cmd_pr_status(args):
         print(f"[dry-run] would poll checks for PR #{args.pr or '<current branch>'} in {repo}")
         emit(
             "dry run",
-            {"failed": [], "pending": [], "passed": 0, "skipped": 0, "ignored": [], "green": True, "dry_run": True},
+            {
+                "failed": [],
+                "pending": [],
+                "passed": 0,
+                "skipped": 0,
+                "ignored": [],
+                "green": True,
+                "review": review_summary("OPEN", False, {}),
+                "dry_run": True,
+            },
         )
         return
     headers = bitbucket_headers() if provider == "bitbucket" else github_headers()
@@ -818,10 +895,12 @@ def cmd_pr_status(args):
         print(f"waiting on {len(report['pending'])} check(s): {', '.join(report['pending'][:5])} ...", flush=True)
         time.sleep(args.interval)
     if provider == "bitbucket":
-        report.update({"pr": pull["id"], "url": bb_pr_url(pull, repo)})
+        report.update({"pr": pull["id"], "url": bb_pr_url(pull, repo), "review": review_rollup_bitbucket(pull)})
     else:
-        report.update({"pr": pull["number"], "url": pull["html_url"]})
+        reviews = list(github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{pull['number']}/reviews", headers))
+        report.update({"pr": pull["number"], "url": pull["html_url"], "review": review_rollup_github(pull, reviews)})
     state = "GREEN" if report["green"] else ("FAILED" if report["failed"] else "PENDING")
+    print(review_line(report["review"]))
     for detail in report["failed_details"]:
         print(f"FAILED {detail['name']}: {detail.get('title') or ''}")
         if detail.get("summary"):
@@ -1647,7 +1726,7 @@ def build_parser():
     job_log.add_argument("--out-dir", help="where the log is saved (default: <tmp>/ticket_pr)")
     job_log.set_defaults(func=cmd_job_log)
 
-    status = sub.add_parser("pr-status", help="bucket a PR's checks into a green/failed report")
+    status = sub.add_parser("pr-status", help="bucket a PR's checks into a green/failed report, with its review state")
     status.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     status.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
     status.add_argument(

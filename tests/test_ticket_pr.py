@@ -862,6 +862,66 @@ def test_pr_status_dry_run_is_parseable(monkeypatch, capsys):
     )
     result = json.loads(out.strip().splitlines()[-1])
     assert result["dry_run"] is True and result["green"] is True
+    assert result["review"]["approved"] is False
+
+
+def test_pr_status_bitbucket_reports_the_reviewers_votes(monkeypatch, capsys):
+    # The regression: an approval was reported as "none yet" because the
+    # reviewer's vote was never read. It now rides on every pr-status result.
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    alex = {"uuid": "{cs}", "display_name": "Alex Reviewer"}
+    pull = _bb_pull(
+        98,
+        "Drop overrides",
+        {"uuid": "{me}", "display_name": "Me"},
+        [alex, {"uuid": "{pat}", "display_name": "Pat Lee"}],
+        [
+            {"user": alex, "role": "REVIEWER", "approved": True, "state": "approved"},
+            {"user": {"display_name": "Me"}, "role": "PARTICIPANT", "approved": False, "state": None},
+        ],
+    )
+    pull["state"] = "OPEN"
+    pull["source"]["commit"] = {"hash": "abc123"}
+    _record_http(monkeypatch, {"/pullrequests/98": pull, "/statuses": {"values": []}})
+    ticket_pr.main(["pr-status", "--repo", "bitbucket:ws/slug", "--pr", "98"])
+    out = capsys.readouterr().out
+    assert "review: approved by Alex Reviewer; awaiting Pat Lee" in out
+    review = json.loads(out.strip().splitlines()[-1])["review"]
+    assert review == {
+        "state": "OPEN",
+        "draft": False,
+        "reviewers": {"Alex Reviewer": "approved", "Pat Lee": None},
+        "approved_by": ["Alex Reviewer"],
+        "changes_requested_by": [],
+        "awaiting": ["Pat Lee"],
+        "approved": True,
+    }
+
+
+def test_review_rollup_bitbucket_reports_a_merged_pr():
+    pull = _bb_pull(9, "Done", {"display_name": "Me"}, [], [])
+    pull["state"] = "MERGED"
+    review = ticket_pr.review_rollup_bitbucket(pull)
+    assert review["state"] == "MERGED" and review["approved"] is False
+    assert ticket_pr.review_line(review) == "PR is MERGED"
+
+
+def test_review_rollup_github_keeps_the_latest_real_vote_per_login():
+    pull = {"state": "open", "draft": True, "requested_reviewers": [{"login": "dana"}]}
+    reviews = [
+        {"user": {"login": "csmith"}, "state": "CHANGES_REQUESTED", "submitted_at": "2026-09-01T10:00:00Z"},
+        {"user": {"login": "csmith"}, "state": "APPROVED", "submitted_at": "2026-09-02T10:00:00Z"},
+        {"user": {"login": "csmith"}, "state": "COMMENTED", "submitted_at": "2026-09-03T10:00:00Z"},
+        {"user": {"login": "lee"}, "state": "APPROVED", "submitted_at": "2026-09-01T10:00:00Z"},
+        {"user": {"login": "lee"}, "state": "DISMISSED", "submitted_at": "2026-09-02T10:00:00Z"},
+    ]
+    review = ticket_pr.review_rollup_github(pull, reviews)
+    assert review["reviewers"] == {"dana": None, "csmith": "approved", "lee": None}
+    assert review["approved_by"] == ["csmith"] and review["awaiting"] == ["dana", "lee"]
+    assert ticket_pr.review_line(review) == "review: approved by csmith; awaiting dana, lee; still a draft"
+    merged = ticket_pr.review_rollup_github({"state": "closed", "merged": True}, [])
+    assert merged["state"] == "MERGED"
 
 
 # ---------------------------------------------------------------- review
