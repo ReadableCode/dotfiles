@@ -84,6 +84,45 @@ output, so it refuses and the viewer logs `SetDesktopSize failed: 4` for the
 rest of the session. `AlwaysCursor` defaults to **off**, and the symptom is
 simply no visible pointer.
 
+### Screen Sharing says "Unable to communicate", then asks for a password
+
+That dialog is not a transport failure, despite its wording ("make sure the
+remote computer is available and the firewall is not blocking screen sharing").
+Apple's client makes a first connection, reads the auth challenge, hangs up,
+then reopens with a password box. The scary dialog is what you see in between.
+
+The VNC password is **not** the machine's login password. VNC Auth carries no
+username at all - only a password - so there is no username field to hint that
+an account password is the wrong thing to type. TightVNC keeps its own password
+in `HKLM\SOFTWARE\TightVNC\Server`, set from its tray icon, and it is
+unrelated to the Windows account. This cost an afternoon on 2026-09-21.
+
+Two more things worth knowing before blaming the client:
+
+- **VNC Auth uses only the first 8 characters** of the password. The DES key is
+  8 bytes; anything past that is discarded by every implementation.
+- Apple's client negotiates **RFB 003.003**, the oldest version, in which the
+  server picks the security type unilaterally instead of offering a list.
+
+Tell auth apart from transport without ever handling the password - the
+response is DES-encrypted on the wire, and the verdict is a separate 4-byte
+result. Proxy the connection and read only that:
+
+```python
+# 127.0.0.1:5999 -> the real server; point Screen Sharing at the proxy.
+# b"\x00\x00\x00\x02" + 16 bytes  = VNC Auth selected, challenge sent
+# 16 bytes from the client           = the auth response
+# next 4 bytes from the server       = 0 is OK, 1 is AUTH FAILED
+```
+
+`1` means the password is wrong and everything else is fine. If instead the
+client never sends 16 bytes, the problem really is the negotiation.
+
+Check the transport separately, and do not trust the dialog for it: `lsof -nP
+-i TCP@<host>` while connecting shows whether the socket reaches ESTABLISHED.
+It did here, which ruled out the firewall and macOS Local Network permission
+(`docs/setup_mac_workstation.md`) before any of them were touched.
+
 The first connection to each Pi warns that the certificate is untrusted and
 that `CN=raspberrypi` does not match the hostname. That is wayvnc's self-signed
 certificate, generated per Pi by `wayvnc-generate-keys.service`. Accepting it
