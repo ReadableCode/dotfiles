@@ -142,6 +142,34 @@ checkout path or username is not `/home/jason/GitHub`, add a
 `start_x0vncserver.<host>.desktop` variant next to the payload — `.desktop`
 files take no placeholders, so `Exec=` is a literal path.
 
+When that checkout path is itself a context identifier, the variant cannot sit
+next to the public payload: the leak check refuses it, correctly. Put the
+payload **and** its own host-filtered entry in that context's credentials repo
+instead, replacing this entry on that host rather than overriding it — the same
+shape the per-context VS Code workspace entries already use. Nothing about the
+mechanism changes; only the file holding the literal `Exec=` moves.
+
+### The `-localhost` default changed, so the script sets it
+
+`x0vncserver` binds `0.0.0.0:5900` under tigervnc 1.12 and `127.0.0.1:5900`
+under 1.15. Nothing warns you: the log still says
+`New X0tigervnc server ... on port 5900` either way, the process is running and
+healthy, and the only symptom is that every remote viewer gets connection
+refused. An OS upgrade crossing that version boundary therefore turns remote
+VNC off silently.
+
+`scripts/start_x0vncserver.sh` passes `-localhost=0` explicitly so both
+versions behave the same. Note the `=0` form — `-localhost no` is not valid
+syntax for `x0vncserver` and it exits on it.
+
+Check which one you actually got, rather than trusting the log:
+
+```bash
+ss -tlnp | grep 5900
+```
+
+`0.0.0.0:5900` is reachable; `127.0.0.1:5900` is not.
+
 - To check status:
 
 ```bash
