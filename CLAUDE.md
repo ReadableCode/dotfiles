@@ -51,8 +51,11 @@ is the one-paragraph orientation so an agent knows which file to open.
   per-repo `.mcp.json`, `.env` and allow-list links). Slash commands stay
   user-level as flat per-file links in `~/.claude/commands`: T3 Code builds
   its menu from that path alone and subfolders there namespace the names.
-  Manifest `hosts:` names must exist in the union of the `*_credentials`
-  inventories (`<context>_hosts.json`). An overlay loads only where the
+  A `method: system` entry is a root-owned copy outside the home
+  (`/etc/nut/*.conf` on the UPS pis), placed through `sudo -n`, checked by
+  content hash and owner/mode, with a `reload:` command run after a change;
+  everything else is a link. Manifest `hosts:` names must exist in the union
+  of the `*_credentials` inventories (`<context>_hosts.json`). An overlay loads only where the
   machine's inventory record is in its context (its own inventory or the
   record's `contexts:` list); a checkout held for another reason, such as
   elitedesk hosting a client's git hub, deploys nothing. Doc:

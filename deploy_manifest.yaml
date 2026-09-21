@@ -28,9 +28,18 @@
 #                                 # knows its names; a filter here would fail to
 #                                 # validate on machines that clone other inventories
 #                                 # (enforced at load).
-#     method: symlink | none      # default symlink. "none" = inventory-only entry:
+#     method: symlink | none | system
+#                                 # default symlink. "none" = inventory-only entry:
 #                                 # the app is configured without links (see note).
-#                                 # There is no copy method - copies silently drift.
+#                                 # "system" = a root-owned COPY outside the home,
+#                                 # placed with sudo -n and kept equal to the repo
+#                                 # file by content hash (/etc/nut/*.conf on the UPS
+#                                 # pis): takes mode: "0640" (quoted octal, required),
+#                                 # owner: user:group (default root:root) and an
+#                                 # optional reload: shell command run through sudo
+#                                 # after the content changed. Linux/darwin only.
+#                                 # There is no plain copy method - a copy nothing
+#                                 # hashes silently drifts.
 #     requires: ~/path            # optional precondition: skip the entry (SKIP_REQUIRES)
 #                                 # unless this path (or, given a list of paths, ALL of
 #                                 # them) already exists. Placeholders expand like dest.

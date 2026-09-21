@@ -1791,3 +1791,214 @@ def test_prune_directory_without_flag_still_refuses_git_repos(tmp_path, capsys):
     deploy_configs.run_prune([(repo, "removals:x", False)], apply_changes=True)
     assert os.path.isdir(repo)
     assert "real directory" in capsys.readouterr().out
+
+
+# %%
+# System files (method: system) #
+
+posix_only = pytest.mark.skipif(os.name != "posix", reason="method: system is sudo/owner based, posix only")
+
+
+def own_owner():
+    import grp
+    import pwd
+
+    return f"{pwd.getpwuid(os.getuid()).pw_name}:{grp.getgrgid(os.getgid()).gr_name}"
+
+
+@pytest.fixture
+def unprivileged(monkeypatch):
+    # the same install / chown / chmod / cp / sh calls, run as the test user
+    monkeypatch.setattr(deploy_configs, "SUDO_PREFIX", ())
+
+
+def test_load_manifest_accepts_system_entries(tmp_path):
+    manifest_path = write_manifest(
+        tmp_path,
+        [
+            {
+                "name": "x",
+                "repo": "y",
+                "dest": {"linux": "/etc/x"},
+                "method": "system",
+                "owner": "root:nut",
+                "mode": "0640",
+                "reload": "systemctl restart x",
+            }
+        ],
+    )
+    entries = deploy_configs.load_manifest(manifest_path, inventory_path=str(tmp_path / "none.json"))
+    assert entries[0]["mode"] == "0640"
+
+
+@pytest.mark.parametrize(
+    "entry, message",
+    [
+        ({"method": "system"}, "mode"),
+        ({"method": "system", "mode": 416}, "quoted octal"),
+        ({"method": "system", "mode": "640"}, "quoted octal"),
+        ({"method": "system", "mode": "0640", "owner": "root"}, "owner"),
+        ({"method": "system", "mode": "0640", "reload": "  "}, "reload"),
+        ({"method": "system", "mode": "0640", "on_drift": "adopt"}, "neither on_drift nor refresh"),
+        ({"method": "system", "mode": "0640", "refresh": "relink"}, "neither on_drift nor refresh"),
+        ({"method": "system", "mode": "0640", "dest": {"windows": "C:/x"}}, "windows"),
+        ({"mode": "0640"}, "only method: system"),
+        ({"reload": "true"}, "only method: system"),
+    ],
+)
+def test_load_manifest_rejects_bad_system_entries(tmp_path, entry, message):
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", **entry}])
+    with pytest.raises(ValueError, match=message):
+        deploy_configs.load_manifest(manifest_path)
+
+
+def test_build_plan_carries_system_fields(fake_home):
+    entries = [
+        {
+            "name": "x",
+            "repo": "f",
+            "dest": {"linux": "/etc/x", "darwin": "/etc/x"},
+            "method": "system",
+            "owner": "root:nut",
+            "mode": "0640",
+            "reload": "true",
+        },
+        {"name": "y", "repo": "g", "dest": {"linux": "~/y", "darwin": "~/y"}},
+    ]
+    rows = {row["name"]: row for row in deploy_configs.build_plan(entries, "linux", "HOST")}
+    assert (rows["x"]["owner"], rows["x"]["mode"], rows["x"]["reload"]) == ("root:nut", "0640", "true")
+    assert (rows["y"]["owner"], rows["y"]["mode"], rows["y"]["reload"]) == ("root:root", None, None)
+
+
+@posix_only
+def test_classify_system_entry_states(tmp_path):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "etc" / "conf")
+    owner = own_owner()
+    assert deploy_configs.classify_system_entry(str(tmp_path / "missing"), dest, owner, "0640")[0] == "REPO_MISSING"
+    assert deploy_configs.classify_system_entry(repo_file, dest, owner, "0640")[0] == "NOT_DEPLOYED"
+    write_file(dest, "other content")
+    os.chmod(dest, 0o640)
+    status, detail = deploy_configs.classify_system_entry(repo_file, dest, owner, "0640")
+    assert status == "DIVERGED" and "content differs" in detail
+    write_file(dest, "repo content")
+    os.chmod(dest, 0o644)
+    status, detail = deploy_configs.classify_system_entry(repo_file, dest, owner, "0640")
+    assert status == "WRONG_MODE" and "0644" in detail and "0640" in detail
+    os.chmod(dest, 0o640)
+    assert deploy_configs.classify_system_entry(repo_file, dest, owner, "0640")[0] == "OK"
+    os.remove(dest)
+    os.symlink(repo_file, dest)
+    status, detail = deploy_configs.classify_system_entry(repo_file, dest, owner, "0640")
+    assert status == "DIVERGED" and "link" in detail
+
+
+@posix_only
+def test_classify_system_entry_needs_sudo_when_nothing_can_read_the_file(tmp_path, monkeypatch):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = write_file(str(tmp_path / "etc" / "conf"), "repo content")
+    monkeypatch.setattr(deploy_configs, "_file_hash", lambda path: (_ for _ in ()).throw(PermissionError(path)))
+    monkeypatch.setattr(deploy_configs, "_privileged", lambda argv: (False, "sudo: a password is required"))
+    status, detail = deploy_configs.classify_system_entry(repo_file, dest, own_owner(), "0640")
+    assert status == "NEEDS_SUDO" and "sudo -n" in detail
+    assert deploy_configs.deploy_system_file(repo_file, dest, own_owner(), "0640") == "skipped"
+
+
+@posix_only
+def test_deploy_system_file_installs_reloads_and_is_idempotent(tmp_path, unprivileged, capsys):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "etc" / "nut" / "conf")
+    marker = tmp_path / "reloaded"
+    reload = f"touch {marker}"
+    assert deploy_configs.deploy_system_file(repo_file, dest, own_owner(), "0640", reload=reload) == "installed"
+    assert open(dest).read() == "repo content"
+    assert deploy_configs.file_owner_and_mode(dest) == (own_owner(), "0640")
+    assert marker.exists()
+    assert not os.path.islink(dest)
+    marker.unlink()
+    assert deploy_configs.deploy_system_file(repo_file, dest, own_owner(), "0640", reload=reload) == "noop"
+    assert not marker.exists()
+    assert "already deployed" in capsys.readouterr().out
+
+
+@posix_only
+def test_deploy_system_file_backs_up_a_diverging_copy_before_reinstalling(tmp_path, unprivileged):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = write_file(str(tmp_path / "etc" / "conf"), "the package's version")
+    backup_root = str(tmp_path / "backups")
+    marker = tmp_path / "reloaded"
+    result = deploy_configs.deploy_system_file(
+        repo_file, dest, own_owner(), "0640", reload=f"touch {marker}", backup_root=backup_root, repo_root=str(tmp_path)
+    )
+    assert result == "installed"
+    assert open(dest).read() == "repo content"
+    backups = glob.glob(os.path.join(backup_root, "repo", "conf.*"))
+    assert len(backups) == 1 and open(backups[0]).read() == "the package's version"
+    assert marker.exists()
+
+
+@posix_only
+def test_deploy_system_file_fixes_mode_without_a_reload(tmp_path, unprivileged):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = write_file(str(tmp_path / "etc" / "conf"), "repo content")
+    os.chmod(dest, 0o644)
+    marker = tmp_path / "reloaded"
+    assert (
+        deploy_configs.deploy_system_file(repo_file, dest, own_owner(), "0600", reload=f"touch {marker}")
+        == "fixed_mode"
+    )
+    assert deploy_configs.file_owner_and_mode(dest)[1] == "0600"
+    assert not marker.exists()
+
+
+@posix_only
+def test_deploy_system_file_replaces_a_link_with_a_real_copy(tmp_path, unprivileged):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "etc" / "conf")
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(repo_file, dest)
+    assert deploy_configs.deploy_system_file(repo_file, dest, own_owner(), "0644") == "installed"
+    assert not os.path.islink(dest) and open(dest).read() == "repo content"
+
+
+@posix_only
+def test_deploy_system_file_reports_a_failed_sudo_and_leaves_the_destination(tmp_path, monkeypatch, capsys):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "etc" / "conf")
+    monkeypatch.setattr(deploy_configs, "_privileged", lambda argv: (False, "sudo: a password is required"))
+    assert deploy_configs.deploy_system_file(repo_file, dest, "root:root", "0644") == "skipped"
+    assert not os.path.lexists(dest)
+    assert "a password is required" in capsys.readouterr().out
+
+
+def test_run_deploy_routes_system_rows_to_the_privileged_path(tmp_path, monkeypatch, capsys):
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    calls = []
+    monkeypatch.setattr(
+        deploy_configs, "deploy_system_file", lambda *args, **kwargs: calls.append((args, kwargs)) or "installed"
+    )
+    monkeypatch.setattr(deploy_configs, "classify_system_entry", lambda *args: ("NOT_DEPLOYED", "destination missing"))
+    plan = deploy_configs.build_plan(
+        [
+            {
+                "name": "x",
+                "repo": "repo/conf",
+                "dest": {"linux": "/etc/x", "darwin": "/etc/x"},
+                "method": "system",
+                "mode": "0644",
+                "reload": "true",
+            }
+        ],
+        deploy_configs.get_platform_key(),
+        "HOST",
+        repo_root=str(tmp_path),
+    )
+    deploy_configs.run_deploy(plan)
+    assert calls == [((repo_file, "/etc/x", "root:root", "0644"), {"reload": "true"})]
+    assert "1 changed" in capsys.readouterr().out
+
+
+def test_status_planned_action_for_system_rows_mentions_sudo():
+    for status in ("NOT_DEPLOYED", "DIVERGED", "WRONG_MODE"):
+        assert "sudo -n" in deploy_configs.planned_action(status, method="system")
+    assert "left alone" in deploy_configs.planned_action("NEEDS_SUDO", method="system")

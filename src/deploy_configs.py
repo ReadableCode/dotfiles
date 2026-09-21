@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -63,6 +64,16 @@ PLATFORM_FILE_TOKENS = {"darwin": ("darwin", "mac"), "linux": ("linux",), "windo
 # Statuses that mean "this entry needs no attention"
 HEALTHY_STATUSES = {"OK"}
 
+# method: system entries place a root-owned COPY (never a link) outside the
+# home directory through passwordless sudo: a service user such as nut cannot
+# follow a link into a 0700 home, and dpkg treats the path as its own conffile.
+# Drift is caught by content hash and by owner/mode, so unlike the copies the
+# symlink method refuses, these cannot drift silently. Tests blank the prefix
+# to exercise the same path without privilege.
+SUDO_PREFIX = ("sudo", "-n")
+SYSTEM_ENTRY_KEYS = ("owner", "mode", "reload")
+SYSTEM_DEFAULT_OWNER = "root:root"
+
 # %%
 # Output formatting #
 
@@ -83,6 +94,9 @@ STATUS_COLORS = {
     "NOT_A_LINK": "red",
     "STALE_LINK": "yellow",
     "REPO_MISSING": "red",
+    "DIVERGED": "red",
+    "WRONG_MODE": "yellow",
+    "NEEDS_SUDO": "red",
     "NONE": "dim",
     "SKIP_HOST": "dim",
     "SKIP_PLATFORM": "dim",
@@ -235,13 +249,8 @@ def link_is_stale(repo_path, system_path):
         return False
 
 
-def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None):
-    """
-    Copy system_path (file or directory) to <backup_root>/<repo-relative path>.<timestamp>.
-
-    Backups live under data/config_backups (data/ is gitignored) so they never
-    appear as clutter next to tracked configs.
-    """
+def _backup_path(repo_path, backup_root=None, repo_root=None):
+    """<backup_root>/<repo-relative path>.<timestamp>, parent created."""
     backup_root = backup_root or BACKUP_ROOT
     repo_root = repo_root or REPO_ROOT
     relative_path = os.path.relpath(os.path.abspath(repo_path), repo_root)
@@ -250,6 +259,17 @@ def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None)
     timestamp = time.strftime("%Y%m%d-%H%M%S")
     backup_path = os.path.join(backup_root, f"{relative_path}.{timestamp}")
     os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+    return backup_path
+
+
+def backup_system_file(system_path, repo_path, backup_root=None, repo_root=None):
+    """
+    Copy system_path (file or directory) to <backup_root>/<repo-relative path>.<timestamp>.
+
+    Backups live under data/config_backups (data/ is gitignored) so they never
+    appear as clutter next to tracked configs.
+    """
+    backup_path = _backup_path(repo_path, backup_root, repo_root)
     if os.path.isdir(system_path):
         shutil.copytree(system_path, backup_path, symlinks=True)
     else:
@@ -481,6 +501,142 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
 
 
 # %%
+# System files #
+
+# A method: system entry is a root-owned file outside the home directory
+# (/etc/nut/upsmon.conf on the UPS pis is the case that named it). It is a
+# copy, installed and kept current through `sudo -n`, because a link cannot do
+# the job there: the daemon reading the file runs as its own service user,
+# which cannot follow a link into a 0700 home, and a package upgrade treats the
+# path as a conffile it may replace. The repo file is still the truth: status
+# compares content hashes and owner/mode, deploy re-installs whatever differs
+# and then runs the entry's reload command, so a pulled change reaches the
+# running daemon on the next deploy. Nothing here ever prompts: without
+# passwordless sudo the row reports NEEDS_SUDO and is left alone.
+
+
+def file_owner_and_mode(path):
+    """("user:group", "0640") of path, from its stat - readable or not."""
+    import grp
+    import pwd
+
+    info = os.stat(path)
+    try:
+        user = pwd.getpwuid(info.st_uid).pw_name
+    except KeyError:
+        user = str(info.st_uid)
+    try:
+        group = grp.getgrgid(info.st_gid).gr_name
+    except KeyError:
+        group = str(info.st_gid)
+    return f"{user}:{group}", f"{stat.S_IMODE(info.st_mode):04o}"
+
+
+def _privileged(argv):
+    """Run argv through SUDO_PREFIX. Returns (ok, output); never prompts (sudo -n)."""
+    try:
+        completed = subprocess.run(list(SUDO_PREFIX) + list(argv), capture_output=True, text=True, check=False)
+    except OSError as error:
+        return False, str(error)
+    output = (completed.stdout + completed.stderr).strip()
+    return completed.returncode == 0, output
+
+
+def system_file_hash(path):
+    """sha256 of a file the current user may not be able to read; None when sudo cannot read it either."""
+    try:
+        return _file_hash(path)
+    except PermissionError:
+        pass
+    hasher = ("shasum", "-a", "256") if system == "Darwin" else ("sha256sum",)
+    ok, output = _privileged(hasher + (path,))
+    if not ok or not output:
+        return None
+    return output.split()[0]
+
+
+def classify_system_entry(repo_path, system_path, owner, mode):
+    """Health of one root-owned copy. Returns (status, detail) like classify_entry."""
+    if not os.path.exists(repo_path):
+        return "REPO_MISSING", f"repo file {repo_path} does not exist"
+    if not os.path.lexists(system_path):
+        return "NOT_DEPLOYED", "destination missing"
+    if os.path.islink(system_path):
+        return "DIVERGED", f"destination is a link -> {os.readlink(system_path)}; a system entry must be a real file"
+    if not os.path.isfile(system_path):
+        return "DIVERGED", "destination is not a regular file"
+    digest = system_file_hash(system_path)
+    if digest is None:
+        return "NEEDS_SUDO", "destination is unreadable and sudo -n cannot read it either; nothing can be checked here"
+    if digest != _file_hash(repo_path):
+        return "DIVERGED", "content differs from the repo file"
+    actual_owner, actual_mode = file_owner_and_mode(system_path)
+    if (actual_owner, actual_mode) != (owner, mode):
+        return "WRONG_MODE", f"is {actual_owner} {actual_mode}; entry wants {owner} {mode}"
+    return "OK", "root-owned copy matches the repo file"
+
+
+def deploy_system_file(repo_path, system_path, owner, mode, reload=None, backup_root=None, repo_root=None):
+    """
+    Install repo_path at system_path as a copy owned by owner with mode, through
+    sudo -n, and run reload afterwards when the content changed.
+
+    A diverging regular file is backed up first (through sudo, then handed to the
+    current user) so the pre-deploy content survives like it does for links.
+    A wrong owner or mode on matching content is fixed in place without a
+    reload - the daemon already holds the right bytes. Idempotent: OK is a
+    no-op, and every sudo failure reports and leaves the destination alone.
+    """
+    repo_path = os.path.abspath(os.path.expanduser(repo_path))
+    system_path = os.path.abspath(os.path.expanduser(system_path))
+    status, detail = classify_system_entry(repo_path, system_path, owner, mode)
+    if status == "OK":
+        print(f"  already deployed: {system_path}")
+        return "noop"
+    if status == "REPO_MISSING":
+        print(f"  nothing to deploy: {detail}")
+        return "missing"
+    if status == "NEEDS_SUDO":
+        print(f"  skipped: {detail}")
+        return "skipped"
+    if status == "WRONG_MODE":
+        for argv in (("chown", owner, system_path), ("chmod", mode, system_path)):
+            ok, output = _privileged(argv)
+            if not ok:
+                print(f"  sudo -n {' '.join(argv)} failed: {output or 'no output'}")
+                return "skipped"
+        print(f"  set {owner} {mode} on {system_path} ({detail})")
+        return "fixed_mode"
+    if os.path.isfile(system_path) and not os.path.islink(system_path):
+        backup_path = _backup_path(repo_path, backup_root, repo_root)
+        for argv in (("cp", "-p", system_path, backup_path), ("chown", f"{os.getuid()}:{os.getgid()}", backup_path)):
+            ok, output = _privileged(argv)
+            if not ok:
+                print(f"  sudo -n {' '.join(argv)} failed: {output or 'no output'}")
+                return "skipped"
+        print(f"  backed up {system_path}\n         -> {backup_path}")
+    user, group = owner.split(":", 1)
+    # mkdir -p rather than install -D: BSD install (macOS) has no -D
+    steps = [("mkdir", "-p", os.path.dirname(system_path))]
+    if os.path.islink(system_path):
+        steps.append(("rm", "-f", system_path))
+    steps.append(("install", "-o", user, "-g", group, "-m", mode, repo_path, system_path))
+    for argv in steps:
+        ok, output = _privileged(argv)
+        if not ok:
+            print(f"  sudo -n {' '.join(argv)} failed: {output or 'no output'}")
+            return "skipped"
+    print(f"  installed {system_path} ({owner} {mode})\n         <- {repo_path}")
+    if reload:
+        ok, output = _privileged(("sh", "-c", reload))
+        if not ok:
+            print(f"  reload failed: {reload}\n         {output or 'no output'}")
+            return "reload_failed"
+        print(f"  reloaded: {reload}")
+    return "installed"
+
+
+# %%
 # Manifest #
 
 
@@ -612,8 +768,9 @@ def _parse_manifest_file(manifest_path):
         if not isinstance(entry, dict) or "name" not in entry or "repo" not in entry:
             raise ValueError(f"Manifest entry must be a mapping with 'name' and 'repo' keys: {entry}")
         method = entry.get("method", "symlink")
-        if method not in ("symlink", "none"):
+        if method not in ("symlink", "none", "system"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
+        _validate_system_keys(entry)
         on_drift = entry.get("on_drift", "replace")
         if on_drift not in ("replace", "adopt"):
             raise ValueError(
@@ -634,6 +791,29 @@ def _parse_manifest_file(manifest_path):
             raise ValueError(f"Manifest entry {entry['name']} has non-boolean generated: {entry['generated']}")
         _validate_context_repo_keys(entry, manifest_path)
     return entries
+
+
+def _validate_system_keys(entry):
+    """owner / mode / reload belong to method: system, which needs a quoted octal mode and posix dests only."""
+    name = entry["name"]
+    present = [key for key in SYSTEM_ENTRY_KEYS if key in entry]
+    if entry.get("method", "symlink") != "system":
+        if present:
+            raise ValueError(f"Manifest entry {name} has {', '.join(present)}, which only method: system takes")
+        return
+    mode = entry.get("mode")
+    if not isinstance(mode, str) or not re.fullmatch(r"0[0-7]{3}", mode):
+        raise ValueError(f'Manifest entry {name} needs mode as a quoted octal string such as "0640" (got {mode!r})')
+    owner = entry.get("owner", SYSTEM_DEFAULT_OWNER)
+    if not isinstance(owner, str) or not re.fullmatch(r"[A-Za-z_][\w.-]*:[A-Za-z_][\w.-]*", owner):
+        raise ValueError(f"Manifest entry {name} has invalid owner: {owner!r} (use user:group)")
+    reload = entry.get("reload")
+    if reload is not None and (not isinstance(reload, str) or not reload.strip()):
+        raise ValueError(f"Manifest entry {name} has invalid reload: {reload!r} (a shell command, run through sudo -n)")
+    if entry.get("on_drift", "replace") != "replace" or entry.get("refresh", "none") != "none":
+        raise ValueError(f"Manifest entry {name} is method: system, which takes neither on_drift nor refresh")
+    if "windows" in (entry.get("dest") or {}):
+        raise ValueError(f"Manifest entry {name} is method: system, which has no windows dest (sudo and owners)")
 
 
 # %%
@@ -938,6 +1118,11 @@ def build_plan(entries, platform_key, hostname, repo_root=None, assume_requires=
             # relink entries: an app caches this file, so a pull that changes it
             # needs the link re-created for the app to notice (see link_is_stale)
             "refresh": entry.get("refresh", "none"),
+            # method: system rows: who owns the installed copy, its mode, and the
+            # command that makes the daemon re-read it after a change
+            "owner": entry.get("owner", SYSTEM_DEFAULT_OWNER),
+            "mode": entry.get("mode"),
+            "reload": entry.get("reload"),
             "note": entry.get("note", ""),
             "requires": None,
             "dest": None,
@@ -1015,8 +1200,25 @@ def classify_entry(repo_path, system_path, refresh="none"):
     return "NOT_A_LINK", "regular file; content diverges from repo (orphaned hard link after git pull?)"
 
 
-def planned_action(status, on_drift="replace"):
+def classify_row(row):
+    """classify_entry or classify_system_entry, whichever the row's method needs."""
+    if row["method"] == "system":
+        return classify_system_entry(row["repo"], row["dest"], row["owner"], row["mode"])
+    return classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))
+
+
+def planned_action(status, on_drift="replace", method="symlink"):
     """Human description of what deploy would do for a given status."""
+    if method == "system":
+        return {
+            "OK": "no action needed",
+            "NOT_DEPLOYED": "deploy would install the repo file as a root-owned copy (sudo -n) and run the reload",
+            "DIVERGED": "deploy would back up the system file to data/config_backups, install the repo file over it "
+            "(sudo -n) and run the reload",
+            "WRONG_MODE": "deploy would chown/chmod the copy to the entry's owner and mode (sudo -n), no reload",
+            "NEEDS_SUDO": "nothing: passwordless sudo is not available here, so the entry is left alone",
+            "REPO_MISSING": "nothing to deploy (repo file missing)",
+        }.get(status, "unknown")
     if status == "NOT_A_LINK" and on_drift == "adopt":
         return (
             "deploy would back up the system file, adopt its content into the repo working tree if it is "
@@ -1039,7 +1241,7 @@ def print_unhealthy_row(status, row, detail, name_width):
     """One needs-attention entry: status line, detail, what deploy would do, and where adoption lives."""
     print("  " + status_line(status, row["name"], row["dest"], name_width))
     print(paint(f"      {detail}", "dim"))
-    print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'))}", "dim"))
+    print(paint(f"      -> {planned_action(status, row.get('on_drift', 'replace'), row['method'])}", "dim"))
     if status == "NOT_A_LINK" and row.get("adopt_elsewhere"):
         print(
             paint(
@@ -1065,7 +1267,7 @@ def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
         if row["action"] != "apply":
             info.append((row["action"].upper(), row, _info_detail(row, platform_key)))
             continue
-        status, detail = classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))
+        status, detail = classify_row(row)
         (healthy if status in HEALTHY_STATUSES else unhealthy).append((status, row, detail))
 
     if info and not problems_only:
@@ -1122,9 +1324,7 @@ def run_deploy(plan):
     """
     info = [row for row in plan if row["action"] != "apply"]
     apply_rows = [row for row in plan if row["action"] == "apply"]
-    healthy = [
-        row for row in apply_rows if classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))[0] == "OK"
-    ]
+    healthy = [row for row in apply_rows if classify_row(row)[0] == "OK"]
     work = [row for row in apply_rows if row not in healthy]
     counts = {"changed": 0, "noop": len(healthy), "skipped": 0}
 
@@ -1132,12 +1332,18 @@ def run_deploy(plan):
         print_section("Changes", len(work), "cyan")
         for row in work:
             print("  " + paint(row["name"], "bold"))
-            result = deploy_config(
-                row["repo"], row["dest"], on_drift=row.get("on_drift", "replace"), refresh=row.get("refresh", "none")
-            )
+            if row["method"] == "system":
+                result = deploy_system_file(row["repo"], row["dest"], row["owner"], row["mode"], reload=row["reload"])
+            else:
+                result = deploy_config(
+                    row["repo"],
+                    row["dest"],
+                    on_drift=row.get("on_drift", "replace"),
+                    refresh=row.get("refresh", "none"),
+                )
             if result == "noop":
                 counts["noop"] += 1
-            elif result in ("skipped", "missing"):
+            elif result in ("skipped", "missing", "reload_failed"):
                 counts["skipped"] += 1
             else:
                 counts["changed"] += 1

@@ -45,7 +45,10 @@ disable colors).
     windows: ~/AppData/...                # only if the app is deployed on Windows
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
                                           # (overlay manifests only, see below)
-  method: symlink | none                  # default symlink
+  method: symlink | none | system         # default symlink; system = root-owned copy,
+  owner: root:nut                         #   see "Root-owned system files" below
+  mode: "0640"                            #   (quoted octal, required for system)
+  reload: systemctl restart nut-monitor   #   optional, run through sudo -n after a change
   on_drift: replace | adopt               # default replace; adopt acts on
                                           # WORKTREE_HOST only, see below
   refresh: none | relink                  # default none; relink re-creates the link
@@ -104,6 +107,32 @@ is a complete inventory of deployed configs, not just a link list.
 That completeness is **enforced**, not aspirational: `tests/` asserts that
 every tracked file under `application_configs/` is reachable from some loaded
 manifest entry — see [Payload coverage](#payload-coverage) below.
+
+### Root-owned system files (`method: system`)
+
+Some configs live outside the home directory and are read by a daemon's own
+service user: `/etc/nut/*.conf` on the UPS pis, read by upsd and the driver as
+user `nut`, and the pis' `gitpullall` timer under `/etc/systemd/system`. A
+link cannot do that job. The service user cannot follow a link into a `0700`
+home, and dpkg treats the path as a conffile it may replace on upgrade. So a
+`system` entry places a **copy**, owned by `owner` (default `root:root`) with
+the quoted octal `mode`, through `sudo -n`. The repo file stays the truth:
+`status` compares content hashes and owner/mode, and a deploy re-installs
+whatever differs, backing up a diverging regular file to `data/config_backups`
+first like it does for links. When the content changed (a first install or a
+re-install, never a mode-only fix) the entry's `reload` command runs through
+`sudo -n sh -c`, which is how a pulled change reaches the running daemon.
+
+Nothing prompts: on a machine without passwordless sudo the row reports
+`NEEDS_SUDO` and is left alone, and every failed sudo step reports and stops
+that entry. `sudo` is only ever invoked for `system` rows that apply on the
+machine, so a host with no such entry never runs it (elitedesk mails every
+failed sudo). `system` entries take no `on_drift`, `refresh` or `windows`
+dest, and prune never removes them: a dropped entry leaves its file for
+someone to delete by hand, since the file is not a link back into a checkout.
+
+Copies are otherwise still refused: a plain copy nothing hashes is how a
+config drifts silently, and the symlink method never falls back to one.
 
 ## Overlay manifests from sibling repos
 
@@ -331,6 +360,9 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
 | `BROKEN_LINK` | Destination is a dangling symlink. |
 | `WRONG_TARGET` | Destination is a link resolving somewhere else. |
 | `STALE_LINK` | `refresh: relink` entries only: the link is correct but older than the repo file it points at, so an app that cached the file still holds the pre-pull content. Deploy re-creates the link to fire the path event. |
+| `DIVERGED` | `method: system` only: the root-owned copy's content differs from the repo file, or a link or directory sits where the copy belongs. Deploy backs up a regular file, installs the repo file over it and runs the reload. |
+| `WRONG_MODE` | `method: system` only: content matches but owner or mode differ. Deploy chowns and chmods in place, no reload. |
+| `NEEDS_SUDO` | `method: system` only: the copy is unreadable and `sudo -n` cannot read it either. Nothing is checked or changed. |
 | `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file, an orphaned hard link (git replaced the inode on pull), or an app's atomic-rename save; the detail says whether its content matches the repo copy or diverges. Deploy backs it up, then replaces it with a link to the repo version — except under `on_drift: adopt`, where a newer diverging system file is first adopted into the repo working tree. |
 
 Unhealthy rows get a second dimmed line explaining what is wrong and what

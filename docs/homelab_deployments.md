@@ -118,8 +118,18 @@ on change. Do not add it here.
   since 2026-09-13), is a systemd user timer declared in
   `server_configs/system_configs/jasonzephyrus/systemd/` and linked by the
   personal manifest, not a crontab.
-- **Envy, macmini14, nukbuntu, the five pis** — no user or root crontab at
-  all. Macs would use launchd if they ever need one.
+- **raspberrypi3 and raspberrypi3a (the UPS pis)** — no crontab either. Their
+  loop is `gitpullall.timer`, a systemd **system** unit (pi has no linger and
+  `/home/pi` is `0700`) declared in
+  `server_configs/system_configs/raspbian/systemd/` and installed to
+  `/etc/systemd/system` by the personal manifest's `method: system` entries,
+  which is also how their NUT configs reach `/etc/nut`
+  (`docs/setup_ups_monitoring.md`). Every 15 minutes it runs
+  `refresh_machine.py` as pi: pull, clone, sync envs, deploy, prune. The
+  deploy installs the unit that runs it, so the loop is self-carrying the
+  same way elitedesk's cron line is. Logs: `journalctl -u gitpullall`.
+- **Envy, macmini14, nukbuntu, the other three pis** — no user or root crontab
+  at all. Macs would use launchd if they ever need one.
 - **Windows machines** — Task Scheduler, no cron.
 
 ## Compose conventions (`Docker/docker_compose_projects.yaml`)
