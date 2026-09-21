@@ -210,16 +210,52 @@ def vnc_alias_for(ssh_alias):
     return VNC_ALIAS_PREFIX + name[len(SSH_ALIAS_PREFIX) :]
 
 
+def serves_screen_sharing(host):
+    """
+    Whether this host's VNC server speaks a security type macOS Screen Sharing
+    can negotiate - VNC Auth (2) or Apple ARD (30).
+
+    macOS targets always do. Everything else has to say so with
+    ``vnc_screen_sharing``: it depends on the server the machine runs, and
+    guessing it from the OS is what produced a fleet-wide "TigerVNC everywhere"
+    rule out of a constraint that only ever applied to wayvnc.
+
+    Read a host's list for yourself without authenticating - the server sends
+    it straight after the version handshake:
+
+        python3 - <<'EOF'
+        import socket
+        s = socket.create_connection(("<host>", 5900), 3)
+        s.recv(12); s.sendall(b"RFB 003.008\n")
+        print(list(s.recv(s.recv(1)[0])))
+        EOF
+    """
+    if is_mac(host.get("os")):
+        return True
+    return bool(host.get("vnc_screen_sharing"))
+
+
 def vnc_command(host, platform_token):
     """
     The vncviewer command line for a host, or None if it cannot serve a screen.
 
-    Mac to Mac uses Screen Sharing, everything else uses TigerVNC through
-    vnc_connect.py. The viewer depends on the TARGET, not just this machine:
-    macOS's own server offers VNC Auth and Apple ARD, so Screen Sharing is both
-    available and better there (ARD auth, clipboard, retina), and there is
-    nothing to install. wayvnc offers neither of those types, which is why every
-    other target needs TigerVNC.
+    From a Mac, a target whose server speaks VNC Auth or Apple ARD gets Screen
+    Sharing; everything else gets TigerVNC through vnc_connect.py. The viewer
+    depends on the TARGET, not just this machine.
+
+    Screen Sharing is the better client wherever it can negotiate at all: it
+    scales the remote desktop to fit the window, draws the remote cursor, and
+    passes the Command key through as Super. TigerVNC 1.16 does none of those -
+    upstream removed local scaling entirely, so against a server that cannot
+    resize its own desktop (TightVNC) the window cannot be made to show the
+    whole desktop at all.
+
+    Which one a host can take is a property of its SERVER, not its OS, so it is
+    declared per host with ``vnc_screen_sharing`` rather than inferred. macOS
+    targets are implicitly true. Probed 2026-09-21: TightVNC offers VNC Auth,
+    x0vncserver and Xtigervnc offer VeNCrypt + VNC Auth, and wayvnc offers only
+    VeNCrypt, RSA-AES and RA2 - which is why the Pis still need TigerVNC and
+    why this was never a fleet-wide rule.
 
     For the TigerVNC path the target and port are passed separately and
     vnc_connect.py joins them as ``host::port``, because TigerVNC reads a single
@@ -233,8 +269,13 @@ def vnc_command(host, platform_token):
     if not target:
         return None
     port = int(host.get("vnc_port") or DEFAULT_VNC_PORT)
-    if is_mac(platform_token) and is_mac(host_os):
-        user = host_user(host)
+    if is_mac(platform_token) and serves_screen_sharing(host):
+        # The user is sent only to macOS targets. Those authenticate with Apple
+        # ARD, where it is the account name and Screen Sharing needs it. A
+        # VNC Auth server has no username at all - the protocol carries only a
+        # password - so putting one in the URL just pre-fills a field the
+        # server will never be asked about.
+        user = host_user(host) if is_mac(host_os) else ""
         suffix = "" if port == DEFAULT_VNC_PORT else ":{}".format(port)
         return "open vnc://{}{}{}".format(user + "@" if user else "", target, suffix)
     return "{} {} {}".format(viewer_for_platform(platform_token), target, port)

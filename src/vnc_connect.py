@@ -45,7 +45,12 @@ MAC_VIEWER = "/Applications/TigerVNC.app/Contents/MacOS/vncviewer"
 # "SetDesktopSize failed: 4" on every resize for the whole session. Turning it
 # off keeps the remote at its own size and stops the noise; nothing is lost,
 # because the resize was never going to succeed.
-VIEWER_ARGS = ["-RemoteResize=0"]
+#
+# AlwaysCursor draws the remote pointer when the server sends an invisible one,
+# which is the difference between seeing where you are pointing and not - the
+# default is off, and the symptom is simply no cursor. CursorType=System makes
+# it the real pointer rather than TigerVNC's fallback dot.
+VIEWER_ARGS = ["-RemoteResize=0", "-AlwaysCursor=1", "-CursorType=System"]
 
 
 def platform_key(platform_token=None):

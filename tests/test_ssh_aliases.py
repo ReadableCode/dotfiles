@@ -150,6 +150,40 @@ def test_screen_sharing_carries_a_non_default_port(tmp_path):
     assert aliases(tmp_path, platform_token="darwin")["vncenvy"] == "open vnc://jason@192.168.1.20:5901"
 
 
+def test_a_host_declaring_screen_sharing_gets_it_from_a_mac(tmp_path):
+    """
+    The viewer follows the SERVER, not the OS. TightVNC and x0vncserver both
+    offer VNC Auth, so Screen Sharing reaches them and brings the things
+    TigerVNC 1.16 cannot do at all: scale the desktop to fit the window, draw
+    the remote cursor, and pass Command through as Super.
+    """
+    host = dict(VNC_HOST, os="linux", vnc_screen_sharing=True)
+    write_inventory(tmp_path, "personal", [host])
+    assert aliases(tmp_path, platform_token="darwin")["vncenvy"] == "open vnc://192.168.1.20"
+
+
+def test_screen_sharing_sends_no_user_to_a_non_mac_target(tmp_path):
+    """VNC Auth carries a password and no username, so a user@ would pre-fill a field
+    the server is never asked about. Only an ARD (macOS) target gets one."""
+    host = dict(VNC_HOST, os="windows", vnc_screen_sharing=True)
+    write_inventory(tmp_path, "personal", [host])
+    assert "jason@" not in aliases(tmp_path, platform_token="darwin")["vncenvy"]
+
+
+def test_declaring_screen_sharing_changes_nothing_off_a_mac(tmp_path):
+    """There is no vnc:// handler on Windows or Linux; those keep the wrapper."""
+    host = dict(VNC_HOST, os="linux", vnc_screen_sharing=True)
+    write_inventory(tmp_path, "personal", [host])
+    assert aliases(tmp_path, platform_token="win32")["vncenvy"] == vnc_call("192.168.1.20")
+
+
+def test_a_host_without_the_flag_still_uses_tigervnc(tmp_path):
+    """wayvnc offers only VeNCrypt, RSA-AES and RA2 - Screen Sharing cannot negotiate
+    any of them, so the Pis must stay on TigerVNC and the default must not assume."""
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, os="linux")])
+    assert aliases(tmp_path, platform_token="darwin")["vncenvy"] == vnc_call("192.168.1.20")
+
+
 def test_every_ssh_alias_on_a_host_gets_its_own_vnc_twin(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, os="linux", aliases=["sshenvy", "sshdesk"])])
     generated = aliases(tmp_path)

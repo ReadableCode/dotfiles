@@ -22,23 +22,67 @@ reachable only through a vendor's cloud:
 
 | Platform | Client | Installed from |
 | --- | --- | --- |
-| macOS | TigerVNC Viewer | `app_lists/Brewfile` (`cask "tigervnc"`) |
+| macOS | Screen Sharing (built in); TigerVNC for the Pis | `app_lists/Brewfile` (`cask "tigervnc"`) |
 | Windows | TigerVNC Viewer | `app_lists/windows_apps_personal_choco.txt` |
 | Linux (apt) | TigerVNC Viewer | `app_lists/linux_apps.txt` |
 | Linux (Fedora) | TigerVNC Viewer | `app_lists/linux_apps_dnf.txt` |
 | Android | AVNC | F-Droid |
 | iOS | *(none - see below)* | |
 
-The `vnc<host>` aliases pick the viewer from the **target**, not from the
-machine you are sitting at: Mac to Mac opens Screen Sharing (`open vnc://`),
-everything else runs `src/vnc_connect.py`, which launches TigerVNC. macOS's own
-server offers VNC Auth and Apple ARD, so Screen Sharing is both available and
-better there - ARD auth, clipboard, retina - and nothing needs installing.
+### Which viewer an alias picks, and why it matters
 
-`vnc_connect.py` passes `-RemoteResize=0`. TigerVNC otherwise asks the server to
-match the desktop to the local window on every resize, and wayvnc on a headless
-Pi cannot resize its output, so it refuses and the viewer logs
-`SetDesktopSize failed: 4` for the rest of the session.
+The `vnc<host>` aliases pick the viewer from the **target's server**, not from
+the machine you are sitting at and not from the target's OS. From a Mac, a
+target whose server speaks VNC Auth or Apple ARD gets Screen Sharing
+(`open vnc://`); everything else runs `src/vnc_connect.py`, which launches
+TigerVNC.
+
+Prefer Screen Sharing wherever it can negotiate at all, because TigerVNC 1.16
+cannot do three things it does:
+
+| | Screen Sharing | TigerVNC 1.16 |
+| --- | --- | --- |
+| Fit desktop to window | yes | **no - upstream removed local scaling** |
+| Remote cursor | yes | only with `-AlwaysCursor=1` |
+| Command key as Super | yes | full-screen only (`FullscreenSystemKeys`) |
+
+The scaling one has no workaround. TigerVNC's only resize path is
+`RemoteResize`, which asks the *server* to change its desktop size, and a server
+that cannot do that (TightVNC) leaves you with scrollbars and no way to see the
+whole desktop at once.
+
+Which hosts can take Screen Sharing is declared per host with
+`vnc_screen_sharing: true` in the inventory, because it is a property of the
+server rather than the OS. macOS targets are implicitly true. Probed
+2026-09-21:
+
+| Server | Offers | Screen Sharing |
+| --- | --- | --- |
+| TightVNC 2.8 (RyzenWhite) | VNC Auth, Tight | yes |
+| x0vncserver / Xtigervnc | VeNCrypt, VNC Auth | yes |
+| wayvnc (the Pis) | VeNCrypt, RSA-AES, RA2 | **no** |
+
+Read any host's list yourself - it arrives before authentication:
+
+```bash
+python3 - <<'EOF'
+import socket
+s = socket.create_connection(("192.168.86.94", 5900), 3)
+s.recv(12); s.sendall(b"RFB 003.008\n")
+print(list(s.recv(s.recv(1)[0])))   # 2 = VNC Auth, 30 = ARD, 19 = VeNCrypt
+EOF
+```
+
+"TigerVNC everywhere" was briefly the rule here and it was wrong: it
+generalised a wayvnc constraint to the whole fleet, which cost the Windows and
+Linux boxes their scaling and their cursor for no reason.
+
+`vnc_connect.py` passes `-RemoteResize=0`, `-AlwaysCursor=1` and
+`-CursorType=System`. TigerVNC otherwise asks the server to match the desktop to
+the local window on every resize, and wayvnc on a headless Pi cannot resize its
+output, so it refuses and the viewer logs `SetDesktopSize failed: 4` for the
+rest of the session. `AlwaysCursor` defaults to **off**, and the symptom is
+simply no visible pointer.
 
 The first connection to each Pi warns that the certificate is untrusted and
 that `CN=raspberrypi` does not match the hostname. That is wayvnc's self-signed
@@ -49,8 +93,8 @@ pins that key for the host, so it only asks once.
 RSA-AES (129) and RA2 (5); Screen Sharing speaks only VNC Auth (2) and Apple ARD
 (30), so it fails at negotiation before asking for a password. This was found
 the hard way on 2026-09-20 - the built-in client had been assumed sufficient.
-TigerVNC speaks all of them, which is why every platform now uses it and the
-`vnc<host>` aliases launch `vncviewer` rather than `open vnc://`.
+TigerVNC speaks all of them, which is why the Pis - and only the Pis - launch
+`vncviewer` from a Mac rather than `open vnc://`.
 
 iOS has no free software VNC client: the only GPL-lineage app on the App Store
 is paid and ships no iOS source. Reach a GPU host from an iPad with Moonlight
