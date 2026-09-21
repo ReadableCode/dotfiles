@@ -1176,7 +1176,9 @@ def _disable_auto_merge(args, repo):
         "mutation($id: ID!) { disablePullRequestAutoMerge(input: {pullRequestId: $id}) "
         "{ pullRequest { autoMergeRequest { mergeMethod } } } }"
     )
-    response = http_json("POST", GITHUB_GRAPHQL, headers, payload={"query": mutation, "variables": {"id": pull["node_id"]}})
+    response = http_json(
+        "POST", GITHUB_GRAPHQL, headers, payload={"query": mutation, "variables": {"id": pull["node_id"]}}
+    )
     if response.get("errors"):
         raise SystemExit(f"failed to disable auto-merge on PR #{number}: {response['errors']}")
     pull = http_json("GET", pull_url, headers)
