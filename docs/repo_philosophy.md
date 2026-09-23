@@ -221,7 +221,7 @@ avoided* failures on record are device-shell mounts, not local sessions.
 ## Naming new repos
 
 New repos are **lowercase kebab-case** (`load-log`, `postgrest-auth`). The
-existing mixed-case names (`Cash_Flow_Commander`, `Book-Bot`, `CrownCentral`)
+existing mixed-case names (`Cash_Flow_Commander`, `Book-Bot`, `Sync_Plex`)
 stay as they are: renaming one touches every manifest, workspace, clone list
 and deploy script that names it, for no functional gain.
 

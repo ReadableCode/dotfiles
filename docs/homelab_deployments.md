@@ -35,7 +35,7 @@ layout must exist on the Mac and on the servers.
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. Also owns elitedesk's crontabs — see [Cron](#cron-how-scheduled-jobs-are-declared). |
 | `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`). |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
-| app repos | `load-log`, `Assistant`, `CrownCentral`, `postgrest-auth`, `website`, `charlie-personal-website` — each built into containers by the Docker repo. |
+| app repos | `load-log`, `Assistant`, `postgrest-auth`, `website`, `charlie-personal-website` and one client-facing app repo — each built into containers by the Docker repo. |
 
 ## Auto-deploy pipeline (elitedesk)
 

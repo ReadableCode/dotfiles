@@ -53,7 +53,7 @@
   "loadBalancingWeights": {},
   "notificationMode": "off",
   "onboardingCompletedAt": "2026-09-08T19:10:25.340Z",
-  "panelAnimationDurationMs": 0,
+  "panelAnimationDurationMs": 25,
   "planModeEnabled": false,
   "proactivePanelsEnabled": false,
   "providerModelPreferences": {},
