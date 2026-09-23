@@ -747,13 +747,10 @@ def test_update_pr_closes_without_merging(monkeypatch, capsys):
 
     def fake_http_json(method, url, headers, payload=None, **kwargs):
         calls.append((method, url, payload))
-        return {"number": 7, "html_url": "https://github.com/acme/widgets/pull/7", "title": "kept",
-                "state": "closed"}
+        return {"number": 7, "html_url": "https://github.com/acme/widgets/pull/7", "title": "kept", "state": "closed"}
 
     monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
-    out = _run_cli(
-        ["update-pr", "--repo", "acme/widgets", "--pr", "7", "--state", "closed"], monkeypatch, capsys
-    )
+    out = _run_cli(["update-pr", "--repo", "acme/widgets", "--pr", "7", "--state", "closed"], monkeypatch, capsys)
     assert calls == [("PATCH", "https://api.github.com/repos/acme/widgets/pulls/7", {"state": "closed"})]
     result = json.loads(out.strip().splitlines()[-1])
     assert result["state"] == "closed" and result["updated"] == ["state"]
@@ -1210,6 +1207,37 @@ def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, t
     }
 
 
+def test_github_pr_diff_stitches_file_patches_when_the_diff_is_too_large(monkeypatch):
+    base = "https://api.github.com/repos/owner/name/pulls/12"
+    files = [
+        {"filename": "src/a.py", "status": "modified", "patch": "@@ -1 +1 @@\n-x\n+y"},
+        {
+            "filename": "src/new.py",
+            "previous_filename": "src/old.py",
+            "status": "renamed",
+            "patch": "@@ -1 +1 @@\n-a\n+b",
+        },
+        {"filename": "data/big.csv", "status": "added"},
+    ]
+    asked = []
+
+    def fake_bytes(url, headers, tolerate=(), **kwargs):
+        asked.append((url, headers.get("Accept"), tolerate))
+        # GitHub's answer when a PR's diff is past its size limit
+        return None
+
+    monkeypatch.setattr(ticket_pr, "http_bytes", fake_bytes)
+    monkeypatch.setattr(ticket_pr, "http_json", lambda method, url, headers, **kwargs: files)
+    diff = ticket_pr.github_pr_diff("owner/name", 12, {}).decode()
+    assert asked == [(base, "application/vnd.github.diff", (406,))]
+    assert diff == (
+        "diff --git a/src/a.py b/src/a.py\n--- a/src/a.py\n+++ b/src/a.py\n@@ -1 +1 @@\n-x\n+y\n"
+        "diff --git a/src/old.py b/src/new.py\n--- a/src/old.py\n+++ b/src/new.py\n@@ -1 +1 @@\n-a\n+b\n"
+        "diff --git a/data/big.csv b/data/big.csv\n--- a/data/big.csv\n+++ b/data/big.csv\n"
+        "(no patch from GitHub: file too large or binary)\n"
+    )
+
+
 def test_pr_diff_github_reads_every_kind_of_comment(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     base = "https://api.github.com/repos/owner/name/pulls/12"
@@ -1274,7 +1302,7 @@ def test_pr_diff_github_reads_every_kind_of_comment(monkeypatch, capsys, tmp_pat
         return next(resp for marker, resp in responses.items() if marker in url)
 
     monkeypatch.setattr(ticket_pr, "http_json", fake_http)
-    monkeypatch.setattr(ticket_pr, "http_bytes", lambda url, headers: b"diff")
+    monkeypatch.setattr(ticket_pr, "http_bytes", lambda url, headers, **kwargs: b"diff")
     out_path = tmp_path / "pr12.diff"
     ticket_pr.main(["pr-diff", "--repo", "github:owner/name", "--pr", "12", "--out", str(out_path)])
     out = capsys.readouterr().out

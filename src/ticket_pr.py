@@ -145,13 +145,18 @@ def http_json(method, url, headers, payload=None, dry_run=False, timeout=60, tol
     return json.loads(raw) if raw.strip() else {}
 
 
-def http_bytes(url, headers, timeout=120):
-    """Raw GET for a file (an attachment); Jira redirects to its file store."""
+def http_bytes(url, headers, timeout=120, tolerate=()):
+    """
+    Raw GET for a file (an attachment); Jira redirects to its file store.
+    HTTP status codes listed in ``tolerate`` return None instead of exiting.
+    """
     request = urllib.request.Request(url, headers=headers)
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return response.read()
     except urllib.error.HTTPError as err:
+        if err.code in tolerate:
+            return None
         raise SystemExit(f"GET {url} failed: HTTP {err.code}")
     except urllib.error.URLError as err:
         raise SystemExit(f"GET {url} failed: {err.reason}")
@@ -1335,6 +1340,26 @@ def github_pr_files(repo, number, headers):
     ]
 
 
+def github_pr_diff(repo, number, headers):
+    """
+    A PR's unified diff. GitHub answers 406 when the diff is past its size
+    limit (300 files or 20,000 lines); the diff is then stitched from each
+    file's patch on the files endpoint, which also leaves out any single
+    file too large for a patch, so that file gets a marker line instead.
+    """
+    base_url = f"{GITHUB_API}/repos/{repo}/pulls/{number}"
+    diff = http_bytes(base_url, {**headers, "Accept": "application/vnd.github.diff"}, tolerate=(406,))
+    if diff is not None:
+        return diff
+    parts = []
+    for f in github_paginate(f"{base_url}/files", headers):
+        old = f.get("previous_filename") or f["filename"]
+        parts.append(f"diff --git a/{old} b/{f['filename']}\n--- a/{old}\n+++ b/{f['filename']}\n")
+        patch = f.get("patch")
+        parts.append(patch + "\n" if patch else "(no patch from GitHub: file too large or binary)\n")
+    return "".join(parts).encode()
+
+
 def pr_comment_entry(kind, comment_id, author, created, body, path=None, line=None, reply_to=None, state=None):
     """One PR comment in the shape both providers report."""
     return {
@@ -1463,7 +1488,7 @@ def cmd_pr_diff(args):
         headers = github_headers()
         base_url = f"{GITHUB_API}/repos/{repo}/pulls/{args.pr}"
         pull = http_json("GET", base_url, headers)
-        diff = http_bytes(base_url, {**headers, "Accept": "application/vnd.github.diff"})
+        diff = github_pr_diff(repo, args.pr, headers)
         files = github_pr_files(repo, args.pr, headers)
         comments = github_pr_comments(repo, args.pr, headers)
         result = {
@@ -1628,8 +1653,13 @@ def cmd_update_pr(args):
         return
     emit(
         f"PR #{number} updated: {', '.join(sorted(payload))}",
-        {"pr": pull["number"], "url": pull["html_url"], "title": pull["title"],
-         "state": pull.get("state"), "updated": sorted(payload)},
+        {
+            "pr": pull["number"],
+            "url": pull["html_url"],
+            "title": pull["title"],
+            "state": pull.get("state"),
+            "updated": sorted(payload),
+        },
     )
 
 
@@ -1752,8 +1782,7 @@ def build_parser():
     update_pr.add_argument("--title", help="new title; left alone when omitted")
     update_pr.add_argument("--body", help="new description text")
     update_pr.add_argument("--body-file", help="file containing the new description")
-    update_pr.add_argument("--state", choices=["open", "closed"],
-                           help="close a PR without merging, or reopen it")
+    update_pr.add_argument("--state", choices=["open", "closed"], help="close a PR without merging, or reopen it")
     update_pr.set_defaults(func=cmd_update_pr)
 
     job_log = sub.add_parser(
