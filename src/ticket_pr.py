@@ -1601,22 +1601,25 @@ def github_job_log(repo, job, headers, timeout=120):
 
 def cmd_update_pr(args):
     """
-    Change an open PR's title and/or description. A PR opened before a design
+    Change a PR's title, description and/or state. A PR opened before a design
     changed describes work that is no longer there, which is what a reviewer
     reads first; this rewrites it in place rather than burying a correction in
-    the comments.
+    the comments. --state closed parks a PR without merging (the branch and
+    its commits stay); --state open reopens it.
     """
     provider, repo = repo_spec(args.repo)
     if provider != "github":
         raise SystemExit("update-pr is GitHub-only")
     body = body_text(args) if (args.body or args.body_file) else None
-    if args.title is None and body is None:
-        raise SystemExit("update-pr needs --title and/or --body/--body-file")
+    if args.title is None and body is None and args.state is None:
+        raise SystemExit("update-pr needs --title, --body/--body-file and/or --state")
     payload = {}
     if args.title is not None:
         payload["title"] = args.title
     if body is not None:
         payload["body"] = body
+    if args.state is not None:
+        payload["state"] = args.state
     headers = github_headers()
     number = args.pr or resolve_pr(repo, headers, None)["number"]
     pull = http_json("PATCH", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers, payload, dry_run=args.dry_run)
@@ -1625,7 +1628,8 @@ def cmd_update_pr(args):
         return
     emit(
         f"PR #{number} updated: {', '.join(sorted(payload))}",
-        {"pr": pull["number"], "url": pull["html_url"], "title": pull["title"], "updated": sorted(payload)},
+        {"pr": pull["number"], "url": pull["html_url"], "title": pull["title"],
+         "state": pull.get("state"), "updated": sorted(payload)},
     )
 
 
@@ -1742,12 +1746,14 @@ def build_parser():
     rerun.add_argument("--job", required=True, help="job id from the check's details URL")
     rerun.set_defaults(func=cmd_rerun_job)
 
-    update_pr = sub.add_parser("update-pr", help="change an open PR's title and/or description")
+    update_pr = sub.add_parser("update-pr", help="change a PR's title, description and/or state")
     update_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     update_pr.add_argument("--pr", help="PR number (default: current branch's open PR)")
     update_pr.add_argument("--title", help="new title; left alone when omitted")
     update_pr.add_argument("--body", help="new description text")
     update_pr.add_argument("--body-file", help="file containing the new description")
+    update_pr.add_argument("--state", choices=["open", "closed"],
+                           help="close a PR without merging, or reopen it")
     update_pr.set_defaults(func=cmd_update_pr)
 
     job_log = sub.add_parser(

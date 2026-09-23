@@ -741,6 +741,24 @@ def test_update_pr_sends_only_what_was_given(monkeypatch, capsys, tmp_path):
     assert json.loads(out.strip().splitlines()[-1])["updated"] == ["body"]
 
 
+def test_update_pr_closes_without_merging(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    calls = []
+
+    def fake_http_json(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        return {"number": 7, "html_url": "https://github.com/acme/widgets/pull/7", "title": "kept",
+                "state": "closed"}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
+    out = _run_cli(
+        ["update-pr", "--repo", "acme/widgets", "--pr", "7", "--state", "closed"], monkeypatch, capsys
+    )
+    assert calls == [("PATCH", "https://api.github.com/repos/acme/widgets/pulls/7", {"state": "closed"})]
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["state"] == "closed" and result["updated"] == ["state"]
+
+
 def test_update_pr_needs_something_to_change(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     with pytest.raises(SystemExit, match="needs --title"):
