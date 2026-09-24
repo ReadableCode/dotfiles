@@ -217,7 +217,12 @@ entry leaves a key out keeps whatever it has.
 
 ```json
 "updater": {
-  "windows": { "preview_updates": false, "restart_sign_on": true, "parallel_logon_apps": true }
+  "windows": {
+    "preview_updates": false,
+    "restart_sign_on": true,
+    "parallel_logon_apps": true,
+    "disabled_logon_apps": ["com.squirrel.slack.slack"]
+  }
 }
 ```
 
@@ -244,6 +249,15 @@ entry leaves a key out keeps whatever it has.
   updates are known to drop the `Serialize` key, which is why myupdater sets it
   on every run. The Shell-Core/Operational log (events 9707/9708 for Run keys,
   62408/62409 for the rest) shows each launch's start and finish.
+- `disabled_logon_apps` - logon apps this host does not start, listed by the
+  name Windows knows them by: a Run-key value name
+  (`"com.squirrel.slack.slack"`), a Startup folder file name
+  (`"Tailscale.lnk"`), or a Store app's `"PackageName/TaskId"`
+  (`"AppleInc.iCloud/iCloudHomeStartupTask"`). Each is turned off the way Task
+  Manager's Startup tab does it, so the app stays installed and can be switched
+  back on there, and an app that turns its own autostart back on when it
+  updates is turned off again by the next myupdater. A name the machine does
+  not have is reported and skipped.
 
 ## Set app order on Taskbar
 

@@ -34,6 +34,16 @@
 #                    (T3 Code, the AutoHotkey scripts) ran about 8 minutes after
 #                    logon on RyzenWhite. Windows updates are known to drop the
 #                    Serialize key, which is why myupdater puts it back.
+#   disabled_logon_apps  logon apps this host does not start, as a list: a
+#                    Run-key value name ("com.squirrel.slack.slack"), a Startup
+#                    folder file name ("Tailscale.lnk") or a Store app's
+#                    "PackageName/TaskId" ("AppleInc.iCloud/iCloudHomeStartupTask").
+#                    Turned off the way Task Manager's Startup tab does it
+#                    (StartupApproved, or the task's State 1), so the app stays
+#                    installed and can be switched back on there; apps that
+#                    re-enable themselves on update are turned off again by
+#                    the next myupdater. A name this machine does not have is
+#                    reported and skipped.
 #
 # A key the entry leaves out is left alone, as is every setting on a machine
 # no inventory names. No uv or a broken inventory means the policy is unknown,
@@ -66,10 +76,11 @@ $WindowsSettings = @(
     @{ Key = 'parallel_logon_apps'; Path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize'; Name = 'WaitForIdleState'; On = 0; Off = $null }
 )
 
-function Get-UpdaterPolicy {
-    # The value at a dotted key in this host's updater block: $true, $false,
-    # or $null when the entry does not set it. Throws when the lookup itself
-    # fails, which the caller reports as "policy unknown".
+function Get-UpdaterPolicyText {
+    # The value at a dotted key in this host's updater block as
+    # updater_policy.py prints it (lists comma-joined), '' when the entry does
+    # not set it. Throws when the lookup itself fails, which the caller
+    # reports as "policy unknown".
     param([string]$Key)
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
         throw "uv not found, so src/updater_policy.py cannot run"
@@ -79,6 +90,13 @@ function Get-UpdaterPolicy {
     if ($LASTEXITCODE -ne 0) {
         throw "src/updater_policy.py failed for $Key"
     }
+    return $value
+}
+
+function Get-UpdaterPolicy {
+    # A true/false key: $true, $false, or $null when the entry does not set it.
+    param([string]$Key)
+    $value = Get-UpdaterPolicyText $Key
     switch ($value) {
         ''      { return $null }
         'True'  { return $true }
@@ -103,18 +121,99 @@ function Get-WindowsSettingDrift {
         $current = (Get-ItemProperty -Path $setting.Path -Name $setting.Name -ErrorAction SilentlyContinue).($setting.Name)
         if ($current -ne $data) {
             $drift += [pscustomobject]@{
-                Key = $setting.Key; Path = $setting.Path; Name = $setting.Name; Want = $data; Have = $current
+                Kind = 'dword'; Key = $setting.Key; Path = $setting.Path; Name = $setting.Name; Want = $data
+                Text = "$($setting.Name) is $(if ($null -eq $current) { 'unset' } else { $current }), inventory wants $data"
             }
+        }
+    }
+    return , @($drift + (Get-LogonAppDrift))
+}
+
+$ExplorerKey = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved'
+$LogonRunSources = @(
+    @{ Run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'; Approved = "HKCU:\$ExplorerKey\Run" },
+    @{ Run = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'; Approved = "HKLM:\$ExplorerKey\Run" },
+    @{ Run = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run'; Approved = "HKLM:\$ExplorerKey\Run32" }
+)
+$LogonFolderSources = @(
+    @{ Dir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup'; Approved = "HKCU:\$ExplorerKey\StartupFolder" },
+    @{ Dir = Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\StartUp'; Approved = "HKLM:\$ExplorerKey\StartupFolder" }
+)
+$AppTaskStateKey = 'HKCU:\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData'
+
+function Test-ApprovedOff {
+    # StartupApproved data starts with an odd byte when the entry is turned off.
+    param([string]$Path, [string]$Name)
+    $data = (Get-ItemProperty -Path $Path -Name $Name -ErrorAction SilentlyContinue).$Name
+    return ($null -ne $data) -and (($data[0] -band 1) -eq 1)
+}
+
+function Get-LogonAppDrift {
+    # Every logon app the inventory turns off that is still set to start here.
+    $text = Get-UpdaterPolicyText 'windows.disabled_logon_apps'
+    $names = @($text -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $drift = @()
+    foreach ($name in $names) {
+        $found = $false
+        foreach ($source in $LogonRunSources) {
+            if ($null -eq (Get-ItemProperty -Path $source.Run -Name $name -ErrorAction SilentlyContinue)) { continue }
+            $found = $true
+            if (-not (Test-ApprovedOff $source.Approved $name)) {
+                $drift += [pscustomobject]@{ Kind = 'approved'; Key = 'disabled_logon_apps'; Path = $source.Approved; Name = $name; Text = "$name starts at logon (Run key), inventory turns it off" }
+            }
+        }
+        foreach ($source in $LogonFolderSources) {
+            if (-not (Test-Path -LiteralPath (Join-Path $source.Dir $name))) { continue }
+            $found = $true
+            if (-not (Test-ApprovedOff $source.Approved $name)) {
+                $drift += [pscustomobject]@{ Kind = 'approved'; Key = 'disabled_logon_apps'; Path = $source.Approved; Name = $name; Text = "$name starts at logon (Startup folder), inventory turns it off" }
+            }
+        }
+        if ($name -match '^(?<package>[^/]+)/(?<task>.+)$') {
+            $family = (Get-AppxPackage -Name $Matches.package -ErrorAction SilentlyContinue | Select-Object -First 1).PackageFamilyName
+            if ($family) {
+                $found = $true
+                $path = Join-Path $AppTaskStateKey (Join-Path $family $Matches.task)
+                $state = (Get-ItemProperty -Path $path -Name State -ErrorAction SilentlyContinue).State
+                # 0 and 1 are off (1 = by the user), 2 on, 3 and 4 set by policy
+                if ($state -ne 0 -and $state -ne 1 -and $state -ne 3) {
+                    $drift += [pscustomobject]@{ Kind = 'task'; Key = 'disabled_logon_apps'; Path = $path; Name = 'State'; Text = "$name starts at logon (Store app task), inventory turns it off" }
+                }
+            }
+        }
+        if (-not $found) {
+            Write-Host "  windows.disabled_logon_apps: $name is not a logon app on this machine; skipped"
         }
     }
     return , $drift
 }
 
+function Set-DriftRow {
+    # Make one drift row true: a DWord value, a StartupApproved "off" entry,
+    # or a Store app task's State 1 (turned off by the user).
+    param($Row)
+    if (-not (Test-Path $Row.Path)) { New-Item -Path $Row.Path -Force | Out-Null }
+    switch ($Row.Kind) {
+        'dword' {
+            New-ItemProperty -Path $Row.Path -Name $Row.Name -Value $Row.Want -PropertyType DWord -Force | Out-Null
+            Write-Host "  windows.$($Row.Key): set $($Row.Name) to $($Row.Want)"
+        }
+        'approved' {
+            $off = [byte[]](@(3, 0, 0, 0) + [BitConverter]::GetBytes((Get-Date).ToFileTime()))
+            New-ItemProperty -Path $Row.Path -Name $Row.Name -Value $off -PropertyType Binary -Force | Out-Null
+            Write-Host "  windows.$($Row.Key): turned off $($Row.Name)"
+        }
+        'task' {
+            New-ItemProperty -Path $Row.Path -Name 'State' -Value 1 -PropertyType DWord -Force | Out-Null
+            Write-Host "  windows.$($Row.Key): turned off $(Split-Path $Row.Path -Leaf)"
+        }
+    }
+}
+
 function Show-Drift {
     param($Drift)
     foreach ($row in $Drift) {
-        $have = if ($null -eq $row.Have) { 'unset' } else { $row.Have }
-        Write-Host "  windows.$($row.Key): $($row.Name) is $have, inventory wants $($row.Want)"
+        Write-Host "  windows.$($row.Key): $($row.Text)"
     }
 }
 
@@ -204,9 +303,7 @@ try {
     }
     else {
         foreach ($row in $drift) {
-            if (-not (Test-Path $row.Path)) { New-Item -Path $row.Path -Force | Out-Null }
-            New-ItemProperty -Path $row.Path -Name $row.Name -Value $row.Want -PropertyType DWord -Force | Out-Null
-            Write-Host "  windows.$($row.Key): set $($row.Name) to $($row.Want)"
+            Set-DriftRow $row
         }
     }
 }
