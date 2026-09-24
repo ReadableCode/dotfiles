@@ -54,12 +54,18 @@ HELP_PAGE = """# refresh_machine
    runs `src/deploy_configs.py prune --apply`
 7. with `--packages` only: offer to uninstall apps an app removals file retired, asking [y/N/q] per app
    the app lists win: a package one of them still names is never offered
+   on windows, also offer the extra copy of an app an app list installs, found by winget, not declared
    runs `src/app_removals.py`
-7b. `installmissing` only: offer to install app_lists entries this machine does not have
+7b. `installmissing` only: offer to install app list entries this machine does not have
+   the dotfiles `app_lists/` plus each member context's `<context>_app_lists.yaml`
+   answer with numbers (or `i`) to ignore apps on this machine for good, in `~/.dotfiles_ignored_apps`
    deliberately NOT part of a plain pull or update - installing apps is a thing you ask for
    runs the `scripts/install_*` for this machine's package managers
 8. on windows only: bring autohotkey in line with the repo's v2 scripts
    runs `scripts/ensure_autohotkey_v2.ps1 -AutoFix -Full`
+9. with `--packages` or `installmissing`: list every app the lists name that is still not installed, in the summary
+   so a package an installer could not find is read at the end, not lost mid-run
+   runs `src/app_lists.py --missing`
 
 ## examples
 
@@ -217,7 +223,10 @@ def app_list_installers(dotfiles, system, which=shutil.which):
     if system == "Windows":
         shell = which("pwsh") or which("powershell") or "powershell"
         prefix = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
-        return [("installing missing choco apps", prefix + [script("install_windows_apps_with_chocolatey.ps1")])]
+        return [
+            ("installing missing choco apps", prefix + [script("install_windows_apps_with_chocolatey.ps1")]),
+            ("installing missing winget apps", prefix + [script("install_windows_apps_with_winget.ps1")]),
+        ]
     found = []
     if which("apt-get"):
         found.append(("installing missing apt apps", ["bash", script("install_linux_apps.sh")]))
@@ -370,7 +379,38 @@ def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which,
     return failed
 
 
-def summary(failed, total, color, check=False):
+def missing_apps(dotfiles, capture=subprocess.run, which=shutil.which):
+    """
+    ``{"missing": [...], "elsewhere": [...], "ignored": [...], "ignore-file":
+    [path]}`` of ``manager:package`` for the apps this machine's lists name
+    that their manager has not installed, or None when that could not be
+    worked out. Asked once, after every step, so
+    an app an installer could not find is said where it is read - in the
+    summary - and not somewhere in the middle of a long run.
+    """
+    if not which("uv"):
+        return None
+    try:
+        done = capture(
+            uv_python(dotfiles, "app_lists.py", "--missing"),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError:
+        return None
+    if done.returncode:
+        return None
+    found: dict = {"missing": [], "elsewhere": [], "ignored": [], "ignore-file": []}
+    for line in done.stdout.splitlines():
+        kind, _, name = line.strip().partition(" ")
+        if kind in found and name:
+            found[kind].append(name)
+    return found
+
+
+def summary(failed, total, color, check=False, missing=None, asked_missing=False):
     paint = terminal_style.paint
     word = "reported drift" if check else "failed"
     lines = [terminal_style.section("done", color)]
@@ -379,6 +419,25 @@ def summary(failed, total, color, check=False):
         lines.append(paint(text, "amber" if check else "red", color, bold=True))
     else:
         lines.append(paint(f"   all {total} steps ok", "green", color, bold=True))
+    if asked_missing and missing is None:
+        lines.append(
+            paint("   could not work out which listed apps are installed (app_lists.py --missing)", "red", color)
+        )
+    elif missing:
+        if missing["missing"]:
+            count = len(missing["missing"])
+            text = f"   {count} listed app(s) not installed on this machine; `installmissing` offers them:"
+            lines.append(paint(text, "amber", color, bold=True))
+            lines += [paint(f"     {name}", "amber", color) for name in missing["missing"]]
+        if missing["elsewhere"]:
+            text = f"   {len(missing['elsewhere'])} listed app(s) installed, but not by the manager their list names:"
+            lines.append(paint(text, "amber", color))
+            lines += [paint(f"     {name}", "dim", color) for name in missing["elsewhere"]]
+        if missing.get("ignored"):
+            where = (missing.get("ignore-file") or ["the ignore file"])[0]
+            text = f"   {len(missing['ignored'])} listed app(s) not offered, ignored on this machine by {where}"
+            lines.append(paint(text + " (delete a line there to be offered it again):", "dim", color))
+            lines += [paint(f"     {name}", "dim", color) for name in missing["ignored"]]
     return "\n".join(lines) + "\n"
 
 
@@ -424,8 +483,12 @@ def main(argv=None, environ=None):
     except KeyboardInterrupt:
         out.write("\n" + terminal_style.paint("interrupted: the remaining steps did not run", "red", color) + "\n")
         return 130
-    out.write("\n" + summary(failed, len(steps), color, args.check))
-    return 1 if failed else 0
+    # Package runs only: listing what is installed costs a winget list, which
+    # a plain pull should not pay for.
+    asked_missing = (args.packages or args.install_missing) and not args.pull_only
+    missing = missing_apps(os.path.join(git_dir, "dotfiles")) if asked_missing else None
+    out.write("\n" + summary(failed, len(steps), color, args.check, missing, asked_missing))
+    return 1 if failed or (asked_missing and missing is None) else 0
 
 
 if __name__ == "__main__":

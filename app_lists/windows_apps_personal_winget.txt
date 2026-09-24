@@ -1,3 +1,2 @@
-Anthropic.Claude
-Anthropic.ClaudeCode
+Microsoft.OpenSSH.Preview
 T3Tools.T3Code

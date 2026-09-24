@@ -19,4 +19,4 @@ flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flat
 list_installed() { flatpak list --app --columns=application; }
 install_apps() { flatpak install -y flathub "$@"; }
 
-install_from_list "flatpak" "$APP_LIST"
+install_from_list "flatpak" "$APP_LIST" flatpak

@@ -23,12 +23,14 @@ missing, clones dotfiles to `%USERPROFILE%\GitHub`, runs `uv sync`, `clone_repos
 | ------ | ----------- |
 | `app_lists\windows_apps_personal_choco.txt` (default) | `scripts\install_windows_apps_with_chocolatey.ps1` |
 | `app_lists\windows_apps_base_choco.txt` | same, via `-ChocoList` |
-| `app_lists\windows_apps_aws_choco.txt` | same, via `-ChocoList` |
 | `app_lists\windows_apps_personal_winget.txt` | `scripts\install_windows_apps_with_winget.ps1` |
 | `app_lists\windows_apps_personal_winget.shelly.txt` (Shelly) | same, via `-AppList` |
 
 Each reports what is already installed and prompts once for the rest. Pass
-`-ChocoList <path>` to bootstrap to pick a different choco profile.
+`-ChocoList <path>` to bootstrap to pick a different choco profile. Whichever
+list runs, the choco and winget apps this machine's contexts add (each member
+context's `<context>_app_lists.yaml`, through `src/app_lists.py`) join it: a
+client's cloud tools and chat app live there, not in these files.
 
 **What bootstrap does not do**, and you still need from the rest of this document:
 
@@ -190,6 +192,48 @@ were linked since the last login and were never launched.
   - Turn on selective sync and download wanted files (do this before moving targets to onedrive)
 - Move docs and pictures locations to OneDrive
   - Right click on each one and select a new folder in OneDrive to move them to and click yes to move and confirm
+
+### Which manager an app goes on
+
+An app sits on exactly one of `windows_apps_personal_choco.txt` and
+`windows_apps_personal_winget.txt` (or one key of a context's
+`<context>_app_lists.yaml`): the manager whose package offers the newer version.
+A tie goes to winget, which ships with Windows 11, needs no admin for per-user
+installs and no bootstrap; Chocolatey is kept where its package is ahead or
+winget has none. The comparison is recorded next to the entry (as a trailing
+comment in the list, or in the context file's header), dated, so the next look
+starts from it. As of 2026-09-24: Claude and Claude Code on choco (2.7032.0 vs
+1.44121.2, 2.1.273 vs 2.1.268), Slack, AWS CLI, Hoppscotch and Teams on winget,
+DBeaver on choco. An app on both lists is reported by `app_removals.py` as a
+conflict and never has a copy removed until one list lets go.
+
+### Windows Update settings from the inventory
+
+Two Windows Update settings are per host, in the `updater` block of the
+machine's entry in its `<context>_hosts.json` (the block Linux hosts keep their
+release ceiling in). `myupdater` sets them, from an elevated shell, before it
+upgrades packages; `myupdater --check` reports any that differ. A machine whose
+entry leaves a key out keeps whatever it has.
+
+```json
+"updater": {
+  "windows": { "preview_updates": false, "restart_sign_on": true }
+}
+```
+
+- `preview_updates` - "Get the latest updates as soon as they're available"
+  (`IsContinuousInnovationOptedIn`). On, the box also takes the optional preview
+  update each month and restarts for it, so a desktop that must stay up has it
+  off.
+- `restart_sign_on` - sign in and lock the last user after a Windows Update
+  restart (ARSO: `DisableAutomaticRestartSignOn` 0 and
+  `AutomaticRestartSignOnConfig` 1 under
+  `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System`), so the
+  logon apps (T3 Code, the AutoHotkey scripts) start with nobody at the desk.
+  Config 1 is "always", BitLocker or not; without BitLocker the sign-in secret
+  sits on disk until that logon, so this is for a desktop that stays home,
+  never a laptop. Whether it worked shows in the LSA/Operational log (event 320
+  configured, 322 failed) after the next update restart.
 
 ## Set app order on Taskbar
 

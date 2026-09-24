@@ -9,9 +9,15 @@
 # line here, the same way retiring a config path is a line in
 # deploy_removals.yaml.
 #
-# Schema: name (unique), manager (brew/cask/apt/dnf/flatpak/choco/winget),
-# package, optional hosts: and note:. The manager decides the platform, so no
-# platform key exists.
+# Schema: name (unique), manager (brew/cask/apt/dnf/flatpak/choco/winget, or
+# capability for a Windows optional feature), package, optional hosts:,
+# replaced_by: and note:. The manager decides the platform, so no platform key
+# exists. replaced_by: "manager:package" offers the removal only where that
+# replacement is installed.
+#
+# A second copy of an app an app list already installs (the same winget id
+# listed twice) needs no line here: app_removals.py finds it and offers it on
+# its own. Lines are for what that cannot see.
 #
 # A package some app list still names is never removed — the app list wins, and
 # the contradiction is printed. So re-adding a package beats a stale line here.
@@ -68,3 +74,24 @@
   manager: apt
   package: realvnc-vnc-viewer
   note: Shipped alongside the Pi server image. Replaced by tigervnc-viewer.
+
+# --- In-box OpenSSH server, retired 2026-09-24 ---
+#
+# The personal Windows machines run the Win32-OpenSSH release from winget
+# (Microsoft.OpenSSH.Preview, on windows_apps_personal_winget.txt), which owns
+# the sshd service from C:\Program Files\OpenSSH. The in-box optional feature
+# is an older build left beside it in System32\OpenSSH. Nothing lists
+# optional features, so the duplicate finder cannot see this pair; the line
+# says it once.
+
+- name: inbox_openssh_server
+  manager: capability
+  package: OpenSSH.Server~~~~0.0.1.0
+  replaced_by: winget:Microsoft.OpenSSH.Preview
+  note: >-
+    Run this one from the console or VNC, never over ssh. Both copies register
+    a service named sshd, and how removing the feature treats a service the
+    winget copy re-registered is undocumented; afterwards check that
+    `Get-Service sshd` still points at C:\Program Files\OpenSSH\sshd.exe, and
+    if it is gone, `winget install --id Microsoft.OpenSSH.Preview --exact
+    --force` puts it back. Windows asks for a restart to finish.

@@ -24,7 +24,7 @@ if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
     exit
 }
 
-Install-FromList -Label 'winget' -AppList $AppList -AssumeYes:$AssumeYes -DryRun:$DryRun `
+Install-FromList -Label 'winget' -AppList $AppList -Manager winget -AssumeYes:$AssumeYes -DryRun:$DryRun `
     -ListInstalled {
         # winget list is fixed-width columns, so the Id is read by column offset taken
         # from the header. Pattern matching a dotted token instead picks up versions in

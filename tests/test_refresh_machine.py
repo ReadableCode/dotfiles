@@ -356,9 +356,59 @@ def test_a_linux_box_with_no_known_manager_gets_no_installer(tmp_path):
     assert refresh_machine.app_list_installers(str(tmp_path), "Linux", which=lambda n: None) == []
 
 
-def test_windows_runs_the_choco_installer_through_powershell(tmp_path):
+def test_windows_runs_the_choco_and_winget_installers_through_powershell(tmp_path):
     installers = refresh_machine.app_list_installers(str(tmp_path), "Windows", which=lambda n: "/bin/" + n)
-    title, argv = installers[0]
-    assert title == "installing missing choco apps"
-    assert argv[0].endswith("pwsh") and "-NoProfile" in argv
-    assert argv[-1].endswith("install_windows_apps_with_chocolatey.ps1")
+    assert [title for title, _ in installers] == ["installing missing choco apps", "installing missing winget apps"]
+    for _, argv in installers:
+        assert argv[0].endswith("pwsh") and "-NoProfile" in argv
+    assert installers[0][1][-1].endswith("install_windows_apps_with_chocolatey.ps1")
+    assert installers[1][1][-1].endswith("install_windows_apps_with_winget.ps1")
+
+
+# %%
+# Missing apps in the summary #
+
+
+def test_the_summary_ends_with_the_listed_apps_that_are_missing():
+    found = {"missing": ["choco:dbeaver", "cask:slack"], "elsewhere": ["choco:tailscale"]}
+    text = refresh_machine.summary([], 5, False, missing=found, asked_missing=True)
+    assert text.index("all 5 steps ok") < text.index("2 listed app(s) not installed")
+    assert "choco:dbeaver" in text and "cask:slack" in text
+    assert "1 listed app(s) installed, but not by the manager their list names" in text
+    assert "choco:tailscale" in text
+
+
+def test_the_summary_says_when_missing_apps_could_not_be_checked():
+    text = refresh_machine.summary([], 5, False, missing=None, asked_missing=True)
+    assert "could not work out which listed apps are installed" in text
+
+
+def test_the_summary_says_nothing_about_apps_when_not_asked():
+    assert "listed app" not in refresh_machine.summary([], 5, False)
+
+
+def test_missing_apps_reads_one_entry_per_line(tmp_path):
+    class Done:
+        returncode = 0
+        stdout = "missing choco:dbeaver\n\nmissing cask:slack\nelsewhere choco:tailscale\n"
+
+    found = refresh_machine.missing_apps(str(tmp_path), capture=lambda *a, **k: Done(), which=lambda n: "/bin/uv")
+    assert found["missing"] == ["choco:dbeaver", "cask:slack"]
+    assert found["elsewhere"] == ["choco:tailscale"]
+
+
+def test_missing_apps_is_unknown_without_uv(tmp_path):
+    assert refresh_machine.missing_apps(str(tmp_path), which=lambda n: None) is None
+
+
+def test_the_summary_names_the_ignore_file_for_ignored_apps():
+    found = {
+        "missing": [],
+        "elsewhere": [],
+        "ignored": ["brew:docker"],
+        "ignore-file": ["/home/me/.dotfiles_ignored_apps"],
+    }
+    text = refresh_machine.summary([], 5, False, missing=found, asked_missing=True)
+    assert "ignored on this machine by /home/me/.dotfiles_ignored_apps" in text
+    assert "delete a line there to be offered it again" in text
+    assert "brew:docker" in text

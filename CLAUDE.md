@@ -30,7 +30,7 @@ that same `<context>_dev` repo. See
 | `src/` | Python utilities: the deploy pipeline (`deploy_configs.py`, `deploy_map.py`, `claude_mcp.py`), the calendar / Gmail tools, the stdlib-only helpers the shells call at startup, and the data pullers. One paragraph per tool in **Tool index** below; shared helpers come from the `readable-utils` package, `src/utils/` holds only dotfiles-specific modules. |
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
-| `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux). |
+| `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux): what every machine of a platform gets. A context's own apps live in its `<context>_app_lists.yaml` (see `app_lists.py`). |
 | `go_apps/` | Small Go tools: `git_puller` and the syncthing cleanup, both committing prebuilt binaries. |
 | `docs/` | Setup/how-to docs (one per topic), indexed in `docs/README.md`. |
 | `tests/` | pytest suite (`tests/test_utils/`). |
@@ -148,9 +148,25 @@ is the one-paragraph orientation so an agent knows which file to open.
   list and not the negation of `app_lists/`: those name what should be
   installed, so "absent from the Brewfile" would propose uninstalling every
   dependency nobody named. A package an app list still names is never a
-  candidate, so re-adding beats a stale removal line. Step 7 of
-  `refresh_machine.py`, `--packages` only, so myupdater and not every
+  candidate, so re-adding beats a stale removal line. A `capability` entry
+  retires a Windows optional feature, and `replaced_by:` holds a removal back
+  until its replacement is installed. On Windows it also finds the same app
+  installed twice (one winget id listed twice) and offers the copy no app
+  list owns without any line, the way `clone_repos.py` offers a repo. Step 7
+  of `refresh_machine.py`, `--packages` only, so myupdater and not every
   gitpullall. Doc: `docs/repo_app_removals.md`.
+- **`app_lists.py`** — the one answer to "what should this machine have" per
+  package manager: the dotfiles `app_lists/` files plus each member overlay
+  repo's `<context>_app_lists.yaml` (manager -> package names, same membership
+  gate as the overlay manifests), so a client's cloud CLI and chat app install
+  only on that client's machines. Every installer in `scripts/` appends
+  `--overlay <manager>`, and `app_removals.py` protects the union.
+  `--missing` lists what the lists name and the managers do not report
+  installed, which myupdater and installmissing print in their closing
+  summary. An app turned down at an installer's prompt is written to
+  `~/.dotfiles_ignored_apps` on that machine and never offered there again;
+  each run that leaves one out names the file. Doc:
+  `docs/repo_app_removals.md`, "Context app lists".
 - **`clone_repos.py`** — offers to clone every repo the cloned contexts'
   `<context>_repos.yaml` files declare for this machine; run by gitpullall
   between the pull and the deploy, and on elitedesk by its declared

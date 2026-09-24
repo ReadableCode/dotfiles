@@ -17,4 +17,4 @@ sudo apt -y full-upgrade
 list_installed() { dpkg-query -W -f='${Package}\n' 2>/dev/null; }
 install_apps() { sudo apt install -fy "$@"; }
 
-install_from_list "apt" "$APP_LIST"
+install_from_list "apt" "$APP_LIST" apt

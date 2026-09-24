@@ -2,8 +2,8 @@
 angryip
 autohotkey
 barrier
-claude
-claude-code
+claude  # choco over winget Anthropic.Claude: 2.7032.0 vs 1.44121.2 on 2026-09-24
+claude-code  # choco over winget Anthropic.ClaudeCode: 2.1.273 vs 2.1.268 on 2026-09-24
 discord
 epicgameslauncher
 etcher
@@ -11,7 +11,6 @@ ffmpeg
 firefox
 golang
 gsudo
-hoppscotch
 logitech-options
 messenger
 moonlight-qt

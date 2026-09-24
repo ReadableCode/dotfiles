@@ -4,7 +4,8 @@
 #
 # Usage: .\install_windows_apps_with_chocolatey.ps1 [-AppList <path>] [-AssumeYes] [-DryRun]
 # Defaults to app_lists\windows_apps_personal_choco.txt relative to the repo root.
-# The base and aws lists are installed by passing -AppList.
+# The base list is installed by passing -AppList. Either way, the choco names
+# this machine's contexts add (src/app_lists.py) join the list.
 
 param(
     [string]$AppList,
@@ -39,7 +40,7 @@ if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     }
 }
 
-Install-FromList -Label 'choco' -AppList $AppList -AssumeYes:$AssumeYes -DryRun:$DryRun `
+Install-FromList -Label 'choco' -AppList $AppList -Manager choco -AssumeYes:$AssumeYes -DryRun:$DryRun `
     -ListInstalled {
         # "choco list" output is "<id> <version>" lines plus a trailing summary line.
         choco list --limit-output | ForEach-Object { ($_ -split '\|')[0] }

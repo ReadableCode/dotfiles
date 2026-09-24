@@ -5,8 +5,14 @@
 * run commands:
   
   ```bash
-  winget install "openssh beta"
+  winget install --id Microsoft.OpenSSH.Preview --exact
   ```
+
+  This is the Win32-OpenSSH release in `C:\Program Files\OpenSSH`, and it is
+  on `app_lists/windows_apps_personal_winget.txt`, so `installmissing` offers
+  it too. Do not also add the Windows "OpenSSH Server" optional feature: that
+  is an older in-box build in `System32\OpenSSH`, and `app_removals.yaml`
+  retires it on any machine where this package is installed.
 
   * if not using bootstrap script:
   

@@ -18,4 +18,4 @@ sudo dnf -y upgrade --refresh
 list_installed() { rpm -qa --qf '%{NAME}\n'; }
 install_apps() { sudo dnf install -y "$@"; }
 
-install_from_list "dnf" "$APP_LIST"
+install_from_list "dnf" "$APP_LIST" dnf
