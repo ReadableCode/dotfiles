@@ -700,3 +700,72 @@ def test_the_owner_is_the_listed_choco_package_even_when_its_copy_is_older(tmp_p
     write_list(tmp_path, "windows_apps_personal_choco.txt", ["slack"])
     groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])
     assert groups[0].owner.version == "4.51.191.0"
+
+
+# %%
+# after: scripts #
+
+
+def test_after_resolves_relative_to_the_removals_files_repo(tmp_path):
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "fix.ps1").write_text("exit 0\n")
+    path = write_removals(tmp_path, [dict(CAPABILITY_ENTRY, after="scripts/fix.ps1")])
+    [entry] = app_removals.load_app_removals([path])
+    argv = app_removals.after_argv(entry)
+    assert argv[:2] == ["powershell", "-NoProfile"]
+    assert argv[-1] == os.path.join(str(tmp_path), "scripts", "fix.ps1")
+
+
+def test_a_shell_after_script_runs_with_bash(tmp_path):
+    (tmp_path / "fix.sh").write_text("exit 0\n")
+    path = write_removals(tmp_path, [dict(CASK_ENTRY, after="fix.sh")])
+    [entry] = app_removals.load_app_removals([path])
+    assert app_removals.after_argv(entry)[0] == "bash"
+
+
+def test_a_missing_after_script_fails_at_load(tmp_path):
+    path = write_removals(tmp_path, [dict(CAPABILITY_ENTRY, after="scripts/nope.ps1")])
+    with pytest.raises(ValueError, match="not found"):
+        app_removals.load_app_removals([path])
+
+
+def test_an_after_script_with_no_runner_fails_at_load(tmp_path):
+    (tmp_path / "fix.py").write_text("")
+    path = write_removals(tmp_path, [dict(CAPABILITY_ENTRY, after="fix.py")])
+    with pytest.raises(ValueError, match=".ps1 or .sh"):
+        app_removals.load_app_removals([path])
+
+
+def test_after_runs_once_the_removal_succeeded(monkeypatch):
+    ran = []
+    entry = dict(CAPABILITY_ENTRY, after="scripts/repair_sshd.ps1", _file=app_removals.REPO_ROOT + "/app_removals.yaml")
+    monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: app_removals.Candidates(removable=[entry]))
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "package_present", lambda *a, **k: True)
+    monkeypatch.setattr(app_removals, "remove_package", lambda *a, **k: True)
+    monkeypatch.setattr(app_removals, "run_after", lambda e: ran.append(e["name"]) or True)
+    assert app_removals.run(assume_yes=True, entries=[entry], system="Darwin") == 0
+    assert ran == ["inbox_sshd"]
+
+
+def test_a_failed_after_script_fails_the_run(monkeypatch, capsys):
+    entry = dict(CAPABILITY_ENTRY, after="scripts/repair_sshd.ps1")
+    monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: app_removals.Candidates(removable=[entry]))
+    monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "package_present", lambda *a, **k: True)
+    monkeypatch.setattr(app_removals, "remove_package", lambda *a, **k: True)
+    monkeypatch.setattr(app_removals, "run_after", lambda e: False)
+    assert app_removals.run(assume_yes=True, entries=[entry], system="Darwin") == 1
+    assert "FAILED: scripts/repair_sshd.ps1" in capsys.readouterr().out
+
+
+def test_after_is_skipped_when_the_removal_is_declined(monkeypatch):
+    entry = dict(CAPABILITY_ENTRY, after="scripts/repair_sshd.ps1")
+    monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: app_removals.Candidates(removable=[entry]))
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "show_simulation", lambda *a, **k: None)
+    monkeypatch.setattr(app_removals, "package_present", lambda *a, **k: True)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "n")
+    monkeypatch.setattr(app_removals, "run_after", lambda e: pytest.fail("ran after: without a removal"))
+    assert app_removals.run(entries=[entry], system="Darwin") == 0

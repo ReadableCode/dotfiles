@@ -211,6 +211,8 @@ def load_app_removals(paths=None):
             manager_for(entry["manager"])
             if entry.get("replaced_by"):
                 split_replacement(entry["replaced_by"])
+            if entry.get("after"):
+                after_argv(entry, path)
             if entry["name"] in seen:
                 raise ValueError(
                     f"Duplicate app removal entry name '{entry['name']}' in {path} "
@@ -648,6 +650,37 @@ def show_simulation(entry, run=run_capture):
         print(f"    {line}")
 
 
+def after_argv(entry, removals_file=None):
+    """
+    The argv of an entry's ``after:`` script, run once its removal succeeded.
+
+    The path is relative to the repo holding the removals file, so an overlay's
+    entry names a script of its own repo. A missing script or an extension
+    with no known runner is a hard error when the file loads, not a surprise
+    after something was already uninstalled.
+    """
+    base = os.path.dirname(removals_file or entry["_file"])
+    path = os.path.normpath(os.path.join(base, entry["after"]))
+    if not os.path.isfile(path):
+        raise ValueError(f"after: script {entry['after']} of '{entry['name']}' not found at {path}")
+    if path.endswith(".ps1"):
+        return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", path]
+    if path.endswith(".sh"):
+        return ["bash", path]
+    raise ValueError(f"after: script {entry['after']} of '{entry['name']}' must be a .ps1 or .sh file")
+
+
+def run_after(entry, run=subprocess.run):
+    """Run an entry's ``after:`` script with the real terminal; True when it succeeded or there is none."""
+    if not entry.get("after"):
+        return True
+    print(paint(f"  running {entry['after']}", "dim"))
+    try:
+        return run(after_argv(entry)).returncode == 0
+    except OSError:
+        return False
+
+
 def remove_package(entry, run=subprocess.run):
     """Uninstall one package with the real terminal, so a sudo or choco prompt reaches the person."""
     manager = manager_for(entry["manager"])
@@ -705,6 +738,9 @@ def offer_removals(removable, assume_yes):
             continue
         if remove_package(entry):
             print(paint(f"  removed {entry['package']}", "green"))
+            if not run_after(entry):
+                failures += 1
+                print(paint(f"  FAILED: {entry['after']} after removing {entry['package']} (see output above)", "red"))
         else:
             failures += 1
             print(paint(f"  FAILED to remove {entry['package']} (see output above)", "red"))

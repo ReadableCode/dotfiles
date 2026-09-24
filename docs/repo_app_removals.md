@@ -49,6 +49,7 @@ its git hub contributes nothing.
 | `package` | yes | the name that manager knows it by |
 | `hosts` | no | limit to named machines, full or short hostname |
 | `replaced_by` | no | `manager:package`; offered only where that replacement is installed |
+| `after` | no | a `.ps1` or `.sh` script, relative to the removals file's repo, run once the removal succeeded; a failure fails the run |
 | `note` | no | why it was retired, printed with the entry |
 
 The manager decides the platform, so there is no platform key. Each manager's
@@ -58,7 +59,11 @@ rather than one per direction.
 
 `replaced_by` exists for the in-box OpenSSH server: retiring it on a machine
 that has nothing else serving ssh would lock the machine out, so the removal
-waits until the winget OpenSSH is installed there. Listing optional features
+waits until the winget OpenSSH is installed there. `after` exists for the same
+entry: removing the feature deletes the `sshd` service even though the winget
+copy owns it (RyzenWhite, 2026-09-24), so `scripts/repair_sshd.ps1` registers it
+again from `C:\Program Files\OpenSSH`, starts it and restores the port 22
+firewall rule, in the same session that ran the removal - which survives it. Listing optional features
 needs an elevated shell; a query that fails is reported in red and fails the
 run, rather than reading as "not installed".
 

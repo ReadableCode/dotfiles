@@ -12,7 +12,10 @@
   on `app_lists/windows_apps_personal_winget.txt`, so `installmissing` offers
   it too. Do not also add the Windows "OpenSSH Server" optional feature: that
   is an older in-box build in `System32\OpenSSH`, and `app_removals.yaml`
-  retires it on any machine where this package is installed.
+  retires it on any machine where this package is installed. Removing that
+  feature deletes the `sshd` service this package uses, so the removal runs
+  `scripts/repair_sshd.ps1` straight after; if ssh is ever down with the
+  package installed, run that script from an elevated console.
 
   * if not using bootstrap script:
   

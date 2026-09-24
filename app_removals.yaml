@@ -11,9 +11,10 @@
 #
 # Schema: name (unique), manager (brew/cask/apt/dnf/flatpak/choco/winget, or
 # capability for a Windows optional feature), package, optional hosts:,
-# replaced_by: and note:. The manager decides the platform, so no platform key
-# exists. replaced_by: "manager:package" offers the removal only where that
-# replacement is installed.
+# replaced_by:, after: and note:. The manager decides the platform, so no
+# platform key exists. replaced_by: "manager:package" offers the removal only
+# where that replacement is installed. after: is a .ps1 or .sh script, relative
+# to this file's repo, run once the removal succeeded.
 #
 # A second copy of an app an app list already installs (the same winget id
 # listed twice) needs no line here: app_removals.py finds it and offers it on
@@ -88,10 +89,11 @@
   manager: capability
   package: OpenSSH.Server~~~~0.0.1.0
   replaced_by: winget:Microsoft.OpenSSH.Preview
+  after: scripts/repair_sshd.ps1
   note: >-
-    Run this one from the console or VNC, never over ssh. Both copies register
-    a service named sshd, and how removing the feature treats a service the
-    winget copy re-registered is undocumented; afterwards check that
-    `Get-Service sshd` still points at C:\Program Files\OpenSSH\sshd.exe, and
-    if it is gone, `winget install --id Microsoft.OpenSSH.Preview --exact
-    --force` puts it back. Windows asks for a restart to finish.
+    Removing the feature deletes the sshd service even though the winget copy
+    owns it (seen on RyzenWhite 2026-09-24), so scripts/repair_sshd.ps1 runs
+    straight after and registers sshd again from C:\Program Files\OpenSSH,
+    starts it, and adds the port 22 firewall rule if it went too. The ssh
+    session running the removal survives it, so this is safe over ssh; if the
+    repair itself fails, ssh stays down until the console runs that script.
