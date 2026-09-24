@@ -651,10 +651,11 @@ the end of active hours, and without automatic sign-on the box then waits at
 the sign-in screen, so nothing in the Startup folder runs until someone logs
 in (13 hours on RyzenWhite after the 2026-09-15 and 2026-09-24 restarts). The
 host's `updater.windows.restart_sign_on` in its inventory entry turns it on,
-and `preview_updates: false` halves the restarts; see "Windows Update settings
-from the inventory" in `docs/setup_windows_workstation_personal.md`. Even
+and `preview_updates: false` halves the restarts; see "Windows settings from the
+inventory" in `docs/setup_windows_workstation_personal.md`. Even
 signed in, the Startup folder runs last, after every Run-key app, each allowed
-30 seconds: about 8 minutes on RyzenWhite.
+30 seconds: about 8 minutes on RyzenWhite. `parallel_logon_apps: true` in the
+same block stops Explorer waiting on each one.
 
 Note `desktop-settings.json` is per-home and unmanaged, so `serverExposureMode`
 carries over independently: a home set to `network-accessible` binds `0.0.0.0`

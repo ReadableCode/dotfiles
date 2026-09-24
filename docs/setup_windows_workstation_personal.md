@@ -207,9 +207,9 @@ starts from it. As of 2026-09-24: Claude and Claude Code on choco (2.7032.0 vs
 DBeaver on choco. An app on both lists is reported by `app_removals.py` as a
 conflict and never has a copy removed until one list lets go.
 
-### Windows Update settings from the inventory
+### Windows settings from the inventory
 
-Two Windows Update settings are per host, in the `updater` block of the
+A few Windows settings are per host, in the `updater` block of the
 machine's entry in its `<context>_hosts.json` (the block Linux hosts keep their
 release ceiling in). `myupdater` sets them, from an elevated shell, before it
 upgrades packages; `myupdater --check` reports any that differ. A machine whose
@@ -217,7 +217,7 @@ entry leaves a key out keeps whatever it has.
 
 ```json
 "updater": {
-  "windows": { "preview_updates": false, "restart_sign_on": true }
+  "windows": { "preview_updates": false, "restart_sign_on": true, "parallel_logon_apps": true }
 }
 ```
 
@@ -234,6 +234,16 @@ entry leaves a key out keeps whatever it has.
   sits on disk until that logon, so this is for a desktop that stays home,
   never a laptop. Whether it worked shows in the LSA/Operational log (event 320
   configured, 322 failed) after the next update restart.
+- `parallel_logon_apps` - start the logon apps without Explorer's startup delay
+  and without waiting for each to go idle before the next
+  (`StartupDelayInMSec` and `WaitForIdleState`, both 0, under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize`).
+  Explorer otherwise starts the Run-key apps one at a time, allowing each 30
+  seconds, and the Startup folder only after them: on RyzenWhite that put T3
+  Code and the AutoHotkey scripts 8 minutes after logon (2026-09-24). Windows
+  updates are known to drop the `Serialize` key, which is why myupdater sets it
+  on every run. The Shell-Core/Operational log (events 9707/9708 for Run keys,
+  62408/62409 for the rest) shows each launch's start and finish.
 
 ## Set app order on Taskbar
 

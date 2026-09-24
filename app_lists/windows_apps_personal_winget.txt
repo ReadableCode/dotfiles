@@ -1,2 +1,3 @@
+LizardByte.Sunshine  # winget over choco sunshine: 2026.914 vs 2025.118 on 2026-09-24
 Microsoft.OpenSSH.Preview
 T3Tools.T3Code

@@ -23,7 +23,6 @@ putty
 rustdesk
 speedtest
 steam
-sunshine
 synctrayzor
 tailscale
 tigervnc

@@ -15,7 +15,8 @@
 # <context>_hosts.json inventory, the block my_updater.sh reads its release
 # ceiling from, looked up by src/updater_policy.py:
 #
-#   "updater": {"windows": {"preview_updates": false, "restart_sign_on": true}}
+#   "updater": {"windows": {"preview_updates": false, "restart_sign_on": true,
+#                           "parallel_logon_apps": true}}
 #
 #   preview_updates  Settings > Windows Update > "Get the latest updates as
 #                    soon as they're available". On, the box also takes the
@@ -25,6 +26,14 @@
 #                    true means "always", BitLocker or not, which keeps the
 #                    sign-in secret on disk until that logon: a desktop that
 #                    stays home, never a laptop.
+#   parallel_logon_apps  start the Run-key and Startup-folder apps at logon
+#                    without Explorer's startup delay and without waiting for
+#                    each one to go idle before the next (HKCU Explorer\Serialize
+#                    StartupDelayInMSec and WaitForIdleState, both 0). With 20+
+#                    logon apps each allowed 30 seconds, the Startup folder
+#                    (T3 Code, the AutoHotkey scripts) ran about 8 minutes after
+#                    logon on RyzenWhite. Windows updates are known to drop the
+#                    Serialize key, which is why myupdater puts it back.
 #
 # A key the entry leaves out is left alone, as is every setting on a machine
 # no inventory names. No uv or a broken inventory means the policy is unknown,
@@ -52,7 +61,9 @@ src/refresh_machine.py --packages. The macOS/Linux twin is scripts/my_updater.sh
 $WindowsSettings = @(
     @{ Key = 'preview_updates'; Path = 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings'; Name = 'IsContinuousInnovationOptedIn'; On = 1; Off = 0 },
     @{ Key = 'restart_sign_on'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = 'DisableAutomaticRestartSignOn'; On = 0; Off = 1 },
-    @{ Key = 'restart_sign_on'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = 'AutomaticRestartSignOnConfig'; On = 1; Off = $null }
+    @{ Key = 'restart_sign_on'; Path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'; Name = 'AutomaticRestartSignOnConfig'; On = 1; Off = $null },
+    @{ Key = 'parallel_logon_apps'; Path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize'; Name = 'StartupDelayInMSec'; On = 0; Off = $null },
+    @{ Key = 'parallel_logon_apps'; Path = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize'; Name = 'WaitForIdleState'; On = 0; Off = $null }
 )
 
 function Get-UpdaterPolicy {
