@@ -28,11 +28,11 @@
       "provider": "claudeAgent"
     },
     {
-      "model": "claude-opus-5",
+      "model": "claude-opus-5-5",
       "provider": "claudeAgent"
     },
     {
-      "model": "eu.anthropic.claude-opus-5",
+      "model": "eu.anthropic.claude-opus-5-5",
       "provider": "claudeAgent"
     }
   ],
