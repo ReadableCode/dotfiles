@@ -199,9 +199,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   TigerVNC at `host::port` (the doubled colon matters: TigerVNC reads a single
   one as a display number) and, when the viewer is missing, offers to install
   just that package with the platform's own manager rather than failing with
-  `command not found` - and refuses unless the app list names it, so the
-  lists stay the record of what belongs on a machine. The whole-list run is
-  `installmissing`, which is a thing you go and ask for. Stdlib-only like
+  `command not found`. The app lists are not consulted: they gate what a
+  refresh offers on its own, and a command someone typed may install the one
+  thing it needs. The whole-list run is `installmissing`, which is a thing
+  you go and ask for. Stdlib-only like
   `ssh_aliases.py`, one file for every platform. TigerVNC and not the native
   client because wayvnc offers only VeNCrypt/RSA-AES/RA2 and macOS Screen
   Sharing speaks neither. Doc: `docs/setup_vnc_server.md`, "Clients".

@@ -63,8 +63,8 @@ npx t3@latest
 ## Install (Windows)
 
 Desktop app via winget — never the website installer, so the package manager
-tracks it like everything else (it's in
-`app_lists/windows_apps_personal_winget.txt`):
+tracks it like everything else (`T3Tools.T3Code` in the `<context>_app_lists.yaml`
+of each context that uses it, since not every context's machines may carry it):
 
 ```powershell
 winget install T3Tools.T3Code
@@ -399,7 +399,7 @@ running T3 Code** (not the browser/phone you control it from). Provider auth is
 required before starting a session with that provider, not before starting T3
 Code itself.
 
-For Claude Code (already in the Brewfile as `cask "claude-code@latest"`):
+For Claude Code (`cask "claude-code@latest"` in the app lists of each context that uses it):
 
 ```bash
 claude auth login

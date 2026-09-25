@@ -205,7 +205,13 @@ comment in the list, or in the context file's header), dated, so the next look
 starts from it. As of 2026-09-24: Claude and Claude Code on choco (2.7032.0 vs
 1.44121.2, 2.1.273 vs 2.1.268), Slack, AWS CLI, Hoppscotch and Teams on winget,
 DBeaver on choco. An app on both lists is reported by `app_removals.py` as a
-conflict and never has a copy removed until one list lets go.
+conflict and never has a copy removed until one list lets go.  Two contexts
+naming the same app on the same manager is fine: a machine in both is offered
+it once, so a client's list can grow to a full profile without a clash.
+
+The dotfiles lists hold what any Windows box gets; the home apps (games,
+media, streaming, the VNC viewer and server) live in the personal context's
+list.
 
 ### Windows settings from the inventory
 
@@ -512,7 +518,7 @@ RyzenWhite already runs Sunshine on 47984/47989.
 
 ### TigerVNC Viewer (client)
 
-`tigervnc` in the choco list. The fallback for everything Sunshine cannot serve:
+`tigervnc` in the personal app list. The fallback for everything Sunshine cannot serve:
 the Pis, headless boxes, and the login screen before any session exists.
 
 ### TightVNC (server)

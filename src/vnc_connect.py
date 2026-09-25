@@ -33,7 +33,6 @@ import sys
 
 DEFAULT_VNC_PORT = 5900
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # The macOS cask installs an .app rather than something on PATH, so that one is
 # an absolute path; choco and apt/dnf both put ``vncviewer`` on PATH.
@@ -65,70 +64,30 @@ def platform_key(platform_token=None):
 
 def linux_plan():
     """
-    (package, app list, install argv) for this Linux box, chosen by the package
-    manager it actually has. Fedora and Debian name the viewer differently and
-    keep separate lists, so the wrong one is both the wrong name and the wrong
-    file.
+    (package, install argv) for this Linux box, chosen by the package manager
+    it actually has: Fedora and Debian name the viewer differently.
     """
     if shutil.which("apt-get"):
-        return (
-            "tigervnc-viewer",
-            "app_lists/linux_apps.txt",
-            ["sudo", "apt-get", "install", "-y", "tigervnc-viewer"],
-        )
+        return "tigervnc-viewer", ["sudo", "apt-get", "install", "-y", "tigervnc-viewer"]
     if shutil.which("dnf"):
-        return "tigervnc", "app_lists/linux_apps_dnf.txt", ["sudo", "dnf", "install", "-y", "tigervnc"]
-    return None, None, None
+        return "tigervnc", ["sudo", "dnf", "install", "-y", "tigervnc"]
+    return None, None
 
 
 def viewer_plan(key):
     """
-    (viewer command, package, app list, install argv) for a platform key.
+    (viewer command, package, install argv) for a platform key.
 
     The install is ONE package, not the whole app list. Running the list
     installer to get a viewer would offer every other pending app on the
-    machine, which is not what someone typing ``vncpi4`` asked for. The package
-    name still has to appear in the app list before anything is installed (see
-    ``declared_in_app_list``), so the list stays the record of what belongs
-    here and this cannot drift from it.
+    machine, which is not what someone typing ``vncpi4`` asked for.
     """
     if key == "darwin":
-        return MAC_VIEWER, "tigervnc", "app_lists/Brewfile", ["brew", "install", "--cask", "tigervnc"]
+        return MAC_VIEWER, "tigervnc", ["brew", "install", "--cask", "tigervnc"]
     if key == "windows":
-        return (
-            "vncviewer",
-            "tigervnc",
-            "app_lists/windows_apps_personal_choco.txt",
-            ["choco", "install", "tigervnc", "-y"],
-        )
-    package, app_list, argv = linux_plan()
-    return "vncviewer", package, app_list, argv
-
-
-def declared_in_app_list(package, app_list):
-    """
-    Whether the app list actually names this package.
-
-    The guard that keeps app_lists/ authoritative: if the viewer is not on the
-    list, installing it here would put something on the machine that its own
-    record does not name - exactly the drift the lists exist to prevent.
-    """
-    if not package or not app_list:
-        return False
-    path = os.path.join(REPO_ROOT, app_list)
-    try:
-        with open(path, "r", encoding="utf-8") as handle:
-            body = handle.read()
-    except OSError:
-        return False
-    for line in body.splitlines():
-        line = line.split("#", 1)[0].strip()
-        if not line:
-            continue
-        # a Brewfile says `cask "tigervnc"`; the plain lists say `tigervnc`
-        if line == package or line.endswith('"{}"'.format(package)):
-            return True
-    return False
+        return "vncviewer", "tigervnc", ["choco", "install", "tigervnc", "-y"]
+    package, argv = linux_plan()
+    return "vncviewer", package, argv
 
 
 def find_viewer(viewer):
@@ -150,30 +109,24 @@ def ask_yes_no(question):
         return False
 
 
-def offer_install(viewer, package, app_list, install_argv, ask=None, run=subprocess.call):
+def offer_install(viewer, package, install_argv, ask=None, run=subprocess.call):
     """
     Offer to install just the viewer, returning its path once present.
 
-    ONE package, using the same manager and the same name the app list declares
-    - not the whole-list installer. Someone typing ``vncpi4`` asked for a
-    viewer, and ``install_mac_apps.sh`` would put every other pending app on the
-    machine in front of them.
+    ONE package, with the platform's own manager - not the whole-list
+    installer. Someone typing ``vncpi4`` asked for a viewer, and
+    ``install_mac_apps.sh`` would put every other pending app on the machine in
+    front of them.
 
-    The app list is still the authority: nothing installs unless the list names
-    the package, so this can never add something the machine's own record does
-    not account for. ``installmissing`` remains the way to work through a whole
-    list deliberately.
+    The app lists are not consulted: they gate what a refresh offers on its own,
+    and this is a command someone typed, which may install the one thing it
+    needs. The prompt is still there, and nothing installs without a terminal.
     """
     ask = ask or ask_yes_no
     print(f"The VNC viewer is not installed on this machine (looked for {viewer}).")
     if not package or not install_argv:
         print("No known package manager on this machine; install TigerVNC by hand.")
         return None
-    if not declared_in_app_list(package, app_list):
-        print(f"{package} is not named in {app_list}, so it is not installed from here.")
-        print(f"Add it to {app_list} first, then run installmissing.")
-        return None
-    print(f"{package} is named in {app_list}.")
     if not sys.stdin.isatty():
         print(f"Not running on a terminal, so not prompting. Install {package}, then try again.")
         return None
@@ -194,10 +147,10 @@ def connect(target, port=DEFAULT_VNC_PORT, platform_token=None, run=subprocess.c
     The doubled colon is not optional: TigerVNC reads ``host:5900`` as display
     number 5900, and only ``host::5900`` as a port.
     """
-    viewer, package, app_list, install_argv = viewer_plan(platform_key(platform_token))
+    viewer, package, install_argv = viewer_plan(platform_key(platform_token))
     found = find_viewer(viewer)
     if not found:
-        found = offer_install(viewer, package, app_list, install_argv, ask=ask, run=run)
+        found = offer_install(viewer, package, install_argv, ask=ask, run=run)
     if not found:
         return 1
     return run([found] + VIEWER_ARGS + [f"{target}::{int(port)}"])

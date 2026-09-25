@@ -171,10 +171,16 @@ def load_overlay(paths=None):
 
 
 def overlay_packages(manager, paths=None):
-    """The package names this machine's contexts add for one manager, in file order, without repeats."""
-    names = []
+    """
+    The package names this machine's contexts add for one manager, in file
+    order, without repeats. Two contexts may name the same app (a machine in
+    both is offered it once, under the first spelling); every manager here
+    treats names case-insensitively, so the repeat check does too.
+    """
+    names, seen = [], set()
     for name, _ in load_overlay(paths).get(manager, []):
-        if name not in names:
+        if name.lower() not in seen:
+            seen.add(name.lower())
             names.append(name)
     return names
 

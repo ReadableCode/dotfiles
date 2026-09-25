@@ -20,12 +20,17 @@ The servers here speak plain RFB with VncAuth on 5900/5901, so any standards
 compliant viewer works. One per platform, all free software, none of them
 reachable only through a vendor's cloud:
 
-| Platform | Client | Installed from |
+The `vnc<host>` aliases offer to install the viewer when it is missing,
+whatever the app lists say: the lists gate what a refresh offers on its own,
+and a typed alias may fetch the one package it needs. The lists below are where
+a refresh offers it.
+
+| Platform | Client | Listed for refresh in |
 | --- | --- | --- |
-| macOS | Screen Sharing (built in); TigerVNC for the Pis | `app_lists/Brewfile` (`cask "tigervnc"`) |
-| Windows | TigerVNC Viewer | `app_lists/windows_apps_personal_choco.txt` |
-| Linux (apt) | TigerVNC Viewer | `app_lists/linux_apps.txt` |
-| Linux (Fedora) | TigerVNC Viewer | `app_lists/linux_apps_dnf.txt` |
+| macOS | Screen Sharing (built in); TigerVNC for the Pis | the personal `<context>_app_lists.yaml` (`cask: tigervnc`) |
+| Windows | TigerVNC Viewer | the same file (`choco: tigervnc`) |
+| Linux (apt) | TigerVNC Viewer | the same file (`apt: tigervnc-viewer`) |
+| Linux (Fedora) | TigerVNC Viewer | the same file (`dnf: tigervnc`) |
 | Android | AVNC | F-Droid |
 | iOS | *(none - see below)* | |
 

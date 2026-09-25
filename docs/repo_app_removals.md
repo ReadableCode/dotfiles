@@ -70,9 +70,10 @@ run, rather than reading as "not installed".
 ## Context app lists
 
 `app_lists/` holds what every machine of a platform gets. What only one
-context's machines get - a client's cloud CLI, database client and chat app -
-lives in that context's own repo as `<context>_app_lists.yaml`, keyed by the
-same manager names as the removals schema:
+context's machines get - a client's cloud CLI, database client and chat app,
+the personal context's game, media and streaming apps - lives in that
+context's own repo as `<context>_app_lists.yaml`, keyed by the same manager
+names as the removals schema:
 
 ```yaml
 choco: [awscli, dbeaver, slack]
@@ -86,7 +87,11 @@ only as its git hub gets none of it. Every installer in `scripts/` adds
 installs nothing rather than a list that only looks complete. The removals side
 protects the union: a package any context list names is never offered.
 `app_lists.py` with no arguments prints the whole list for this machine, and
-`--where` prints the context files it read. A context lists each of its apps for
+`--where` prints the context files it read. Two contexts may name the same
+app: the overlay is deduplicated case-insensitively, both installers add only
+the names their dotfiles list lacks, and the installed check runs before the
+prompt, so a machine in both contexts sees the app once and never installs it
+twice. The one clash is the same app on two managers, below. A context lists each of its apps for
 every OS its machines run - a client's chat app on macOS and on Windows alike.
 
 `app_lists.py --missing` is the other half: every listed app this machine's

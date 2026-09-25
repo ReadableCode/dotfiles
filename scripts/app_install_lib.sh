@@ -77,7 +77,7 @@ install_from_list() {
         fi
         while IFS= read -r line; do
             [ -n "$line" ] || continue
-            if [ "${#apps[@]}" -eq 0 ] || ! printf '%s\n' "${apps[@]}" | grep -qxF "$line"; then
+            if [ "${#apps[@]}" -eq 0 ] || ! printf '%s\n' "${apps[@]}" | grep -qixF "$line"; then
                 apps+=("$line")
             fi
         done <<< "$extra"

@@ -65,6 +65,13 @@ def test_overlay_names_come_back_per_manager_without_repeats(tmp_path):
     assert app_lists.overlay_packages("apt", [first, second]) == []
 
 
+def test_the_same_name_in_two_contexts_is_offered_once_whatever_its_case(tmp_path):
+    first = write(tmp_path, "acme_app_lists.yaml", "winget: [T3Tools.T3Code]\nchoco: [claude]\n")
+    second = write(tmp_path, "personal_app_lists.yaml", "winget: [t3tools.t3code, Foo.Bar]\nchoco: [claude]\n")
+    assert app_lists.overlay_packages("winget", [first, second]) == ["T3Tools.T3Code", "Foo.Bar"]
+    assert app_lists.overlay_packages("choco", [first, second]) == ["claude"]
+
+
 def test_wanted_packages_is_the_union_of_both_sources(tmp_path):
     write(tmp_path, "windows_apps_personal_choco.txt", "7zip\n")
     overlay = write(tmp_path, "acme_app_lists.yaml", "choco: [slack]\n")

@@ -711,5 +711,5 @@ System Settings → Keyboard → Text Input → U.S. -> Edit -> Turn off dobule 
 
 ## T3 Code Setup
 
-- Installed by the Brewfile (`cask "t3-code"`); to connect agents and set up
+- Installed from the app lists of each context that uses it (`cask "t3-code"`); to connect agents and set up
   providers, follow instructions in [setup_t3_code.md](./setup_t3_code.md)

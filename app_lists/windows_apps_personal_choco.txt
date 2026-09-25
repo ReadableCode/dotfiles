@@ -1,34 +1,17 @@
+# What any Windows box gets, whichever context owns it: the tools, the
+# browser, the ssh server. What only some contexts' machines get lives in
+# each context's <context>_app_lists.yaml, which src/app_lists.py adds to
+# this list on member machines; a name two contexts both list is offered once.
 7zip
 angryip
 autohotkey
-barrier
-claude  # choco over winget Anthropic.Claude: 2.7032.0 vs 1.44121.2 on 2026-09-24
-claude-code  # choco over winget Anthropic.ClaudeCode: 2.1.273 vs 2.1.268 on 2026-09-24
-discord
-epicgameslauncher
-etcher
-ffmpeg
 firefox
 golang
 gsudo
 logitech-options
-messenger
-moonlight-qt
-obs-studio
-parsec
-plex
 powertoys
 procexp
 putty
-rustdesk
 speedtest
-steam
-synctrayzor
 tailscale
-tigervnc
-tightvnc
-unison
-vlc
-vortex
-wireguard
 wiztree
