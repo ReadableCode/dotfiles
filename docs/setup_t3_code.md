@@ -848,45 +848,170 @@ How T3 maps onto that:
   with Remote Control (phone/web via claude.ai; one connected session at a
   time) or a self-hosted web UI, at the cost of T3's side-by-side thread UI.
 
+## Working on the T3 source
+
+The upstream repo ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code),
+MIT) is cloned as `~/GitHub/t3code` on the personal dev workstations only: it
+is declared in the personal repo list (`personal_repos.yaml`, `org: pingdotgg`,
+`hosts: *dev_hosts`), so `clone_repos.py` offers it there and nowhere else.
+Nothing deploys from it; it exists to read the code behind the quirks in this
+file (the desktop bundle is minified in `app.asar`, the checkout is not) and
+to prepare fixes.
+
+Reading the source needs nothing beyond the clone. Building or running it needs:
+
+- `vp` (Vite+), installed with the vendor script `curl -fsSL https://vite.plus | bash`.
+  Not in the Brewfile because it is not a formula; add it to
+  `app_lists/mac_apps_non_brew.md` before installing it on any machine.
+- Node `^24.13.1` (`package.json` engines) and `pnpm@11.10.0`, which `vp`
+  provisions. The Brewfile's `node` is 26 here, so expect an engines warning.
+- `vp i` in the checkout, then `vp run dev --home-dir /tmp/t3code-dev` (server
+  plus web) or `vp run dev:desktop`. **Never run a dev server against
+  `~/.t3/userdata`**; the main checkout defaults to `~/.t3/dev/userdata` and a
+  worktree to its own gitignored `.t3`. Checks: `vp test run <files>`,
+  `vp lint <files>`, `vp run --filter <package> typecheck`.
+- The repo's `t3.json` runs `node scripts/setup-worktree.ts` on worktree
+  creation, so opening the checkout as a T3 project works out of the box.
+
+Contribution mechanics, from `CONTRIBUTING.md` and `.github/pull_request_template.md`:
+
+1. Fork on GitHub and add the fork as a second remote (`origin` stays
+   upstream); push branches to the fork.
+2. Keep the PR small and single-purpose. Bug fixes are the only category they
+   say they merge; features go to the Ideas discussion first.
+3. Fill the template's *What Changed* and *Why*; UI changes need before/after
+   images, interaction changes a short video.
+4. Expect `vouch:unvouched` (`.github/VOUCHED.td`) and `size:*` labels from
+   the bots, plus Macroscope and CodeRabbit reviews. Unvouched PRs are
+   routinely closed.
+5. As of 2026-09-19 the orchestration and provider layers under
+   `apps/server/src/{orchestration,provider}` are frozen for a V2 rewrite and
+   PRs there are closed on sight; comment on the existing issue instead and
+   watch for the rewrite landing.
+
 ## Known issues & recommended fixes
 
 Running notes from daily use — each is either an upstream candidate
 ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
 a doc/automation task in this repo.
 
-- **A newly deployed slash command stays invisible until the SERVER restarts
-  (upstream)**: deploy a new `~/.claude/commands/<name>.md` link while T3 is
-  running and it never appears in the picker, no matter how many new threads
-  are opened. Measured 2026-09-19: the macOS app process had been up since
-  Sep 17 19:34, the command symlink was created Sep 19 17:24, and the command
-  was still absent ~46 h later with no restart in between. It is not a slow
-  cache and it is not a deploy fault — `deploy_configs.py` reports the entry
-  clean and the symlink resolves.
+- **The `/` menu shows no provider commands in one project while the same
+  commands work in every other project (upstream, verified 2026-09-25 on
+  desktop 0.0.42 against `main @ 7a12aff471`)**: typing `/` lists only the
+  client built-ins (`/compact`, `/plan`, `/default`, `/usage-limits`) and none
+  of the `~/.claude/commands` entries, for every thread whose cwd is one
+  particular directory. The agent is unaffected: every session's `system.init`
+  message in `~/.t3/userdata/logs/provider/events.<thread>.log` carries the
+  full `slash_commands` list, so a command typed out in full still runs.
+  The old form of this note (a newly deployed command never appears until the
+  server restarts) is the same defect seen from the other side.
 
-  **It is the server side that holds the list, not the client.** The 0.0.31
-  schemas carry `slashCommands` on the *provider* snapshot
-  (`ServerProviderSlashCommand`), which the server builds from one probe of
-  `claude` run in its own working directory and streams to clients. Reloading
-  a window or opening a thread re-reads nothing. So on a systemd Linux server
-  the fix is `systemctl --user restart t3code.service`, and a client
-  reconnecting on its own will not help; on the macOS/Windows desktop app the
-  server ships inside the app process tree, so quitting and reopening the app
-  is the same action.
+  **Mechanism.** Since 0.0.42 (PR 11519, "expose native slash commands across
+  clients") the server keeps one command list *per working directory* on top
+  of the machine-wide list:
 
-  **There is a refresh RPC, and it is worth trying before a restart**: the
-  server exposes `server.refreshProviders` (`WsServerRefreshProvidersRpc`).
-  Whatever UI control calls it — provider or agent settings is the likely
-  home — should re-probe and pick up new commands without a restart. *Not yet
-  verified from the UI*: the control was not identifiable in the minified
-  bundle, so the restart above is the only route confirmed to work.
+  1. `checkClaudeProviderStatus` (`apps/server/src/provider/Layers/ClaudeProvider.ts:540`)
+     builds the machine-wide list every 5 minutes from one SDK `initialize`
+     handshake run in the server's own cwd (`probeClaudeCapabilities`, 25 s
+     timeout, `settingSources: user,project,local`, no MCP). The result is
+     written to `~/.t3/caches/claudeAgent.json` (`slashCommands`, 95 entries
+     here). The `claude --version` health check that precedes it has a 4 s
+     timeout (`providerSnapshot.ts:23`) and takes 1 to 1.8 s on this Mac.
+  2. When a thread mounts, `ChatComposer.tsx:1975-2010` asks
+     `server.refreshProviders({instanceId, cwd})` for a *workspace snapshot*
+     of the thread's cwd (worktree path, else the project root), retrying
+     every 10 s until one exists. `ProviderRegistry.refreshWorkspaceSnapshot`
+     (`ProviderRegistry.ts:838`) calls `ClaudeDriver.snapshotForCwd`
+     (`ClaudeDriver.ts:261`), which is nothing more than
+     `{...machineSnapshot, skills: discoverClaudeSkills(cwd)}`: the commands
+     are a **copy of the machine list at that instant**. A turn start does the
+     same capture (`ProviderCommandReactor.ts:708`).
+  3. `upsertProviderWorkspaceSnapshot` (`ProviderRegistry.ts:85`) stores it in
+     a ring of **16 entries per provider** (`MAX_WORKSPACE_SNAPSHOTS_PER_PROVIDER`,
+     newest wins). The refresh returns early whenever an entry for the cwd
+     already exists (`ProviderRegistry.ts:847`), the 5-minute machine refresh
+     carries old entries over untouched (`mergeProviderSnapshot`,
+     `ProviderRegistry.ts:214`), and only `status === "error"` blocks a capture
+     (`ProviderRegistry.ts:863`). So an entry is captured once and **never
+     revisited**; it dies only by ring eviction or a server restart.
+  4. The client prefers the entry over the machine list
+     (`packages/client-runtime/src/providerSkills.ts:121`,
+     `resolveProviderSlashCommandsForCwd`), so a bad entry hides a perfectly
+     good machine list for that cwd.
 
-  Two consequences worth remembering. A command added mid-session is unusable
-  in that session even though the agent itself can see it — the harness
-  re-reads the command list per turn, so it appears in the agent's context
-  while remaining absent from the human's picker, and those two surfaces
-  disagreeing is expected rather than a bug. And on a machine that deploys
-  commands by cron (elitedesk), the link lands correctly but nobody driving
-  that server's UI sees it until the service is bounced.
+  Two windows produce a bad entry, and both leave status `warning`, which
+  does not block the capture: (a) the seconds after a server start, when the
+  placeholder from `makePendingClaudeProvider` (`ClaudeProvider.ts:605`) has
+  `slashCommands: []` and the thread restored at launch asks straight away;
+  (b) any 5-minute cycle whose capability probe failed or timed out, when the
+  machine list is just `[compact]` (`ClaudeProvider.ts:540-556`). A
+  `--version` timeout is a third, softer case: status `error` blocks captures
+  and empties the machine list for that cycle, so threads *without* an entry
+  show an empty menu until the next successful check.
+
+  **Why one project.** A project whose threads each get a worktree has one cwd
+  per ticket thread (16 open ones here), every other project has one. The
+  worktree project drives all the churn: its threads are the ones open across
+  restarts and the ones creating new cwds, and its root directory is shared by
+  every non-worktree thread in it, so one bad root entry blanks most of the
+  project at once. A new worktree thread starts on the project root and
+  switches to the worktree path after its first turn, which triggers a fresh
+  capture: that is the "works after a few turns" behaviour.
+
+  **How it was verified.** Server spans in
+  `~/.t3/userdata/logs/server.trace.ndjson*` (rotates every ~35 min at 10 MB
+  x 10 files): `refreshWorkspaceSnapshot` under `ensureSessionForThread` on
+  every turn start, 0 ms because the entry existed; `checkClaudeProviderStatus`
+  1.0-1.8 s every 5 min; the probe replayed by hand (the `initialize` control
+  request over `--input-format stream-json` with the probe's flags) answered
+  in 0.5-0.8 s with all 95 commands. The per-cwd entries themselves are in
+  server memory only, reachable through the authenticated `/ws` RPC, so the
+  bad capture is inferred from the code paths, not read back.
+
+  **Workarounds.** Quit and reopen T3, and let the Claude provider reach
+  `ready` (Settings > Providers) *before* opening a thread, otherwise the
+  restored thread's cwd is captured against the placeholder again. Typing the
+  full command name still works. Settings > Providers > Refresh does not help:
+  `refresh()` merges and keeps the old entries.
+
+  **Upstream state (checked 2026-09-25).** The bug is reported three times:
+  [#7111](https://github.com/pingdotgg/t3code/issues/7111) (probe failure
+  empties the list, Aug 15), [#11575](https://github.com/pingdotgg/t3code/issues/11575)
+  (startup placeholder captured, Sep 13, the exact mechanism above with span
+  timings) and [#13635](https://github.com/pingdotgg/t3code/issues/13635)
+  (probe stuck on `warning` for hours, Sep 25). Three fix PRs were closed
+  unmerged: [#7112](https://github.com/pingdotgg/t3code/pull/7112) and
+  [#7175](https://github.com/pingdotgg/t3code/pull/7175) (keep the last good
+  list) and [#11576](https://github.com/pingdotgg/t3code/pull/11576) (wait
+  for the first probe before capturing). On Sep 19 a maintainer closed
+  #11576 with: *"We're not taking changes to the orchestration and provider
+  layers right now: that part of the server is being rewritten for V2 ...
+  If this is still an issue once V2 lands, please reopen."*
+  [#13077](https://github.com/pingdotgg/t3code/pull/13077) (trusted
+  contributor, size L, open) re-probes commands per cwd with a 5-minute
+  expiry and would also fix this, but it touches the same layers.
+
+  **The fix, if we wanted to write it.** Small, all in
+  `apps/server/src/provider/Layers/ProviderRegistry.ts`:
+  - in `refreshWorkspaceSnapshot`, refuse to capture unless
+    `scopedSnapshot.status === "ready"` (today only `"error"` is refused). The
+    composer already retries every 10 s and the turn-start path retries per
+    turn, so the entry simply arrives once the first probe finishes. This
+    alone closes #11575 and the `[compact]` case of #7111.
+  - in `upsertProviders` / `mergeProviderSnapshot`, when the machine
+    `slashCommands` change, drop (or rewrite) every workspace entry of that
+    provider so the next mount recaptures; today a per-cwd entry can never
+    learn about a new `~/.claude/commands` file.
+  - optional: raise `MAX_WORKSPACE_SNAPSHOTS_PER_PROVIDER` above 16.
+  Tests live in `ProviderRegistry.test.ts` ("stores workspace skills and
+  commands without changing machine metadata", line 580, is the template);
+  the pending-provider case needs a fake instance whose `snapshotForCwd`
+  first returns a `warning` snapshot with `slashCommands: []`. Estimate: a
+  20-line change plus two tests, an afternoon. The realistic blocker is
+  the V2 freeze above, so the useful move is a comment on #11575 with the
+  span evidence, and a PR only once V2 lands or the freeze is lifted. See
+  [Working on the T3 source](#working-on-the-t3-source) for the checkout and
+  PR mechanics.
 
 - **No verbose transcript view (upstream)**: T3 has no equivalent of Claude
   Code's verbose mode — tool calls render as truncated summaries with no
