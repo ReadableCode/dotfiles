@@ -388,9 +388,9 @@ def calendar_db(tmp_path):
     return build(
         tmp_path / "Calendar.sqlitedb",
         """
-        CREATE TABLE Store (ROWID INTEGER PRIMARY KEY, name TEXT, external_id TEXT);
+        CREATE TABLE Store (ROWID INTEGER PRIMARY KEY, name TEXT, external_id TEXT, last_sync_end REAL);
         CREATE TABLE Calendar (ROWID INTEGER PRIMARY KEY, UUID TEXT, title TEXT, owner_identity_email TEXT,
-            store_id INTEGER);
+            store_id INTEGER, external_id TEXT, self_identity_email TEXT);
         CREATE TABLE Location (ROWID INTEGER PRIMARY KEY, title TEXT);
         CREATE TABLE CalendarItem (ROWID INTEGER PRIMARY KEY, UUID TEXT, unique_identifier TEXT, summary TEXT,
             description TEXT,
@@ -404,8 +404,10 @@ def calendar_db(tmp_path):
         CREATE TABLE Participant (ROWID INTEGER PRIMARY KEY, owner_id INTEGER, entity_type INTEGER, status INTEGER,
             role INTEGER, email TEXT, is_self INTEGER, identity_id INTEGER);
         CREATE TABLE Identity (display_name TEXT, address TEXT);
-        INSERT INTO Store VALUES (1, 'Acme', 'AAAA-ACME-CALDAV'), (2, 'Home', 'BBBB-HOME-IMAP');
-        INSERT INTO Calendar VALUES (10, 'CAL-ACME', 'Work', 'me@acme.com', 1), (20, 'CAL-HOME', 'Home', NULL, 2);
+        INSERT INTO Store VALUES (1, 'Acme', 'AAAA-ACME-CALDAV', 812000000), (2, 'Home', 'BBBB-HOME-IMAP', NULL);
+        INSERT INTO Calendar VALUES (10, 'CAL-ACME', 'Work', 'me@acme.com', 1, '/calendar/dav/me/events/', NULL),
+            (11, 'CAL-ACME-INBOX', 'Work', 'me@acme.com', 1, '/calendar/dav/me/inbox/', NULL),
+            (20, 'CAL-HOME', 'Home', NULL, 2, NULL, NULL);
         INSERT INTO Location VALUES (1, 'Room 4');
         INSERT INTO Identity VALUES ('Boss Person', 'boss@acme.com');
         """,
@@ -442,7 +444,9 @@ def calendar_db(tmp_path):
                 (apple_seconds(single), apple_seconds(single + timedelta(hours=1))),
             ),
             ("INSERT INTO Participant VALUES (11, 4, 8, 0, 3, 'boss@acme.com', 0, 1)", ()),
-            ("INSERT INTO Participant VALUES (12, 4, 7, 2, 1, 'me@acme.com', 1, NULL)", ()),
+            # status 1 is accepted (iCalendar order); is_self is 0 as Calendar.app leaves it - the address decides
+            ("INSERT INTO Participant VALUES (12, 4, 7, 1, 1, 'Me@Acme.com', 0, NULL)", ()),
+            ("INSERT INTO Participant VALUES (13, 4, 7, 2, 2, 'other@acme.com', 0, NULL)", ()),
             (
                 "INSERT INTO CalendarItem VALUES (5, 'UID-HOME', 'ICAL-HOME', "
                 "'Dentist', NULL, NULL, 0, ?, ?, 'America/Chicago', "
@@ -456,6 +460,7 @@ def calendar_db(tmp_path):
 def test_calendar_list_calendars_is_scoped(accounts_db, calendar_db):
     calendars = mtools.calendar_list_calendars(scope(accounts_db, "acme"), calendar_db=calendar_db)
     assert [(cal["calendar_id"], cal["account"]) for cal in calendars] == [("CAL-ACME", "acme")]
+    assert calendars[0]["last_synced"] == mtools.local_iso(mtools.from_apple_seconds(812000000))
 
 
 def test_weekly_series_keeps_its_wall_clock_across_dst_and_honours_exceptions(accounts_db, calendar_db):
@@ -490,6 +495,17 @@ def test_all_day_events_are_plain_dates_with_an_exclusive_end(accounts_db, calen
     assert (offsite["start"], offsite["end"], offsite["end_is_exclusive"]) == ("2026-10-30", "2026-11-01", True)
 
 
+def test_agenda_response_is_yours_not_another_attendees(accounts_db, calendar_db):
+    events = mtools.calendar_events(
+        scope(accounts_db, "acme"), local(2026, 10, 27), local(2026, 11, 1), calendar_db=calendar_db
+    )
+    by_title = {event["title"]: event for event in events}
+    # Review lists you as accepted and someone else as declined; Offsite has no participants at all
+    review = by_title["Review"]
+    assert (review["response"], review["attendees_listed"], review["organizer"]) == ("accepted", 2, "boss@acme.com")
+    assert (by_title["Offsite"]["response"], by_title["Offsite"]["attendees_listed"]) == (None, 0)
+
+
 def test_calendar_events_search_text_and_scope(accounts_db, calendar_db):
     window = (local(2026, 10, 1), local(2026, 12, 1))
     acme = mtools.calendar_events(scope(accounts_db, "acme"), *window, query_text="numbers", calendar_db=calendar_db)
@@ -501,8 +517,10 @@ def test_calendar_events_search_text_and_scope(accounts_db, calendar_db):
 def test_calendar_get_event_has_organizer_and_attendees(accounts_db, calendar_db):
     event = mtools.calendar_get_event(scope(accounts_db, "acme"), "UID-REVIEW", calendar_db=calendar_db)
     assert event["organizer"] == "Boss Person <boss@acme.com>"
+    assert event["response"] == "accepted"
     assert event["attendees"] == [
-        {"name": None, "email": "me@acme.com", "response": "accepted", "role": "required", "is_self": True}
+        {"name": None, "email": "Me@Acme.com", "response": "accepted", "role": "required", "is_self": True},
+        {"name": None, "email": "other@acme.com", "response": "declined", "role": "optional", "is_self": False},
     ]
     assert event["description"] == "Bring numbers"
     with pytest.raises(ValueError, match="no event"):

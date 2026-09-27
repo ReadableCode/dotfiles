@@ -51,16 +51,18 @@ EVENT_ENTITY = 2
 # Participant.entity_type: 7 an attendee row, 8 the organizer row.
 ATTENDEE_ENTITY = 7
 ORGANIZER_ENTITY = 8
-# EKParticipantStatus, which Participant.status and CalendarItem.invitation_status share.
+# Participant.status is iCalendar PARTSTAT order, not EventKit's enum - checked
+# against the Google API's own responseStatus for the same meetings. Your answer
+# is on the attendee row carrying your address; Participant.is_self is not kept
+# up to date, and CalendarItem.invitation_status is not a response at all.
 PARTICIPANT_STATUS = {
-    0: "unknown",
-    1: "pending",
-    2: "accepted",
-    3: "declined",
-    4: "tentative",
-    5: "delegated",
-    6: "completed",
-    7: "in_process",
+    0: "needs_action",
+    1: "accepted",
+    2: "declined",
+    3: "tentative",
+    4: "delegated",
+    5: "completed",
+    6: "in_process",
 }
 PARTICIPANT_ROLE = {0: "unknown", 1: "required", 2: "optional", 3: "chair", 4: "non_participant"}
 
@@ -95,6 +97,9 @@ RRULE_WEEK_START = {
 }
 # Recurrence.specifier keys holding plain integers, and the rrule argument each becomes.
 SPECIFIER_KEYS = {"M": "bymonthday", "O": "bymonth", "S": "bysetpos", "Y": "byyearday", "W": "byweekno"}
+
+# A CalDAV calendar's path ends /inbox/ or /outbox/ for the scheduling mailboxes.
+SCHEDULING_MAILBOX_PATTERN = re.compile(r"/(inbox|outbox)/?$")
 
 OSASCRIPT_TIMEOUT = 60
 MAX_RESULTS = 500
@@ -885,24 +890,36 @@ def messages_search(
 
 
 def scoped_calendars(accounts, calendar_db=None):
-    """Every calendar whose store belongs to one of the given accounts, keyed by Calendar ROWID."""
+    """
+    Every calendar whose store belongs to one of the given accounts, keyed by
+    Calendar ROWID. CalDAV scheduling inboxes and outboxes are left out: they
+    hold invitations in transit, never events, and a Google account's inbox
+    carries the same title as its main calendar.
+    """
     rows = query(
         calendar_db or CALENDAR_DB,
-        "SELECT c.ROWID AS id, c.UUID AS uuid, c.title, c.owner_identity_email AS owner, s.external_id AS store_id, "
-        "s.name AS store FROM Calendar c JOIN Store s ON s.ROWID = c.store_id",
+        "SELECT c.ROWID AS id, c.UUID AS uuid, c.title, c.owner_identity_email AS owner, c.external_id AS path, "
+        "c.self_identity_email AS self, s.external_id AS store_id, s.name AS store, s.last_sync_end AS synced "
+        "FROM Calendar c JOIN Store s ON s.ROWID = c.store_id",
     )
+    addresses = {account["name"]: account.get("address", "") for account in accounts}
     calendars = {}
     for row in rows:
         owner = owner_of(row["store_id"], accounts)
-        if owner:
+        if owner and not SCHEDULING_MAILBOX_PATTERN.search(row["path"] or ""):
             calendars[row["id"]] = {
                 "calendar_id": row["uuid"],
                 "title": row["title"],
                 "account": owner,
                 "store": row["store"],
                 "owner": row["owner"],
+                # when Calendar.app last finished syncing this account; a stalled sync means stale reads and
+                # writes that never leave this Mac
+                "last_synced": local_iso(from_apple_seconds(row["synced"])) if row["synced"] else None,
                 "_rowid": row["id"],
                 "_store_id": row["store_id"],
+                # the addresses that are you on this calendar, for finding your attendee row
+                "_me": {address.lower() for address in (addresses[owner], row["self"], row["owner"]) if address},
             }
     return calendars
 
@@ -926,7 +943,7 @@ def calendar_by_id(calendars, calendar_id):
 
 EVENT_COLUMNS = (
     "ci.ROWID AS rowid, ci.UUID AS uid, ci.unique_identifier AS ical_uid, ci.summary, ci.all_day, ci.start_date, "
-    "ci.end_date, ci.calendar_id, ci.status, ci.invitation_status, ci.has_recurrences, ci.orig_item_id, "
+    "ci.end_date, ci.calendar_id, ci.status, ci.has_recurrences, ci.orig_item_id, "
     "ci.has_attendees, ci.conference_url, ci.start_tz, l.title AS location"
 )
 
@@ -1057,7 +1074,42 @@ def _skipped_occurrences(path, master_ids):
     return skipped
 
 
-def _serialize_occurrence(row, calendars, start, end):
+def _participation(path, rowids, calendars):
+    """
+    rowid -> who is on that item: ``response`` is your answer (the status on
+    your attendee row, "organizer" when the organizer row is you, "unknown"
+    when you are listed under no known address), ``attendees_listed`` counts the
+    attendee rows and ``organizer`` is the organizer's address. An item with no
+    participant rows is absent. A hidden guest list shows up as you being the
+    only attendee listed - the shape of a broadcast invite to a big event.
+    """
+    if not rowids:
+        return {}
+    rows = query(
+        path,
+        "SELECT p.owner_id, p.entity_type, p.status, lower(p.email) AS email, ci.calendar_id FROM Participant p "
+        f"JOIN CalendarItem ci ON ci.ROWID = p.owner_id WHERE p.owner_id IN ({placeholders(rowids)}) "
+        f"AND p.entity_type IN ({ATTENDEE_ENTITY}, {ORGANIZER_ENTITY})",
+        list(rowids),
+    )
+    found: dict = {}
+    for row in rows:
+        item = found.setdefault(row["owner_id"], {"response": None, "attendees_listed": 0, "organizer": None})
+        me = calendars[row["calendar_id"]]["_me"] if row["calendar_id"] in calendars else set()
+        if row["entity_type"] == ATTENDEE_ENTITY:
+            item["attendees_listed"] += 1
+        else:
+            item["organizer"] = row["email"]
+        if row["email"] not in me:
+            item["response"] = item["response"] or "unknown"
+        elif row["entity_type"] == ATTENDEE_ENTITY:
+            item["response"] = PARTICIPANT_STATUS.get(row["status"] or 0, "unknown")
+        elif item["response"] in (None, "unknown"):
+            item["response"] = "organizer"
+    return found
+
+
+def _serialize_occurrence(row, calendars, start, end, participation=None):
     cal = calendars[row["calendar_id"]]
     all_day = bool(row["all_day"])
     return {
@@ -1072,7 +1124,9 @@ def _serialize_occurrence(row, calendars, start, end):
         "all_day": all_day,
         **({"end_is_exclusive": True} if all_day else {}),
         "location": row["location"],
-        "response": PARTICIPANT_STATUS.get(row["invitation_status"] or 0) if row["has_attendees"] else None,
+        "response": (participation or {}).get("response"),
+        "attendees_listed": (participation or {}).get("attendees_listed", 0),
+        "organizer": (participation or {}).get("organizer"),
         "recurring": bool(row["has_recurrences"] or row["orig_item_id"]),
         "has_attendees": bool(row["has_attendees"]),
         "conference_url": row["conference_url"],
@@ -1126,6 +1180,7 @@ def calendar_events(accounts, window_start, window_end, query_text="", calendar_
             rules.setdefault(rule["owner_id"], []).append(rule)
     skipped = _skipped_occurrences(path, master_ids)
     first_day, last_day = _window_days(window_start, window_end)
+    participation = _participation(path, [row["rowid"] for row in list(single) + list(masters)], calendars)
     events, seen = [], set()
     for row in single:
         start, end = _single_window(row)
@@ -1134,7 +1189,7 @@ def calendar_events(accounts, window_start, window_end, query_text="", calendar_
         else:
             overlaps = start < window_end and end > window_start
         if overlaps:
-            events.append(_serialize_occurrence(row, calendars, start, end))
+            events.append(_serialize_occurrence(row, calendars, start, end, participation.get(row["rowid"])))
     for row in masters:
         for rule in rules.get(row["rowid"], []):
             if rule["end_date"] and rule["end_date"] < lower - 86400:
@@ -1143,7 +1198,7 @@ def calendar_events(accounts, window_start, window_end, query_text="", calendar_
                 key = (row["rowid"], str(start))
                 if key not in seen:
                     seen.add(key)
-                    events.append(_serialize_occurrence(row, calendars, start, end))
+                    events.append(_serialize_occurrence(row, calendars, start, end, participation.get(row["rowid"])))
     events.sort(key=lambda event: (_sort_key(event), event["title"] or ""))
     return events
 
@@ -1188,7 +1243,10 @@ def calendar_get_event(accounts, event_id, calendar_id="", calendar_db=None):
         raise ValueError(f"no event {event_id} in these accounts")
     row = rows[0]
     start, end = _single_window(row)
-    event = _serialize_occurrence(row, calendars, start, end)
+    event = _serialize_occurrence(
+        row, calendars, start, end, _participation(path, [row["rowid"]], calendars).get(row["rowid"])
+    )
+    me = calendars[row["calendar_id"]]["_me"]
     people = query(
         path,
         "SELECT p.entity_type, p.status, p.role, p.email, p.is_self, i.display_name FROM Participant p "
@@ -1206,9 +1264,9 @@ def calendar_get_event(accounts, event_id, calendar_id="", calendar_db=None):
             {
                 "name": person["display_name"],
                 "email": person["email"],
-                "response": PARTICIPANT_STATUS.get(person["status"] or 0),
+                "response": PARTICIPANT_STATUS.get(person["status"] or 0, "unknown"),
                 "role": PARTICIPANT_ROLE.get(person["role"] or 0),
-                "is_self": bool(person["is_self"]),
+                "is_self": (person["email"] or "").lower() in me,
             }
             for person in people
             if person["entity_type"] == ATTENDEE_ENTITY
