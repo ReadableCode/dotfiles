@@ -29,6 +29,7 @@ prefixes; nothing lives unprefixed.
 - [setup_libreoffice.md](setup_libreoffice.md) - setup_libreoffice
 - [setup_linux_workstation.md](setup_linux_workstation.md) - Setup Linux Workstation
 - [setup_local_ai.md](setup_local_ai.md) - Setting Up Local AI
+- [setup_mac_mcp.md](setup_mac_mcp.md) - Mac MCP - Mail.app, Calendar.app and Messages in Claude Code
 - [setup_mac_workstation.md](setup_mac_workstation.md) - Setup macOS Workstation
 - [setup_mkdocs.md](setup_mkdocs.md) - MKDOCS
 - [setup_msys2.md](setup_msys2.md) - MSYS2

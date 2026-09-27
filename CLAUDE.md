@@ -93,6 +93,16 @@ is the one-paragraph orientation so an agent knows which file to open.
   reaches only that context's accounts. OAuth refresh is shared with the
   calendar board via `src/utils/google_oauth_tools.py`; nothing in that
   process may print to stdout or the JSON-RPC protocol breaks.
+- **`mac_mcp.py`** - stdio MCP server over the local copies Mail.app,
+  Calendar.app and Messages keep on a Mac, so any account signed in to
+  Internet Accounts is reachable without an OAuth app of our own (the fix for
+  tenants that block consent). Read-only SQLite (`mode=ro`) for mail, texts
+  and calendars, recurring series expanded from their stored rules; calendar
+  writes go through Calendar.app over AppleScript. Same per-context pinning as
+  the Google server: each credentials repo declares `<context>_mac` and lists
+  its addresses in `<context>_macaccounts.yaml`. Needs Full Disk Access on the
+  app launching Claude. Readers in `src/utils/macmcp_tools.py`. Doc:
+  `docs/setup_mac_mcp.md`.
 - **`calendar_board.py`** — calendar TUI: Google Calendar and Outlook-on-the-web
   (Microsoft Graph) accounts as side-by-side day columns with attendance
   badges and cross-source overlap flags; sources from
