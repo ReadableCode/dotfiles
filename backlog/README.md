@@ -19,3 +19,4 @@ system on the day they were written, and infrastructure moves on its own.
 | [pasting into the RyzenWhite VNC session does nothing](vnc-paste-into-ryzenwhite.md) | 2026-09-24 | open |
 | [google_mcp hides the reason for anticipated errors](google-mcp-hides-error-reasons.md) | 2026-09-26 | open |
 | [mac_mcp has no Windows or Linux equivalent](mac-mcp-windows-linux.md) | 2026-09-26 | open |
+| [the drive pulled from behemoth's disk5 may be good, and is untested](behemoth-old-disk5-untested.md) | 2026-09-28 | open |

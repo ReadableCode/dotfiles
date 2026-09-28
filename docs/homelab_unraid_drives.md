@@ -38,8 +38,9 @@ history
 minutes with nothing wrong: every md error counter zero, no parity mismatches,
 no kernel disk errors, every link at 6.0 gbps throughout. parity is valid again.
 
-2026-09-26, power supply and every sata data cable replaced, after three days
-of rebuilds that died part way on link drops. what pointed at power was the
+2026-09-26, power supply, every sata data cable and the 4-way sata power
+splitter for column 3 replaced, after three days of rebuilds that died part
+way on link drops. the splitter was the fault. what pointed at power was the
 drives' own smart power cycle count (attribute 12), read while the server
 stayed up:
 
@@ -48,11 +49,10 @@ WS23L2YN         disk7   7774
 everything else          42 to 247
 
 a count that climbs while the server has not restarted means that drive's
-power feed is dropping. disk5 and disk7 both hang off the 4-way sata power
-splitter that feeds the bottom four bays of column 3. disk2 (77) and disk3
-(247) are on the same splitter and look normal. no count has moved since the
-swap, through the whole rebuild. whether the splitter itself was replaced is
-not recorded here.
+power feed is dropping. disk5 and disk7 both hung off the old splitter, which
+fed the bottom four bays of column 3. disk2 (77) and disk3 (247) were on it
+too and look normal. no count has moved since the new splitter went in,
+through the whole rebuild.
 
 2026-09-23, column 3 bottom, disk5: WD-WCC7K4NHXD19 (4tb wd WD40EFRX) was
 disabled by unraid after 308 write errors and replaced with ZZ30MKQY (12tb
