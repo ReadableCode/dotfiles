@@ -823,6 +823,23 @@ def review_rollup_github(pull, reviews):
     return review_summary(state, bool(pull.get("draft")), votes)
 
 
+def merge_state_github(repo, pull, headers):
+    """
+    Why GitHub will or will not merge a PR: its mergeable_state (clean, blocked,
+    behind, dirty, unstable, draft) and whether auto-merge is queued. The list
+    endpoint leaves both out, so a PR found by branch is fetched again by number.
+    """
+    if "mergeable_state" not in pull:
+        pull = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{pull['number']}", headers)
+    auto_merge = pull.get("auto_merge") or {}
+    return {
+        "mergeable_state": pull.get("mergeable_state"),
+        "auto_merge": bool(auto_merge),
+        "auto_merge_method": auto_merge.get("merge_method"),
+        "auto_merge_by": (auto_merge.get("enabled_by") or {}).get("login"),
+    }
+
+
 def review_summary(state, draft, votes):
     votes = {name: vote for name, vote in votes.items() if name}
     return {
@@ -904,6 +921,7 @@ def cmd_pr_status(args):
     else:
         reviews = list(github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{pull['number']}/reviews", headers))
         report.update({"pr": pull["number"], "url": pull["html_url"], "review": review_rollup_github(pull, reviews)})
+        report["merge"] = merge_state_github(repo, pull, headers)
     state = "GREEN" if report["green"] else ("FAILED" if report["failed"] else "PENDING")
     print(review_line(report["review"]))
     for detail in report["failed_details"]:

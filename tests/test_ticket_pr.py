@@ -1463,6 +1463,32 @@ def _github_pull(state, auto_merge=None):
     }
 
 
+def test_merge_state_github_reads_a_full_pull_without_another_request(monkeypatch):
+    calls = _record_http(monkeypatch, {})
+    queued = {"merge_method": "squash", "enabled_by": {"login": "dana"}}
+    state = ticket_pr.merge_state_github("owner/name", _github_pull("blocked", queued), {})
+    assert state == {
+        "mergeable_state": "blocked",
+        "auto_merge": True,
+        "auto_merge_method": "squash",
+        "auto_merge_by": "dana",
+    }
+    assert calls == []
+
+
+def test_merge_state_github_refetches_a_pull_found_by_branch(monkeypatch):
+    # the list endpoint returns the PR without its merge state
+    calls = _record_http(monkeypatch, {"/pulls/12": _github_pull("behind")})
+    state = ticket_pr.merge_state_github("owner/name", {"number": 12}, {})
+    assert state == {
+        "mergeable_state": "behind",
+        "auto_merge": False,
+        "auto_merge_method": None,
+        "auto_merge_by": None,
+    }
+    assert calls == [("GET", "https://api.github.com/repos/owner/name/pulls/12", None)]
+
+
 def test_merge_pr_dry_run_is_parseable(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     out = _run_cli(["--dry-run", "merge-pr", "--repo", "owner/name", "--pr", "12"], monkeypatch, capsys)
