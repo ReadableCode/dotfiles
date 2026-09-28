@@ -31,7 +31,7 @@ stack (`ms-dotnettools.csdevkit`, `ms-dotnettools.csharp`, and their
 csdevkit pack also removes csharp) and `github.vscode-pull-request-github`
 (PRs are handled via `gh`/browser). Clarification: the ruff keep's
 "herdstone only" refers to the **herdstone repo** being present on the machine
-(its ruff config is `backends/python/pyproject.toml`), not a hostname.
+(its ruff config is `backend/pyproject.toml`), not a hostname.
 
 A fourth pass (July 2026, RyzenWhite) added three removals — `gruntfuggly.todo-tree`
 (startup-activating workspace scan; ripgrep/search covers it),
