@@ -542,7 +542,9 @@ is signed in with the personal account, and T3 picked it up under
 **Settings → Source Control** (rescan there if needed). Remote environments
 each use their own machine's auth, so agents on work machines keep doing
 GitHub through that context's normal token conventions — don't try to force a
-second account through the GUI.
+second account through the GUI. The flip side: on a personal machine, a client
+project's pull request pane can never load (see Known issues, "Pull request
+pane fails for client repos").
 
 ## Environments (multi-machine)
 
@@ -1346,6 +1348,43 @@ a doc/automation task in this repo.
   network filesystem can't take down every thread on the box; a liveness
   probe of its own HTTP port would also let the service self-restart out of
   this state.
+- **Pull request pane fails for client repos on a personal machine (upstream,
+  found 2026-09-28 on desktop 0.0.42)**: in a client project, a thread with a
+  linked PR opens the side pane to "Could not load pull requests. Pull request
+  operation detail failed: GitHub CLI command failed." The link itself comes
+  from the `link_pull_request` MCP tool, which only stores the URL, so the
+  badge appears and "Open on GitHub" works; everything that needs data fails.
+  **Cause.** `gh` is T3's only GitHub credential source. Every lookup runs
+  `gh auth token --hostname <host>`, verifies it with `gh api user` and pins
+  that token (`captureVerifiedCredential`,
+  `apps/server/src/pullRequest/GitHubPullRequestCli.ts:1110`; the pin is
+  applied in `sourceControl/GitHubCli.ts:405`). On Envy `gh` holds only the
+  personal account, which cannot see the client's private org, so every
+  lookup fails. `server.trace.ndjson` shows it for every branch in that
+  project: `lookupStatusPr` events "PR lookup failed; keeping last known PR
+  state." with `providerOperation: listChangeRequests` and `errorDetail:
+  GitHub CLI command failed.` The exact `gh` stderr was not captured: running
+  the personal account against the client repo by hand is exactly what we
+  don't do. It is probably GitHub's "Could not resolve to a Repository", which
+  T3 reports as a generic command failure instead of "no access".
+  **No local fix within the rules.** There is no per-project token and no
+  per-project PR opt-out: a project's `t3.json` accepts only `vcs.kind`
+  (`apps/server/src/vcs/VcsProjectConfig.ts`). Each possible workaround breaks
+  a rule. Signing `gh` in to the client account puts a machine-global client
+  sign-in on a personal machine. A `gh` wrapper that picks the account from
+  the cwd (via `GH_CONFIG_DIR` or `GH_TOKEN`) still uses `gh` for the client,
+  and nightly `0.0.43-nightly.20260928.2375` broke that setup anyway by running
+  every project's lookups from one directory and batching owners into one
+  GraphQL query ([#14123](https://github.com/pingdotgg/t3code/issues/14123),
+  triaged and confirmed). A `GH_TOKEN` in the server's environment applies to
+  the whole server, so personal repos would then run as the client account.
+  Workaround: ignore the pane in client projects. Use "Open on GitHub" or
+  `ticket_pr.py pr-status`, which reads the token the repo's `.env` pins.
+  **Upstream ask** (none filed as of 2026-09-28): a per-project credential
+  source in `t3.json`, such as a token command or an env file plus key, or a
+  per-project switch to turn off source control lookups. Also report a repo
+  the account can't see as "no access to this repository", not "GitHub CLI
+  command failed".
 
 ## More docs
 
