@@ -32,7 +32,7 @@ Each reports what is already installed and prompts once for the rest.
 
 - install the OS itself (next section)
 - `app_lists/linux_apps_non_apt.md`: the VS Code repo and the SQL Server ODBC driver on
-  Fedora, GPU drivers for Parsec, and enabling the gsconnect extension after install
+  Fedora, and GPU drivers for Parsec
 - desktop environment settings: display, keyboard, power, autostart
 - ssh keys for pushing (bootstrap clones dotfiles over https)
 

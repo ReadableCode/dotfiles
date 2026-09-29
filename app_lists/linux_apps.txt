@@ -4,12 +4,10 @@ cargo
 cifs-utils
 curl
 docker-compose
-evolution
 fastfetch
 fzf
 gh
 git-all
-gnome-shell-extension-gsconnect
 golang-go
 htop
 iperf3
@@ -30,8 +28,6 @@ rsync
 samba
 speedtest-cli
 ssmtp
-steam
-syncthing
 texlive-fonts-extra
 texlive-fonts-recommended
 texlive-latex-base

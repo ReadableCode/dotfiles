@@ -83,17 +83,6 @@ verification error: Signing key not found", the repo was set up with the older
 right key a first install still prints that message once, then dnf imports the
 key named in `gpgkey` (0xF748182B) and carries on. Verified on Fedora 43.
 
-## KDE Connect (gsconnect)
-
-The package is in `linux_apps_dnf.txt` and `linux_apps.txt`, but the extension has to be
-enabled afterwards, and you must log out and back in first:
-
-```bash
-gnome-extensions enable gsconnect@andyholmes.github.io
-```
-
-The phone icon then appears in the system tray.
-
 ## Parsec on Fedora: GPU drivers
 
 Parsec itself is in `linux_apps_flatpak.txt`. Hardware acceleration is not — the driver

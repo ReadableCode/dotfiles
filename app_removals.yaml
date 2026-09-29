@@ -97,3 +97,18 @@
     starts it, and adds the port 22 firewall rule if it went too. The ssh
     session running the removal survives it, so this is safe over ssh; if the
     repair itself fails, ssh stays down until the console runs that script.
+
+# --- GSConnect, retired 2026-09-29 ---
+#
+# The GNOME port of KDE Connect, which pairs a desktop with an Android phone.
+# No Android phone is in use any more and it offers little for an iPhone.
+
+- name: gsconnect_apt
+  manager: apt
+  package: gnome-shell-extension-gsconnect
+  note: Dropped from app_lists/linux_apps.txt.
+
+- name: gsconnect_dnf
+  manager: dnf
+  package: gnome-shell-extension-gsconnect
+  note: Dropped from app_lists/linux_apps_dnf.txt.
