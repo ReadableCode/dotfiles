@@ -1385,6 +1385,57 @@ a doc/automation task in this repo.
   per-project switch to turn off source control lookups. Also report a repo
   the account can't see as "no access to this repository", not "GitHub CLI
   command failed".
+- **No Claude Code update is offered on a Mac that redirects `HOMEBREW_CACHE`
+  (upstream, found 2026-09-29 on desktop 0.0.42 against `main @ d2c9281b81`)**:
+  Envy ran Claude Code 2.1.280 with 2.1.284 published and T3 showed no update
+  prompt, while its own provider message said "Claude Code v2.1.280 is too old
+  for Claude Sonnet 5.5. Upgrade to v2.1.284 or newer to access it."
+  **Cause.** T3 asks the installer that owns the binary what the latest
+  version is, and asks npm only when no installer owns it. Here that is the
+  `claude-code@latest` cask, so the server runs
+  `brew info --json=v2 claude-code@latest` once an hour
+  (`resolvePackageManagedProviderMaintenance`,
+  `apps/server/src/provider/providerMaintenance.ts`). `brew info` answers from
+  Homebrew's local API cache and refreshes it only past 7 days
+  (`DEFAULT_API_STALE_SECONDS`, `Library/Homebrew/api.rb`). Envy has two of
+  those caches. Every shell exports `HOMEBREW_CACHE` to the external SSD
+  (`application_configs/bash/zshenv_local.envy`), so myupdater's `brew update`
+  refreshes that one. The desktop app copies a fixed list of variables from
+  the login shell (`LOGIN_SHELL_ENV_NAMES`,
+  `apps/desktop/src/shell/DesktopShellEnvironment.ts`) that has
+  `HOMEBREW_PREFIX`, `HOMEBREW_CELLAR` and `HOMEBREW_REPOSITORY` but not
+  `HOMEBREW_CACHE`, so its brew reads the default `~/Library/Caches/Homebrew`,
+  which nothing refreshes.
+  **Evidence**, all read 2026-09-29 07:57 CDT. The package file
+  `api/internal/packages.arm64_golden_gate.jws.json` under the SSD cache was
+  dated Sep 29 07:55 and listed the cask at 2.1.284; the one under
+  `~/Library/Caches/Homebrew` was dated Sep 23 15:55 and listed 2.1.280. The
+  server process (`ps eww`) carried `PATH` and no `HOMEBREW_CACHE`.
+  `~/.t3/caches/claudeAgent.json` held `versionAdvisory` with
+  `status: current`, `currentVersion: 2.1.280`, `latestVersion: 2.1.280`, and
+  the prompt needs `status: behind_latest` (`isProviderUpdateCandidate`,
+  `apps/web/src/components/ProviderUpdateLaunchNotification.logic.ts`). Ruled
+  out: the brew probe is healthy (`runHomebrew` span, 456 ms), nothing is
+  dismissed (`dismissedProviderUpdateNotificationKeys: []`), and the
+  notification settings gate thread notifications only.
+  Left alone the prompt works briefly each time T3's cache passes 7 days, then
+  goes stale for another week.
+  **Second effect.** The update button runs
+  `brew upgrade --cask claude-code@latest` in that same environment, so its
+  217 MB download lands on the internal disk, which the redirect exists to
+  prevent.
+  **Upstream fix**: add `HOMEBREW_CACHE` to `LOGIN_SHELL_ENV_NAMES`, one line.
+  That file is outside the frozen orchestration and provider layers. Not
+  verified against the installed 0.0.42 bundle; the list was read from `main`
+  and the server's environment matches it. After a release carrying it,
+  confirm with `ps eww -p <server pid> | tr ' ' '\n' | grep HOMEBREW_CACHE`.
+  **No local fix.** A LaunchAgent running
+  `launchctl setenv HOMEBREW_CACHE ...` would work around it, but no manifest
+  deploys a LaunchAgent, it would define the redirect a second time outside
+  `zshenv_local.envy`, and it changes brew for every app launched from the
+  Dock. Workaround: update Claude Code with myupdater or
+  `brew upgrade --cask claude-code@latest` from a shell, both of which use
+  the fresh cache. Threads started afterwards get the new binary.
 
 ## More docs
 
