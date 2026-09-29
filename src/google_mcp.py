@@ -396,7 +396,8 @@ def gmail_trash_message(message_id: str, undo: bool = False, mailbox: str = "") 
 
 @server.tool(
     description=(
-        "Send a plain-text email as the mailbox's own address. Pass reply_to_message_id to thread it as a reply. "
+        "Send an email as the mailbox's own address. body is the plain text; html adds an HTML version beside it "
+        "and body stays as the fallback. Pass reply_to_message_id to thread it as a reply. "
         "This sends real mail to real people - confirm recipients and content with the user first."
     )
 )
@@ -408,6 +409,7 @@ def gmail_send_message(
     bcc: list[str] = [],
     reply_to_message_id: str = "",
     mailbox: str = "",
+    html: str = "",
 ) -> dict:
     return gtools.gmail_send_message(
         _mailbox(mailbox),
@@ -417,6 +419,7 @@ def gmail_send_message(
         cc=cc or None,
         bcc=bcc or None,
         reply_to_message_id=reply_to_message_id or None,
+        html=html or None,
     )
 
 

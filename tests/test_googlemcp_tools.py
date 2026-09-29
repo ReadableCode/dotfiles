@@ -4,6 +4,7 @@
 import base64
 import json
 import os
+from email import message_from_bytes
 from urllib.parse import parse_qs, urlparse
 
 import config_test_utils  # noqa F401
@@ -418,6 +419,26 @@ def test_gmail_send_message_builds_a_raw_mime_payload(monkeypatch):
     assert "Cc: e@f.com" in raw
     assert "Subject: Subj" in raw
     assert "Body" in raw
+
+
+def test_gmail_send_message_without_html_stays_plain_text(monkeypatch):
+    gmail_env(monkeypatch)
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"id": "m9", "threadId": "t9"}))
+    googlemcp_tools.gmail_send_message(MAILBOX, "a@b.com", "Subj", "Body")
+    sent = message_from_bytes(base64.urlsafe_b64decode(calls[0]["payload"]["raw"]))
+    assert not sent.is_multipart()
+    assert sent.get_content_type() == "text/plain"
+
+
+def test_gmail_send_message_carries_html_beside_the_plain_text(monkeypatch):
+    gmail_env(monkeypatch)
+    calls = stub_requests(monkeypatch, lambda *args: FakeResponse({"id": "m9", "threadId": "t9"}))
+    googlemcp_tools.gmail_send_message(MAILBOX, "a@b.com", "Subj", "Plain body", html="<p>Rich <b>body</b></p>")
+    sent = message_from_bytes(base64.urlsafe_b64decode(calls[0]["payload"]["raw"]))
+    parts = {part.get_content_type(): part.get_payload(decode=True).decode("utf-8") for part in sent.get_payload()}
+    assert sent.get_content_type() == "multipart/alternative"
+    assert "Plain body" in parts["text/plain"]
+    assert "<p>Rich <b>body</b></p>" in parts["text/html"]
 
 
 def test_gmail_send_message_threads_a_reply(monkeypatch):

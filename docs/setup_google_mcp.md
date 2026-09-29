@@ -236,7 +236,8 @@ Calendar: `calendar_agenda` (all calendars for a date range, the board's view),
 Mail: `gmail_search` (Gmail's own query syntax), `gmail_list_message_ids`
 (every matching id, all pages, for diffing against a record), `gmail_get_message`,
 `gmail_list_labels`, `gmail_modify_message`, `gmail_trash_message`,
-`gmail_send_message`, `gmail_save_attachment_to_drive`, `gmail_profile`.
+`gmail_send_message` (plain text, with an optional HTML version beside it),
+`gmail_save_attachment_to_drive`, `gmail_profile`.
 
 Drive: `drive_about`, `drive_search` (Drive's own query syntax, shared drives
 included), `drive_get_metadata`, `drive_read_file` (Docs and Slides as text,

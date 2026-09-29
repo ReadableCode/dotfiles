@@ -474,9 +474,13 @@ def gmail_trash_message(mailbox, message_id, undo=False):
     return {"id": raw.get("id"), "labels": raw.get("labelIds", []), "action": action}
 
 
-def gmail_send_message(mailbox, to, subject, body, cc=None, bcc=None, reply_to_message_id=None, thread_id=None):
+def gmail_send_message(
+    mailbox, to, subject, body, cc=None, bcc=None, reply_to_message_id=None, thread_id=None, html=None
+):
     """
-    Send a plain-text message as the mailbox's own address. Passing
+    Send a message as the mailbox's own address. ``body`` is the plain text;
+    ``html`` adds an HTML alternative beside it, so a client that shows HTML
+    gets that and any other still gets the text. Passing
     ``reply_to_message_id`` threads the reply properly (In-Reply-To/References
     off that message's Message-ID) and defaults thread_id to its thread.
     """
@@ -488,6 +492,8 @@ def gmail_send_message(mailbox, to, subject, body, cc=None, bcc=None, reply_to_m
         message["Bcc"] = _join_addresses(bcc)
     message["Subject"] = subject
     message.set_content(body)
+    if html:
+        message.add_alternative(html, subtype="html")
     payload = {}
     if reply_to_message_id:
         original = _request(
