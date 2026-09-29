@@ -81,7 +81,7 @@ agent tooling and declares its own overlay manifest (the opt-in form, see
 | App-owned commands (a personal app's `.claude/commands/`) | the app repo; the context overlay links them |
 | Agent notes for a personal repo that does not advertise agent use | `personal_dev/claude/repo_notes/<repo>.md`, deployed as a gitignored `CLAUDE.md` link |
 | Context-free payloads (`init_worktree`, user `settings.json`, statusline, themes) and the generated `data/mcp/*.mcp.json` | `dotfiles` |
-| Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal_dev/ops/` for the homelab |
+| Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal_dev/src/` for the homelab |
 | Executable code with only that context's consumers | `<context>_dev/src/` (`personal_dev/src/`; each client has its own `scripts/`) |
 
 Claude's auto-memory directories are **not** synced: they are machine-local by
@@ -162,7 +162,7 @@ known folder carries none of that risk.
 manifest and removals, a `pyproject.toml`, and `src/` for code whose only
 consumers are personal. Homelab jobs — the cron- and container-lifecycle work
 like the Bitwarden vault backup, the postgres and docker-app backups, log
-rotation, the usage monitor — live in its `ops/` tree.
+rotation, the usage monitor — live in `src/` beside the rest of its code.
 
 This supersedes the retired `personal-automation` repo (split out of dotfiles
 2026-07, folded into `personal_dev` 2026-09). Splitting personal code by
