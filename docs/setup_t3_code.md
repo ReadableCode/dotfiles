@@ -900,7 +900,8 @@ a doc/automation task in this repo.
 
 - **The `/` menu shows no provider commands in one project while the same
   commands work in every other project (upstream, verified 2026-09-25 on
-  desktop 0.0.42 against `main @ 7a12aff471`)**: typing `/` lists only the
+  desktop 0.0.42 against `main @ 7a12aff471`; re-checked 2026-09-30 against
+  the `v0.0.42` tag and `main @ d2c9281b81`, same code paths)**: typing `/` lists only the
   client built-ins (`/compact`, `/plan`, `/default`, `/usage-limits`) and none
   of the `~/.claude/commands` entries, for every thread whose cwd is one
   particular directory. The agent is unaffected: every session's `system.init`
@@ -913,14 +914,14 @@ a doc/automation task in this repo.
   clients") the server keeps one command list *per working directory* on top
   of the machine-wide list:
 
-  1. `checkClaudeProviderStatus` (`apps/server/src/provider/Layers/ClaudeProvider.ts:540`)
-     builds the machine-wide list every 5 minutes from one SDK `initialize`
+  1. `checkClaudeProviderStatus` (`apps/server/src/provider/Layers/ClaudeProvider.ts:420`,
+     the list itself at line 540) builds the machine-wide list every 5 minutes from one SDK `initialize`
      handshake run in the server's own cwd (`probeClaudeCapabilities`, 25 s
      timeout, `settingSources: user,project,local`, no MCP). The result is
-     written to `~/.t3/caches/claudeAgent.json` (`slashCommands`, 95 entries
-     here). The `claude --version` health check that precedes it has a 4 s
+     written to `~/.t3/caches/claudeAgent.json` (`slashCommands`, 99 entries
+     here on 2026-09-30). The `claude --version` health check that precedes it has a 4 s
      timeout (`providerSnapshot.ts:23`) and takes 1 to 1.8 s on this Mac.
-  2. When a thread mounts, `ChatComposer.tsx:1975-2010` asks
+  2. When a thread mounts, `ChatComposer.tsx:1957-2010` asks
      `server.refreshProviders({instanceId, cwd})` for a *workspace snapshot*
      of the thread's cwd (worktree path, else the project root), retrying
      every 10 s until one exists. `ProviderRegistry.refreshWorkspaceSnapshot`
@@ -928,7 +929,7 @@ a doc/automation task in this repo.
      (`ClaudeDriver.ts:261`), which is nothing more than
      `{...machineSnapshot, skills: discoverClaudeSkills(cwd)}`: the commands
      are a **copy of the machine list at that instant**. A turn start does the
-     same capture (`ProviderCommandReactor.ts:708`).
+     same capture (`ProviderCommandReactor.ts:713`).
   3. `upsertProviderWorkspaceSnapshot` (`ProviderRegistry.ts:85`) stores it in
      a ring of **16 entries per provider** (`MAX_WORKSPACE_SNAPSHOTS_PER_PROVIDER`,
      newest wins). The refresh returns early whenever an entry for the cwd
@@ -961,13 +962,36 @@ a doc/automation task in this repo.
   switches to the worktree path after its first turn, which triggers a fresh
   capture: that is the "works after a few turns" behaviour.
 
+  Counted from `~/.t3/userdata/state.sqlite` on 2026-09-30, for the server
+  that had been up since 2026-09-23: threads with a turn since that start
+  (`projection_turns` joined to `projection_threads` and
+  `projection_projects`) ran in 14 distinct working directories across 8
+  projects. The worktree project accounts for 7 of them (its root and 6
+  worktrees) across 22 threads, 16 of which ran in the shared root; every
+  other project has exactly one. 14 is under the 16-entry ring, so turn
+  starts alone evicted nothing in that week.
+
+  A settled thread costs nothing by itself. A capture happens only when a
+  thread is mounted in the composer or starts a turn, so a settled thread
+  matters only if it is opened. Of 201 threads, 196 were settled.
+
+  The last three turns before that restart (13:46 to 13:49 UTC, four minutes
+  before it) were in a worktree thread of that project, so the thread
+  restored at launch was most likely one of its threads: window (a) above.
+  That is one restart, and it points at the project in daily use being the
+  one open when T3 restarts.
+
+  The user-level command folder is not the cause: the machine list read from
+  it held all 29 deployed commands on 2026-09-30. The per-directory entries
+  are in server memory, so an empty one is still inferred, not read back.
+
   **How it was verified.** Server spans in
   `~/.t3/userdata/logs/server.trace.ndjson*` (rotates every ~35 min at 10 MB
   x 10 files): `refreshWorkspaceSnapshot` under `ensureSessionForThread` on
   every turn start, 0 ms because the entry existed; `checkClaudeProviderStatus`
   1.0-1.8 s every 5 min; the probe replayed by hand (the `initialize` control
   request over `--input-format stream-json` with the probe's flags) answered
-  in 0.5-0.8 s with all 95 commands. The per-cwd entries themselves are in
+  in 0.5-0.8 s with all 95 commands (99 by 2026-09-30). The per-cwd entries themselves are in
   server memory only, reachable through the authenticated `/ws` RPC, so the
   bad capture is inferred from the code paths, not read back.
 
@@ -993,6 +1017,9 @@ a doc/automation task in this repo.
   [#13077](https://github.com/pingdotgg/t3code/pull/13077) (trusted
   contributor, size L, open) re-probes commands per cwd with a 5-minute
   expiry and would also fix this, but it touches the same layers.
+  Re-checked 2026-09-30: #7111, #11575 and #13635 are still open, and so is
+  #13077, now titled "fix(server): Claude picks up project slash commands",
+  with automated review comments unresolved and no maintainer decision.
 
   **The fix, if we wanted to write it.** Small, all in
   `apps/server/src/provider/Layers/ProviderRegistry.ts`:
@@ -1015,6 +1042,51 @@ a doc/automation task in this repo.
   span evidence, and a PR only once V2 lands or the freeze is lifted. See
   [Working on the T3 source](#working-on-the-t3-source) for the checkout and
   PR mechanics.
+
+- **A repo's own `.claude/commands` are never listed in the `/` menu
+  (upstream, verified 2026-09-30 on desktop 0.0.42 against the `v0.0.42` tag
+  and `main @ d2c9281b81`)**: a command file kept in a project's
+  `.claude/commands` does not appear when `/` is typed in a thread of that
+  project. It still runs when typed in full, because the agent loads project
+  commands itself. Only commands in `~/.claude/commands` are listed, in every
+  thread of every project.
+
+  **Mechanism.** T3 is built to hold a command list per working directory:
+  each workspace snapshot carries its own `slashCommands`, and the client
+  prefers it over the machine list (`resolveProviderSlashCommandsForCwd`,
+  `packages/client-runtime/src/providerSkills.ts:121`). The Cursor and
+  Antigravity drivers fill it per directory. The Claude driver does not:
+  `snapshotForCwd` (`apps/server/src/provider/Drivers/ClaudeDriver.ts:261`)
+  returns `{...machineSnapshot, skills}`, where only `skills` is looked up
+  for the thread's directory (`discoverClaudeSkills`, `ClaudeSkills.ts`,
+  which reads `~/.claude/skills` and `<cwd>/.claude/skills`). The commands
+  are the machine list, and the machine list comes from one probe run in the
+  server's own working directory (`ServerConfig.cwd`, `ClaudeDriver.ts:119`
+  and `:187`): `/` for the desktop app, the home folder under systemd. The
+  probe does pass `settingSources: user, project, local`, so a project's
+  commands would be listed only if that project were the server's start
+  directory.
+
+  **What follows from it.** Project skills are found per thread and project
+  commands are not. That is why every slash command here is a flat file
+  link in `~/.claude/commands`
+  ([repo_deploy_configs.md](repo_deploy_configs.md)), and why every thread
+  lists every context's commands. Moving a command into its repo alone takes
+  it out of the menu everywhere. Measured 2026-09-30: 31 commands are
+  deployed this way by 34 manifest entries, and the T3 cache on the Mac
+  lists the 29 that machine has.
+
+  **Upstream state (checked 2026-09-30).**
+  [#13077](https://github.com/pingdotgg/t3code/pull/13077), "fix(server):
+  Claude picks up project slash commands", is open and is exactly this
+  change. It is not in `main @ d2c9281b81`. It touches the provider layers
+  that are frozen for the V2 rewrite (see the entry above), so it may wait
+  for V2.
+
+  **Workaround.** Keep linking commands into `~/.claude/commands` through
+  the overlay manifests. Revisit per-repo commands when #13077 or its V2
+  equivalent ships; the check is whether a file placed in a project's
+  `.claude/commands` shows in that project's menu and in no other.
 
 - **No verbose transcript view (upstream)**: T3 has no equivalent of Claude
   Code's verbose mode — tool calls render as truncated summaries with no

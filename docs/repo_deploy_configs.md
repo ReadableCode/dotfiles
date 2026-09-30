@@ -229,6 +229,11 @@ the context prefix in every filename is what keeps N contexts from colliding
 in one path. Two alternatives do not work: per-repo directory links (they
 empty that menu) and per-context subfolders under `~/.claude/commands`
 (Claude Code namespaces those, so `/acme_x` becomes `/acme:acme_x`).
+A command kept only in its own repo's `.claude/commands` still runs when typed
+in full, and is missing from the menu in every thread, that repo's included.
+This was re-checked on 2026-09-30; the mechanism and the open upstream change
+that would lift it are in
+[setup_t3_code.md](setup_t3_code.md#known-issues--recommended-fixes).
 
 Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is

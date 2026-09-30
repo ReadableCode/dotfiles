@@ -50,7 +50,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   time into one link per repo in that context's `<context>_repos.yaml` (the
   per-repo `.mcp.json`, `.env` and allow-list links). Slash commands stay
   user-level as flat per-file links in `~/.claude/commands`: T3 Code builds
-  its menu from that path alone and subfolders there namespace the names.
+  its menu from that path alone and subfolders there namespace the names
+  (`docs/setup_t3_code.md` has the mechanism and the upstream change that
+  would allow per-repo commands).
   A `method: system` entry is a root-owned copy outside the home
   (`/etc/nut/*.conf` on the UPS pis), placed through `sudo -n`, checked by
   content hash and owner/mode, with a `reload:` command run after a change;
