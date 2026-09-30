@@ -4,7 +4,9 @@
   "browserDefaultAppearance": "system",
   "browserDefaultProfileId": "default",
   "browserDefaultViewport": {
-    "_tag": "fill"
+    "_tag": "freeform",
+    "width": 1440,
+    "height": 900
   },
   "browserDefaultZoomFactor": 1,
   "browserLinkTarget": "system",
