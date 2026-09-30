@@ -2,7 +2,9 @@
 -- Mac equivalent of AutoHotkey
 
 -- Command-line access: enables the `hs` CLI (brew's hammerspoon ships it) so
--- config can be probed/driven from a shell: `hs -c "wl.applyAll()"`.
+-- config can be probed/driven from a shell: `hs -c "wl.applyAll()"`. From a
+-- script close stdin (`</dev/null`) or use `hs -s <<'EOF'`: with stdin a pipe
+-- the client runs -c and then reads the pipe for more code until it closes.
 require("hs.ipc")
 
 ----------Hotkey Reference----------
@@ -769,22 +771,114 @@ end
 -- press its "switch to desktop N" shortcut, and that shortcut is already the
 -- one wl.gotoIndex leans on. Grab the title bar, hold, switch, let go.
 --
--- Grab point: the title strip is not uniformly draggable. 30% across keeps
--- clear of the traffic lights and of whatever an app puts dead centre (VS
--- Code's command centre), but Slack's search box spans roughly 17%-80% of its
--- header and a press there focuses the box instead of lifting the window -
--- the drag ran, the desktop switched, Slack stayed put. So try a few spots in
--- turn, verifying the move after each: 30%, then just right of the traffic
--- lights, then just right of a centred search box. A failed attempt has
--- already switched desktops, so come home before the next one. The drag is a
--- few pixels so macOS reads it as a drag and not a click on whatever is under
--- the cursor.
+-- Grab point: the title strip is not uniformly draggable. A press on a control
+-- in it (Slack's search box, VS Code's command centre) focuses the control
+-- instead of lifting the window - the drag ran, the desktop switched, the
+-- window stayed put. Fixed fractions of the width stop being safe every time
+-- an app rearranges its header: Slack's search box was 17%-80% of the header
+-- when 30% was chosen and is 29%-68% now, with history buttons to its left
+-- and Slackbot/agent buttons to its right, so 30% pressed search on
+-- 2026-09-30 and the two fixed fallbacks did not move it either. So read the
+-- header through accessibility and grab the widest strip that has no control
+-- in it, with the old fixed spots kept as the fallback for an app whose
+-- header AX cannot see. Each attempt is verified, and a failed one has already
+-- switched desktops, so come home before the next. The drag is a few pixels
+-- so macOS reads it as a drag and not a click on whatever is under the cursor.
+--
+-- Before pressing, ask what is under the cursor. Two windows can share a
+-- rectangle here (a Slack stranded on desktop 1 sits exactly where Messages
+-- does, and the all-desktops Claude window overlaps its right third), and a
+-- press that lands on the wrong one would carry THAT window away - so a
+-- point covered by another app is skipped without pressing, and every press
+-- logs what it landed on, which is what tells the next failure apart.
+local CONTROL_ROLES = {
+    AXButton = true, AXPopUpButton = true, AXMenuButton = true, AXTextField = true,
+    AXSearchField = true, AXComboBox = true, AXCheckBox = true, AXRadioButton = true,
+    AXTabGroup = true, AXRadioGroup = true, AXSlider = true, AXLink = true, AXTextArea = true,
+}
+
+-- Controls in the top 44px of a window, as x ranges relative to the window's
+-- left edge. Walks only the branches that reach the strip, and gives up after
+-- a bounded number of nodes or seconds: Slack's whole header is ~50 nodes, and
+-- a Chromium app builds its AX tree lazily on the first query.
+local function headerControls(win)
+    local f = win:frame()
+    local ax = hs.axuielement.windowElement(win)
+    if not ax then return nil end
+    local t0 = hs.timer.secondsSinceEpoch()
+    local ranges, queue, n = {}, { { ax, 0 } }, 0
+    while #queue > 0 and n < 400 and hs.timer.secondsSinceEpoch() - t0 < 3 do
+        local item = table.remove(queue, 1)
+        local el, depth = item[1], item[2]
+        n = n + 1
+        local fr = el:attributeValue("AXFrame")
+        local reachesStrip = not fr or fr.y <= f.y + 44
+        if fr and depth > 0 and reachesStrip and fr.y + fr.h >= f.y + 4 and fr.h < 80
+            and CONTROL_ROLES[el:attributeValue("AXRole") or ""] then
+            ranges[#ranges + 1] = { fr.x - f.x, fr.x - f.x + fr.w }
+        end
+        if reachesStrip and depth < 14 then
+            for _, c in ipairs(el:attributeValue("AXChildren") or {}) do queue[#queue + 1] = { c, depth + 1 } end
+        end
+    end
+    return ranges
+end
+
+-- Where to grab: the centre of each control-free strip of the header, widest
+-- first, from just right of the traffic lights to just left of the window's
+-- edge. Strips narrower than 40px are not worth a press. Falls back to the
+-- fixed spots (30% across, just right of the traffic lights, 85% across) when
+-- the header cannot be read or has no gap.
+function wl.grabPoints(win)
+    local f = win:frame()
+    local points = {}
+    local controls = headerControls(win)
+    if controls and #controls > 0 then
+        table.sort(controls, function(a, b) return a[1] < b[1] end)
+        local gaps, cursor = {}, 80
+        for _, c in ipairs(controls) do
+            if c[1] - 12 - cursor >= 40 then gaps[#gaps + 1] = { cursor, c[1] - 12 } end
+            cursor = math.max(cursor, c[2] + 12)
+        end
+        if f.w - 30 - cursor >= 40 then gaps[#gaps + 1] = { cursor, f.w - 30 } end
+        table.sort(gaps, function(a, b) return (a[2] - a[1]) > (b[2] - b[1]) end)
+        for i = 1, math.min(2, #gaps) do
+            local g = gaps[i]
+            points[#points + 1] = { string.format("gap %d-%d", g[1], g[2]), math.floor((g[1] + g[2]) / 2) }
+        end
+    end
+    for _, p in ipairs({
+        { "30%",   math.min(f.w - 30, math.max(100, f.w * 0.3)) },
+        { "left",  math.min(f.w - 30, 120) },
+        { "right", math.max(100, f.w * 0.85) },
+    }) do points[#points + 1] = p end
+    return points
+end
+
+-- The app and element under a screen point, for the pre-press check and the
+-- log: "Slack AXToolbar", "Claude AXWindow", "Slack AXButton Search".
+local function underCursor(x, y)
+    local el = hs.axuielement.systemElementAtPosition(x, y)
+    if not el then return nil, "nothing" end
+    local app = hs.application.applicationForPID(el:pid() or 0)
+    local role = el:attributeValue("AXRole") or "?"
+    local label = el:attributeValue("AXDescription") or el:attributeValue("AXTitle") or ""
+    local text = (app and app:name() or "?") .. " " .. role
+    if label ~= "" then text = text .. " " .. tostring(label):sub(1, 30) end
+    return app, text, CONTROL_ROLES[role] or false
+end
+
 local function dragOnce(win, n, ids, x, y)
     local ev = hs.eventtap.event
     local at = function(dx, dy) return hs.geometry.point(x + (dx or 0), y + (dy or 0)) end
 
     win:focus()
+    win:raise()
     hs.timer.usleep(250000)
+    local app, what, isControl = underCursor(x, y)
+    if app and app:pid() ~= win:application():pid() then
+        return false, what .. " (skipped, not this window)"
+    end
     ev.newMouseEvent(ev.types.leftMouseDown, at()):post()
     hs.timer.usleep(150000)
     ev.newMouseEvent(ev.types.leftMouseDragged, at(10, 4)):post()
@@ -800,29 +894,40 @@ local function dragOnce(win, n, ids, x, y)
     for _ = 1, 8 do
         hs.timer.usleep(250000)
         local after = hs.spaces.windowSpaces(win) or {}
-        if after[1] == ids[n] then return true end
+        if after[1] == ids[n] then return true, what end
     end
-    return false
+    return false, what, isControl
 end
 
+-- Up to four attempts: the two widest header gaps, then the fixed spots. A
+-- press that landed on a control has usually opened something (Slack's search
+-- overlay), which the next press would land on instead of the header, so that
+-- is dismissed with Escape once the window is focused again. A skipped
+-- attempt never switched desktops, so it does not come home first.
 function wl.dragToDesktop(win, n)
     local home, ids = wl.spaceIndex()
     if not (win and home and ids[n]) then return false end
     local f = win:frame()
-    local grabs = {
-        { "30%",     math.min(f.w - 30, math.max(100, f.w * 0.3)) },
-        { "left",    math.min(f.w - 30, 120) },
-        { "right",   math.max(100, f.w * 0.85) },
-    }
-    for i, g in ipairs(grabs) do
-        if i > 1 then
+    local away, dismiss, tried = false, false, 0
+    for _, g in ipairs(wl.grabPoints(win)) do
+        if tried >= 4 then break end
+        tried = tried + 1
+        if away then
             wl.gotoIndex(home, ids[home])
             hs.timer.usleep(800000)
         end
-        local ok = dragOnce(win, n, ids, f.x + g[2], f.y + 10)
-        wl.log("drag %s -> desktop %d at %s: %s (%s)", win:application():name(), n, g[1],
-            ok and "ok" or "no move", (win:title() or ""):sub(1, 40))
+        if dismiss then
+            win:focus()
+            hs.timer.usleep(200000)
+            hs.eventtap.keyStroke({}, "escape", 0)
+            hs.timer.usleep(200000)
+        end
+        local ok, what, isControl = dragOnce(win, n, ids, f.x + g[2], f.y + 10)
+        wl.log("drag %s -> desktop %d at %s (x+%d, on %s): %s (%s)", win:application():name(), n, g[1],
+            math.floor(g[2]), what or "?", ok and "ok" or "no move", (win:title() or ""):sub(1, 40))
         if ok then return true end
+        away = what == nil or not what:find("skipped", 1, true)
+        dismiss = isControl or false
     end
     return false
 end

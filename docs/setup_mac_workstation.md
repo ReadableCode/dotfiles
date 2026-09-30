@@ -613,9 +613,30 @@ read APIs work. AX cannot see windows on inactive spaces, so each desktop must
 be visible when its layout is applied; that is why init.lua walks desktops
 with ctrl+N. Hammerspoon has `hs.ipc` on and a `wl` global, so the running
 instance can be driven from a shell (`hs -c "wl.applyAll()"`); reload with
-`killall Hammerspoon && open -g -a Hammerspoon`. Stream Deck's Website action
+`killall Hammerspoon && open -g -a Hammerspoon`. From a script or an agent
+close stdin (`hs -c "..." </dev/null`) or feed the code on stdin
+(`hs -s <<'EOF'`): when stdin is a pipe the client runs the `-c` command and
+then keeps reading the pipe for more code until it closes, so an inherited
+pipe that never closes looks like a hang while the command has already run
+(verified 2026-09-30). Stream Deck's Website action
 drops custom URL schemes; its "GET request in background" mode is what reaches
 the loopback trigger server.
+
+### Moving a window to another desktop
+
+`hs.spaces.moveWindowToSpace` returns true and does nothing on this macOS, so
+init.lua drags the window by its header while pressing ctrl+N. The grab point
+is read from the window's accessibility tree each time: the widest strip of the
+top 44px with no control in it, because a press on a control (Slack's search
+box) focuses the control and the window stays put, and apps move their
+controls between releases (Slack's search box went from 17-80% of the header
+to 29-68% and the fixed 30% grab stopped working, 2026-09-30). Before pressing
+it checks what is under the cursor and skips a point that belongs to another
+window, since a stranded window can share its rectangle with the one that
+belongs there. The console line per attempt names the point and what it
+landed on, e.g. `drag Slack -> desktop 2 at gap 739-919 (x+829, on Slack
+AXToolbar History Navigation): ok`; `wl.grabPoints(win)` prints the candidates
+without dragging.
 
 ## Chrome web apps: one shim per site
 
@@ -626,6 +647,15 @@ app, "Create shortcuts...", then fully quit the app and relaunch it from the
 Dock (the shim rebuilds its profile menu at launch). "Open in <app>" alone
 does not register the profile. The in-page Google avatar only lists that
 profile's accounts. Diagnostics: chrome://web-app-internals.
+
+A Dock icon that turns into a question mark means the shim under
+`~/Applications/Chrome Apps.localized/` is gone. Uninstalling a web app on any
+device signed in to the profile propagates through Chrome Sync and deletes the
+shim here; a reinstall on that device arrives as a sync install, which Chrome
+marks as not installed on this Mac and gives no shim (Messenger, 2026-09-29,
+after a reinstall on another device). Fix: chrome://apps in that profile,
+right-click the app, Install; the shim returns at the same path. Nothing in
+the app lists or `app_removals.yaml` removes shims.
 
 ## Enable SSH Server
 
