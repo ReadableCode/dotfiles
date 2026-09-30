@@ -26,7 +26,7 @@
   "environmentIdentificationMode": "artwork",
   "favorites": [
     {
-      "model": "claude-fable-5-1",
+      "model": "eu.anthropic.claude-opus-5",
       "provider": "claudeAgent"
     },
     {
@@ -34,7 +34,11 @@
       "provider": "claudeAgent"
     },
     {
-      "model": "eu.anthropic.claude-opus-5-5",
+      "model": "claude-fable-5-1",
+      "provider": "claudeAgent"
+    },
+    {
+      "model": "claude-sonnet-5-5",
       "provider": "claudeAgent"
     }
   ],
