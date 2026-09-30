@@ -57,7 +57,7 @@ untouched.
 
 ## not doing yet
 
-Nothing needs it yet: the synced client accounts live in Mail.app on the
+Nothing needs it yet: every account it reads is synced into Mail.app on the
 personal Macs. Decide first which mail and calendar client each non-Mac
 machine really runs, and whether any of them hold accounts the Google server
 cannot reach.

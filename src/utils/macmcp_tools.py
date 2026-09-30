@@ -610,9 +610,11 @@ def mail_get_message(accounts, message_id, body_limit=20000, mail_root=None):
         for part in message.iter_attachments()
         if part.get_filename()
     ]
-    attachments += stored_attachments(files[0], row["id"], attachments)
+    attachments = stored_attachments(files[0], row["id"], attachments)
+    # A folded header keeps the whitespace it was folded on ("\t<id@host>").
+    message_id_header = message.get("Message-ID")
     result.update(
-        message_id_header=message.get("Message-ID"),
+        message_id_header=message_id_header.strip() if message_id_header else message_id_header,
         reply_to=message.get("Reply-To"),
         body=body[:body_limit],
         body_truncated=len(body) > body_limit,
@@ -622,16 +624,25 @@ def mail_get_message(accounts, message_id, body_limit=20000, mail_root=None):
     return result
 
 
-def stored_attachments(emlx_path, message_id, already):
-    """A .partial.emlx leaves its attachments under Attachments/<id>/<part>/<name> next door."""
+def stored_attachments(emlx_path, message_id, listed):
+    """
+    A .partial.emlx leaves its attachments under Attachments/<id>/<part>/<name> next door, and still names
+    them among its own parts. A listed part Mail stored gains its size and local path; a stored file the
+    message does not list is added.
+    """
     root = os.path.join(os.path.dirname(os.path.dirname(emlx_path)), "Attachments", str(message_id))
-    known = {item["filename"] for item in already}
-    found = []
+    attachments = [dict(item) for item in listed]
+    by_name = {item["filename"]: item for item in attachments}
     for path in sorted(glob.glob(os.path.join(glob.escape(root), "*", "*"))):
         name = os.path.basename(path)
-        if os.path.isfile(path) and name not in known:
-            found.append({"filename": name, "size": os.path.getsize(path), "local_path": path})
-    return found
+        if not os.path.isfile(path):
+            continue
+        stored = {"size": os.path.getsize(path), "local_path": path}
+        if name not in by_name:
+            attachments.append({"filename": name, **stored})
+        elif "local_path" not in by_name[name]:
+            by_name[name].update(stored)
+    return attachments
 
 
 # %%

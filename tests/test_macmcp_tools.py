@@ -1,6 +1,7 @@
 # %%
 # Imports #
 
+import os
 import sqlite3
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -248,6 +249,40 @@ def test_mail_get_message_falls_back_to_the_preview_without_a_file(accounts_db, 
 def test_mail_get_message_refuses_another_contexts_message(accounts_db, mail_root):
     with pytest.raises(ValueError, match="no message 1004"):
         mtools.mail_get_message(scope(accounts_db, "acme"), 1004, mail_root=mail_root)
+
+
+def test_mail_get_message_gives_a_listed_attachment_its_stored_path(accounts_db, mail_root):
+    """A .partial.emlx still names its attachment part; the file Mail stored beside it is that part."""
+    raw = (
+        b"From: Vendor Billing <billing@vendor.test>\r\nSubject: Quarterly invoice\r\n"
+        b"Message-ID:\r\n\t<inv-2@vendor.test>\r\nMIME-Version: 1.0\r\n"
+        b'Content-Type: multipart/mixed; boundary="b"\r\n\r\n'
+        b"--b\r\nContent-Type: text/plain\r\n\r\nInvoice attached\r\n"
+        b'--b\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename="invoice.pdf"\r\n'
+        b"X-Apple-Content-Length: 4\r\n\r\n\r\n--b--\r\n"
+    )
+    data = mail_root + f"/V10/{ACME_IMAP_ID}/[Gmail].mbox/All Mail.mbox/STORE/Data/1"
+    with open(f"{data}/Messages/1001.partial.emlx", "wb") as handle:
+        handle.write(str(len(raw)).encode() + b"\n" + raw + b"<?xml plist?>")
+    os.remove(f"{data}/Messages/1001.emlx")
+    stored = os.path.join(data, "Attachments", "1001", "2", "invoice.pdf")
+    os.makedirs(os.path.dirname(stored))
+    with open(stored, "wb") as handle:
+        handle.write(b"%PDF")
+    os.makedirs(os.path.join(data, "Attachments", "1001", "3"))
+    with open(os.path.join(data, "Attachments", "1001", "3", "unlisted.txt"), "wb") as handle:
+        handle.write(b"x")
+
+    message = mtools.mail_get_message(scope(accounts_db, "acme"), 1001, mail_root=mail_root)
+    assert message["message_id_header"] == "<inv-2@vendor.test>"
+    assert message["attachments"] == [
+        {"filename": "invoice.pdf", "content_type": "application/pdf", "size": 4, "local_path": stored},
+        {
+            "filename": "unlisted.txt",
+            "size": 1,
+            "local_path": os.path.join(data, "Attachments", "1001", "3", "unlisted.txt"),
+        },
+    ]
 
 
 def test_emlx_path_spreads_thousands_digits_reversed(tmp_path):

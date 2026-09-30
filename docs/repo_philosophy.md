@@ -3,15 +3,20 @@
 What belongs in dotfiles, what belongs in sibling repos, and why. Use this
 when deciding where a new script, doc, or config should live.
 
-## dotfiles: everything a new machine at a new job needs
+## dotfiles: configuration for every machine, and the code that runs it
 
-This repo gets cloned onto **every** machine — personal, homelab, and work.
-It is a portable knowledge base and toolkit: it reminds or codifies things I
-know how to do, and carries the tooling that must exist wherever the repo is
-cloned.
+This repo is public and gets cloned onto **every** machine — personal,
+homelab, and work. It holds the configuration any of those machines can use,
+and the code that distributes and monitors that configuration.
 
-The litmus test: **"If I sat down at a brand-new machine for a new job
-tomorrow, would I want this immediately?"** If yes, it lives here.
+The test is **where the code can run**:
+
+- It belongs here when it is configuration, or the code that deploys and
+  checks configuration, or a tool a work machine can run
+  (`ticket_pr.py` runs on any machine).
+- It belongs in `personal_dev` when it only ever runs on my own machines.
+- It belongs in `readable_utils` when it is library code a Python project
+  imports so it does not redefine a basic task (talking to a Google API).
 
 That covers:
 
@@ -41,48 +46,48 @@ separate repos, and committed Go binaries are the accepted cost of that.
 
 ## Context overlays: sibling `*_credentials` repos
 
-Each context a machine belongs to — personal, or a client/company — has its
+Each context a machine belongs to — personal, or a work context — has its
 own private `*_credentials` repo cloned as a sibling of dotfiles (see
 `docs/repo_client_credentials.md`). It supplies the secrets, host
 inventories, manifests, and company-tagged config variants for that context.
 
 The rule: **everything I need for a job comes from dotfiles plus that
 context's own repo layers.** Dotfiles stays context-free — nothing
-client-specific is committed here, ever; company-tagged config variants live
-in the client's `*_credentials` repo.
+context-specific is committed here, ever; company-tagged config variants live
+in that context's `*_credentials` repo.
 
-Contexts also never reference each other. A client's name, repo, ticket key
-or hostname never appears in another client's repos, docs, configs or
-commands, not even as an example, and nothing a client's overlay deploys into
+Contexts also never reference each other. A context's names, repos, ticket
+keys and hostnames never appear in another context's repos, docs, configs or
+commands, not even as an example, and nothing a context's overlay deploys into
 a checkout may carry another context's identifiers. The personal context is
-the one place that knows every context by name, and its files deploy only to
+the one place allowed to name other contexts, and its files deploy only to
 personal machines. The rule itself lives in the user-level working rules this
 repo deploys (`application_configs/claude/rules/working_rules.md`), so it
-reaches every session without any client repo carrying it.
+reaches every session without any work context's repo carrying it.
 It is enforced, not just stated: `src/context_leak_check.py` and the
 pre-commit hook built on it (`docs/repo_client_credentials.md`, "Context leak
 check") refuse a commit that stages another context's identifiers.
 
-## Client dev repos: anything agent-shaped
+## Work context dev repos: anything agent-shaped
 
-A client's credentials repo is cloned on the client's own hardware, so it
-carries **no path that names Claude and no bot-guiding markdown**. Each client
-context therefore has a second private repo, `<client>_dev`, that holds the
+A work context's credentials repo is cloned on that context's own hardware, so
+it carries **no path that names Claude and no bot-guiding markdown**. Each work
+context therefore has a second private repo, `<context>_dev`, that holds the
 agent tooling and declares its own overlay manifest (the opt-in form, see
-`docs/repo_client_credentials.md`). Both clients share the shape:
+`docs/repo_client_credentials.md`). Every context has the same shape:
 
 | Category | Home |
 |---|---|
 | Secrets: `.env`, tokens, keys, certs, OAuth tokens, gmail filters | `<context>_credentials` |
 | Context declarations: `<context>_hosts.json`, `_repos.yaml`, `_mcp_servers.yaml`, `_statusboard.yaml`, `_calendarboard.yaml`, `_googlemail.yaml`, `_googledrive.yaml` | `<context>_credentials` |
-| Client app payloads: `configuration.json`, workspaces, shell / PowerShell / ssh fragments, editor settings, git hooks that name no agent | `<context>_credentials` |
+| App payloads: `configuration.json`, workspaces, shell / PowerShell / ssh fragments, editor settings, git hooks that name no agent | `<context>_credentials` |
 | Working notes that become a repo's `CLAUDE.md` | `<context>_credentials` under a **neutral filename**; the dev overlay supplies the destination name |
-| Agent tooling: slash commands, skills, project allow lists, user-level Claude settings and `CLAUDE.md`, T3 Code settings, the per-repo `.mcp.json` manifest entry | `<context>_dev` (`personal_dev`; each client has its own) |
+| Agent tooling: slash commands, skills, project allow lists, user-level Claude settings and `CLAUDE.md`, T3 Code settings, the per-repo `.mcp.json` manifest entry | `<context>_dev` (`personal_dev` for the personal context) |
 | App-owned commands (a personal app's `.claude/commands/`) | the app repo; the context overlay links them |
 | Agent notes for a personal repo that does not advertise agent use | `personal_dev/claude/repo_notes/<repo>.md`, deployed as a gitignored `CLAUDE.md` link |
 | Context-free payloads (`init_worktree`, user `settings.json`, statusline, themes) and the generated `data/mcp/*.mcp.json` | `dotfiles` |
-| Scheduled jobs | the dev repo's `ops/` when they run on a client machine; `personal_dev/src/` for the homelab |
-| Executable code with only that context's consumers | `<context>_dev/src/` (`personal_dev/src/`; each client has its own `scripts/`) |
+| Scheduled jobs | the dev repo's `ops/` when they run on a work machine; `personal_dev/src/` for the homelab |
+| Executable code with only that context's consumers | `<context>_dev/src/` (`personal_dev/src/`; a work context's dev repo uses its own `scripts/`) |
 
 Claude's auto-memory directories are **not** synced: they are machine-local by
 design, written by the agent without review, and accumulate rules and facts
@@ -92,13 +97,13 @@ here for the context-free ones, each context's `CLAUDE.<context>.md` in its
 dev repo for the rest) and durable facts in the doc that owns the topic.
 
 The MCP server *declaration* stays in the credentials repo on purpose: it
-holds a URL and env var names, the env file it points at lives there, and the
-two clients are meant to work identically.
+holds a URL and env var names, the env file it points at lives there, and
+every context is meant to work the same way.
 
-The two dev repos are listed in different `*_repos.yaml` files because their
-clone sets differ - one must be on its client's laptop for that machine's
-crontab, the other must never touch client hardware - but their role is the
-same.
+A dev repo is listed in whichever `*_repos.yaml` has the clone set it needs:
+one that must run on a work machine (for that machine's crontab) is listed in
+its own context's file, and one that must never touch work hardware is listed
+in the personal one. Its role is the same either way.
 
 **The personal context has the same split** (`personal_dev`): the
 secrets repo stays a secrets repo, and the agent tooling lives in a
@@ -108,18 +113,17 @@ credentials repo never can. It is cloned wherever the credentials repo is.
 ## Where executable code lives
 
 The dev-repo table above says skills live in `<context>_dev`, which leaves open
-where a skill's own Python goes. The test is **the consumer list**, nothing else:
+where a skill's own Python goes. The test is **which machines run it**:
 
-- **Plural or remote consumers — `dotfiles/src/`.** `ticket_pr.py` serves all
-  three contexts; `host_facts.py` runs over ssh on machines that never clone a
-  dev repo. The command that calls one is a thin wrapper in the dev repo, not
-  the owner: `personal_host_facts`, `personal_chrome_bookmarks`,
-  `personal_pr_review` and each client's PR commands are all prose over
+- **Runs on work machines too — `dotfiles/src/`.**
+  `ticket_pr.py` runs on any machine; `host_facts.py`
+  runs over ssh on machines that never clone a dev repo. The command that calls
+  one is a thin wrapper in the dev repo, not the owner: `personal_host_facts`,
+  `personal_chrome_bookmarks` and `personal_pr_review` are all prose over
   `python3 ~/GitHub/dotfiles/src/<tool>.py`.
-- **Only one context's consumers — that context's dev repo.** `personal_dev/src/`
-  for personal-only code, each client's own `scripts/` for theirs. This bucket
-  exists because a tool with a single personal consumer used to have nowhere
-  else to go and defaulted into `dotfiles/src/` by omission.
+- **Runs only on my own machines — `personal_dev/src/`.**
+- **One work context's own tooling — that context's dev repo**, under its own
+  `scripts/` or `tools/`.
 - **A skill's private implementation — inside the skill.**
   `sort-scanned-documents` carries its scripts under its own `scripts/`, and
   every caller is that skill's `SKILL.md`, `references/method.md` or a
@@ -127,16 +131,11 @@ where a skill's own Python goes. The test is **the consumer list**, nothing else
   Moving them to `dotfiles/src/` would split one skill's code across two repos
   and manufacture a coupling it does not have.
 
-"Would I want this at a new job tomorrow?" decides whether **dotfiles** is
-cloned somewhere. It never decides whether a given file is shared — the
-consumer list does.
-
 Two bounds sit on top of that test, because dotfiles is public and lands on
-every client machine: nothing that cannot be public, and nothing that cannot
-be exposed to every client. Within those bounds a tool does not need every
-context to want it. A general capability two or more contexts could use
-belongs here even when a third ignores it — a calendar integration that two
-contexts rely on and a third never touches still belongs here, because
+work machines: nothing that cannot be public, and nothing that cannot be
+exposed to anyone whose machine clones it. Within those bounds a tool does not need every
+context to want it. A general capability belongs here even when some context
+ignores it, because
 interfacing with a browser or a calendar is an ordinary thing for a person to
 want on any machine.
 
@@ -158,7 +157,7 @@ known folder carries none of that risk.
 ## personal_dev: the personal context's code, jobs and tooling
 
 `personal_dev` is the personal context's repo in the same shape every
-`<client>_dev` already has: `claude/` for agent tooling, its own
+`<context>_dev` already has: `claude/` for agent tooling, its own
 manifest and removals, a `pyproject.toml`, and `src/` for code whose only
 consumers are personal. Homelab jobs — the cron- and container-lifecycle work
 like the Bitwarden vault backup, the postgres and docker-app backups, log
@@ -168,12 +167,12 @@ This supersedes the retired `personal-automation` repo (split out of dotfiles
 2026-07, folded into `personal_dev` 2026-09). Splitting personal code by
 *where it runs* put a second code repo beside a config-only `personal_dev`
 and left the personal context as the only one whose `*_dev` repo carried no
-code; the client repos never made that split, and neither should this one. A
+code; the work context dev repos never made that split, and neither should this one. A
 job that happens to run on the homelab is still personal-context code.
 
-The distinction from dotfiles tooling is unchanged and is about consumers,
-not schedules: dotfiles carries what more than one context could reach for,
-`personal_dev` carries what only the personal context will ever call.
+The distinction from dotfiles tooling is about machines, not schedules:
+dotfiles carries what a work machine could run, `personal_dev` carries what
+only runs on mine.
 
 ## Apps: their own repos
 
@@ -233,17 +232,17 @@ and deploy script that names it, for no functional gain.
 a new one must be created private before it is first pushed.
 
 This is not a preference. `src/context_leak_check.py` grants the personal
-repos a blanket exemption from the client-identifier rules, and it matches
+repos a blanket exemption from the context-identifier rules, and it matches
 them on the **name prefix**, not on visibility:
 
     if name == PERSONAL_CONTEXT or name.startswith(PERSONAL_CONTEXT + "_"):
         return {}
 
 So a public repo named `personal_anything` would be silently exempt from every
-check that keeps client names, repo slugs, ticket prefixes and hostnames out
+check that keeps context names, repo slugs, ticket prefixes and hostnames out
 of public view - and these repos genuinely carry all of those. They have to:
 `personal_credentials` deploys every context and its generated deploy map
-enumerates every client repo on one page, which is the whole point of the
+enumerates every repo it deploys on one page, which is the whole point of the
 exemption.
 
 The prefix is therefore load-bearing. Two ways to stay safe, and both matter:
@@ -254,18 +253,17 @@ ordinary repo before the visibility changes.
 
 ## Shared `src/utils/`
 
-Several personal repos need the same wrappers (Google Sheets via pygsheets,
+Python projects need the same basic wrappers (Google Sheets via pygsheets,
 display/formatting helpers, config loading, etc.). The **canonical versions
 live in the public `readable_utils` package repo**
-(github.com/ReadableCode/readable_utils), which personal repos consume as a
-uv git dependency pinned to a tag
+(github.com/ReadableCode/readable_utils), a library so projects do not
+redefine basic tasks. It is not agent tooling. Any repo may consume it as a uv
+git dependency pinned to a tag
 (`readable-utils @ git+https://... , tag = "vX.Y.Z"`), installing only the
-extras they need (`[google]`, `[postgres]`, `[s3]`, `[ntfy]`).
+extras it needs (`[google]`, `[postgres]`, `[s3]`, `[ntfy]`), work repos
+included: the package is public.
 
 This repo consumes it the same way — `uv run` fetches it on first sync like
 any other dependency, so no copies live here. `src/utils/` holds only
 dotfiles-specific modules (`inventory_tools`, `secret_tools`,
 `calendarboard_tools`), not shared helpers.
-
-The one exception: **work-context repos** never depend on personal remotes;
-they vendor whatever they need.

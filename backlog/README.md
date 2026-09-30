@@ -20,3 +20,8 @@ system on the day they were written, and infrastructure moves on its own.
 | [google_mcp hides the reason for anticipated errors](google-mcp-hides-error-reasons.md) | 2026-09-26 | open |
 | [mac_mcp has no Windows or Linux equivalent](mac-mcp-windows-linux.md) | 2026-09-26 | open |
 | [the drive pulled from behemoth's disk5 may be good, and is untested](behemoth-old-disk5-untested.md) | 2026-09-28 | open |
+| [mac_mcp: a macOS-only server lives in the repo every machine clones](mac-mcp-belongs-in-personal-dev.md) | 2026-09-30 | open |
+| [chrome_bookmarks: a personal-only tool and its alias ship to every machine](chrome-bookmarks-is-personal-only.md) | 2026-09-30 | open |
+| [gmail_filters: written for any context, used by one](gmail-filters-is-personal-only.md) | 2026-09-30 | open |
+| [ssh_devices: dead script, described wrongly in CLAUDE.md](ssh-devices-has-no-callers.md) | 2026-09-30 | open |
+| [go_apps: syncthing_artifact_cleanup has no callers and hard-codes personal folders](syncthing-artifact-cleanup-unused.md) | 2026-09-30 | open |
