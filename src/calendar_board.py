@@ -120,7 +120,7 @@ def day_renderable(day_events, tz=None):
 #
 # The Google-Calendar-style day view: a shared vertical time axis on the
 # left, one column per source, events drawn as colored blocks positioned and
-# sized by time - so a cross-client double booking is visible as two blocks
+# sized by time - so a double booking across calendars is visible as two blocks
 # sitting at the same height, before the ‼ flag even registers. Overlapping
 # events WITHIN a source split into side-by-side lanes, like the web UIs do.
 

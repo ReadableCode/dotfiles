@@ -138,7 +138,7 @@ config drifts silently, and the symlink method never falls back to one.
 
 Private configs never live in this public repo — they live in sibling
 credentials repos (see
-[repo_client_credentials.md](./client_credentials_repos.md)). On every run,
+[repo_context_credentials.md](./repo_context_credentials.md)). On every run,
 `deploy_configs.py` loads `deploy_manifest.yaml` first and then discovers one
 optional overlay per sibling **overlay repo** (sorted for determinism):
 `<context>_manifest.yaml`. Overlay entries use the exact same schema; the only

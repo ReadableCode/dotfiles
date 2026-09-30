@@ -125,8 +125,9 @@ outage this server exists to replace.
 
 **Do not use `claude mcp add -s user`.** That writes an unnamed key into
 `~/.claude.json` — a file no repo owns, that cannot be redeployed idempotently
-or reverted, and never appears in the deployment map. On a machine with several
-clients' credentials repos it is also precisely where they would collide.
+or reverted, and never appears in the deployment map. On a machine that clones
+more than one context's credentials repo it is also precisely where they would
+collide.
 
 One wrinkle versus user scope: a project-scoped server needs a **one-time
 in-session approval** the first time you use it from a given directory ("New MCP

@@ -21,17 +21,17 @@ sibling ``<context>_credentials`` repo, so this public file names no client:
 
 Rules, by the repo being scanned. The line is VISIBILITY, not convenience:
 
-- ``dotfiles`` - **public**, and cloned on every client machine: every
-  client's identifiers are forbidden. No client name, repo slug, ticket
+- ``dotfiles`` - **public**, and cloned on work machines: every work
+  context's identifiers are forbidden. No context name, repo slug, ticket
   prefix or hostname, in any file, including a scratch note or a backlog
   entry. Use the ``acme`` placeholder. This is the bound that matters and
   nothing below may weaken it.
-- a client context's credentials or dev repo - private: the OTHER clients'
+- a work context's credentials or dev repo - private: every OTHER context's
   identifiers are forbidden.
 - the personal context's own repos - ``personal_credentials`` (LAN-hosted)
   and ``personal_dev`` (GitHub-private): anything goes. They are private
   places that have to know every context by name; ``personal_credentials``
-  deploys them all and its generated deploy map enumerates every client repo
+  deploys them all and its generated deploy map enumerates every repo
   on purpose. The exemption is safe only because both are private, and it is
   matched on the ``personal_`` name prefix - so a repo that is public must
   never be named ``personal_*``.
@@ -397,7 +397,7 @@ def main(argv=None):
                 print(f"  {ident}")
         return 0
     if not contexts:
-        print("context-leak: no client credentials repos cloned here; nothing to check")
+        print("context-leak: no work context credentials repos cloned here; nothing to check")
         return 0
     failed = False
     if args.repo:

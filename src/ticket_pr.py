@@ -32,7 +32,7 @@ Env keys used (values win in the order: real environment, then --env-file files)
             JIRA_PROJECT (optional default for --project)
     GitHub: GITHUB_TOKEN_ENV naming the var that holds the PAT (e.g.
             GITHUB_TOKEN_ENV=GH_PAT_ACME - the per-account convention the
-            credentials repos use, so each client env file pins its own
+            credentials repos use, so each context's env file pins its own
             account and two accounts can never be confused), or a direct
             GITHUB_TOKEN / GH_TOKEN. No gh CLI fallback: gh has ONE active
             account, so falling back from a client repo could silently act
@@ -547,7 +547,7 @@ def bitbucket_token():
     """
     The API token for THIS repo's Bitbucket workspace. Same indirection
     convention as GitHub: BITBUCKET_TOKEN_ENV (set in the calling repo's env
-    file) names the variable holding the token so each client env file pins
+    file) names the variable holding the token so each context's env file pins
     its own account; BITBUCKET_TOKEN still works directly.
     """
     indirect = os.environ.get("BITBUCKET_TOKEN_ENV", "")

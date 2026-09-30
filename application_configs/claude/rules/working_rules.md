@@ -86,8 +86,8 @@ context's own user-level CLAUDE.md.
   directly.
 - Nothing client-specific in a public repo: no client names, repo slugs,
   ticket prefixes or hostnames. Use the `acme` placeholder.
-- Contexts never reference each other: a client's name, repo, ticket key or
-  hostname never appears in another client's repos, docs, configs, commands
+- Contexts never reference each other: a context's name, repo, ticket key or
+  hostname never appears in another context's repos, docs, configs, commands
   or deployed files, and never in an example. Describe a mirrored pattern
   generically. Before finishing, grep every edited file for every other
   context's identifiers.

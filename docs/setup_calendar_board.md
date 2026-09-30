@@ -12,7 +12,7 @@ The default view is a Google-Calendar-style **time grid**: a shared vertical
 time axis, one column per account, events drawn as blocks positioned and
 sized by their times, **every block in its calendar's configured color**
 (attendance lives in the badge; a double-booked block keeps its color and
-flags itself with `‼` and bold red text) — a cross-client double booking is
+flags itself with `‼` and bold red text) — a double booking across calendars is
 two blocks at the same height before the flag even registers. Overlapping events
 within one account split into side-by-side sub-lanes, all-day events sit in
 a banner row above the axis, and a red rule marks the current time on

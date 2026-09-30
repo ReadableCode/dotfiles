@@ -189,5 +189,5 @@ Both are correct.
 - **Host inventories should still store reserved IPs, not names.** An IP
   resolves identically from every machine regardless of what that machine's
   resolver, search domains or mDNS stack are doing. See
-  [repo_client_credentials.md](./client_credentials_repos.md) for the
+  [repo_context_credentials.md](./repo_context_credentials.md) for the
   inventory schema.

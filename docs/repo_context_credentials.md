@@ -1,11 +1,17 @@
-# Client Credentials Repos (`*_credentials`)
+# Context Credentials Repos (`*_credentials`)
 
-The public dotfiles repo holds **all the logic** and none of the secrets. Every
-private context — personal machines, and each client/employer — gets its own
-private repo named `<context>_credentials`, cloned **next to** the dotfiles
-checkout (e.g. `~/GitHub/personal_credentials`, `~/GitHub/acme_credentials`).
-Each one acts as that context's private dotfiles repo. Nothing client-private
-(names, hostnames, configs, keys) ever lives in the public repo — every tool
+A **context** is one scope of work with its own accounts, machines and
+repos: the personal context, or a work context (an employer or an
+engagement). Every context is set up the same way, and every rule here is
+written about one context at a time: its own repos, and what it may not
+carry from any other.
+
+The public dotfiles repo holds **all the logic** and none of the secrets. Each
+context gets its own private repo named `<context>_credentials`, cloned
+**next to** the dotfiles checkout (e.g. `~/GitHub/personal_credentials`,
+`~/GitHub/acme_credentials`). Each one acts as that context's private dotfiles
+repo. Nothing context-private (names, hostnames, configs, keys) ever lives in
+the public repo — every tool
 here discovers the private repos generically by globbing `../*_credentials`.
 
 ## What a credentials repo contains
@@ -36,9 +42,9 @@ entries by its own presence. Secret payloads still stay in the credentials
 repo; the narrower overlay just points `repo:` back across at them with a
 matching `requires:`.
 
-This is the **standard shape for every client context**, not an exception:
+This is the **standard shape for every work context**, not an exception:
 the credentials repo carries no path that names Claude
-and no bot-guiding markdown, and each client's `<client>_dev` repo holds the
+and no bot-guiding markdown, and its `<context>_dev` repo holds the
 slash commands, project allow lists, user-level Claude and T3 settings, and the per-repo `.mcp.json` entry, whether or not that client
 allows agents on its machines. Working notes that become a repo's `CLAUDE.md`
 live in the credentials repo under a neutral filename
@@ -64,7 +70,7 @@ See `docs/repo_philosophy.md` for the full category table.
   for exactly that reason. The case it exists for: `elitedesk` holds the git
   **origin** for several credentials repos under `~/GitHub`, which looks like a
   working checkout to `clone_repos.py`, so without it that box gets offered
-  every client repo the context declares.
+  every repo the context declares.
 - **Shell ssh aliases** — the shell startup files build ssh aliases from every
   `*_credentials` inventory they find, so cloning a client's credentials repo
   onto a machine is all it takes to get that client's hosts.
@@ -189,9 +195,9 @@ reachable; nothing else degrades.
 
 ## Context leak check
 
-Two contexts must never reference each other, and no client may be named in
-any repo outside its own two. `src/context_leak_check.py` enforces it without
-this public repo naming anyone: each client's identifiers are derived from
+Two contexts must never reference each other, and no work context may be
+named in any repo outside its own two. `src/context_leak_check.py` enforces it
+without this public repo naming anyone: each context's identifiers are derived from
 its own credentials repo (the context token and its spellings, every repo and
 org in `<context>_repos.yaml`, every host name and address in
 `<context>_hosts.json`, `JIRA_PROJECT=` ticket prefixes from its env files,
@@ -201,10 +207,10 @@ the dev repo whose manifest targets it, and an optional
 - the personal context's own repos (`personal_credentials`, LAN-hosted, and
   `personal_dev`, GitHub-private) may name anything — the exemption is
   theirs because they are private, not because they are personal;
-- a client's credentials or dev repo may not contain the other clients'
-  identifiers;
-- every other repo, this one included, may not contain any client's. dotfiles
-  is public, so this is absolute: no client name, repo slug, ticket prefix or
+- a work context's credentials or dev repo may not contain any other
+  context's identifiers;
+- every other repo, this one included, may not contain any work context's.
+  dotfiles is public, so this is absolute: no context name, repo slug, ticket prefix or
   hostname anywhere in it, scratch notes and backlog entries included.
 
 Run `uv run python src/context_leak_check.py` for the default sweep (dotfiles
@@ -212,7 +218,7 @@ plus every credentials and dev repo), `--all` to also report on every other
 sibling, `--list` to see what it derived. The same script is the
 **pre-commit hook** `application_configs/git/hooks/pre-commit.context-leak`,
 deployed by the overlays into dotfiles and into every checkout of each
-client context, the client's own repos included (`.git/hooks/pre-commit`,
+work context, that context's own repos included (`.git/hooks/pre-commit`,
 untracked by git). It scans only the staged content and fails closed, then
 runs the repo's own pre-commit framework checks when it has a
 `.pre-commit-config.yaml`, so replacing the hook `pre-commit install` wrote

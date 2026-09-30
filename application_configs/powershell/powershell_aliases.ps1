@@ -728,7 +728,7 @@ function Get-PythonCommand {
 # that same script's --format bash output, so jump-host resolution, port
 # handling and user selection have a single implementation instead of two twins
 # kept in step by hand. See its module docstring and
-# docs/repo_client_credentials.md for the inventory schema.
+# docs/repo_context_credentials.md for the inventory schema.
 #
 # The generated definitions are `Set-Item function:global:<alias>` statements —
 # functions, not Set-Alias, because a PowerShell alias is a bare command name

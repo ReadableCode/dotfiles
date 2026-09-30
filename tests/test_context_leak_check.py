@@ -1,4 +1,4 @@
-"""context_leak_check derives each client's identifiers from its own repo and refuses them elsewhere."""
+"""context_leak_check derives each context's identifiers from its own repo and refuses them elsewhere."""
 
 import json
 import os
@@ -117,7 +117,7 @@ def test_scan_flags_the_other_context_and_the_public_repo_but_not_the_owner(cons
     # dotfiles naming acme is not - even though its text calls it a placeholder
     hits = leak.scan_repo(os.path.join(constellation, "dotfiles"), contexts)
     assert [(h[0], h[2], h[3]) for h in hits] == [("docs/x.md", "acme", "acme")]
-    # a bravo identifier inside acme's context is the cross-client case
+    # a bravo identifier inside acme's context is the cross-context case
     write(os.path.join(constellation, "acme_dev", "docs/b.md"), "mirror what bravo-site does\n")
     subprocess.run(["git", "-C", os.path.join(constellation, "acme_dev"), "add", "-A"], check=True)
     hits = leak.scan_repo(os.path.join(constellation, "acme_dev"), contexts)

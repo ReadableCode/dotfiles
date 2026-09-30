@@ -68,7 +68,7 @@ Notes:
 Workspace files are manifest-driven too, but they do NOT live in this repo: a
 workspace file names every sibling repo at once — including private client
 repos — so they belong in the credentials overlays (see
-`repo_client_credentials.md`). Personal machines get theirs from the
+`repo_context_credentials.md`). Personal machines get theirs from the
 `vscode_workspace` entry in `personal_credentials/personal_manifest.yaml`
 (one `vscode/workspace.<host>.code-workspace` per host, lowercase hostname);
 client machines get a per-host entry in their own `<context>_manifest.yaml`.

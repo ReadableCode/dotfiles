@@ -19,7 +19,7 @@ anything needed at any job must live here (portable tooling like
 context-specific lives in that context's sibling `*_credentials` repo (secrets,
 inventory, declarations, client payloads) or, if it names Claude or guides an
 agent, in that context's `<context>_dev` repo (`personal_dev` for the
-personal context; each client has its own), and recurring homelab jobs live in
+personal context; each work context has its own), and recurring homelab jobs live in
 that same `<context>_dev` repo. See
 `docs/repo_philosophy.md` before proposing to move something out.
 
@@ -45,7 +45,7 @@ is the one-paragraph orientation so an agent knows which file to open.
   overlay manifests (`<context>_manifest.yaml`) discovered in sibling
   `*_credentials` repos and in any sibling repo that opts in by declaring one
   named after its own directory (`<dirname>_manifest.yaml`), which is how a
-  client's `<client>_dev` repo gates agent tooling by a clone narrower than
+  work context's `<context>_dev` repo gates agent tooling by a clone narrower than
   the credentials repo's. An entry marked `per_context_repo` expands at load
   time into one link per repo in that context's `<context>_repos.yaml` (the
   per-repo `.mcp.json`, `.env` and allow-list links). Slash commands stay
@@ -121,7 +121,7 @@ is the one-paragraph orientation so an agent knows which file to open.
   the caller's syntax (`--format bash` / `--format powershell`), which
   `.shared_aliases` and `powershell_aliases.ps1` eval at startup. Stdlib-only
   so a bare `python3` runs it before any venv exists. Doc:
-  `docs/repo_client_credentials.md`.
+  `docs/repo_context_credentials.md`.
 - **`updater_policy.py`** — same stdlib-only contract; resolves the current
   host's `updater` block (release ceiling, cadence, check scripts) from the
   inventories for `scripts/my_updater.sh`. Host entry only, no group/context
@@ -148,11 +148,11 @@ is the one-paragraph orientation so an agent knows which file to open.
   one teardown implementation and this tool has no delete of its own. Wrapped
   by `/sweep_worktrees`. Doc: `docs/repo_init_worktree.md`.
 - **`context_leak_check.py`** — refuses one context's identifiers inside
-  another: derives each client's identifiers from its own credentials repo
+  another: derives each context's identifiers from its own credentials repo
   (so this file names none), forbids them in every other repo, and forbids
-  the other clients' in a client's own two repos. Also the pre-commit hook
+  any other context's in a work context's own two repos. Also the pre-commit hook
   the overlays deploy into those checkouts. Doc:
-  `docs/repo_client_credentials.md`, "Context leak check".
+  `docs/repo_context_credentials.md`, "Context leak check".
 - **`app_removals.py`** — the app-list twin of `deploy_configs.py prune`:
   uninstalls the packages `app_removals.yaml` (plus each overlay repo's
   `<context>_app_removals.yaml`) says must not be installed, one prompt per

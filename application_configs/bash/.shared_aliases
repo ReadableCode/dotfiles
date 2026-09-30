@@ -359,7 +359,7 @@ _ssh_local_hostname() {
 # evals that same script's --format powershell output, so jump-host resolution,
 # port handling, user selection and vnc aliases have a single implementation
 # instead of two twins kept in step by hand. See its module docstring and
-# docs/repo_client_credentials.md for the inventory schema.
+# docs/repo_context_credentials.md for the inventory schema.
 #
 # Stdlib-only, so bare python3 runs it before any venv exists, and it is ONE
 # process for all inventories, never one per file. No python3 (or no generator

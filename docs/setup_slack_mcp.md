@@ -31,7 +31,7 @@ Two options that look right and are not:
   Streamable HTTP with OAuth**, and `src/utils/mcpservers_tools.py` requires a
   `command` and knows only `args`/`env`/`env_secrets`/`env_file`. There is no
   `type`/`url`/`headers` key, so a remote server cannot be declared through the
-  generator at all without extending it — and every client must be "backed by a
+  generator at all without extending it — and every MCP client must be "backed by a
   registered Slack app with a fixed app ID" that a **workspace admin approves**,
   so it is not the lower-friction path it appears to be. Revisit only if the
   generator grows HTTP support.

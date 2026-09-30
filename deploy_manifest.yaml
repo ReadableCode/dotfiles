@@ -156,9 +156,9 @@
 
 # VS Code workspace files AND settings.json live in the credentials overlays
 # (entries vscode_workspace + vscode_settings in personal_manifest.yaml,
-# per-host entries in the client manifests): a workspace file lists every
+# per-host entries in each work context's manifest): a workspace file lists every
 # sibling repo at once, and settings.json carries the Remote-SSH host map plus
-# repo exclude lists - exactly the cross-client inventory the public repo must
+# repo exclude lists - exactly the cross-context inventory the public repo must
 # not carry. The overlay entries own those dests, so a machine that loads no
 # overlay at all keeps a dangling link until one is cloned - removals can't
 # name these dests while live entries still want them.
@@ -311,7 +311,7 @@
 # t3code_settings (application_configs/t3code/settings.json ->
 # ~/.t3/userdata/settings.json) deploys via personal_manifest.yaml: the file
 # stays here and is still public, but the ENTRY needs a
-# hosts whitelist so client contexts can point that dest at their own copy,
+# hosts whitelist so a work context can point that dest at its own copy,
 # and hosts filters are overlay-manifest-only. Same split as claude_settings
 # above, and for the same reason: a work machine on Bedrock needs a
 # claudeAgent providerInstance whose customModels names an inference profile,
@@ -399,7 +399,7 @@
 # Per-host barrier_config.<host>.sgc files live in the credentials overlays
 # (entry barrier_configs in personal_manifest.yaml; a client machine's own
 # config sits in its context repo): a screen layout names every machine it
-# spans, including work machines - cross-client inventory the public repo must
+# spans, including work machines - cross-context inventory the public repo must
 # not carry. method is none (loaded by path from the Barrier GUI), so there are
 # no links; Barrier on each host is pointed at the overlay repo's path.
 

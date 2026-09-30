@@ -48,7 +48,7 @@ separate repos, and committed Go binaries are the accepted cost of that.
 
 Each context a machine belongs to — personal, or a work context — has its
 own private `*_credentials` repo cloned as a sibling of dotfiles (see
-`docs/repo_client_credentials.md`). It supplies the secrets, host
+`docs/repo_context_credentials.md`). It supplies the secrets, host
 inventories, manifests, and company-tagged config variants for that context.
 
 The rule: **everything I need for a job comes from dotfiles plus that
@@ -65,7 +65,7 @@ personal machines. The rule itself lives in the user-level working rules this
 repo deploys (`application_configs/claude/rules/working_rules.md`), so it
 reaches every session without any work context's repo carrying it.
 It is enforced, not just stated: `src/context_leak_check.py` and the
-pre-commit hook built on it (`docs/repo_client_credentials.md`, "Context leak
+pre-commit hook built on it (`docs/repo_context_credentials.md`, "Context leak
 check") refuse a commit that stages another context's identifiers.
 
 ## Work context dev repos: anything agent-shaped
@@ -74,7 +74,7 @@ A work context's credentials repo is cloned on that context's own hardware, so
 it carries **no path that names Claude and no bot-guiding markdown**. Each work
 context therefore has a second private repo, `<context>_dev`, that holds the
 agent tooling and declares its own overlay manifest (the opt-in form, see
-`docs/repo_client_credentials.md`). Every context has the same shape:
+`docs/repo_context_credentials.md`). Every context has the same shape:
 
 | Category | Home |
 |---|---|
