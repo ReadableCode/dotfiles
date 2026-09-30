@@ -1136,6 +1136,21 @@ a doc/automation task in this repo.
   follow mode, or at minimum a "jump to end" that loads the final 1 MB.
   Workaround: `tail -f` the file in the terminal panel (`mod+j`) or from any
   shell on that machine.
+- **Popped-out browser preview is unreadably blurry (upstream)**: seen on
+  0.0.42 (Envy, 2026-09-30). Popping the inline chat thumbnail out gives a
+  large window of smeared, unreadable text, while the same page in the side
+  pane renders sharp. The pop-out is not a live page: the main process
+  `capturePage()`s the preview's web view about 12 times a second
+  (`PICTURE_IN_PICTURE_FRAME_INTERVAL_MS`), JPEG-encodes each frame at
+  quality 80 and sends it to the picture-in-picture window, which scales it
+  up. The capture appears to be taken at the size the web view is drawn on
+  screen, so with only the thumbnail showing every frame is thumbnail-sized.
+  The viewport setting does not help: `browserDefaultViewport` at a fixed
+  1440x900 gave the same blur after a full restart. The page itself renders
+  fine; an agent `preview_snapshot` of the same tab came back sharp at
+  1280x800. Fix: capture the pop-out frames at the page's viewport size, not
+  the drawn size. Workaround: read the page in the side pane, or open the
+  URL in the system browser.
 - **OAuth account sign-in is broken on Windows — the callback is dropped
   (upstream, OPEN)**: on RyzenWhite (0.0.33), signing in to the T3 account
   with any provider button — Apple, GitHub, Google, Microsoft —
