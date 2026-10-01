@@ -276,5 +276,70 @@
     "command": "modelPicker.nextProvider",
     "key": "mod+shift+arrowdown",
     "when": "modelPickerOpen"
+  },
+  {
+    "command": "navigation.back",
+    "key": "mod+[",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "navigation.forward",
+    "key": "mod+]",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "usage.open",
+    "key": "mod+u",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "theme.select",
+    "key": "mod+alt+a",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "appearance.cycle",
+    "key": "mod+alt+shift+a",
+    "when": "!terminalFocus"
+  },
+  {
+    "command": "thread.undo",
+    "key": "mod+z",
+    "when": "!terminalFocus && !editableFocus"
+  },
+  {
+    "command": "usage.cost",
+    "key": "c",
+    "when": "usagePageOpen"
+  },
+  {
+    "command": "usage.tokens",
+    "key": "t",
+    "when": "usagePageOpen"
+  },
+  {
+    "command": "usage.limits",
+    "key": "l",
+    "when": "usagePageOpen"
+  },
+  {
+    "command": "usage.period.day",
+    "key": "mod+shift+1",
+    "when": "usagePageOpen"
+  },
+  {
+    "command": "usage.period.week",
+    "key": "mod+shift+2",
+    "when": "usagePageOpen"
+  },
+  {
+    "command": "usage.period.month",
+    "key": "mod+shift+3",
+    "when": "usagePageOpen"
+  },
+  {
+    "command": "usage.period.quarter",
+    "key": "mod+shift+4",
+    "when": "usagePageOpen"
   }
 ]
