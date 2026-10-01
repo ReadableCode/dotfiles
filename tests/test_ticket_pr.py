@@ -704,6 +704,117 @@ def test_rerun_job_dry_run_hits_the_job_rerun_endpoint(monkeypatch, capsys):
     assert result == {"job": "123456", "url": "https://github.com/acme/widgets/actions/jobs/123456"}
 
 
+def test_dispatch_workflow_dry_run_posts_ref_and_inputs(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        [
+            "--dry-run",
+            "dispatch-workflow",
+            "--repo",
+            "acme/widgets",
+            "--workflow",
+            "deploy.yaml",
+            "--ref",
+            "main",
+            "--input",
+            "version=1.2.3",
+        ],
+        monkeypatch,
+        capsys,
+    )
+    assert "[dry-run] POST https://api.github.com/repos/acme/widgets/actions/workflows/deploy.yaml/dispatches" in out
+    assert '"inputs": {\n      "version": "1.2.3"\n    }' in out
+    assert json.loads(out.strip().splitlines()[-1]) == {
+        "workflow": "deploy.yaml",
+        "ref": "main",
+        "inputs": {"version": "1.2.3"},
+        "url": "https://github.com/acme/widgets/actions/workflows/deploy.yaml",
+    }
+
+
+def test_dispatch_workflow_rejects_an_input_without_a_value(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    with pytest.raises(SystemExit, match="KEY=VALUE"):
+        ticket_pr.main(
+            [
+                "--dry-run",
+                "dispatch-workflow",
+                "--repo",
+                "acme/widgets",
+                "--workflow",
+                "d.yaml",
+                "--ref",
+                "main",
+                "--input",
+                "version",
+            ]
+        )
+
+
+def _run(run_id, status, conclusion=None):
+    return {
+        "id": run_id,
+        "status": status,
+        "conclusion": conclusion,
+        "event": "release",
+        "head_branch": "main",
+        "head_sha": "abc",
+        "display_title": "v1",
+        "created_at": "2026-01-01T00:00:00Z",
+        "html_url": f"https://github.com/acme/widgets/actions/runs/{run_id}",
+    }
+
+
+def test_workflow_runs_filters_by_branch_and_event(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    seen = []
+
+    def fake_http(method, url, *a, **k):
+        seen.append(url)
+        return {"workflow_runs": [_run(2, "completed", "success"), _run(1, "completed", "failure")]}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(
+        [
+            "workflow-runs",
+            "--repo",
+            "acme/widgets",
+            "--workflow",
+            "deploy.yaml",
+            "--branch",
+            "main",
+            "--event",
+            "release",
+            "--limit",
+            "2",
+        ]
+    )
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert seen == [
+        "https://api.github.com/repos/acme/widgets/actions/workflows/deploy.yaml/runs"
+        "?per_page=2&branch=main&event=release"
+    ]
+    assert [(r["id"], r["conclusion"]) for r in result["runs"]] == [(2, "success"), (1, "failure")]
+    assert result["timed_out"] is None
+
+
+def test_workflow_runs_wait_polls_until_the_newest_run_completes(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    polls = iter(
+        [
+            {"workflow_runs": [_run(5, "in_progress")]},
+            {"workflow_runs": [_run(5, "completed", "success")]},
+        ]
+    )
+    monkeypatch.setattr(ticket_pr, "http_json", lambda *a, **k: next(polls))
+    monkeypatch.setattr(ticket_pr.time, "sleep", lambda s: None)
+    ticket_pr.main(["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--wait"])
+    out = capsys.readouterr().out
+    assert "waiting on run 5 (in_progress)" in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["runs"][0]["conclusion"] == "success"
+
+
 def test_update_pr_dry_run_patches_the_pull(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(
@@ -1575,3 +1686,17 @@ def test_merge_pr_reports_a_rejected_auto_merge(monkeypatch):
     )
     with pytest.raises(SystemExit, match="Auto merge is not allowed"):
         ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
+
+
+def test_workflow_runs_jobs_lists_each_runs_jobs(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+
+    def fake_http(method, url, *a, **k):
+        if url.endswith("/actions/runs/7/jobs?per_page=100"):
+            return {"jobs": [{"id": 70, "name": "deploy", "status": "completed", "conclusion": "failure"}]}
+        return {"workflow_runs": [_run(7, "completed", "failure")]}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--limit", "1", "--jobs"])
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["runs"][0]["jobs"] == [{"id": 70, "name": "deploy", "status": "completed", "conclusion": "failure"}]

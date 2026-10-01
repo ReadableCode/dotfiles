@@ -9,7 +9,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
 transition-ticket, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
-update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review. get-ticket
+dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
 never has to go to the Jira API on its own; search-tickets runs a JQL query
@@ -1615,6 +1615,101 @@ def cmd_rerun_job(args):
     emit(f"job {args.job} queued: {url}", {"job": args.job, "url": url})
 
 
+def parse_workflow_inputs(pairs):
+    """KEY=VALUE strings from repeatable --input flags into the dispatch inputs object."""
+    inputs = {}
+    for pair in pairs:
+        key, sep, value = pair.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"--input wants KEY=VALUE, got {pair!r}")
+        inputs[key] = value
+    return inputs
+
+
+def cmd_dispatch_workflow(args):
+    """
+    Start a workflow_dispatch workflow (the "Run workflow" button) on a ref,
+    with its inputs. GitHub answers 204 with no run id, so the run is found
+    afterwards with workflow-runs.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("dispatch-workflow is GitHub-only")
+    payload = {"ref": args.ref, "inputs": parse_workflow_inputs(args.input)}
+    http_json(
+        "POST",
+        f"{GITHUB_API}/repos/{repo}/actions/workflows/{args.workflow}/dispatches",
+        github_headers(),
+        payload,
+        dry_run=args.dry_run,
+    )
+    url = f"https://github.com/{repo}/actions/workflows/{args.workflow}"
+    emit(
+        f"workflow {args.workflow} dispatched on {args.ref}: {url}",
+        {"workflow": args.workflow, "ref": args.ref, "inputs": payload["inputs"], "url": url},
+    )
+
+
+def summarize_run(run):
+    """The fields of one workflow run a caller acts on."""
+    return {
+        "id": run["id"],
+        "status": run["status"],
+        "conclusion": run.get("conclusion"),
+        "event": run.get("event"),
+        "branch": run.get("head_branch"),
+        "sha": run.get("head_sha"),
+        "title": run.get("display_title"),
+        "created_at": run.get("created_at"),
+        "url": run.get("html_url"),
+    }
+
+
+def cmd_workflow_runs(args):
+    """
+    The newest runs of one workflow, newest first, optionally filtered by
+    branch and event. --wait polls until the newest of them has completed, so
+    a deploy started by a merge or by dispatch-workflow can be followed to its
+    conclusion; --jobs lists each run's jobs with the ids job-log takes.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("workflow-runs is GitHub-only")
+    query = {"per_page": args.limit}
+    if args.branch:
+        query["branch"] = args.branch
+    if args.event:
+        query["event"] = args.event
+    url = f"{GITHUB_API}/repos/{repo}/actions/workflows/{args.workflow}/runs?{urllib.parse.urlencode(query)}"
+    if args.dry_run:
+        print(f"[dry-run] GET {url}")
+        emit("dry run", {"workflow": args.workflow, "runs": [], "timed_out": None})
+        return
+    headers = github_headers()
+    deadline = time.monotonic() + args.timeout
+    timed_out = None
+    while True:
+        runs = [summarize_run(r) for r in http_json("GET", url, headers)["workflow_runs"]]
+        if not args.wait or not runs or runs[0]["status"] == "completed":
+            break
+        if time.monotonic() >= deadline:
+            timed_out = True
+            break
+        print(f"waiting on run {runs[0]['id']} ({runs[0]['status']}) ...", flush=True)
+        time.sleep(args.interval)
+    for run in runs:
+        print(f"{run['id']} {run['status']} {run['conclusion'] or '-'} {run['event']} {run['branch']} {run['title']}")
+        if args.jobs:
+            jobs_url = f"{GITHUB_API}/repos/{repo}/actions/runs/{run['id']}/jobs?per_page=100"
+            run["jobs"] = [
+                {"id": j["id"], "name": j["name"], "status": j["status"], "conclusion": j.get("conclusion")}
+                for j in http_json("GET", jobs_url, headers)["jobs"]
+            ]
+            for job in run["jobs"]:
+                print(f"  {job['id']} {job['conclusion'] or job['status']} {job['name']}")
+    emit(f"{len(runs)} run(s) of {args.workflow}", {"workflow": args.workflow, "runs": runs, "timed_out": timed_out})
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     """Hand the redirect back instead of following it, so its Location can be read."""
 
@@ -1793,6 +1888,25 @@ def build_parser():
     rerun.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     rerun.add_argument("--job", required=True, help="job id from the check's details URL")
     rerun.set_defaults(func=cmd_rerun_job)
+
+    dispatch = sub.add_parser("dispatch-workflow", help="start a workflow_dispatch workflow on a ref, with inputs")
+    dispatch.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    dispatch.add_argument("--workflow", required=True, help="workflow file name (e.g. deploy.yaml) or id")
+    dispatch.add_argument("--ref", required=True, help="branch or tag the workflow runs on")
+    dispatch.add_argument("--input", action="append", default=[], help="workflow input as KEY=VALUE; repeatable")
+    dispatch.set_defaults(func=cmd_dispatch_workflow)
+
+    runs = sub.add_parser("workflow-runs", help="a workflow's newest runs; --wait follows the newest to completion")
+    runs.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    runs.add_argument("--workflow", required=True, help="workflow file name (e.g. deploy.yaml) or id")
+    runs.add_argument("--branch", help="only runs on this branch")
+    runs.add_argument("--event", help="only runs from this event, e.g. push, release, workflow_dispatch")
+    runs.add_argument("--limit", type=int, default=5, help="number of runs listed (default 5)")
+    runs.add_argument("--wait", action="store_true", help="poll until the newest listed run has completed")
+    runs.add_argument("--jobs", action="store_true", help="also list each run's jobs, with the ids job-log takes")
+    runs.add_argument("--interval", type=int, default=60, help="poll interval seconds")
+    runs.add_argument("--timeout", type=int, default=3600, help="max wait seconds")
+    runs.set_defaults(func=cmd_workflow_runs)
 
     update_pr = sub.add_parser("update-pr", help="change a PR's title, description and/or state")
     update_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
