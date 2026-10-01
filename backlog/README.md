@@ -25,3 +25,4 @@ system on the day they were written, and infrastructure moves on its own.
 | [gmail_filters: written for any context, used by one](gmail-filters-is-personal-only.md) | 2026-09-30 | open |
 | [ssh_devices: dead script, described wrongly in CLAUDE.md](ssh-devices-has-no-callers.md) | 2026-09-30 | open |
 | [go_apps: syncthing_artifact_cleanup has no callers and hard-codes personal folders](syncthing-artifact-cleanup-unused.md) | 2026-09-30 | open |
+| [context_leak_check: a public repo may name the user's home town, and nothing refuses it](leak-check-has-no-private-places.md) | 2026-09-30 | open |
