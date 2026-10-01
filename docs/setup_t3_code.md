@@ -34,7 +34,7 @@ A server **older** than that logs `ignoring invalid keybinding entry`; a
 with a plain file (`NOT_A_LINK` in `deploy_configs.py status`). So the bare
 file tracks the **oldest server running anywhere**:
 
-1. roll every server up (Linux: `npx -y t3@latest service update`),
+1. roll every server up (Linux: `npx -y t3@latest update`),
 2. only then promote new default bindings into the bare file,
 3. after any server install, check that box's boot log for
    `ignoring invalid keybinding entry`.
@@ -108,7 +108,7 @@ enable-linger`); there is nothing to enable by hand. Management is
 `systemctl --user {status,restart} t3code.service` — **never** `sudo
 systemctl`, it's a user unit. Logs go to
 `~/.t3/userdata/logs/boot-service.log`, and updates use
-`npx -y t3@<version> service update` (**not** the panel's copy-update
+`npx -y t3@<version> update` (**not** the panel's copy-update
 command — see [Updating a service-managed Linux
 server](#updating-a-service-managed-linux-server)).
 
@@ -695,13 +695,18 @@ connections** — that's the ready signal (same readiness behavior as Envy).
 doesn't surface it):
 
 ```bash
-npx -y t3@latest service update
+npx -y t3@latest update
 ```
 
 The version the panel names works here too; what matters is the
-`service update` verb, not the tag. It installs the
+`update` verb, not the tag. It installs the
 runtime under `~/.t3/runtime/versions/<version>`, rewrites
 the unit, and restarts the service — sessions on the box restart with it.
+`service update` was the verb through 0.0.42; the 0.0.44 CLI still accepts
+it but prints "`t3 service update` is deprecated: run `t3 update` to move to
+a newer release, or `t3 service install` to repair the service" and then
+performs the update anyway (observed 2026-09-30 moving a box from 0.0.42 to
+0.0.44). `t3 update` itself has not been run on a service install yet.
 As of 0.0.33 the rewrite also switches `ExecStart` from a version-pinned
 runtime path to the version-agnostic `~/.t3/runtime/service-launcher.mjs`,
 so future updates shouldn't need to touch the unit at all. Verify with
