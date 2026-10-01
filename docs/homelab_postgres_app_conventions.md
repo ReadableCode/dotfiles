@@ -198,7 +198,7 @@ The division of labor:
 | **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | None |
 | **D. nginx basic auth** | `.htpasswd` at the proxy | None; every occurrence is commented out |
 | **E. App's own internal auth** | Out of scope | `jellyfin`, `nextcloud`, `grafana`, `bitwarden`, `homeassistant` |
-| **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `a-girls-guide-to-georgetown`, `minecraft*`, `minio`, `ntfy`, `auth`†, `pgrest`† |
+| **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `minecraft*`, `minio`, `ntfy`, `auth`†, `pgrest`† |
 
 \* Open **at the proxy** by design — the app itself requires a login (flow B).
 Authelia's config comments this explicitly for the whole group.

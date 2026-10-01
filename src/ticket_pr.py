@@ -1776,6 +1776,28 @@ def cmd_update_pr(args):
     )
 
 
+def cmd_archive_repo(args):
+    """
+    Archive a GitHub repo: it stays where it is and stays readable, and takes
+    no more pushes, issues or PRs. For a project nobody maintains any more.
+    --unarchive puts it back. The repo is always named outright; this never
+    acts on whatever checkout it happens to be run from.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("archive-repo is GitHub-only")
+    archived = not args.unarchive
+    payload = {"archived": archived}
+    result = http_json("PATCH", f"{GITHUB_API}/repos/{repo}", github_headers(), payload, dry_run=args.dry_run)
+    if args.dry_run:
+        emit("dry run", {"repo": repo, "archived": archived})
+        return
+    emit(
+        f"{repo} {'archived' if result.get('archived') else 'not archived'}",
+        {"repo": result["full_name"], "url": result["html_url"], "archived": result.get("archived")},
+    )
+
+
 def cmd_job_log(args):
     """
     Save one GitHub Actions job's log to disk (the job id is the number at the
@@ -1916,6 +1938,11 @@ def build_parser():
     update_pr.add_argument("--body-file", help="file containing the new description")
     update_pr.add_argument("--state", choices=["open", "closed"], help="close a PR without merging, or reopen it")
     update_pr.set_defaults(func=cmd_update_pr)
+
+    archive = sub.add_parser("archive-repo", help="archive a GitHub repo (read-only, kept), or unarchive it")
+    archive.add_argument("--repo", required=True, help="owner/name; always explicit, never taken from the checkout")
+    archive.add_argument("--unarchive", action="store_true", help="make an archived repo writable again")
+    archive.set_defaults(func=cmd_archive_repo)
 
     job_log = sub.add_parser(
         "job-log", help="save one GitHub Actions job's log to disk, print the lines matching --grep"

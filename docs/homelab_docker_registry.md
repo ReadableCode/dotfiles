@@ -97,7 +97,7 @@ cat .dockerignore
 #### Building for a single architecture
 
 ```bash
-sudo docker build -t a_girls_guide_to_georgetown_image:latest .
+sudo docker build -t example_app_image:latest .
 ```
 
 - Verify that the built image is available locally:
@@ -109,13 +109,13 @@ sudo docker images
 - Tag the Docker Image
 
 ```bash
-sudo docker tag a_girls_guide_to_georgetown_image:latest 192.168.86.179:5000/a_girls_guide_to_georgetown_image:latest
+sudo docker tag example_app_image:latest 192.168.86.179:5000/example_app_image:latest
 ```
 
 - Push the Docker Image to the Local Registry
 
 ```bash
-sudo docker push 192.168.86.179:5000/a_girls_guide_to_georgetown_image:latest
+sudo docker push 192.168.86.179:5000/example_app_image:latest
 ```
 
 #### Building for multiple architectures
@@ -173,7 +173,7 @@ sudo docker buildx ls
 - Build the image for multiple architectures.
 
 ```bash
-sudo docker buildx build --platform linux/arm64,linux/amd64 --push -t 192.168.86.179:5000/a_girls_guide_to_georgetown_image:latest .
+sudo docker buildx build --platform linux/arm64,linux/amd64 --push -t 192.168.86.179:5000/example_app_image:latest .
 ```
 
 ### 2. Verify the Image is in the Local Registry
@@ -185,5 +185,5 @@ curl http://192.168.86.179:5000/v2/_catalog
 ### 3. Pull the Image from the Local Registry
 
 ```bash
-sudo docker pull 192.168.86.179:5000/a_girls_guide_to_georgetown_image:latest
+sudo docker pull 192.168.86.179:5000/example_app_image:latest
 ```
