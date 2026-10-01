@@ -2,6 +2,7 @@
 # Imports #
 
 import base64
+import hashlib
 import json
 import os
 from email import message_from_bytes
@@ -706,6 +707,47 @@ def test_gmail_save_attachment_to_drive_names_the_attachments_on_a_miss(monkeypa
     stub_requests(monkeypatch, lambda *args: FakeResponse(ATTACHMENT_MESSAGE))
     with pytest.raises(ValueError, match="no attachment 'other.pdf' - attachments: book.xlsx"):
         googlemcp_tools.gmail_save_attachment_to_drive(MAILBOX, DRIVE, "m1", "other.pdf")
+
+
+def attachment_handler(method, url, params, payload):
+    if url.endswith("/attachments/a1"):
+        return FakeResponse({"data": b64("bytes")})
+    return FakeResponse(ATTACHMENT_MESSAGE)
+
+
+def test_gmail_download_attachment_writes_the_bytes(monkeypatch, tmp_path):
+    gmail_env(monkeypatch)
+    stub_requests(monkeypatch, attachment_handler)
+    target = tmp_path / "new folder" / "book 2026-09.xlsx"
+    result = googlemcp_tools.gmail_download_attachment(MAILBOX, "m1", "book.xlsx", str(target))
+    assert target.read_bytes() == b"bytes"
+    assert result == {
+        "filename": "book.xlsx",
+        "mime_type": "application/vnd.ms-excel",
+        "path": str(target),
+        "bytes": 5,
+        "sha256": hashlib.sha256(b"bytes").hexdigest(),
+    }
+
+
+def test_gmail_download_attachment_never_overwrites_and_fetches_nothing(monkeypatch, tmp_path):
+    gmail_env(monkeypatch)
+    calls = stub_requests(monkeypatch, attachment_handler)
+    existing = tmp_path / "book.xlsx"
+    existing.write_bytes(b"keep me")
+    with pytest.raises(ValueError, match="already exists"):
+        googlemcp_tools.gmail_download_attachment(MAILBOX, "m1", "book.xlsx", str(existing))
+    assert existing.read_bytes() == b"keep me"
+    assert calls == []
+
+
+def test_gmail_download_attachment_writes_nothing_on_a_miss(monkeypatch, tmp_path):
+    gmail_env(monkeypatch)
+    stub_requests(monkeypatch, attachment_handler)
+    target = tmp_path / "other.pdf"
+    with pytest.raises(ValueError, match="no attachment 'other.pdf' - attachments: book.xlsx"):
+        googlemcp_tools.gmail_download_attachment(MAILBOX, "m1", "other.pdf", str(target))
+    assert not target.exists()
 
 
 # %%

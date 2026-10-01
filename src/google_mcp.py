@@ -438,6 +438,17 @@ def gmail_save_attachment_to_drive(
     )
 
 
+@server.tool(
+    description=(
+        "Save one Gmail attachment to a local path that does not exist yet, picked by its filename as "
+        "gmail_get_message lists it. The bytes are written as-is and the result carries their sha256. Never "
+        "overwrites."
+    )
+)
+def gmail_download_attachment(message_id: str, filename: str, local_path: str, mailbox: str = "") -> dict:
+    return gtools.gmail_download_attachment(_mailbox(mailbox), message_id, filename, local_path)
+
+
 # %%
 # Drive tools #
 

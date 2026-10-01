@@ -2,6 +2,7 @@
 # Imports #
 
 import base64
+import hashlib
 import json
 import mimetypes
 import os
@@ -544,6 +545,38 @@ def _gmail_attachment(mailbox, message_id, filename):
     return _b64url_bytes(data), parts[0].get("mimeType") or "application/octet-stream"
 
 
+def _new_local_path(local_path):
+    """The absolute form of a download target, refused before any fetch when something is already there."""
+    path = os.path.abspath(os.path.expanduser(local_path))
+    if os.path.exists(path):
+        raise ValueError(f"{path} already exists - pick a new path, downloads never overwrite")
+    return path
+
+
+def _write_new_file(path, content):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "xb") as file_handle:
+        file_handle.write(content)
+
+
+def gmail_download_attachment(mailbox, message_id, filename, local_path):
+    """
+    Save one Gmail attachment's bytes, as-is, to a path that does not exist
+    yet. The sha256 is of what was written, so a caller can tell a copy it
+    already holds under another name.
+    """
+    path = _new_local_path(local_path)
+    data, mime_type = _gmail_attachment(mailbox, message_id, filename)
+    _write_new_file(path, data)
+    return {
+        "filename": filename,
+        "mime_type": mime_type,
+        "path": path,
+        "bytes": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    }
+
+
 def gmail_save_attachment_to_drive(mailbox, drive, message_id, filename, parent_id="root", name=""):
     """
     Upload one Gmail attachment straight into a Drive folder, stored as-is.
@@ -638,13 +671,9 @@ def drive_read_file(drive, file_id, max_chars=100000):
 
 def drive_download_file(drive, file_id, local_path):
     """Save a file's bytes (Google-native files exported as for drive_read_file) to a path that does not exist yet."""
-    path = os.path.abspath(os.path.expanduser(local_path))
-    if os.path.exists(path):
-        raise ValueError(f"{path} already exists - pick a new path, downloads never overwrite")
+    path = _new_local_path(local_path)
     metadata, content = _drive_file_bytes(drive, file_id)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "wb") as file_handle:
-        file_handle.write(content)
+    _write_new_file(path, content)
     return {"id": metadata.get("id"), "name": metadata.get("name"), "path": path, "bytes": len(content)}
 
 

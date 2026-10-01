@@ -138,6 +138,7 @@ def test_every_tool_is_registered_once():
         "gmail_send_message",
         "gmail_list_message_ids",
         "gmail_save_attachment_to_drive",
+        "gmail_download_attachment",
         "drive_about",
         "drive_search",
         "drive_read_file",
