@@ -1103,6 +1103,7 @@ def cmd_request_review(args):
 
 MERGE_METHODS = ("merge", "rebase", "squash")
 MERGE_NOW_STATES = ("clean", "has_hooks")
+BITBUCKET_MERGE_STRATEGIES = {"merge": "merge_commit", "rebase": "rebase_merge", "squash": "squash"}
 
 
 def cmd_merge_pr(args):
@@ -1118,8 +1119,10 @@ def cmd_merge_pr(args):
     auto-merge so an approval no longer merges the PR on its own.
     """
     provider, repo = repo_spec(args.repo)
-    if provider != "github":
-        raise SystemExit("merge-pr is GitHub-only")
+    if provider == "bitbucket":
+        _merge_pr_bitbucket(args, repo)
+        return
+    args.method = args.method or "squash"
     if args.disable_auto_merge:
         _disable_auto_merge(args, repo)
         return
@@ -1178,6 +1181,75 @@ def cmd_merge_pr(args):
     emit(
         f"PR #{number} will {method}-merge automatically once its approval and required checks land",
         {**result, "merge_method": method, "merged": False, "auto_merge": True},
+    )
+
+
+def _merge_pr_bitbucket(args, repo):
+    """
+    Merge a Bitbucket PR now. Bitbucket has no merge-on-approval (its automatic
+    merge only waits on builds after someone presses Merge), so the caller
+    waits for the approval and this merges only a PR that is open, out of
+    draft, approved with no changes requested, and has no failing or pending
+    build; anything else is reported, never worked around. With no --method
+    the repo's own default strategy applies. A slow merge answers 202 with no
+    body, so the PR's own state decides when it is done.
+    """
+    if args.disable_auto_merge:
+        raise SystemExit("Bitbucket has no queued auto-merge to clear")
+    strategy = BITBUCKET_MERGE_STRATEGIES.get(args.method)
+    label = strategy or "repo default strategy"
+    if args.dry_run:
+        print(f"[dry-run] would merge PR #{args.pr or '<current branch>'} in {repo} ({label}) once it is approved")
+        emit("dry run", {"merged": False, "auto_merge": False, "dry_run": True})
+        return
+    headers = bitbucket_headers()
+    pull = bb_resolve_pr(repo, headers, args.pr)
+    number = pull["id"]
+    pull_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}"
+    review = review_rollup_bitbucket(pull)
+    sha = pull["source"]["commit"]["hash"]
+    statuses = bb_paginate(f"{BITBUCKET_API}/repositories/{repo}/commit/{sha}/statuses", headers)
+    checks = rollup(
+        [
+            {"name": s.get("key") or s.get("name") or "<unnamed>", "bucket": bucket_bitbucket_status(s)}
+            for s in statuses
+        ],
+        [],
+    )
+    blockers = []
+    if review["state"] != "OPEN":
+        blockers.append(f"it is {review['state']}")
+    if review["draft"]:
+        blockers.append("it is still a draft")
+    if review["changes_requested_by"]:
+        blockers.append("changes requested by " + ", ".join(review["changes_requested_by"]))
+    if not review["approved"]:
+        blockers.append("no approval yet")
+    if checks["failed"] or checks["pending"]:
+        blockers.append("builds not green: " + ", ".join(checks["failed"] + checks["pending"]))
+    if blockers:
+        raise SystemExit(f"PR #{number} cannot merge: {'; '.join(blockers)}")
+    payload = {"type": "pullrequest", **({"merge_strategy": strategy} if strategy else {})}
+    merged = http_json("POST", f"{pull_url}/merge", headers, payload=payload, timeout=120)
+    for _ in range(20):
+        if (merged or {}).get("state") == "MERGED":
+            break
+        time.sleep(3)
+        merged = http_json("GET", pull_url, headers)
+    else:
+        raise SystemExit(f"PR #{number} was sent to merge but still shows {merged.get('state')!r}")
+    merge_sha = (merged.get("merge_commit") or {}).get("hash")
+    emit(
+        f"PR #{number} merged ({label}): {merge_sha}",
+        {
+            "pr": number,
+            "url": bb_pr_url(merged, repo),
+            "review": review_rollup_bitbucket(merged),
+            "merge_strategy": strategy,
+            "merged": True,
+            "auto_merge": False,
+            "sha": merge_sha,
+        },
     )
 
 
@@ -1987,10 +2059,15 @@ def build_parser():
     )
     review.set_defaults(func=cmd_request_review)
 
-    merge = sub.add_parser("merge-pr", help="merge a PR now, or enable auto-merge while it waits (GitHub only)")
+    merge = sub.add_parser(
+        "merge-pr",
+        help="merge a PR now, or on GitHub enable auto-merge while it waits; Bitbucket merges only an approved PR",
+    )
     merge.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     merge.add_argument("--pr", type=int, help="PR number (default: current branch's open PR)")
-    merge.add_argument("--method", choices=MERGE_METHODS, default="squash", help="merge method (default: squash)")
+    merge.add_argument(
+        "--method", choices=MERGE_METHODS, help="merge method (default: squash on GitHub, the repo's own on Bitbucket)"
+    )
     merge.add_argument(
         "--disable-auto-merge", action="store_true", help="clear a queued auto-merge instead of merging or queueing"
     )

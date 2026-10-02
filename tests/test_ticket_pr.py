@@ -1723,6 +1723,97 @@ def test_merge_pr_reports_a_rejected_auto_merge(monkeypatch):
         ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
 
 
+def _bb_merge_pull(state="OPEN", vote="approved", draft=False):
+    alex = {"uuid": "{alex}", "display_name": "Alex Reviewer"}
+    pull = _bb_pull(
+        98,
+        "Drop overrides",
+        {"display_name": "Me"},
+        [alex],
+        [{"user": alex, "role": "REVIEWER", "state": vote}],
+        draft=draft,
+    )
+    pull["state"] = state
+    pull["source"]["commit"] = {"hash": "abc123"}
+    return pull
+
+
+def _bb_env(monkeypatch):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+
+
+BB_PULL_URL = "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/98"
+
+
+def test_merge_pr_bitbucket_merges_an_approved_pr_with_the_repo_default(monkeypatch, capsys):
+    _bb_env(monkeypatch)
+    merged = {**_bb_merge_pull(state="MERGED"), "merge_commit": {"hash": "def456"}}
+    calls = _record_http(
+        monkeypatch, {"/pullrequests/98": _bb_merge_pull(), "/statuses": {"values": []}, "/merge": merged}
+    )
+    ticket_pr.main(["merge-pr", "--repo", "bitbucket:ws/slug", "--pr", "98"])
+    assert calls[-1] == ("POST", f"{BB_PULL_URL}/merge", {"type": "pullrequest"})
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["merged"] is True and result["sha"] == "def456" and result["merge_strategy"] is None
+    assert result["review"]["state"] == "MERGED"
+
+
+def test_merge_pr_bitbucket_maps_the_method_to_a_strategy(monkeypatch, capsys):
+    _bb_env(monkeypatch)
+    merged = {**_bb_merge_pull(state="MERGED"), "merge_commit": {"hash": "def456"}}
+    calls = _record_http(
+        monkeypatch, {"/pullrequests/98": _bb_merge_pull(), "/statuses": {"values": []}, "/merge": merged}
+    )
+    ticket_pr.main(["merge-pr", "--repo", "bitbucket:ws/slug", "--pr", "98", "--method", "merge"])
+    assert calls[-1][2] == {"type": "pullrequest", "merge_strategy": "merge_commit"}
+
+
+def test_merge_pr_bitbucket_follows_a_slow_merge_to_its_end(monkeypatch, capsys):
+    # A merge past Bitbucket's timeout answers 202 with no body.
+    _bb_env(monkeypatch)
+    monkeypatch.setattr(ticket_pr.time, "sleep", lambda _s: None)
+    merged = {**_bb_merge_pull(state="MERGED"), "merge_commit": {"hash": "def456"}}
+    calls = _record_http(
+        monkeypatch,
+        {"/pullrequests/98": [_bb_merge_pull(), _bb_merge_pull(), merged], "/statuses": {"values": []}, "/merge": {}},
+    )
+    ticket_pr.main(["merge-pr", "--repo", "bitbucket:ws/slug", "--pr", "98"])
+    assert [c[0] for c in calls] == ["GET", "GET", "POST", "GET", "GET"]
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["sha"] == "def456"
+
+
+@pytest.mark.parametrize(
+    "pull, statuses, reason",
+    [
+        (_bb_merge_pull(vote=None), [], "no approval yet"),
+        (_bb_merge_pull(vote="changes_requested"), [], "changes requested by Alex Reviewer"),
+        (_bb_merge_pull(draft=True), [], "still a draft"),
+        (_bb_merge_pull(state="DECLINED"), [], "it is DECLINED"),
+        (_bb_merge_pull(), [{"key": "build", "state": "FAILED"}], "builds not green: build"),
+    ],
+)
+def test_merge_pr_bitbucket_never_merges_a_pr_that_is_not_ready(monkeypatch, pull, statuses, reason):
+    _bb_env(monkeypatch)
+    calls = _record_http(monkeypatch, {"/pullrequests/98": pull, "/statuses": {"values": statuses}})
+    with pytest.raises(SystemExit, match=reason):
+        ticket_pr.main(["merge-pr", "--repo", "bitbucket:ws/slug", "--pr", "98"])
+    assert all(method == "GET" for method, _url, _payload in calls)
+
+
+def test_merge_pr_bitbucket_dry_run_is_parseable(monkeypatch, capsys):
+    _bb_env(monkeypatch)
+    out = _run_cli(["--dry-run", "merge-pr", "--repo", "bitbucket:ws/slug", "--pr", "98"], monkeypatch, capsys)
+    assert "[dry-run] would merge PR #98 in ws/slug (repo default strategy) once it is approved" in out
+    assert json.loads(out.strip().splitlines()[-1])["dry_run"] is True
+
+
+def test_merge_pr_bitbucket_has_no_auto_merge_to_disable(monkeypatch):
+    _bb_env(monkeypatch)
+    with pytest.raises(SystemExit, match="no queued auto-merge"):
+        ticket_pr.main(["merge-pr", "--repo", "bitbucket:ws/slug", "--pr", "98", "--disable-auto-merge"])
+
+
 def test_workflow_runs_jobs_lists_each_runs_jobs(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
 
