@@ -34,6 +34,15 @@ the things that silently fail a plausible remote workflow.
   not `/dockerAppData`. It is the observability node (loki, alloy, syslog-ng
   on UDP+TCP 514) defined in the Docker repo with configs in server_configs.
 
+## JasonZephyrus (192.168.86.170)
+
+- Passwordless sudo for jason (since 2026-10-02, the agent server), so an
+  agent may run root steps there: `dnf`, `src/app_removals.py`, the
+  deployer's `method: system` entries. The sudoers file is manifest entry
+  `zephyrus_sudoers_nopasswd`; keep it parsing (`visudo -cf`), or sudo stops
+  working for everyone and only pkexec gets back in.
+- Fedora, no cron: its pull loop is the `git_pull_zephyrus` user timer.
+
 ## behemoth (192.168.86.31, Unraid)
 
 - `root@192.168.86.31` via `/usr/bin/ssh` (behemoth.local only resolves while
