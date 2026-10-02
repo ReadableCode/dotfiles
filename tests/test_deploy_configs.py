@@ -1905,6 +1905,42 @@ def test_classify_system_entry_needs_sudo_when_nothing_can_read_the_file(tmp_pat
 
 
 @posix_only
+def test_classify_system_entry_asks_sudo_when_a_root_only_directory_hides_the_file(tmp_path, monkeypatch):
+    # /etc/sudoers.d is 0750 root: lstat as the user is denied, which lexists reads as missing
+    repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    dest = str(tmp_path / "etc" / "sudoers.d" / "conf")
+    real_lstat, real_hash = os.lstat, deploy_configs._file_hash
+    repo_digest = real_hash(repo_file)
+
+    def denied_lstat(path, *args, **kwargs):
+        if os.fspath(path) == dest:
+            raise PermissionError(path)
+        return real_lstat(path, *args, **kwargs)
+
+    def denied_hash(path):
+        if path == dest:
+            raise PermissionError(path)
+        return real_hash(path)
+
+    def fake_privileged(argv):
+        if argv[0] == "stat":
+            return (True, f"regular file|{own_owner()}|440") if present else (False, "No such file or directory")
+        if argv[0] in ("sha256sum", "shasum"):
+            return True, f"{repo_digest}  {dest}"
+        return sudo_works, ""
+
+    monkeypatch.setattr(deploy_configs.os, "lstat", denied_lstat)
+    monkeypatch.setattr(deploy_configs, "_file_hash", denied_hash)
+    monkeypatch.setattr(deploy_configs, "_privileged", fake_privileged)
+    present, sudo_works = True, True
+    assert deploy_configs.classify_system_entry(repo_file, dest, own_owner(), "0440")[0] == "OK"
+    present = False
+    assert deploy_configs.classify_system_entry(repo_file, dest, own_owner(), "0440")[0] == "NOT_DEPLOYED"
+    sudo_works = False
+    assert deploy_configs.classify_system_entry(repo_file, dest, own_owner(), "0440")[0] == "NEEDS_SUDO"
+
+
+@posix_only
 def test_deploy_system_file_installs_reloads_and_is_idempotent(tmp_path, unprivileged, capsys):
     repo_file = write_file(str(tmp_path / "repo" / "conf"), "repo content")
     dest = str(tmp_path / "etc" / "nut" / "conf")

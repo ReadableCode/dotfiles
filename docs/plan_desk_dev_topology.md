@@ -128,11 +128,13 @@ actually needed.
   old macOS) were ruled out.
 - T3 threads have no computer use (`docs/setup_t3_code.md`, "What T3
   replaces"), so the server drives the browser through a browser-automation
-  MCP server with a persistent profile, on a headless Xtigervnc virtual
-  desktop (`docs/setup_vnc_server.md`, as on nukbuntu) rather than the
-  laptop's own session. Logins and 2FA are typed by hand into that browser
-  over VNC, and a password manager extension unlocked there fills the rest;
-  passwords never go through chat.
+  MCP server with a persistent profile, in the laptop's own GNOME session.
+  There is one desktop only: VNC mirrors that session through
+  gnome-remote-desktop (`docs/setup_vnc_server.md`, "GNOME session
+  sharing"), so nothing runs over VNC that the laptop screen does not show.
+  Logins and 2FA are typed by hand into that browser over VNC, and a password
+  manager extension unlocked there fills the rest; passwords never go through
+  chat.
 - The three T3 Connect slots go to Envy, the work laptop and JasonZephyrus.
   RyzenWhite and the MacBook are clients only. Reasoning in
   `docs/setup_t3_code.md`, Slot policy; the switch is

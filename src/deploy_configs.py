@@ -517,10 +517,14 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
 
 def file_owner_and_mode(path):
     """("user:group", "0640") of path, from its stat - readable or not."""
+    return _owner_and_mode(os.stat(path))
+
+
+def _owner_and_mode(info):
+    """("user:group", "0640") of a stat result."""
     import grp
     import pwd
 
-    info = os.stat(path)
     try:
         user = pwd.getpwuid(info.st_uid).pw_name
     except KeyError:
@@ -542,6 +546,39 @@ def _privileged(argv):
     return completed.returncode == 0, output
 
 
+def system_file_info(path):
+    """
+    (kind, "user:group", "0640") of path without following a link, kind being
+    "link", "file" or "other"; None when nothing is there; "unreadable" when
+    neither this user nor sudo -n can look.
+
+    A root-only parent directory (/etc/sudoers.d is 0750 root) hides even a
+    file's existence from the current user, and os.path.lexists reports that as
+    missing, so a denied lstat asks sudo -n instead.
+    """
+    try:
+        info = os.lstat(path)
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except PermissionError:
+        return _privileged_file_info(path)
+    kind = "link" if stat.S_ISLNK(info.st_mode) else "file" if stat.S_ISREG(info.st_mode) else "other"
+    return (kind, *_owner_and_mode(info))
+
+
+def _privileged_file_info(path):
+    """system_file_info through sudo -n stat, which does not follow links on either platform."""
+    fmt = ("-f", "%HT|%Su:%Sg|%Lp") if system == "Darwin" else ("-c", "%F|%U:%G|%a")
+    ok, output = _privileged(("stat",) + fmt + (path,))
+    if ok and output.count("|") >= 2:
+        kind_text, owner, mode = output.rsplit("|", 2)
+        kind_text = kind_text.lower()
+        kind = "link" if "link" in kind_text else "file" if "regular" in kind_text else "other"
+        return kind, owner, f"{int(mode, 8):04o}"
+    # stat failing while sudo itself works means the path is not there
+    return None if _privileged(("true",))[0] else "unreadable"
+
+
 def system_file_hash(path):
     """sha256 of a file the current user may not be able to read; None when sudo cannot read it either."""
     try:
@@ -557,20 +594,28 @@ def system_file_hash(path):
 
 def classify_system_entry(repo_path, system_path, owner, mode):
     """Health of one root-owned copy. Returns (status, detail) like classify_entry."""
+    unreadable = "destination is unreadable and sudo -n cannot read it either; nothing can be checked here"
     if not os.path.exists(repo_path):
         return "REPO_MISSING", f"repo file {repo_path} does not exist"
-    if not os.path.lexists(system_path):
+    info = system_file_info(system_path)
+    if info is None:
         return "NOT_DEPLOYED", "destination missing"
-    if os.path.islink(system_path):
-        return "DIVERGED", f"destination is a link -> {os.readlink(system_path)}; a system entry must be a real file"
-    if not os.path.isfile(system_path):
+    if info == "unreadable":
+        return "NEEDS_SUDO", unreadable
+    kind, actual_owner, actual_mode = info
+    if kind == "link":
+        try:
+            target = f" -> {os.readlink(system_path)}"
+        except OSError:
+            target = ""
+        return "DIVERGED", f"destination is a link{target}; a system entry must be a real file"
+    if kind != "file":
         return "DIVERGED", "destination is not a regular file"
     digest = system_file_hash(system_path)
     if digest is None:
-        return "NEEDS_SUDO", "destination is unreadable and sudo -n cannot read it either; nothing can be checked here"
+        return "NEEDS_SUDO", unreadable
     if digest != _file_hash(repo_path):
         return "DIVERGED", "content differs from the repo file"
-    actual_owner, actual_mode = file_owner_and_mode(system_path)
     if (actual_owner, actual_mode) != (owner, mode):
         return "WRONG_MODE", f"is {actual_owner} {actual_mode}; entry wants {owner} {mode}"
     return "OK", "root-owned copy matches the repo file"
@@ -607,7 +652,9 @@ def deploy_system_file(repo_path, system_path, owner, mode, reload=None, backup_
                 return "skipped"
         print(f"  set {owner} {mode} on {system_path} ({detail})")
         return "fixed_mode"
-    if os.path.isfile(system_path) and not os.path.islink(system_path):
+    info = system_file_info(system_path)
+    kind = info[0] if isinstance(info, tuple) else None
+    if kind == "file":
         backup_path = _backup_path(repo_path, backup_root, repo_root)
         for argv in (("cp", "-p", system_path, backup_path), ("chown", f"{os.getuid()}:{os.getgid()}", backup_path)):
             ok, output = _privileged(argv)
@@ -618,7 +665,7 @@ def deploy_system_file(repo_path, system_path, owner, mode, reload=None, backup_
     user, group = owner.split(":", 1)
     # mkdir -p rather than install -D: BSD install (macOS) has no -D
     steps = [("mkdir", "-p", os.path.dirname(system_path))]
-    if os.path.islink(system_path):
+    if kind == "link":
         steps.append(("rm", "-f", system_path))
     steps.append(("install", "-o", user, "-g", group, "-m", mode, repo_path, system_path))
     for argv in steps:

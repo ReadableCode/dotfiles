@@ -224,9 +224,9 @@ uv run python src/deploy_configs.py
 
 then log out and back in — autostart entries only run at session start. The
 entry is host-filtered (EliteDesk today) in the personal overlay manifest,
-because not every Linux box should answer on 5900; JasonZephyrus does not (its
-GNOME session is Wayland, which x0vncserver cannot scrape) and runs the
-[virtual desktop](#virtual-desktop-headless-xtigervnc) instead. To add a machine, add its name to that entry's `hosts:` list. If its
+because not every Linux box should answer on 5900; JasonZephyrus shares its
+Wayland session through [GNOME Remote Desktop](#gnome-session-sharing-gnome-remote-desktop)
+instead, since x0vncserver can only scrape an X display. To add a machine, add its name to that entry's `hosts:` list. If its
 checkout path or username is not `/home/jason/GitHub`, add a
 `start_x0vncserver.<host>.desktop` variant next to the payload — `.desktop`
 files take no placeholders, so `Exec=` is a literal path.
@@ -267,15 +267,11 @@ sudo netstat -tuln | grep 5900
 
 ## Virtual desktop, headless (Xtigervnc)
 
-For a machine with no monitor and no console login - NukBuntu - or one whose
-own desktop should stay out of it - JasonZephyrus, where the agent server's
-browser runs on this display so logins can be typed in over VNC without
-touching the laptop's session. `vncserver` starts its own X server on its own
-display, so there is no `:0` to attach to and no Xauthority to borrow.
+For a machine with no monitor and no console login - NukBuntu. `vncserver`
+starts its own X server on its own display, so there is no `:0` to attach to
+and no Xauthority to borrow.
 
 ### Install
-
-Ubuntu:
 
 ```bash
 sudo apt update
@@ -283,21 +279,6 @@ sudo apt install tigervnc-standalone-server
 mkdir -p ~/.vnc
 tigervncpasswd
 ```
-
-Fedora (JasonZephyrus):
-
-```bash
-sudo dnf install tigervnc-server xfce4-session xfwm4 xfce4-panel xfdesktop xfce4-terminal
-mkdir -p ~/.vnc
-vncpasswd
-```
-
-Fedora's `tigervnc-server` ships the same perl `vncserver` as Debian, so the
-unit below runs unchanged; it only prints a deprecation warning pointing at
-Fedora's own system-level `vncserver@` unit, which this setup does not use.
-The session is Xfce, from the `xstartup.jasonzephyrus` variant: GNOME 49 on
-Fedora 43 has no X11 session, and this user's GNOME session already holds the
-console.
 
 `tigervnc-standalone-server` is deliberately not in `app_lists/linux_apps.txt`:
 that list installs on every Linux box, and not every Linux box should answer on
@@ -357,11 +338,40 @@ systemctl --user disable --now vncserver@1   # and across reboots
 - `-localhost no` is what makes it reachable off-box; TigerVNC binds loopback
   only by default. VncAuth means the `~/.vnc/passwd` blob is the only gate, so
   this belongs on the LAN, not on anything port-forwarded.
-- No firewall work is needed on NukBuntu - ufw is disabled there. Nor on
-  JasonZephyrus: firewalld's FedoraWorkstation zone already allows
-  1025-65535/tcp.
-- Both hosts carry `vnc_port: 5901` and `vnc_screen_sharing: true` in the
-  inventory, so `vncnuk` and `vnczephyrus` dial the virtual desktop, not 5900.
+- No firewall work is needed on NukBuntu - ufw is disabled there.
+
+## GNOME session sharing (gnome-remote-desktop)
+
+For a Fedora box whose console runs GNOME on Wayland - JasonZephyrus. Neither
+path above fits it: x0vncserver can only scrape an X display, and an Xtigervnc
+virtual desktop is a second session, so VNC would show something the laptop
+screen does not. GNOME's own server mirrors the logged-in session instead
+(`screen-share-mode` `mirror-primary`): one desktop, the same on the laptop
+and over VNC. `gnome-remote-desktop` ships with Fedora Workstation and is built
+with its VNC backend. Everything below is per user, so no sudo.
+
+```bash
+grdctl vnc set-auth-method password
+grdctl vnc disable-view-only
+gsettings set org.gnome.desktop.remote-desktop.vnc encryption "['none', 'tls-anon']"
+grdctl vnc enable
+grdctl vnc set-password            # at most 8 characters: VNC Auth is a DES key
+systemctl --user enable --now gnome-remote-desktop.service
+```
+
+Over ssh, export `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus`
+first, or the settings land on a throwaway bus.
+
+- **Encryption is the setting that matters for a Mac.** The default
+  `['tls-anon']` offers only security type 18, which macOS Screen Sharing
+  cannot speak, so it fails with the "make sure Screen Sharing is enabled"
+  dialog. Adding `none` offers VNC Auth (type 2) as well (probed 2026-10-02:
+  `[2, 18]`), which is why the inventory sets `vnc_screen_sharing: true` and
+  the alias opens Screen Sharing on 5900.
+- **It shares only a logged-in session.** After a reboot nothing is served
+  until someone signs in at the laptop.
+- The `RDP server certificate is invalid` lines `grdctl` prints come from the
+  RDP backend, which stays disabled; they are harmless.
 
 ## Install TightVNC on Windows
 

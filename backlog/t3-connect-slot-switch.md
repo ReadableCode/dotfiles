@@ -31,10 +31,11 @@ JasonZephyrus is back online.
 1. Bring JasonZephyrus back online and keep it awake with the lid closed
    through the dotfiles setup (no lid-switch setting exists in the repo yet;
    add one there, not by hand over ssh).
-2. Give it a headless virtual desktop for the agent's browser: the Xtigervnc
-   unit from "Virtual desktop, headless (Xtigervnc)" in
-   `docs/setup_vnc_server.md`, as on nukbuntu. Not the x0vncserver entry: the
-   doc keeps JasonZephyrus off port 5900 on purpose.
+2. VNC into its own GNOME session: done 2026-10-02 through
+   gnome-remote-desktop ("GNOME session sharing" in
+   `docs/setup_vnc_server.md`); `vnczephyrus` opens it on 5900. What is left
+   is surviving a reboot with nobody signed in at the laptop, which it does
+   not do yet.
 3. Free RyzenWhite's slot: in its desktop app, Settings → Connections, turn
    T3 Connect publishing off and stay signed into the account, so it matches
    "New Windows client-only machine checklist". If the slot still shows as
