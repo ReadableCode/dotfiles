@@ -115,6 +115,29 @@ actually needed.
   persistent processes, and anything that outgrows it, go to a behemoth
   Ubuntu VM when one is built.
 
+## Agent server and T3 Connect slots (October 2026)
+
+- JasonZephyrus also becomes the always-on agent server: the jobs that drive
+  a browser and sign into sites run there, so they never take over Envy's
+  screen. It already runs T3 as a boot service and carries the same repos as
+  every other personal machine, and local AI is no longer a standing load,
+  so dev and browser jobs share its 16 GB. A spare Dell Latitude 7420
+  (i7-1185G7, 16 GB, not in the inventory) was weighed and kept as the
+  fallback if that memory runs short; its only edge was keeping the two jobs
+  apart. nukbuntu (too slow for heavy sites) and macmini14 (4 GB, stuck on an
+  old macOS) were ruled out.
+- T3 threads have no computer use (`docs/setup_t3_code.md`, "What T3
+  replaces"), so the server drives the browser through a browser-automation
+  MCP server with a persistent profile, on a headless Xtigervnc virtual
+  desktop (`docs/setup_vnc_server.md`, as on nukbuntu) rather than the
+  laptop's own session. Logins and 2FA are typed by hand into that browser
+  over VNC, and a password manager extension unlocked there fills the rest;
+  passwords never go through chat.
+- The three T3 Connect slots go to Envy, the work laptop and JasonZephyrus.
+  RyzenWhite and the MacBook are clients only. Reasoning in
+  `docs/setup_t3_code.md`, Slot policy; the switch is
+  `backlog/t3-connect-slot-switch.md`.
+
 ## Provisioning checklist (when a target is chosen)
 
 1. Stand up the OS (VM define + Ubuntu install for Option A; Zephyrus already

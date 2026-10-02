@@ -577,9 +577,21 @@ Concrete LAN IPs and usernames are deliberately not listed here: look the
 machine up in the `*_hosts.json` inventory of the sibling `*_credentials`
 repo it belongs to (`hostname` + `user` fields).
 
-**Slot policy**: the 3 T3 Connect tunnel slots go to the most-used machines,
-because only relay-linked environments send push notifications and Live
-Activities to the phone. Machines beyond the cap ride Tailscale Serve instead.
+**Slot policy** (decided 2026-10-01): a slot goes to a machine whose own
+threads other devices need to reach, never to one that is only a client. A
+desktop or phone app signed into the T3 account sees every slotted
+environment without a slot of its own, and the desktop app raises its own
+notifications for every environment it is connected to
+(`apps/web/src/components/ThreadNotificationCoordinator.tsx` upstream); only
+phone push and Live Activities come from the relay. The three slots go to
+Envy, the work laptop and JasonZephyrus, which becomes the always-on agent
+server as well as the dev target. RyzenWhite and the MacBook are clients only: a
+thread started on the MacBook is finished there. The switch waits until those
+machines are back online, see `backlog/t3-connect-slot-switch.md`. Machines
+beyond the cap ride Tailscale Serve. A `t3 connect link --publish-only` link
+takes no slot, lists the environment on the account and, per the source
+(`apps/server/src/cli/connect.ts`), still sends phone push through the relay;
+not tried here yet, and other devices still pair to it per device.
 Mixing transports is fine — the connection method is per-environment plumbing
 and threads behave identically once connected, and a machine can carry both at
 once, as RyzenWhite does.
@@ -828,7 +840,7 @@ Gaps that matter next to the Claude desktop app:
 | Other desktop-app surfaces missing | The in-app browser pane, artifacts and the iOS simulator panel are Claude-desktop-app features and don't exist in T3 threads (T3 has its own device panel for simulators, `mcp__t3-code__device_*`). claude.ai connectors (Gmail, Calendar, Drive, Docs, Slack) DO reach T3 threads: they are remote MCP servers registered on the claude.ai account and `claude mcp list` shows them connected from inside a thread (verified 2026-09-25). CLAUDE.md, skills, auto-memory, and MCP servers configured in `~/.claude` also apply, since it's the same `claude` binary. |
 | No Anthropic cloud sessions | T3 can't spawn or steer sessions running in Anthropic's GitHub-repo sandbox; those are reachable only from Anthropic's own apps. |
 | One serving machine | Everything a session touches (repo, agent CLI, auth) must exist on the machine whose t3 server owns the thread. |
-| T3 Connect tunnel cap | Accounts get **3 managed tunnels**, counted against *published environments* — the local desktop's own published environment occupies a slot, so the dashboard's remote-environments list understates usage (it looks like 2 when all 3 are taken). The headless CLI surfaces a refusal only as a bare `403` with no message; the desktop dialog shows the real reason. Machines beyond the cap pair over Tailscale Serve instead — full thread functionality, but no push notifications or Live Activities from those environments. |
+| T3 Connect tunnel cap | Accounts get **3 managed tunnels**, counted against *published environments* — the local desktop's own published environment occupies a slot, so the dashboard's remote-environments list understates usage (it looks like 2 when all 3 are taken). The headless CLI surfaces a refusal only as a bare `403` with no message; the desktop dialog shows the real reason. Machines beyond the cap pair over Tailscale Serve instead — full thread functionality, but no phone push or Live Activities unless also linked `--publish-only` (see Slot policy). Why 3: each managed tunnel is a real Cloudflare Tunnel plus DNS record in T3's own Cloudflare account, billed whether or not a connector is attached; `DEFAULT_MANAGED_TUNNEL_LIMIT = 3` in `infra/relay/src/environments/ManagedTunnelLimits.ts` (lowered from 10 in upstream #4530, no reason given) is a soft quota the T3 team can raise per user with a row in `relay_managed_tunnel_limits`. No plan or paid tier exists. |
 
 ## Multi-machine control surface (target setup)
 
