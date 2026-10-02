@@ -373,6 +373,21 @@ def test_gmail_html_fallback_decodes_entities_and_drops_empty_layout_lines(monke
     )
 
 
+def test_gmail_get_message_lists_the_links_in_the_html(monkeypatch):
+    gmail_env(monkeypatch)
+    page = (
+        '<p>Your statement is ready. <a class="b" href="https://portal.test/login?next=%2Fstatement&amp;id=7"> View\n'
+        '<b>statement</b></a> or <a href="mailto:help@portal.test">write</a>. '
+        "<a href='https://portal.test/login?next=%2Fstatement&amp;id=7'>again</a> <a href=\"https://portal.test/unsub\">Unsubscribe</a></p>"
+    )
+    raw = {"id": "m1", "payload": {"mimeType": "text/html", "body": {"data": b64(page)}, "headers": []}}
+    stub_requests(monkeypatch, lambda *args: FakeResponse(raw))
+    assert googlemcp_tools.gmail_get_message(MAILBOX, "m1")["links"] == [
+        {"text": "View statement", "url": "https://portal.test/login?next=%2Fstatement&id=7"},
+        {"text": "Unsubscribe", "url": "https://portal.test/unsub"},
+    ]
+
+
 def test_gmail_get_message_lists_attachments(monkeypatch):
     gmail_env(monkeypatch)
     payload = {

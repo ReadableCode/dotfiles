@@ -396,6 +396,7 @@ def gmail_get_message(mailbox, message_id, body_limit=20000):
     body = _extract_body(payload)
     message["body"] = body[: body_limit - 1] + "…" if len(body) > body_limit else body
     message["attachments"] = _extract_attachments(payload)
+    message["links"] = _extract_links(payload)
     return message
 
 
@@ -432,6 +433,24 @@ def _extract_body(payload):
     lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
     # a stripped layout table is mostly empty lines; one blank line between blocks is all that carries meaning
     return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def _extract_links(payload):
+    """
+    Every web link in the message's HTML, as {"text", "url"} in the order they
+    appear and without repeats. The plain-text body drops them, and a mail that
+    only says "your statement is ready" is nothing but its link.
+    """
+    html = "\n".join(_decode_part(part) for part in _walk_parts(payload) if part.get("mimeType") == "text/html")
+    links, seen = [], set()
+    for match in re.finditer(r"""(?is)<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""", html):
+        url = html_lib.unescape(match.group(1)).strip()
+        if not url.lower().startswith(("http://", "https://")) or url in seen:
+            continue
+        seen.add(url)
+        text = re.sub(r"\s+", " ", html_lib.unescape(re.sub(r"<[^>]+>", " ", match.group(2)))).strip()
+        links.append({"text": text, "url": url})
+    return links
 
 
 def _extract_attachments(payload):
