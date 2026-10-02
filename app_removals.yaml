@@ -112,3 +112,18 @@
   manager: dnf
   package: gnome-shell-extension-gsconnect
   note: Dropped from app_lists/linux_apps_dnf.txt.
+
+# --- Rescue boot image, retired 2026-10-02 ---
+#
+# JasonZephyrus's 974 MB /boot reached 99% (13 MB free) holding three kernels
+# plus the dracut rescue image: each hostonly initramfs there is ~185 MB and the
+# generic rescue one 261 MB, so the next kernel update had no room to land.
+# Without the rescue image, dnf's three kept kernels fit with space to spare,
+# and the older kernels are the fallback boot entries.
+
+- name: dracut_config_rescue
+  manager: dnf
+  package: dracut-config-rescue
+  hosts: [JASONZEPHYRUS]
+  after: scripts/remove_rescue_boot_images.sh
+  note: Removing the package leaves the existing rescue image; the after script deletes it.

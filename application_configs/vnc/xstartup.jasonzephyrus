@@ -1,0 +1,12 @@
+#!/bin/sh
+# JasonZephyrus variant of xstartup, deployed to ~/.vnc/xstartup by manifest
+# entry vnc_virtual_desktop_xstartup. Fedora 43's GNOME 49 ships no X11
+# session, and the console already holds this user's GNOME session, so the
+# virtual desktop runs Xfce instead.
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=XFCE
+
+exec dbus-run-session -- startxfce4

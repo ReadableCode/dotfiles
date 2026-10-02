@@ -224,8 +224,9 @@ uv run python src/deploy_configs.py
 
 then log out and back in — autostart entries only run at session start. The
 entry is host-filtered (EliteDesk today) in the personal overlay manifest,
-because not every Linux box should answer on 5900; JasonZephyrus deliberately
-does not. To add a machine, add its name to that entry's `hosts:` list. If its
+because not every Linux box should answer on 5900; JasonZephyrus does not (its
+GNOME session is Wayland, which x0vncserver cannot scrape) and runs the
+[virtual desktop](#virtual-desktop-headless-xtigervnc) instead. To add a machine, add its name to that entry's `hosts:` list. If its
 checkout path or username is not `/home/jason/GitHub`, add a
 `start_x0vncserver.<host>.desktop` variant next to the payload — `.desktop`
 files take no placeholders, so `Exec=` is a literal path.
@@ -266,11 +267,15 @@ sudo netstat -tuln | grep 5900
 
 ## Virtual desktop, headless (Xtigervnc)
 
-For a machine with no monitor and no console login - NukBuntu. `vncserver`
-starts its own X server on its own display, so there is no `:0` to attach to
-and no Xauthority to borrow.
+For a machine with no monitor and no console login - NukBuntu - or one whose
+own desktop should stay out of it - JasonZephyrus, where the agent server's
+browser runs on this display so logins can be typed in over VNC without
+touching the laptop's session. `vncserver` starts its own X server on its own
+display, so there is no `:0` to attach to and no Xauthority to borrow.
 
 ### Install
+
+Ubuntu:
 
 ```bash
 sudo apt update
@@ -278,6 +283,21 @@ sudo apt install tigervnc-standalone-server
 mkdir -p ~/.vnc
 tigervncpasswd
 ```
+
+Fedora (JasonZephyrus):
+
+```bash
+sudo dnf install tigervnc-server xfce4-session xfwm4 xfce4-panel xfdesktop xfce4-terminal
+mkdir -p ~/.vnc
+vncpasswd
+```
+
+Fedora's `tigervnc-server` ships the same perl `vncserver` as Debian, so the
+unit below runs unchanged; it only prints a deprecation warning pointing at
+Fedora's own system-level `vncserver@` unit, which this setup does not use.
+The session is Xfce, from the `xstartup.jasonzephyrus` variant: GNOME 49 on
+Fedora 43 has no X11 session, and this user's GNOME session already holds the
+console.
 
 `tigervnc-standalone-server` is deliberately not in `app_lists/linux_apps.txt`:
 that list installs on every Linux box, and not every Linux box should answer on
@@ -337,7 +357,11 @@ systemctl --user disable --now vncserver@1   # and across reboots
 - `-localhost no` is what makes it reachable off-box; TigerVNC binds loopback
   only by default. VncAuth means the `~/.vnc/passwd` blob is the only gate, so
   this belongs on the LAN, not on anything port-forwarded.
-- No firewall work is needed on NukBuntu - ufw is disabled there.
+- No firewall work is needed on NukBuntu - ufw is disabled there. Nor on
+  JasonZephyrus: firewalld's FedoraWorkstation zone already allows
+  1025-65535/tcp.
+- Both hosts carry `vnc_port: 5901` and `vnc_screen_sharing: true` in the
+  inventory, so `vncnuk` and `vnczephyrus` dial the virtual desktop, not 5900.
 
 ## Install TightVNC on Windows
 
