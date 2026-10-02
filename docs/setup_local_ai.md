@@ -31,9 +31,14 @@ column is not verified on the machine itself. This table used to list an RX
 
 **Split by job, not one winner.**
 
-- **Zephyrus runs the always-on LLM** (Odysseus's llama-server, below). It
-  owns the laptop's 6 GB GPU; Stable Diffusion is kept commented out there
-  because the two cannot share it.
+- **Zephyrus holds the LLM, stopped** (Odysseus's llama-server, below). Since
+  2026-10-02 the odysseus stack is stopped by hand (`docker compose -p
+  odysseus stop`), so its `unless-stopped` containers stay down across
+  reboots and the 6 GB GPU and ~5.5 GB of VRAM stay free for the agent
+  server. Everything stays installed: `cd ~/GitHub/odysseus && docker compose
+  up -d` brings it back, and `ODYSSEUS_LLAMA_AUTOSERVE=true` in its `.env`
+  loads the model at once. Stable Diffusion is kept commented out there
+  because the two cannot share the GPU.
 - **RyzenWhite does image generation**, started by hand when wanted and closed
   before gaming: 16 GB of VRAM holds SDXL whole and makes Flux-class models
   practical. See [`setup_stable_diffusion.md`](setup_stable_diffusion.md). It

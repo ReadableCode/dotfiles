@@ -99,6 +99,29 @@ echo 'export EDITOR=nvim' >> ~/.bashrc
 * Not applicable for headless setups
 * For desktop: Raspberry Pi Configuration -> Display -> Screen Blanking
 
+## Screen Sharing (Fedora GNOME)
+
+A Fedora workstation on GNOME/Wayland shares its own session over VNC through
+gnome-remote-desktop, so VNC shows exactly what its screen shows. These are
+per-user GNOME settings (dconf, and the VNC password in the login keyring),
+which the deployer cannot link, so they are set by hand once per machine with
+the commands in [setup_vnc_server.md](./setup_vnc_server.md), "GNOME session
+sharing". JasonZephyrus has them as of 2026-10-02:
+
+| Setting | Value |
+| --- | --- |
+| `org.gnome.desktop.remote-desktop.vnc enable` | `true` |
+| `auth-method` | `password` (set with `grdctl vnc set-password`, at most 8 characters) |
+| `view-only` | `false` |
+| `encryption` | `['none', 'tls-anon']`, so macOS Screen Sharing can use VNC Auth |
+| `screen-share-mode` | `mirror-primary` (the default) |
+| `gnome-remote-desktop.service` | user unit, enabled |
+
+Check a machine with `grdctl status` and
+`gsettings list-recursively org.gnome.desktop.remote-desktop.vnc`. It shares
+only a logged-in session, and closing a laptop lid suspends it; both gaps are
+`backlog/zephyrus-agent-server-unattended.md`.
+
 ## OpenSSH Server
 
 ### Ubuntu/Debian
@@ -462,11 +485,11 @@ xargs sudo apt install -y < ~/GitHub/dotfiles/app_lists/linux_apps.txt
 
 ### Fedora
 
-Many packages have different names on Fedora. Install equivalents manually:
+Install all apps listed in `app_lists/linux_apps_dnf.txt`, the Fedora twin of
+`linux_apps.txt` under Fedora's package names:
 
 ```bash
-sudo dnf install -y curl fzf gh git htop iperf3 mailx ncdu neovim net-tools npm \
-  pandoc ripgrep syncthing tmux tree unzip rsync golang cargo gcc-c++ make
+~/GitHub/dotfiles/scripts/install_linux_apps_dnf.sh
 ```
 
 * `gcc-c++` is not optional on a machine that runs npm tools with native

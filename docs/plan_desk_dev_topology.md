@@ -136,9 +136,10 @@ actually needed.
   manager extension unlocked there fills the rest; passwords never go through
   chat.
 - The three T3 Connect slots go to Envy, the work laptop and JasonZephyrus.
-  RyzenWhite and the MacBook are clients only. Reasoning in
-  `docs/setup_t3_code.md`, Slot policy; the switch is
-  `backlog/t3-connect-slot-switch.md`.
+  RyzenWhite and the MacBook are clients only (switched 2026-10-02).
+  Reasoning in `docs/setup_t3_code.md`, Slot policy. What still keeps
+  JasonZephyrus from being unattended is
+  `backlog/zephyrus-agent-server-unattended.md`.
 
 ## Provisioning checklist (when a target is chosen)
 

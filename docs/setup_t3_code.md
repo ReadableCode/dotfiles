@@ -570,8 +570,8 @@ Current fleet:
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
-| RyzenWhite | T3 Connect **and** Tailscale Serve | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve, so it is an environment only while the app is open. Both transports work while it is (relay tunnel plus the tailnet proxy on 3773). See [Windows: desktop app only](#windows-desktop-app-only). |
-| JasonZephyrus | Remote link over Tailscale Serve | Fedora 43: systemd boot service (`t3 service install`), not the SSH card. See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
+| RyzenWhite | Client only (deregistered from T3 Connect 2026-10-02) | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve. Its T3 Connect publishing is off; it watches and drives the slotted environments. See [Windows: desktop app only](#windows-desktop-app-only). |
+| JasonZephyrus | T3 Connect **and** Tailscale Serve | Fedora 43: systemd boot service (`t3 service install`), not the SSH card. Linked 2026-10-02 with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 node-22 ~/.t3/runtime/versions/<version>/node_modules/.bin/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 
 Concrete LAN IPs and usernames are deliberately not listed here: look the
 machine up in the `*_hosts.json` inventory of the sibling `*_credentials`
@@ -586,15 +586,19 @@ notifications for every environment it is connected to
 phone push and Live Activities come from the relay. The three slots go to
 Envy, the work laptop and JasonZephyrus, which becomes the always-on agent
 server as well as the dev target. RyzenWhite and the MacBook are clients only: a
-thread started on the MacBook is finished there. The switch waits until those
-machines are back online, see `backlog/t3-connect-slot-switch.md`. Machines
-beyond the cap ride Tailscale Serve. A `t3 connect link --publish-only` link
+thread started on the MacBook is finished there. Switched 2026-10-02. To move
+a slot: turn T3 Connect off on the old host (Settings → Connections), then on
+any signed-in client open the account avatar → **Manage account** → **T3
+Connect** and **Deregister** it; link the new host and restart its server.
+After `link`, also run `t3 connect publish`: a linked environment starts with
+agent-activity publishing (phone push) disabled. Machines beyond the cap ride
+Tailscale Serve. A `t3 connect link --publish-only` link
 takes no slot, lists the environment on the account and, per the source
 (`apps/server/src/cli/connect.ts`), still sends phone push through the relay;
 not tried here yet, and other devices still pair to it per device.
 Mixing transports is fine — the connection method is per-environment plumbing
 and threads behave identically once connected, and a machine can carry both at
-once, as RyzenWhite does.
+once, as JasonZephyrus does.
 
 **SSH environments (Linux/macOS remotes only).** Requirements on the remote:
 Node `^22.16 || ^23.11 || >=24.10` resolvable from a *non-interactive* shell,
@@ -1388,8 +1392,8 @@ a doc/automation task in this repo.
   the desktop's Set up T3 Connect dialog shows the real message ("this
   account already has its maximum of 3 managed tunnels. Unlink an
   environment to free one up"), while the headless CLI logs only a bare 403
-  (upstream ask: surface the relay's error body). The three slots here:
-  Envy's published environment plus the two laptop environments. The cap
+  (upstream ask: surface the relay's error body). Which machines hold the
+  three slots is the Slot policy above. The cap
   counts *published environments*, not the remote-environments list in the
   dashboard — which is why it looks like only two. Workaround while capped:
   `t3 serve --tailscale-serve` + Remote link over the tailnet (no slot
