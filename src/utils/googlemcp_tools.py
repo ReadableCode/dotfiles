@@ -3,6 +3,7 @@
 
 import base64
 import hashlib
+import html as html_lib
 import json
 import mimetypes
 import os
@@ -327,7 +328,7 @@ def gmail_search(mailbox, query="", max_results=25, include_spam_trash=False):
             headers,
             params={
                 "format": "metadata",
-                "metadataHeaders": ["From", "To", "Cc", "Subject", "Date"],
+                "metadataHeaders": ["From", "To", "Cc", "Subject", "Date", "Message-ID"],
             },
         )
         summaries.append(_gmail_summary(raw))
@@ -362,6 +363,8 @@ def _gmail_summary(raw):
         "cc": headers.get("cc", ""),
         "subject": headers.get("subject", ""),
         "date": headers.get("date", ""),
+        # the sender's own id for the message: the same on every machine and in every mail client
+        "message_id_header": headers.get("message-id", "").strip(),
         # when Gmail received it, as UTC ISO 8601 - unambiguous where the Date header is free text
         "internal_date": (
             datetime.fromtimestamp(int(internal_ms) / 1000, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -424,8 +427,11 @@ def _extract_body(payload):
     if joined:
         return joined
     html = [_decode_part(part) for part in _walk_parts(payload) if part.get("mimeType") == "text/html"]
-    text = re.sub(r"<[^>]+>", " ", "\n".join(chunk for chunk in html if chunk))
-    return re.sub(r"[ \t]+", " ", text).strip()
+    text = re.sub(r"(?is)<(script|style)\b.*?</\1>", " ", "\n".join(chunk for chunk in html if chunk))
+    text = html_lib.unescape(re.sub(r"<[^>]+>", " ", text)).replace("\xa0", " ")
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    # a stripped layout table is mostly empty lines; one blank line between blocks is all that carries meaning
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
 
 
 def _extract_attachments(payload):

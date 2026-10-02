@@ -359,6 +359,20 @@ def test_gmail_get_message_truncates_a_long_body(monkeypatch):
     assert len(body) == 100 and body.endswith("…")
 
 
+def test_gmail_html_fallback_decodes_entities_and_drops_empty_layout_lines(monkeypatch):
+    gmail_env(monkeypatch)
+    page = (
+        "<style>p{color:red}</style><table><tr><td> </td></tr>\n\n\n<tr><td>Minutes &ndash; August&nbsp;6</td></tr>"
+        "\n \n \n \n<tr><td>Kim &amp; Ed &middot; approved</td></tr></table>"
+    )
+    raw = {"id": "m1", "payload": {"mimeType": "text/html", "body": {"data": b64(page)}, "headers": []}}
+    stub_requests(monkeypatch, lambda *args: FakeResponse(raw))
+    assert (
+        googlemcp_tools.gmail_get_message(MAILBOX, "m1")["body"]
+        == "Minutes \u2013 August 6\n\nKim & Ed \u00b7 approved"
+    )
+
+
 def test_gmail_get_message_lists_attachments(monkeypatch):
     gmail_env(monkeypatch)
     payload = {
@@ -638,6 +652,12 @@ def test_gmail_list_message_ids_follows_every_page(monkeypatch):
     assert calls[0]["params"]["q"] == "from:notes@x.com"
     assert calls[0]["params"]["maxResults"] == googlemcp_tools.MAX_GMAIL_RESULTS
     assert calls[1]["params"]["pageToken"] == "p2"
+
+
+def test_gmail_summary_carries_the_senders_message_id():
+    raw = {"id": "m1", "payload": {"headers": [{"name": "Message-Id", "value": " <abc@x.com> "}]}}
+    assert googlemcp_tools._gmail_summary(raw)["message_id_header"] == "<abc@x.com>"
+    assert googlemcp_tools._gmail_summary({"id": "m1", "payload": {}})["message_id_header"] == ""
 
 
 def test_gmail_summary_carries_the_internal_date_as_utc_iso():
