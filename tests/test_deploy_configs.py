@@ -1559,6 +1559,7 @@ OVERLAY_OWNED_PAYLOADS = {
     "ssh/config.mac": "personal_credentials",
     "t3code/service.d/10-path.jasonzephyrus.conf": "personal_dev",
     "t3code/service.d/20-tailscale-serve.jasonzephyrus.conf": "personal_dev",
+    "t3code/service.d/30-tunnel-http2.jasonzephyrus.conf": "personal_dev",
     "t3code/settings.json": "personal_dev",
 }
 

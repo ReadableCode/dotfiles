@@ -232,6 +232,16 @@ Parsed by Effect's `Config.boolean`, so `true`/`1`/`on` all work. Use
 firewalld — Tailscale Serve needs no firewall rule, since it proxies from
 loopback).
 
+**The T3 Connect tunnel is pinned to http2.** T3 Connect runs a `cloudflared`
+child (`~/.t3/tools/cloudflared/`) that inherits the service environment, so
+`30-tunnel-http2.conf` sets `TUNNEL_TRANSPORT_PROTOCOL=http2`. QUIC to the
+edge fails from JasonZephyrus every time (`tls: no application protocol`).
+cloudflared falls back to http2 on a cold start, but on 2026-10-02 after a
+suspend it retried QUIC only and never reconnected: the service stayed
+`active` while the machine was gone from T3 Connect. Check the tunnel with
+`curl -s 127.0.0.1:20241/ready`: `readyConnections` should be 4, and a
+`503` means the tunnel is down even though the server is up.
+
 **`tailscale serve` needs an operator grant.** It is a state-changing command,
 so as a normal user it fails and the server logs a `WARN ... Failed to
 configure Tailscale Serve` with `stderrDiagnostic: 'permission-denied'` —
