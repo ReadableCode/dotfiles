@@ -14,7 +14,6 @@ btop
 cargo
 cifs-utils
 curl
-docker-compose
 fastfetch
 flatpak
 fzf
@@ -25,8 +24,6 @@ git-all
 golang  # golang-go
 htop
 iperf3
-krb5-devel  # libkrb5-dev
-krb5-workstation  # krb5-user
 libxcrypt-compat
 make
 ncdu
@@ -34,7 +31,7 @@ neovim
 net-tools
 nodejs-npm  # npm
 openssh-server
-pandoc
+pandoc-cli  # pandoc
 # containerd unpacks image layers with unpigz once it has seen it; a
 # `dnf autoremove` took pigz on JasonZephyrus and every pull failed after.
 pigz

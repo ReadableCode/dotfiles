@@ -11,8 +11,6 @@ git-all
 golang-go
 htop
 iperf3
-krb5-user
-libkrb5-dev
 mailutils
 ncdu
 neovim

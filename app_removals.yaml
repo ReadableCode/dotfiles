@@ -127,3 +127,31 @@
   hosts: [JASONZEPHYRUS]
   after: scripts/remove_rescue_boot_images.sh
   note: Removing the package leaves the existing rescue image; the after script deletes it.
+
+# --- Kerberos client tools and headers, retired 2026-10-02 ---
+#
+# Added in 2024 alongside an old Impala setup that signed in with Kerberos.
+# Nothing uses that any more: the Impala client libraries still declared in
+# some repos are never imported, and the one Impala tool left signs in with a
+# username and password. Only the tools and the development headers go; the
+# shared krb5 libraries stay, since much of the system links against them.
+
+- name: krb5_user_apt
+  manager: apt
+  package: krb5-user
+  note: Dropped from app_lists/linux_apps.txt.
+
+- name: libkrb5_dev_apt
+  manager: apt
+  package: libkrb5-dev
+  note: Dropped from app_lists/linux_apps.txt.
+
+- name: krb5_workstation_dnf
+  manager: dnf
+  package: krb5-workstation
+  note: Dropped from app_lists/linux_apps_dnf.txt.
+
+- name: krb5_devel_dnf
+  manager: dnf
+  package: krb5-devel
+  note: Dropped from app_lists/linux_apps_dnf.txt.
