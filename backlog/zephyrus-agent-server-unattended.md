@@ -18,8 +18,14 @@ Read on 2026-10-02:
   (empty falls back to `HandleLidSwitch`), `HandleLidSwitchDocked=s "ignore"`.
   Closing the lid suspends it, on power or not, unless it is docked. Nothing
   in dotfiles or server_configs sets a lid policy.
-- Idle: `sleep-inactive-ac-type 'nothing'`, so it does not sleep on AC on
-  its own.
+- Idle, logged in: jason's `sleep-inactive-ac-type 'nothing'`, so a session
+  signed in at the laptop never idles it to sleep on AC.
+- Idle, at the login screen: fixed 2026-10-02. GDM's own settings
+  suspended after 15 minutes on AC, ssh not counting as activity, and did so
+  mid-way through the Fedora 44 download. The `zephyrus_gdm_no_idle_suspend`
+  system entry in personal_manifest.yaml now sets the greeter to `'nothing'`
+  on AC (read it with `DCONF_PROFILE=gdm`; without it gsettings reads the
+  default profile and still says `'suspend'`).
 - Login: `/etc/gdm/custom.conf` has a `[daemon]` section and no
   `AutomaticLogin`. gnome-remote-desktop shares only a logged-in session, so
   after a reboot VNC serves nothing until someone signs in at the laptop.
