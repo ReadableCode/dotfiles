@@ -113,11 +113,9 @@ on change. Do not add it here.
   `/boot/config/plugins/dynamix/`, merged by `update_cron`. `/etc` is tmpfs,
   so anything installed with `crontab` is lost at reboot and fights the GUI.
   Schedule Unraid jobs through the Unraid UI, not a repo.
-- **JasonZephyrus** — Fedora without cronie; `crontab` is not installed. Its
-  one schedule, the Docker deploy loop (`Docker/scripts/git_pull_zephyrus.sh`,
-  since 2026-09-13), is a systemd user timer declared in
-  `server_configs/system_configs/jasonzephyrus/systemd/` and linked by the
-  personal manifest, not a crontab.
+- **JasonZephyrus** — a workstation with no scheduled jobs. Its Docker
+  deploy loop (a systemd user timer, 2026-09-13 to 2026-10-02) was retired
+  with the Stable Diffusion stack it served.
 - **raspberrypi3 and raspberrypi3a (the UPS pis)** — no crontab either. Their
   loop is `gitpullall.timer`, a systemd **system** unit (pi has no linger and
   `/home/pi` is `0700`) declared in

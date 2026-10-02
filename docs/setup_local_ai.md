@@ -37,8 +37,8 @@ column is not verified on the machine itself. This table used to list an RX
   reboots and the 6 GB GPU and ~5.5 GB of VRAM stay free for the agent
   server. Everything stays installed: `cd ~/GitHub/odysseus && docker compose
   up -d` brings it back, and `ODYSSEUS_LLAMA_AUTOSERVE=true` in its `.env`
-  loads the model at once. Stable Diffusion is kept commented out there
-  because the two cannot share the GPU.
+  loads the model at once. It has no Stable Diffusion setup any more
+  (retired 2026-10-02); image generation is RyzenWhite's.
 - **RyzenWhite does image generation**, started by hand when wanted and closed
   before gaming: 16 GB of VRAM holds SDXL whole and makes Flux-class models
   practical. See [`setup_stable_diffusion.md`](setup_stable_diffusion.md). It
@@ -194,7 +194,7 @@ What fits 6 GB VRAM (needs quant ≤ ~5.4 GB to be marked "fits"):
 
 Reality check: Odysseus uses plain diffusers (hungrier than optimized
 ComfyUI/A1111). SD 1.5 feels great; SDXL is sluggish. For optimized SDXL/FLUX,
-use the Forge Neo container instead (see
+use Forge Neo on RyzenWhite instead (see
 [`setup_stable_diffusion.md`](setup_stable_diffusion.md)).
 
 ### Troubleshooting

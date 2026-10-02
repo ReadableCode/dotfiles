@@ -41,7 +41,9 @@ the things that silently fail a plausible remote workflow.
   deployer's `method: system` entries. The sudoers file is manifest entry
   `zephyrus_sudoers_nopasswd`; keep it parsing (`visudo -cf`), or sudo stops
   working for everyone and only pkexec gets back in.
-- Fedora, no cron: its pull loop is the `git_pull_zephyrus` user timer.
+- A workstation, not a server: nothing pulls or deploys on a schedule there
+  (the Docker deploy loop and its Samba share were retired 2026-10-02). The
+  one standing service is T3 Code (`docs/setup_t3_code.md`).
 
 ## behemoth (192.168.86.31, Unraid)
 

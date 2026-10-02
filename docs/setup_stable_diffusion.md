@@ -5,10 +5,9 @@ Windows 11) from **Stability Matrix**: a GUI launcher, no Docker, no Windows
 service, nothing running unless its window is open. Start it when you want
 images, close it before gaming.
 
-JasonZephyrus also has a Docker setup for Forge Neo, kept commented out
-because that laptop's 6 GB GPU belongs to Odysseus's always-on LLM. How to
-switch it back on is in the Docker repo's `README.md` ("JasonZephyrus") and at
-the top of `docker_compose_zephyrus.yaml`.
+JasonZephyrus had a Docker setup for Forge Neo with a Samba share of its
+models, retired on 2026-10-02 along with its data: that laptop is a
+workstation now, and its 6 GB GPU was never the right place for this.
 
 ## Why this setup
 
@@ -55,11 +54,3 @@ the top of `docker_compose_zephyrus.yaml`.
 - **Stop (before gaming):** press **Stop** on the package, then close
   Stability Matrix. Check Task Manager that no `python.exe` is left holding
   VRAM. Nothing starts again until you open it.
-
-## The model already on JasonZephyrus
-
-SDXL base 1.0 was downloaded to the laptop for testing. Copy it over the
-laptop's Samba share instead of downloading again: in File Explorer open
-`\\192.168.86.170\stable_diffusion\models\Stable-diffusion`, sign in with the
-`SAMBA_BACKUPS_*` user from personal.env, and copy
-`sd_xl_base_1.0.safetensors` into Stability Matrix's `Models\StableDiffusion`.
