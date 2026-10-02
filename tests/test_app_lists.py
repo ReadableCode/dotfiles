@@ -194,6 +194,22 @@ def test_a_versioned_formula_counts_as_installed(tmp_path):
     assert "brew:tmux" in missing
 
 
+def test_a_tap_formula_counts_as_installed_by_its_full_name(tmp_path):
+    """brew lists a tap formula as "user/repo/formula" only with --full-name."""
+    write(tmp_path, "Brewfile", "")
+    overlay = write(tmp_path, "acme_app_lists.yaml", "brew: [acme/tools/widget, acme/tools/gadget]\n")
+
+    def run(argv):
+        if argv == ["brew", "list", "--formula", "--full-name"]:
+            return 0, "acme/tools/widget\njq\n"
+        return (0, "widget\njq\n") if argv[0] == "brew" else (None, "")
+
+    missing, _, _, _ = app_lists.missing_packages(
+        which=lambda name: name == "brew", run=run, app_lists=str(tmp_path), overlay_paths=[overlay]
+    )
+    assert missing == ["brew:acme/tools/gadget"]
+
+
 def test_wsl_reads_the_wsl_apt_list():
     assert app_lists.installer_lists("apt", release="5.15.167.4-microsoft-standard-WSL2") == ("linux_apps_wsl.txt",)
     assert app_lists.installer_lists("apt", release="6.8.0-45-generic") == ("linux_apps.txt",)

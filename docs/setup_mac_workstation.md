@@ -22,8 +22,8 @@ works if you just want a straight install of everything.
 
 **What bootstrap does not do**, and you still need from the rest of this document:
 
-- `app_lists/mac_apps_non_brew.md`: the SQL Server ODBC driver tap, the Logitech
-  vendor installers, and App Store apps (WireGuard, GLKVM)
+- `app_lists/mac_apps_non_brew.md`: the Logitech vendor installers and App Store apps
+  (WireGuard, GLKVM)
 - macOS system settings: hostname, scaling, Finder behaviour, keyboard, Dock, power
 - signing in to iCloud / App Store
 - licensed apps and their keys

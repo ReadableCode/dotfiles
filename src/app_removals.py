@@ -277,7 +277,12 @@ def wanted_packages(manager, lists_dir=app_lists.APP_LISTS, overlay_paths=None):
     """Every package an app list names for this manager on this machine, which no removal may touch."""
     if manager.name not in app_lists.BASE_LISTS:
         return set()
-    return app_lists.wanted_packages(manager.name, lists_dir, overlay_paths)
+    wanted = app_lists.wanted_packages(manager.name, lists_dir, overlay_paths)
+    if manager.name == "brew":
+        # A tap formula is listed as "user/repo/formula" but installed, and
+        # named in a removal, as its last segment.
+        wanted |= {name.rsplit("/", 1)[-1] for name in wanted}
+    return wanted
 
 
 def split_replacement(value):

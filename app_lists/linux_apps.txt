@@ -11,6 +11,11 @@ git-all
 golang-go
 htop
 iperf3
+# pango and harfbuzz's subsetter - the native stack WeasyPrint dlopens for PDF
+# generation (the Brewfile's pango on mac; any repo using weasyprint needs it)
+libharfbuzz-subset0
+libpango-1.0-0
+libpangoft2-1.0-0
 mailutils
 ncdu
 neovim

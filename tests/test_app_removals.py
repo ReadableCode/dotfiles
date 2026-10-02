@@ -131,6 +131,25 @@ def test_an_app_list_still_naming_the_package_wins(tmp_path):
     assert [entry["name"] for entry in protected] == ["retired_cask"]
 
 
+def test_a_tap_formula_in_an_app_list_protects_its_installed_name(tmp_path):
+    """A context lists a tap formula in full; brew and a removal name it by its last segment."""
+    write_list(tmp_path, "Brewfile", [])
+    overlay = write_list(tmp_path, "acme_app_lists.yaml", ["brew: [acme/tools/widget]"])
+    entry = {"name": "retired_widget", "manager": "brew", "package": "widget"}
+    removable, protected = pair(
+        app_removals.candidates(
+            [entry],
+            system="Darwin",
+            hostname="ENVY",
+            lists_dir=str(tmp_path),
+            overlay_paths=[overlay],
+            run=fake_run({"brew": (0, "widget\n")}),
+        )
+    )
+    assert removable == []
+    assert [e["name"] for e in protected] == ["retired_widget"]
+
+
 def test_a_package_that_is_not_installed_is_not_offered(tmp_path):
     write_list(tmp_path, "Brewfile", [])
     removable, _ = pair(

@@ -30,9 +30,26 @@ sed -n 's/^brew "\([^"]*\)".*/\1/p' "$BREWFILE" > "$BREW_LIST"
 sed -n 's/^cask "\([^"]*\)".*/\1/p' "$BREWFILE" > "$CASK_LIST"
 
 # Versioned formulae install under a suffixed name (Brewfile "python" lands as
-# "python@3.14"), so report both spellings or every such entry looks missing.
-list_installed() { brew list --formula | awk '{print; sub(/@.*/, ""); print}'; }
-install_apps() { brew install "$@"; }
+# "python@3.14"), and a third-party tap's formula is named "user/repo/formula"
+# only by --full-name, so report every spelling or such entries look missing.
+list_installed() { brew list --formula --full-name | awk '{print; sub(/.*\//, ""); print; sub(/@.*/, ""); print}'; }
+
+# A third-party tap's formula ("user/repo/formula", e.g. from a context app
+# list) needs its tap, and Homebrew will not load it until it is trusted.
+# Trusting just that formula, not the whole tap, keeps the rest of the tap
+# untrusted. A licence prompt the formula asks is left to the person running
+# this. Each installs on its own so one failing leaves the rest alone.
+install_apps() {
+    local name
+    local -a plain=()
+    for name in "$@"; do
+        case "$name" in
+            */*/*) brew tap "${name%/*}" && brew trust --formula "$name" && brew install "$name" ;;
+            *) plain+=("$name") ;;
+        esac
+    done
+    [ "${#plain[@]}" -eq 0 ] || brew install "${plain[@]}"
+}
 install_from_list "brew" "$BREW_LIST" brew
 
 list_installed() { brew list --cask; }

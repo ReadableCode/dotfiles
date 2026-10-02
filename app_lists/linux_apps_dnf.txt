@@ -32,6 +32,8 @@ net-tools
 nodejs-npm  # npm
 openssh-server
 pandoc-cli  # pandoc
+# WeasyPrint's native stack; pulls harfbuzz, whose subsetter Ubuntu packages apart
+pango  # libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
 # containerd unpacks image layers with unpigz once it has seen it; a
 # `dnf autoremove` took pigz on JasonZephyrus and every pull failed after.
 pigz

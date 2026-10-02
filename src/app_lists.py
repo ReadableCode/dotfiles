@@ -16,6 +16,9 @@ The overlay file is a mapping of manager to package names::
     choco: [slack, awscli]
     cask: [slack]
 
+A brew name may be a third-party tap's formula in full (``user/repo/formula``):
+``install_mac_apps.sh`` taps it and trusts that one formula before installing.
+
 Every installer in ``scripts/`` appends ``--overlay <manager>`` to the list it
 already reads, and ``app_removals.py`` asks ``wanted_packages`` so a package any
 of them names is never offered for removal. One answer to "what should this
@@ -259,8 +262,12 @@ def installed_names(manager, run):
     if names is None or manager != "brew":
         return names
     # A versioned formula installs under a suffixed name (Brewfile "python" is
-    # "python@3.14"), the same allowance install_mac_apps.sh makes.
-    return names | {name.split("@")[0] for name in names}
+    # "python@3.14"), and a third-party tap's formula is listed as
+    # "user/repo/formula" only by --full-name; install_mac_apps.sh makes the
+    # same two allowances.
+    code, output = run(["brew", "list", "--formula", "--full-name"])
+    full = {line.strip().lower() for line in output.splitlines() if line.strip()} if code == 0 else set()
+    return names | full | {name.split("@")[0] for name in names}
 
 
 def missing_packages(
