@@ -14,17 +14,26 @@
 # member context's <context>_app_lists.yaml) join the list. A lookup that fails
 # installs nothing rather than a list that only looks complete.
 #
-# The list is shown as already-installed vs pending, then a single prompt covers
-# every pending app at once: install them all, not now, or ignore some or all of
-# them on this machine. An ignored app is written to ~/.dotfiles_ignored_apps
-# (src/app_lists.py owns that file) and never offered here again; every run
-# that leaves one out names the file at its end, since deleting the line is
-# how to be offered it again. Ignoring needs the manager argument, so the
-# installers without one (Termux, MSYS2) keep the plain skip.
+# The list is shown as already-installed vs pending, then one question asks
+# whether to go through the pending apps at all. Saying yes asks about each
+# app in turn - install, not now, or ignore on this machine - and only after
+# the last answer does anything install, all of it in one go. An ignored app is
+# written to ~/.dotfiles_ignored_apps (src/app_lists.py owns that file) and
+# never offered here again; every run that leaves one out names the file at its
+# end, since deleting the line is how to be offered it again. Ignoring needs
+# the manager argument, so the installers without one (Termux, MSYS2) offer
+# only yes or no.
 #
 # Environment:
 #   ASSUME_YES=1   install everything pending without prompting (used by bootstrap)
 #   DRY_RUN=1      print what would be installed and change nothing
+#   APP_PHASE      unset: ask, then install. ask: ask, then append the chosen
+#                  apps to $APP_PLAN as "label<TAB>app" lines instead of
+#                  installing. install: install what $APP_PLAN holds for this
+#                  label, asking nothing. src/refresh_machine.py runs every
+#                  installer once per phase, so myupdater asks every question
+#                  for every package manager before the first install starts.
+#   APP_PLAN       the file the two phases share
 
 read_app_list() {
     # Strips CRs, blank lines, "#" comment lines and trailing "# ..." comments, so an
@@ -51,8 +60,53 @@ ignored_note() {
     printf '  %s\n' "$@"
 }
 
+# Ask about each pending app, filling chosen and to_ignore. Enter or EOF means
+# not now, and q leaves the rest for next time.
+ask_each_app() {
+    local manager="$1" app answer
+    shift
+    for app in "$@"; do
+        if [ -n "$manager" ]; then
+            read -r -p "  $app: [y]es / [N]ot now / [i]gnore here / [q]uit asking: " answer || answer=q
+        else
+            read -r -p "  $app: [y]es / [N]o / [q]uit asking: " answer || answer=q
+        fi
+        case "$answer" in
+            [Yy]*) chosen+=("$app") ;;
+            [Ii]*) [ -n "$manager" ] && to_ignore+=("$app") ;;
+            [Qq]*) echo "  The rest are offered again next time."; return 0 ;;
+        esac
+    done
+}
+
+# The install phase: install what the ask phase queued for this label.
+install_planned() {
+    local label="$1" queued app
+    local -a planned=()
+    if [ -f "$APP_PLAN" ]; then
+        while IFS=$'\t' read -r queued app; do
+            [ "$queued" = "$label" ] && [ -n "$app" ] && planned+=("$app")
+        done < "$APP_PLAN"
+    fi
+    if [ "${#planned[@]}" -eq 0 ]; then
+        echo "Nothing chosen for $label."
+        return 0
+    fi
+    echo "Installing ${#planned[@]} $label apps: ${planned[*]}"
+    if [ -n "$DRY_RUN" ]; then
+        echo "DRY_RUN set — not installing."
+        return 0
+    fi
+    install_apps "${planned[@]}"
+}
+
 install_from_list() {
     local label="$1" list_file="$2" manager="$3"
+
+    if [ "$APP_PHASE" = "install" ]; then
+        install_planned "$label"
+        return
+    fi
 
     if [ ! -f "$list_file" ]; then
         echo "App list not found: $list_file" >&2
@@ -137,49 +191,23 @@ install_from_list() {
 
     echo
     echo "Not installed (${#pending[@]}):"
-    local index=1
-    for app in "${pending[@]}"; do
-        printf '  %3d) %s\n' "$index" "$app"
-        index=$((index + 1))
-    done
+    printf '  %s\n' "${pending[@]}"
 
     local -a chosen=("${pending[@]}")
     local -a to_ignore=()
 
     if [ -z "$ASSUME_YES" ]; then
         echo
-        if [ -n "$manager" ]; then
-            read -r -p "Install all ${#pending[@]}? [Y]es / [n]ot now / [i]gnore all here / numbers to ignore here (e.g. 3 7): " answer
-        else
-            read -r -p "Install all ${#pending[@]}? [Y]es / [n]o / numbers to skip (e.g. 3 7): " answer
-        fi
-
+        read -r -p "Go through the ${#pending[@]} $label apps not installed? [y/N] " answer || answer=""
         case "$answer" in
-            [Nn]*)
+            [Yy]*)
+                chosen=()
+                ask_each_app "$manager" "${pending[@]}"
+                ;;
+            *)
                 echo "Skipping $label for now; it is offered again next time."
                 [ "${#ignored_here[@]}" -eq 0 ] || ignored_note "${ignored_here[@]}"
                 return 0
-                ;;
-            ""|[Yy]*)
-                ;;
-            [Ii]*)
-                if [ -n "$manager" ]; then
-                    to_ignore=("${pending[@]}")
-                    chosen=()
-                fi
-                ;;
-            *)
-                chosen=()
-                local skip=" $answer "
-                index=1
-                for app in "${pending[@]}"; do
-                    if [[ "$skip" != *" $index "* ]]; then
-                        chosen+=("$app")
-                    elif [ -n "$manager" ]; then
-                        to_ignore+=("$app")
-                    fi
-                    index=$((index + 1))
-                done
                 ;;
         esac
     fi
@@ -196,6 +224,15 @@ install_from_list() {
 
     if [ "${#chosen[@]}" -eq 0 ]; then
         echo "Nothing selected for $label."
+        [ "${#ignored_here[@]}" -eq 0 ] || ignored_note "${ignored_here[@]}"
+        return 0
+    fi
+
+    if [ "$APP_PHASE" = "ask" ]; then
+        for app in "${chosen[@]}"; do
+            printf '%s\t%s\n' "$label" "$app"
+        done >> "$APP_PLAN"
+        echo "Queued ${#chosen[@]} $label apps to install after the last question: ${chosen[*]}"
         [ "${#ignored_here[@]}" -eq 0 ] || ignored_note "${ignored_here[@]}"
         return 0
     fi

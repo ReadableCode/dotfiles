@@ -8,12 +8,17 @@
 #   . (Join-Path $PSScriptRoot 'AppInstallLib.ps1')
 #   Install-FromList -Label choco -AppList $path -ListInstalled {...} -InstallApps {...}
 #
-# The list is shown as already-installed vs pending, then a single prompt covers
-# every pending app at once: install them all, not now, or ignore some or all of
-# them on this machine. An ignored app is written to ~/.dotfiles_ignored_apps
-# (src/app_lists.py owns that file) and never offered here again; every run
-# that leaves one out names the file at its end, since deleting the line is
-# how to be offered it again. Ignoring needs -Manager.
+# The list is shown as already-installed vs pending, then one question asks
+# whether to go through the pending apps at all. Saying yes asks about each
+# app in turn - install, not now, or ignore on this machine - and only after
+# the last answer does anything install, all of it in one go. An ignored app is
+# written to ~/.dotfiles_ignored_apps (src/app_lists.py owns that file) and
+# never offered here again; every run that leaves one out names the file at its
+# end, since deleting the line is how to be offered it again. Ignoring needs
+# -Manager.
+#
+# $env:APP_PHASE and $env:APP_PLAN split the asking from the installing the
+# same way as in app_install_lib.sh, which describes them.
 #
 # Parameters:
 #   -Manager     the package manager as src/app_lists.py names it (choco, winget);
@@ -68,6 +73,28 @@ function Write-IgnoredNote {
     $Names | ForEach-Object { Write-Host "  $_" }
 }
 
+function Install-Planned {
+    # The install phase: install what the ask phase queued for this label.
+    param([string]$Label, [scriptblock]$InstallApps, [switch]$DryRun)
+    $planned = @()
+    if ($env:APP_PLAN -and (Test-Path $env:APP_PLAN)) {
+        $planned = @(Get-Content -Path $env:APP_PLAN | ForEach-Object {
+            $queued, $app = $_ -split "`t", 2
+            if ($queued -eq $Label -and $app) { $app }
+        })
+    }
+    if ($planned.Count -eq 0) {
+        Write-Host "Nothing chosen for $Label."
+        return
+    }
+    Write-Host "Installing $($planned.Count) $Label apps: $($planned -join ', ')"
+    if ($DryRun) {
+        Write-Host "DryRun set - not installing."
+        return
+    }
+    & $InstallApps $planned
+}
+
 function Install-FromList {
     param(
         [Parameter(Mandatory = $true)][string]$Label,
@@ -78,6 +105,11 @@ function Install-FromList {
         [switch]$AssumeYes,
         [switch]$DryRun
     )
+
+    if ($env:APP_PHASE -eq 'install') {
+        Install-Planned -Label $Label -InstallApps $InstallApps -DryRun:$DryRun
+        return
+    }
 
     if (-not (Test-Path $AppList)) {
         Write-Error "App list not found: $AppList"
@@ -134,38 +166,33 @@ function Install-FromList {
 
     Write-Host ""
     Write-Host "Not installed ($($pending.Count)):"
-    for ($i = 0; $i -lt $pending.Count; $i++) {
-        Write-Host ("  {0,3}) {1}" -f ($i + 1), $pending[$i])
-    }
+    $pending | ForEach-Object { Write-Host "  $_" }
 
     $chosen = $pending
     $toIgnore = @()
 
     if (-not $AssumeYes) {
         Write-Host ""
-        if ($Manager) {
-            $answer = Read-Host "Install all $($pending.Count)? [Y]es / [n]ot now / [i]gnore all here / numbers to ignore here (e.g. 3 7)"
-        }
-        else {
-            $answer = Read-Host "Install all $($pending.Count)? [Y]es / [n]o / numbers to skip (e.g. 3 7)"
-        }
-
-        if ($answer -match '^\s*[Nn]') {
+        $answer = Read-Host "Go through the $($pending.Count) $Label apps not installed? [y/N]"
+        if ($answer -notmatch '^\s*[Yy]') {
             Write-Host "Skipping $Label for now; it is offered again next time."
             Write-IgnoredNote $ignoredHere
             return
         }
-        elseif ($Manager -and $answer -match '^\s*[Ii]') {
-            $toIgnore = $pending
-            $chosen = @()
-        }
-        elseif ($answer -match '\d') {
-            $skip = @($answer -split '[^\d]+' | Where-Object { $_ -ne '' } | ForEach-Object { [int]$_ })
-            $chosen = @(for ($i = 0; $i -lt $pending.Count; $i++) {
-                if ($skip -notcontains ($i + 1)) { $pending[$i] }
-            })
+        # Enter means not now, and q leaves the rest for next time.
+        $chosen = @()
+        foreach ($app in $pending) {
             if ($Manager) {
-                $toIgnore = @($pending | Where-Object { $chosen -notcontains $_ })
+                $answer = Read-Host "  $app`: [y]es / [N]ot now / [i]gnore here / [q]uit asking"
+            }
+            else {
+                $answer = Read-Host "  $app`: [y]es / [N]o / [q]uit asking"
+            }
+            if ($answer -match '^\s*[Yy]') { $chosen += $app }
+            elseif ($Manager -and $answer -match '^\s*[Ii]') { $toIgnore += $app }
+            elseif ($answer -match '^\s*[Qq]') {
+                Write-Host "  The rest are offered again next time."
+                break
             }
         }
     }
@@ -184,6 +211,13 @@ function Install-FromList {
 
     if ($chosen.Count -eq 0) {
         Write-Host "Nothing selected for $Label."
+        Write-IgnoredNote $ignoredHere
+        return
+    }
+
+    if ($env:APP_PHASE -eq 'ask') {
+        $chosen | ForEach-Object { "$Label`t$_" } | Add-Content -Path $env:APP_PLAN
+        Write-Host "Queued $($chosen.Count) $Label apps to install after the last question: $($chosen -join ', ')"
         Write-IgnoredNote $ignoredHere
         return
     }

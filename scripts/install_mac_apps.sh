@@ -4,7 +4,7 @@
 #
 # The Brewfile stays a real Brewfile, so `brew bundle --file=app_lists/Brewfile`
 # still works for a straight install-everything run of what every Mac gets.
-# This script adds the already-installed report, the single prompt, and the
+# This script adds the already-installed report, the per-app questions, and the
 # formulae and casks this machine's contexts add (src/app_lists.py).
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
@@ -17,7 +17,9 @@ if ! command -v brew >/dev/null 2>&1; then
     exit 1
 fi
 
-brew update
+# Run by hand, update first. Under myupdater (APP_PHASE set, see
+# app_install_lib.sh) brew already updated a step earlier.
+[ -n "$APP_PHASE" ] || brew update
 
 # Formulae and casks are separate namespaces, so they are read and installed apart.
 BREW_LIST="$(mktemp)"

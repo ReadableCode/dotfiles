@@ -9,7 +9,7 @@
   ```
 
   This is the Win32-OpenSSH release in `C:\Program Files\OpenSSH`, and it is
-  on `app_lists/windows_apps_personal_winget.txt`, so `installmissing` offers
+  on `app_lists/windows_apps_personal_winget.txt`, so `myupdater` offers
   it too. Do not also add the Windows "OpenSSH Server" optional feature: that
   is an older in-box build in `System32\OpenSSH`, and `app_removals.yaml`
   retires it on any machine where this package is installed. Removing that

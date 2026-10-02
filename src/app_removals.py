@@ -507,7 +507,7 @@ def find_owner(group, installed_choco, wanted_choco, wanted_winget):
     choco_listed = package is not None and package in {name.lower() for name in wanted_choco}
     if choco_listed and on_winget_list:
         # Both lists install it, so both copies are the repo's: the lists
-        # disagree, and removing either would fight the next installmissing.
+        # disagree, and removing either would fight the next myupdater install offer.
         group.listed = True
         group.reason = f"two app lists install it (choco:{package} and winget:{group.id}); drop it from one"
     elif choco_listed:

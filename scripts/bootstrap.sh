@@ -377,7 +377,7 @@ else
             continue
         fi
         # ASSUME_YES only when the caller asked for it; otherwise the installer's
-        # own single prompt still gives a chance to deselect.
+        # own per-app questions still give a chance to deselect.
         if [ -n "$DRY_RUN" ]; then
             DRY_RUN=1 ASSUME_YES=1 bash "$installer_path"
         else

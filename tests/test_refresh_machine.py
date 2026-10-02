@@ -321,25 +321,46 @@ def test_bootstrap_argv_asks_the_repos_own_installer():
     assert argv == ["bash", "/repos/dotfiles/scripts/bootstrap.sh", "--only", "uv", "--yes"]
 
 
-# ------------------------------------------------- opt-in app-list installs
+# ------------------------------------------------- app-list installs
 
 
-def test_installing_missing_apps_is_never_part_of_a_plain_run(tmp_path):
-    """Adding an entry to an app list is not the same as asking for it on this machine."""
-    plain = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", which=lambda n: "/bin/" + n)
-    updates = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", packages=True, which=lambda n: "/bin/" + n)
-    for steps in (plain, updates):
-        assert not any("installing missing" in step.title for step in steps)
+def test_a_plain_pull_never_offers_app_installs(tmp_path):
+    steps = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", which=lambda n: "/bin/" + n)
+    assert not any("missing" in step.title or "chosen" in step.title for step in steps)
 
 
-def test_install_missing_adds_the_platform_installer(tmp_path):
+def test_myupdater_asks_every_installer_before_any_installs(tmp_path):
+    present = {"dnf", "flatpak"}
     steps = refresh_machine.build_steps(
-        str(tmp_path), "Darwin", "arm64", install_missing=True, which=lambda n: "/bin/" + n
+        str(tmp_path), "Linux", "x86_64", packages=True, which=lambda n: "/bin/" + n if n in present else None
     )
-    titles = [s.title for s in steps]
-    assert "installing missing mac apps" in titles
-    argv = next(s.argv for s in steps if s.title == "installing missing mac apps")
-    assert argv[0] == "bash" and argv[1].endswith("scripts/install_mac_apps.sh")
+    titles = [s.title for s in steps if "missing" in s.title or "chosen" in s.title]
+    assert titles == [
+        "choosing missing dnf apps",
+        "choosing missing flatpaks",
+        "installing chosen dnf apps",
+        "installing chosen flatpaks",
+    ]
+
+
+def test_app_phases_pass_the_phase_and_one_shared_plan(tmp_path):
+    seen = []
+
+    class Done:
+        returncode = 0
+
+    def fake_run(argv, env):
+        seen.append((argv, env["APP_PHASE"], env["APP_PLAN"]))
+        return Done()
+
+    steps = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", packages=True, which=lambda n: "/bin/" + n)
+    for step in steps:
+        if step.title in ("choosing missing mac apps", "installing chosen mac apps"):
+            phase = step.action.args[-1]
+            phase.func(*phase.args, None, run=fake_run)
+    assert [phase for _, phase, _ in seen] == ["ask", "install"]
+    assert seen[0][2] == seen[1][2] == refresh_machine.app_plan_path()
+    assert seen[0][0][1].endswith("scripts/install_mac_apps.sh")
 
 
 def test_linux_gets_every_package_manager_it_actually_has(tmp_path):
@@ -349,7 +370,7 @@ def test_linux_gets_every_package_manager_it_actually_has(tmp_path):
         str(tmp_path), "Linux", which=lambda n: "/bin/" + n if n in present else None
     )
     titles = [title for title, _ in installers]
-    assert titles == ["installing missing apt apps", "installing missing flatpaks"]
+    assert titles == ["apt apps", "flatpaks"]
 
 
 def test_a_linux_box_with_no_known_manager_gets_no_installer(tmp_path):
@@ -358,7 +379,7 @@ def test_a_linux_box_with_no_known_manager_gets_no_installer(tmp_path):
 
 def test_windows_runs_the_choco_and_winget_installers_through_powershell(tmp_path):
     installers = refresh_machine.app_list_installers(str(tmp_path), "Windows", which=lambda n: "/bin/" + n)
-    assert [title for title, _ in installers] == ["installing missing choco apps", "installing missing winget apps"]
+    assert [title for title, _ in installers] == ["choco apps", "winget apps"]
     for _, argv in installers:
         assert argv[0].endswith("pwsh") and "-NoProfile" in argv
     assert installers[0][1][-1].endswith("install_windows_apps_with_chocolatey.ps1")
@@ -412,3 +433,50 @@ def test_the_summary_names_the_ignore_file_for_ignored_apps():
     assert "ignored on this machine by /home/me/.dotfiles_ignored_apps" in text
     assert "delete a line there to be offered it again" in text
     assert "brew:docker" in text
+
+
+def test_the_summary_paints_every_section_with_colour_on():
+    """Every role the summary asks for must be a terminal_style token; a missing one is a KeyError mid-run."""
+    missing = {
+        "missing": ["dnf:htop"],
+        "elsewhere": ["choco:slack"],
+        "ignored": ["dnf:samba"],
+        "ignore-file": ["/home/me/.dotfiles_ignored_apps"],
+    }
+    text = refresh_machine.summary(["deploying configs"], 5, True, missing=missing, asked_missing=True)
+    assert "dnf:samba" in text and "choco:slack" in text
+
+
+def test_package_steps_stand_down_while_a_release_upgrade_waits(tmp_path):
+    """Any dnf transaction before the reboot can throw a downloaded release upgrade away."""
+    ran = []
+    out = io.StringIO()
+    code = refresh_machine.unless_release_pending(
+        str(tmp_path), "Linux", lambda out: ran.append(1) or 0, out, pending=lambda d, s: "44"
+    )
+    assert code == 0 and ran == []
+    assert "release 44 is downloaded" in out.getvalue()
+
+
+def test_package_steps_run_when_no_release_upgrade_waits(tmp_path):
+    ran = []
+    refresh_machine.unless_release_pending(
+        str(tmp_path), "Linux", lambda out: ran.append(1) or 0, io.StringIO(), pending=lambda d, s: ""
+    )
+    assert ran == [1]
+
+
+def test_myupdater_gates_the_removal_and_install_steps_on_a_pending_release(tmp_path):
+    present = {"dnf"}
+    steps = refresh_machine.build_steps(
+        str(tmp_path), "Linux", "x86_64", packages=True, which=lambda n: "/bin/" + n if n in present else None
+    )
+    gated = [s.title for s in steps if s.action is not None and s.action.func is refresh_machine.unless_release_pending]
+    assert gated == ["checking for apps to remove", "choosing missing dnf apps", "installing chosen dnf apps"]
+
+
+def test_only_linux_asks_about_a_pending_release(tmp_path):
+    def boom(*args, **kwargs):
+        raise AssertionError("should not be asked")
+
+    assert refresh_machine.pending_release(str(tmp_path), "Darwin", capture=boom) == ""

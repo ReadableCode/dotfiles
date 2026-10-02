@@ -174,8 +174,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   only on that client's machines. Every installer in `scripts/` appends
   `--overlay <manager>`, and `app_removals.py` protects the union.
   `--missing` lists what the lists name and the managers do not report
-  installed, which myupdater and installmissing print in their closing
-  summary. An app turned down at an installer's prompt is written to
+  installed, which myupdater prints in its closing summary. An app ignored
+  at an installer's per-app question is written to
   `~/.dotfiles_ignored_apps` on that machine and never offered there again;
   each run that leaves one out names the file. Doc:
   `docs/repo_app_removals.md`, "Context app lists".
@@ -194,10 +194,11 @@ is the one-paragraph orientation so an agent knows which file to open.
   `gitpullall` and `myupdater` on every platform: pull every repo, upgrade OS
   packages with `--packages` (`scripts/my_updater.sh` or `my_updater.ps1`),
   clone, sync envs, deploy, prune, offer the `app_removals.py` uninstalls
-  (`--packages` only), offer the app_lists installs (the
-  `installmissing` command only, never automatic - a pull must not install
-  software), and the AutoHotkey fix on Windows. The shells wrap it as
-  `pullrepos` / `gitpullall` / `myupdater` / `installmissing`, one flag each. A step whose tool is missing offers to install it with
+  (`--packages` only), offer the app_lists installs (`--packages` only:
+  one "go through them?" per package manager, then a question per app, and
+  everything chosen installs after the last answer), and the AutoHotkey fix
+  on Windows. The shells wrap it as
+  `pullrepos` / `gitpullall` / `myupdater`, one flag each. A step whose tool is missing offers to install it with
   `scripts/bootstrap.sh --only <tool>` (terminal only - an unattended run
   still just reports), so a tool has one installer and a fresh box can
   bring itself up. Both
@@ -213,8 +214,7 @@ is the one-paragraph orientation so an agent knows which file to open.
   just that package with the platform's own manager rather than failing with
   `command not found`. The app lists are not consulted: they gate what a
   refresh offers on its own, and a command someone typed may install the one
-  thing it needs. The whole-list run is `installmissing`, which is a thing
-  you go and ask for. Stdlib-only like
+  thing it needs. The whole-list offer is `myupdater`'s. Stdlib-only like
   `ssh_aliases.py`, one file for every platform. TigerVNC and not the native
   client because wayvnc offers only VeNCrypt/RSA-AES/RA2 and macOS Screen
   Sharing speaks neither. Doc: `docs/setup_vnc_server.md`, "Clients".

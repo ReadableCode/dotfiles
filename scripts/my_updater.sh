@@ -50,7 +50,7 @@
 
 usage() {
     cat <<'EOF'
-usage: my_updater.sh [--check | --help]
+usage: my_updater.sh [--check | --pending-release | --help]
 
   (no arguments)  Upgrade this machine's OS packages. On Linux it also repairs
                   third-party apt sources, runs this host's mapped checks and
@@ -59,6 +59,9 @@ usage: my_updater.sh [--check | --help]
                   and 0 when everything is current. No sudo, no prompts, no
                   repairs, and the apt package lists are read as they stand
                   rather than refreshed.
+  --pending-release
+                  Print the release a downloaded, not yet installed upgrade
+                  will move this machine to, or nothing. Read-only.
   --help          This page.
 
 The no-argument form is what myupdater runs, through
@@ -70,6 +73,7 @@ MODE="update"
 for arg in "$@"; do
     case "$arg" in
       --check) MODE="check" ;;
+      --pending-release) MODE="pending" ;;
       --help|-h) usage; exit 0 ;;
       *) echo "my_updater.sh: unknown option '$arg'" >&2; usage >&2; exit 2 ;;
     esac
@@ -118,12 +122,18 @@ update_dnf() {
 
 # Upgrade a standalone uv (see the header). A package-manager build refuses
 # self-update and names the manager to use instead; that manager already ran
-# above, so the refusal is informational and never fails the run.
+# above, so that refusal is swallowed into one line and never fails the run.
+# Any other failure prints uv's own output.
 update_uv() {
+    local out
     command -v uv &> /dev/null || return 0
     echo "Updating uv..."
-    if ! uv self update; then
+    if out="$(uv self update 2>&1)"; then
+        [ -n "$out" ] && echo "$out"
+    elif [[ "$out" == *"external package manager"* ]]; then
         echo "uv is package-manager owned; the package upgrade above covers it."
+    else
+        echo "$out"
     fi
 }
 
@@ -155,7 +165,10 @@ check_updates() {
         # dnf first, the same order the update run uses.
         if command -v dnf &> /dev/null; then
             echo "Checking dnf for outdated packages..."
-            report="$(dnf -q check-update 2> /dev/null)"
+            # stdin from /dev/null: a repo whose signing key this user has not
+            # imported asks to import it, and with stdout captured and stderr
+            # dropped that prompt would wait on an invisible question.
+            report="$(dnf -q check-update 2> /dev/null < /dev/null)"
             code=$?
             # check-update exits 100 when updates are available, 0 when none.
             if [ "$code" -eq 100 ]; then
@@ -819,9 +832,13 @@ else:
 # a package only while its dependencies still resolve on the new release, and
 # nothing can reinstall it afterwards. dnf keeps the "Extra packages" header
 # even under -q, so match the rows (name.arch version repo) instead of
-# counting lines.
+# counting lines. Under sudo for root's cache and imported keys: a user run
+# re-asks to import the signing key of every repo_gpgcheck repo (nvidia,
+# microsoft), and declining skips that repo, which then lists every package it
+# serves here as unsourced. stdin from /dev/null so any such prompt declines
+# instead of waiting unseen behind the captured stdout.
 fedora_unsourced_packages() {
-    dnf -q list --extras 2>/dev/null \
+    sudo dnf -q list --extras 2>/dev/null < /dev/null \
         | awk 'NF >= 3 && $1 ~ /\./ { print $1 }'
 }
 
@@ -837,10 +854,60 @@ fedora_lagging_repos() {
     local target="$1" id lagging=""
     for id in $(dnf -q repolist --enabled 2>/dev/null | awk 'NR > 1 { print $1 }'); do
         echo "  $id" >&2
-        [ -n "$(sudo dnf -q repoquery --releasever="$target" --repo="$id" --qf '%{name}\n' 2>/dev/null | head -n1)" ] \
+        [ -n "$(sudo dnf -q repoquery --releasever="$target" --repo="$id" --qf '%{name}\n' 2>/dev/null < /dev/null | head -n1)" ] \
             || lagging="$lagging $id"
     done
     printf '%s' "$lagging"
+}
+
+# Where dnf keeps a downloaded release upgrade until the reboot installs it.
+# World-readable, so asking needs no sudo.
+FEDORA_OFFLINE_DIR=/usr/lib/sysimage/libdnf5/offline
+
+# The release a downloaded upgrade is waiting to install, or nothing. dnf's own
+# `offline status` is not enough: any ordinary dnf transaction run after the
+# download empties packages/ yet leaves the state file saying download-complete,
+# and rebooting into that fails. So the packages must still be there too.
+fedora_pending_release() {
+    local state="$FEDORA_OFFLINE_DIR/offline-transaction-state.toml"
+    [ -r "$state" ] || return 0
+    grep -q '^status = "download-complete"' "$state" || return 0
+    [ -n "$(ls -A "$FEDORA_OFFLINE_DIR/packages" 2>/dev/null)" ] || return 0
+    sed -n 's/^target_releasever = "\(.*\)"$/\1/p' "$state"
+}
+
+# Left by a run that stopped for a release upgrade's reboot. The shell profile
+# (.shared_aliases) sees it in the first terminal after the reboot and offers
+# to finish the run, so nobody has to remember to come back.
+RESUME_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/myupdater_resume"
+
+# Offer the reboot that installs a downloaded release, and leave the resume
+# marker either way: saying no now just means the next myupdater asks again.
+offer_release_reboot() {
+    local target="$1"
+    mkdir -p "$(dirname "$RESUME_FILE")"
+    echo "$target" > "$RESUME_FILE"
+    echo ""
+    echo "Fedora $target is downloaded. Rebooting installs it offline: a few minutes at a"
+    echo "progress screen, longer when akmods rebuild the nvidia module, then a normal boot."
+    echo "The first terminal opened afterwards offers to finish this myupdater run."
+    if confirm "Reboot now to install Fedora $target?"; then
+        sudo dnf system-upgrade reboot
+        exit 0
+    fi
+    echo "Until that reboot nothing else installs or removes a package, since that would"
+    echo "throw the download away."
+}
+
+# A download whose packages a later dnf run threw away. Rebooting into it
+# fails, and it blocks a fresh download, so it is cleared before anything else.
+fedora_clear_spent_download() {
+    local state="$FEDORA_OFFLINE_DIR/offline-transaction-state.toml"
+    [ -r "$state" ] || return 0
+    grep -q '^status = "download-complete"' "$state" || return 0
+    [ -z "$(fedora_pending_release)" ] || return 0
+    echo "A downloaded release upgrade lost its packages to a later dnf run; clearing it so it can be downloaded again."
+    sudo dnf -y offline clean
 }
 
 fedora_release_upgrade() {
@@ -959,11 +1026,7 @@ fedora_release_upgrade() {
         echo "Download failed — nothing has changed. Resolve the errors above and re-run."
         return 1
     fi
-    echo ""
-    echo "Downloaded. Finish with:  sudo dnf system-upgrade reboot"
-    echo "(left to you on purpose — that command reboots immediately)"
-    echo "After it settles, run myupdater again: it re-checks this host's mapped checks"
-    echo "and whether every repo made the jump."
+    offer_release_reboot "$target"
 }
 
 # Offer a distro release upgrade, never past the policy ceiling. Idempotent:
@@ -1268,10 +1331,14 @@ check_release_upgrade() {
     esac
 }
 
-# Read-only mode stops here: everything below prompts, sudoes or repairs.
+# Read-only modes stop here: everything below prompts, sudoes or repairs.
 if [ "$MODE" = "check" ]; then
     check_updates
     exit $?
+fi
+if [ "$MODE" = "pending" ]; then
+    command -v dnf &> /dev/null && fedora_pending_release
+    exit 0
 fi
 
 # Detect the operating system
@@ -1281,6 +1348,20 @@ case "$OS" in
     # BEFORE the upgrade, so a source repaired now is one the upgrade below
     # actually reads -- the whole point is that the fix lands in the same run.
     check_apt_sources
+    # A release upgrade already downloaded wins over everything else: an
+    # ordinary upgrade now would throw it away, and the apps are better
+    # offered on the new release, so the run stops at the reboot it needs.
+    if command -v dnf &> /dev/null; then
+        fedora_clear_spent_download
+        pending="$(fedora_pending_release)"
+        if [ -n "$pending" ]; then
+            offer_release_reboot "$pending"
+            exit 0
+        fi
+    fi
+    # No release waiting, so a marker left behind is spent: this is the run it
+    # asked for.
+    rm -f "$RESUME_FILE"
     # dnf first: Fedora ships both dnf and (sometimes) an apt shim.
     if command -v dnf &> /dev/null; then
         update_dnf

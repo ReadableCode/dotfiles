@@ -8,11 +8,15 @@ APP_LIST="${1:-$SCRIPT_DIR/../app_lists/linux_apps.txt}"
 
 source "$SCRIPT_DIR/app_install_lib.sh"
 
-sudo apt -y update
-sudo apt -y upgrade
-sudo apt -y dist-upgrade
-sudo apt -y autoremove
-sudo apt -y full-upgrade
+# Run by hand, upgrade first. Under myupdater (APP_PHASE set, see
+# app_install_lib.sh) the upgrade already ran a step earlier.
+if [ -z "$APP_PHASE" ]; then
+    sudo apt -y update
+    sudo apt -y upgrade
+    sudo apt -y dist-upgrade
+    sudo apt -y autoremove
+    sudo apt -y full-upgrade
+fi
 
 list_installed() { dpkg-query -W -f='${Package}\n' 2>/dev/null; }
 install_apps() { sudo apt install -fy "$@"; }

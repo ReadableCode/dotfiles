@@ -22,8 +22,8 @@ of them names is never offered for removal. One answer to "what should this
 machine have", whichever direction asks.
 
 One machine can turn an app down for good: ``~/.dotfiles_ignored_apps`` holds
-``manager:package`` lines, written when an installer's prompt is answered with
-the numbers to ignore (or ``i`` for all). A listed app is therefore offered at
+``manager:package`` lines, written when an installer's question about an app
+is answered ``i``. A listed app is therefore offered at
 least once, and after that an ignored one is never offered or reported missing
 again on that machine; every place that leaves one out names the file, so
 deleting its line is how to be offered it again. Machine state and not a
@@ -197,9 +197,9 @@ IGNORE_FILE = os.path.join(os.path.expanduser("~"), ".dotfiles_ignored_apps")
 
 _IGNORE_HEADER = """\
 # Apps this machine was offered and turned down, one manager:package per line.
-# Written by the dotfiles installers when their prompt is answered with the
-# numbers to ignore (or i for all), and read by them, by installmissing and by
-# myupdater's closing summary, none of which offer or report these again here.
+# Written by the dotfiles installers when an app's question is answered i,
+# and read by them and by myupdater's closing summary, neither of which offer
+# or report these again here.
 # Delete a line to be offered that app again.
 """
 

@@ -14,9 +14,12 @@ if ! command -v flatpak >/dev/null 2>&1; then
 fi
 
 # Idempotent: --if-not-exists leaves an already-configured remote alone.
-flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+# Remote and apps are system-wide, under sudo: polkit only lets a local
+# desktop session change the system installation, so an ssh session
+# (myupdater run remotely) is refused with "Deploy not allowed for user".
+sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
 list_installed() { flatpak list --app --columns=application; }
-install_apps() { flatpak install -y flathub "$@"; }
+install_apps() { sudo flatpak install -y flathub "$@"; }
 
 install_from_list "flatpak" "$APP_LIST" flatpak

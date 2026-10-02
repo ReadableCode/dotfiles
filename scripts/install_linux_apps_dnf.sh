@@ -13,7 +13,9 @@ if ! command -v dnf >/dev/null 2>&1; then
     exit 1
 fi
 
-sudo dnf -y upgrade --refresh
+# Run by hand, upgrade first. Under myupdater (APP_PHASE set, see
+# app_install_lib.sh) the upgrade already ran a step earlier.
+[ -n "$APP_PHASE" ] || sudo dnf -y upgrade --refresh
 
 list_installed() { rpm -qa --qf '%{NAME}\n'; }
 install_apps() { sudo dnf install -y "$@"; }

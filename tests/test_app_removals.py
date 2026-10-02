@@ -657,7 +657,7 @@ def test_duplicates_are_not_looked_for_off_windows(monkeypatch):
 
 
 def test_an_app_on_both_lists_is_a_conflict_not_an_offer(tmp_path):
-    """choco's claude and winget's Anthropic.Claude are both the repo's; removing either fights installmissing."""
+    """choco's claude and winget's Anthropic.Claude are both the repo's; removing either fights myupdater."""
     write_list(tmp_path, "windows_apps_personal_choco.txt", ["slack"])
     write_list(tmp_path, "windows_apps_personal_winget.txt", ["SlackTechnologies.Slack"])
     groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])

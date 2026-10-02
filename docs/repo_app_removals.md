@@ -98,25 +98,28 @@ every OS its machines run - a client's chat app on macOS and on Windows alike.
 managers do not report installed, split into `missing` (nothing installed it)
 and `elsewhere` (a choco entry `winget list` shows under the same name, put
 there by hand or another manager, where a choco install would make a second
-copy). `myupdater` and `installmissing` ask it once after every step and print
+copy). `myupdater` asks it once after every step and prints
 the answer in the closing summary, so a package an installer could not find is
 read at the end rather than lost in the middle of a long run.
 
 ### Ignoring an app on one machine
 
-Every listed app is offered at least once. The installers' single prompt reads
-`[Y]es / [n]ot now / [i]gnore all here / numbers to ignore here`: `n` asks
-again next time, while `i` or the numbers write `manager:package` lines to
-`~/.dotfiles_ignored_apps` on that machine, and from then on that app is never
-offered there or reported missing. Every run that leaves one out ends by naming
-the file, and deleting a line is how to be offered that app again. A Mac mini
-that has no use for docker or DBeaver answers once with their numbers.
+Every listed app is offered at least once. Each installer first asks whether
+to go through its missing apps at all, then asks about each one:
+`[y]es / [N]ot now / [i]gnore here / [q]uit asking`. Not now asks again next
+time, while `i` writes a `manager:package` line to `~/.dotfiles_ignored_apps`
+on that machine, and from then on that app is never offered there or reported
+missing. Nothing installs until the questions are done; under `myupdater` that
+means every package manager's questions, then every install in one go. Every
+run that leaves one out ends by naming the file, and deleting a line is how to
+be offered that app again. A Mac mini that has no use for docker or DBeaver
+answers `i` to each once.
 
 It is machine state rather than a committed list on purpose: it records one
 person's answer at one desk, while the lists stay the record of what a machine
 of that kind should have. `src/app_lists.py` is the one reader and writer
 (`--ignored`, `--ignore`, `--ignore-path`); both install helpers call it. The
-Termux and MSYS2 installers pass no manager, so they keep the plain skip.
+Termux and MSYS2 installers pass no manager, so they offer only yes or no.
 
 ## Duplicate installs (Windows)
 
