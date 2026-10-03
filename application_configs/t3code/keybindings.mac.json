@@ -341,5 +341,10 @@
     "command": "usage.period.quarter",
     "key": "mod+shift+4",
     "when": "usagePageOpen"
+  },
+  {
+    "command": "chat.newWithoutProject",
+    "key": "mod+alt+n",
+    "when": "!terminalFocus"
   }
 ]
