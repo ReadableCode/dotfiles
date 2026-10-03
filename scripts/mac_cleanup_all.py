@@ -35,6 +35,11 @@ from collections import defaultdict
 from pathlib import Path
 from stat import S_ISREG
 
+# macOS only. The check is also what lets mypy pass on the other platforms,
+# where the calls below (geteuid, getpwnam, st_blocks) do not exist.
+if sys.platform != "darwin":
+    sys.exit("mac_cleanup_all.py runs on macOS only")
+
 # %%
 # Config — edit these when running as ipython cells (CLI flags override) #
 

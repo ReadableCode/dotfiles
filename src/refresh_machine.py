@@ -41,6 +41,7 @@ HELP_PAGE = """# refresh_machine
 1. pull every repo under `$gitDir` at the same time
    a repo it cannot pull is tagged `WIP PROTECTED`, `FAILED` or `AUTH REQUIRED`, left as it is, and counted in a warning
    runs `go_apps/git_puller -path $gitDir -r`
+   when the pull moves dotfiles, the run starts again from the code it just pulled, so a fix applies on this run
 2. with `--packages` only: upgrade os packages, before the deploy so a config an upgrade clobbers is linked again
    runs `scripts/my_updater.sh` on macos and linux, `scripts/my_updater.ps1` on windows
    a step whose tool is missing offers to install it with `scripts/bootstrap.sh --only <tool>` first
@@ -353,6 +354,25 @@ def run_plain(argv):
     return subprocess.run(argv).returncode
 
 
+def dotfiles_head(dotfiles, capture=subprocess.run):
+    """The dotfiles commit checked out, or None when git cannot say."""
+    try:
+        done = capture(["git", "-C", dotfiles, "rev-parse", "HEAD"], capture_output=True, text=True)
+    except OSError:
+        return None
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def restart_argv(argv, pull_failed, script_path=__file__):
+    """
+    This run again from the file on disk, without the pull it already did.
+    The process running now holds the code from before the pull, so every fix
+    to this file would otherwise only reach the run after the one that pulled it.
+    """
+    extra = ["--after-pull"] + (["--pull-failed"] if pull_failed else [])
+    return [sys.executable, os.path.abspath(script_path), *argv, *extra]
+
+
 def run_pull(argv, out):
     """Stream git_puller's output as it arrives and count the repos it could not pull."""
     unpulled = 0
@@ -511,10 +531,14 @@ def parse_args(argv):
     mode.add_argument("--packages", action="store_true", help="upgrade os packages between the pull and the deploy")
     mode.add_argument("--pull-only", action="store_true", help="pull every repo and stop")
     parser.add_argument("--check", action="store_true", help="report what would change, write nothing")
+    # internal: the restart after a pull that moved dotfiles (restart_argv)
+    parser.add_argument("--after-pull", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--pull-failed", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
-def main(argv=None, environ=None):
+def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
+    argv = sys.argv[1:] if argv is None else argv
     args = parse_args(argv)
     environ = os.environ if environ is None else environ
     git_dir = resolve_git_dir(environ)
@@ -527,6 +551,7 @@ def main(argv=None, environ=None):
         return 1
     out = sys.stdout
     color = terminal_style.use_color(out, environ)
+    dotfiles = os.path.join(git_dir, "dotfiles")
     steps = build_steps(
         git_dir,
         platform.system(),
@@ -535,8 +560,25 @@ def main(argv=None, environ=None):
         args.pull_only,
         args.check,
     )
+    failed = []
+    total = len(steps)
+    if args.after_pull:
+        steps = steps[1:]
+        failed = ["pulling every repo"] if args.pull_failed else []
     try:
-        failed = execute(steps, out, color, dotfiles=os.path.join(git_dir, "dotfiles"))
+        if not (args.after_pull or args.check or args.pull_only):
+            before = head(dotfiles)
+            failed = execute(steps[:1], out, color, dotfiles=dotfiles)
+            if head(dotfiles) != before:
+                out.write(
+                    terminal_style.paint("   dotfiles moved; continuing with the code just pulled", "muted", color)
+                )
+                out.write("\n\n")
+                out.flush()
+                return run(restart_argv(argv, bool(failed))).returncode
+            steps = steps[1:]
+            out.write("\n")
+        failed += execute(steps, out, color, dotfiles=dotfiles)
     except KeyboardInterrupt:
         out.write("\n" + terminal_style.paint("interrupted: the remaining steps did not run", "red", color) + "\n")
         return 130
@@ -547,7 +589,7 @@ def main(argv=None, environ=None):
     # a plain pull should not pay for.
     asked_missing = args.packages and not args.pull_only
     missing = missing_apps(os.path.join(git_dir, "dotfiles")) if asked_missing else None
-    out.write("\n" + summary(failed, len(steps), color, args.check, missing, asked_missing))
+    out.write("\n" + summary(failed, total, color, args.check, missing, asked_missing))
     return 1 if failed or (asked_missing and missing is None) else 0
 
 

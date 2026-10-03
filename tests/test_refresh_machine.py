@@ -166,6 +166,51 @@ def test_main_refuses_without_a_dotfiles_checkout(tmp_path, capsys):
     assert "no dotfiles checkout" in capsys.readouterr().err
 
 
+def run_main_with_heads(tmp_path, monkeypatch, heads, argv=()):
+    """main() with the steps recorded instead of run and dotfiles' HEAD read from ``heads``."""
+    ran, restarts = [], []
+    monkeypatch.setattr(refresh_machine, "execute", lambda steps, *a, **k: ran.append(titles(steps)) or [])
+    heads = iter(heads)
+
+    def run(argv):
+        restarts.append(argv)
+        return type("Done", (), {"returncode": 7})()
+
+    code = refresh_machine.main(
+        list(argv), environ={"gitDir": make_git_dir(tmp_path)}, run=run, head=lambda dotfiles: next(heads)
+    )
+    return code, ran, restarts
+
+
+def test_a_pull_that_moves_dotfiles_restarts_from_the_pulled_code(tmp_path, monkeypatch):
+    code, ran, restarts = run_main_with_heads(tmp_path, monkeypatch, ["old", "new"])
+    assert ran == [["pulling every repo"]]
+    assert code == 7
+    assert restarts[0][1] == os.path.abspath(refresh_machine.__file__)
+    assert restarts[0][2:] == ["--after-pull"]
+
+
+def test_a_pull_that_leaves_dotfiles_alone_carries_on_in_this_process(tmp_path, monkeypatch):
+    code, ran, restarts = run_main_with_heads(tmp_path, monkeypatch, ["same", "same"])
+    assert restarts == []
+    assert ran[0] == ["pulling every repo"]
+    assert ran[1][0] == "checking for repos to clone"
+    assert code == 0
+
+
+def test_the_restart_skips_the_pull_and_still_counts_its_failure(tmp_path, monkeypatch, capsys):
+    code, ran, restarts = run_main_with_heads(tmp_path, monkeypatch, [], ["--after-pull", "--pull-failed"])
+    assert restarts == []
+    assert "pulling every repo" not in ran[0]
+    assert code == 1
+    assert "steps failed: pulling every repo" in capsys.readouterr().out
+
+
+def test_restart_argv_keeps_the_mode_and_passes_the_pull_result():
+    argv = refresh_machine.restart_argv(["--packages"], True, script_path="/x/refresh_machine.py")
+    assert argv[1:] == [os.path.abspath("/x/refresh_machine.py"), "--packages", "--after-pull", "--pull-failed"]
+
+
 # ---------------------------------------------------------------- the check plan
 
 
