@@ -232,6 +232,19 @@ def test_a_choco_app_installed_another_way_is_elsewhere_not_missing(tmp_path):
     assert elsewhere == ["choco:tailscale"]
 
 
+def test_the_installers_question_uses_the_same_elsewhere_answer():
+    listing = (
+        "Name       Id                  Version  Source\n"
+        "---------------------------------------------\n"
+        "Tailscale  Tailscale.Tailscale 1.90.0   winget\n"
+    )
+    run = fake_run({"winget": (0, listing)})
+    have_winget = lambda name: name == "winget"  # noqa: E731
+    assert app_lists.elsewhere_packages("choco", ["tailscale", "dbeaver"], have_winget, run) == ["tailscale"]
+    assert app_lists.elsewhere_packages("winget", ["tailscale"], have_winget, run) == []
+    assert app_lists.elsewhere_packages("choco", ["tailscale"], lambda name: False, run) == []
+
+
 # %%
 # Ignored on this machine #
 

@@ -102,6 +102,19 @@ copy). `myupdater` asks it once after every step and prints
 the answer in the closing summary, so a package an installer could not find is
 read at the end rather than lost in the middle of a long run.
 
+The choco installer asks the same question before it offers anything
+(`app_lists.py --elsewhere choco`, names on stdin): an `elsewhere` app is
+printed under "Installed outside choco, so not offered" and never reaches the
+per-app questions. Until 2026-10-02 the installer read `choco list` alone and
+offered every one of them; a yes ran Chocolatey's installer over the existing
+copy, which on RyzenWhite tried to put Tailscale 1.98.8 over 1.102.4 and
+failed. A name matches a `winget list` row by the row's name with what the
+installer added around it dropped ("SyncTrayzor (x64) version 2.2.0.0" is
+`synctrayzor`), by any part of the winget id, or by the whole id
+(`googlechrome` is `Google.Chrome`); always the whole name, never a prefix. A
+choco name with nothing in common with the app's own (`vscode`) is not
+recognised and is still offered, which is what the check below is for.
+
 ### Ignoring an app on one machine
 
 Every listed app is offered at least once. Each installer first asks whether
@@ -144,7 +157,13 @@ installed it, so Chocolatey's own records stay true.
 | no app list names it | one summary line (runtime frameworks installed per CPU architecture, versions kept side by side); `--all` lists them |
 
 myupdater upgrades packages (step 2) before it offers removals (step 7), so the
-copy kept is the one its manager just brought up to date.
+copy kept is the one its manager just brought up to date. After the app list
+installs it asks once more (`app_removals.py --duplicates`, the duplicate half
+alone), so a second copy an install just made is offered for removal on the
+same run.
+
+Two rows with different ids are not a duplicate even under one name: RustDesk's
+MSI registers itself twice, and both rows uninstall the one product.
 
 Anything the finder cannot see - an optional feature beside a package, like the
 in-box OpenSSH server - still takes a line with `replaced_by`.
@@ -154,6 +173,7 @@ in-box OpenSSH server - still takes a line with `replaced_by`.
 ```bash
 uv run python src/app_removals.py --list   # report only, changes nothing
 uv run python src/app_removals.py --all    # also list duplicates no app list names
+uv run python src/app_removals.py --duplicates  # only the duplicate installs (Windows)
 uv run python src/app_removals.py          # ask per package
 uv run python src/app_removals.py --yes    # no prompts (nothing calls this)
 ```

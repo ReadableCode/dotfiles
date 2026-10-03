@@ -471,10 +471,24 @@ def winget_uninstall(package_id, version):
     return ["winget", "uninstall", "--disable-interactivity", "--exact", "--id", package_id, "--version", version]
 
 
+# What installers add around an app's name in Add/Remove Programs: a bracketed
+# edition, "version 2.2.0.0", the CPU architecture, a version number.
+NAME_DECORATION = re.compile(
+    r"\([^)]*\)|\bversion\b.*$|\b(x64|x86|amd64|arm64|64-bit|32-bit)\b|\bv?\d+(\.\d+)+\S*", re.IGNORECASE
+)
+
+
 def names_row(package, row):
-    """Whether a package name is this row's app: the row's name or any part of its winget id (golang: GoLang.Go)."""
+    """
+    Whether a package name is this row's app. It is when it equals the row's
+    name, with or without what the installer added around it ("SyncTrayzor
+    (x64) version 2.2.0.0" is synctrayzor), any part of its winget id (golang:
+    GoLang.Go) or the whole id (googlechrome: Google.Chrome). Always the whole
+    name, never a prefix: claude is not Claude Code.
+    """
     key = name_key(package)
-    return key == name_key(row.name) or key in {name_key(part) for part in row.id.split(".")}
+    names = {name_key(row.name), name_key(NAME_DECORATION.sub(" ", row.name)), name_key(row.id)}
+    return key in names | {name_key(part) for part in row.id.split(".")}
 
 
 def names_group(package, group):
@@ -753,11 +767,20 @@ def offer_removals(removable, assume_yes):
 
 
 def run(
-    list_only=False, assume_yes=False, entries=None, system=None, hostname=None, run_query=run_capture, show_all=False
+    list_only=False,
+    assume_yes=False,
+    entries=None,
+    system=None,
+    hostname=None,
+    run_query=run_capture,
+    show_all=False,
+    duplicates_only=False,
 ):
     system = system or platform.system()
     entries = load_app_removals() if entries is None else entries
-    if entries:
+    if duplicates_only:
+        found = Candidates()
+    elif entries:
         found = candidates(entries, system=system, hostname=hostname, run=run_query)
         report(found)
     else:
@@ -792,8 +815,13 @@ def main():
     parser.add_argument("--list", action="store_true", help="only report, never prompt or uninstall")
     parser.add_argument("--yes", action="store_true", help="uninstall everything offered without prompting")
     parser.add_argument("--all", action="store_true", help="also list duplicate installs no app list names (Windows)")
+    parser.add_argument(
+        "--duplicates",
+        action="store_true",
+        help="only the duplicate installs (Windows): what a refresh asks again right after it installs apps",
+    )
     args = parser.parse_args()
-    return run(list_only=args.list, assume_yes=args.yes, show_all=args.all)
+    return run(list_only=args.list, assume_yes=args.yes, show_all=args.all, duplicates_only=args.duplicates)
 
 
 if __name__ == "__main__":

@@ -670,6 +670,34 @@ def test_list_only_reports_duplicates_without_offering(monkeypatch, capsys):
     assert "extra" in capsys.readouterr().out
 
 
+def test_duplicates_only_skips_the_declared_removals(monkeypatch, capsys):
+    monkeypatch.setattr(app_removals, "duplicate_groups", lambda **kwargs: [owned_group()])
+    monkeypatch.setattr(app_removals, "candidates", lambda *a, **k: pytest.fail("looked at the removal entries"))
+    entries = [{"name": "old", "manager": "choco", "package": "old"}]
+    assert app_removals.run(list_only=True, entries=entries, system="Windows", duplicates_only=True) == 0
+    assert "Installed more than once" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "package, name, row_id",
+    [
+        ("synctrayzor", "SyncTrayzor (x64) version 2.2.0.0", "ARP\\Machine\\X64\\{c004dcef}_is1"),
+        ("barrier", "Barrier 2.4.0-release", "ARP\\Machine\\X64\\{41036EA6}_is1"),
+        ("7zip", "7-Zip 26.03 (x64)", "ARP\\Machine\\X64\\7-Zip"),
+        ("GoogleChrome", "Chrome", "Google.Chrome"),
+        ("golang", "Go Programming Language amd64 go1.27.1", "GoLang.Go"),
+        ("logitech-options", "Logitech Options", "Logitech.Options"),
+    ],
+)
+def test_a_package_names_the_row_an_installer_decorated(package, name, row_id):
+    assert app_removals.names_row(package, app_removals.Install(name=name, id=row_id, version="1"))
+
+
+def test_a_package_never_names_a_longer_apps_row():
+    row = app_removals.Install(name="Claude Code", id="Anthropic.ClaudeCode", version="1")
+    assert not app_removals.names_row("claude", row)
+
+
 def test_duplicates_are_not_looked_for_off_windows(monkeypatch):
     monkeypatch.setattr(app_removals, "duplicate_groups", lambda **kwargs: pytest.fail("asked winget on a mac"))
     assert app_removals.run(entries=[], system="Darwin") == 0

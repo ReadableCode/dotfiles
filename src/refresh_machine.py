@@ -65,6 +65,9 @@ HELP_PAGE = """# refresh_machine
    an ignored app is never offered on this machine again, via `~/.dotfiles_ignored_apps`
    every question for every manager comes first, then everything chosen installs in one go
    runs the `scripts/install_*` for this machine's package managers, once to ask and once to install
+   a choco app already installed by hand or by winget is listed, not offered: choco would install a second copy
+   on windows, the duplicate check of step 7 then runs again, so a second copy an install made is offered for removal
+   runs `src/app_removals.py --duplicates`
 8. on windows only: bring autohotkey in line with the repo's v2 scripts
    runs `scripts/ensure_autohotkey_v2.ps1 -AutoFix -Full`
 9. with `--packages` only: list every app the lists name that is still not installed, in the summary
@@ -337,6 +340,11 @@ def build_steps(git_dir, system, machine, packages=False, pull_only=False, check
             )
         )
         steps += app_install_steps(dotfiles, system, which)
+        if windows:
+            # Again, after the installs: a copy one of them just put beside an
+            # existing install is offered for removal on this run, not the next.
+            twice = uv_python(dotfiles, "app_removals.py", "--duplicates")
+            steps.append(Step("checking for apps installed twice", twice, needs="uv"))
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-AutoFix", "-Full"]))

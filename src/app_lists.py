@@ -270,6 +270,23 @@ def installed_names(manager, run):
     return names | full | {name.split("@")[0] for name in names}
 
 
+def elsewhere_packages(manager, names, which=shutil.which, run=None):
+    """
+    The ``names`` Chocolatey does not have but `winget list` shows under the
+    same name: installed by hand or by another manager, so installing one
+    through choco would make a second copy. The one answer both the closing
+    summary and the installer's questions use. Only choco has this problem.
+    """
+    import app_removals
+
+    if manager != "choco" or not names or not which("winget"):
+        return []
+    run = run or app_removals.run_capture
+    code, output = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
+    rows = app_removals.parse_winget_list(output) if code == 0 else []
+    return [name for name in names if any(app_removals.names_row(name, row) for row in rows)]
+
+
 def missing_packages(
     which=shutil.which, run=None, app_lists=APP_LISTS, overlay_paths=None, release=None, ignore_file=None
 ):
@@ -290,7 +307,6 @@ def missing_packages(
     run = run or app_removals.run_capture
     missing, elsewhere, unanswered, ignored = [], [], [], []
     skip = read_ignored(ignore_file)
-    winget_rows = None
     for manager in MANAGERS:
         if not which(MANAGER_COMMANDS[manager]):
             continue
@@ -305,13 +321,9 @@ def missing_packages(
         absent = [name for name in wanted if name.lower() not in installed]
         ignored += [f"{manager}:{name}" for name in absent if f"{manager}:{name}".lower() in skip]
         absent = [name for name in absent if f"{manager}:{name}".lower() not in skip]
-        if manager == "choco" and absent and which("winget"):
-            if winget_rows is None:
-                code, output = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
-                winget_rows = app_removals.parse_winget_list(output) if code == 0 else []
-            present = {name for name in absent if any(app_removals.names_row(name, row) for row in winget_rows)}
-            elsewhere += [f"{manager}:{name}" for name in absent if name in present]
-            absent = [name for name in absent if name not in present]
+        present = set(elsewhere_packages(manager, absent, which, run))
+        elsewhere += [f"{manager}:{name}" for name in absent if name in present]
+        absent = [name for name in absent if name not in present]
         missing += [f"{manager}:{name}" for name in absent]
     return missing, elsewhere, unanswered, ignored
 
@@ -340,6 +352,12 @@ def parse_args(argv):
         metavar="MANAGER",
         choices=MANAGERS,
         help="read package names on stdin, print the ones this machine ignores for that manager",
+    )
+    mode.add_argument(
+        "--elsewhere",
+        metavar="MANAGER",
+        choices=MANAGERS,
+        help="read package names on stdin, print the ones installed here outside that manager",
     )
     mode.add_argument(
         "--ignore",
@@ -387,6 +405,9 @@ def main(argv=None):
     if args.ignored:
         names = [line.strip() for line in sys.stdin if line.strip()]
         lines = ignored_packages(args.ignored, names)
+    elif args.elsewhere:
+        names = [line.strip() for line in sys.stdin if line.strip()]
+        lines = elsewhere_packages(args.elsewhere, names)
     elif args.ignore:
         lines = record_ignored(args.ignore[0], args.ignore[1:])
     elif args.ignore_path:

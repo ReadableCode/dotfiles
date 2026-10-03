@@ -87,6 +87,17 @@ def test_windows_uses_powershell_for_packages_and_adds_autohotkey(tmp_path):
     assert steps[-1].argv[-2:] == ["-AutoFix", "-Full"]
 
 
+def test_windows_looks_for_doubled_installs_again_after_installing(tmp_path):
+    git_dir = make_git_dir(tmp_path)
+    steps = refresh_machine.build_steps(git_dir, "Windows", "AMD64", packages=True, which=lambda n: "C:/pwsh.exe")
+    names = titles(steps)
+    twice = names.index("checking for apps installed twice")
+    assert twice > max(index for index, name in enumerate(names) if name.startswith("installing chosen"))
+    assert steps[twice].argv[-2:] == [os.path.join(git_dir, "dotfiles", "src", "app_removals.py"), "--duplicates"]
+    mac = refresh_machine.build_steps(git_dir, "Darwin", "arm64", packages=True, which=lambda n: None)
+    assert "checking for apps installed twice" not in titles(mac)
+
+
 # ---------------------------------------------------------------- running them
 
 

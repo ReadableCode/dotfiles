@@ -156,6 +156,22 @@ function Install-FromList {
         $pending = @($pending | Where-Object { $skipped -notcontains $_ })
     }
 
+    # Installed by hand or by another manager: this manager's own list does not
+    # show it, and installing it here would make a second copy.
+    if ($Manager -and $pending.Count -gt 0) {
+        $elsewhere = Invoke-AppListsPy -Arguments @('--elsewhere', $Manager) -InputLines $pending
+        if ($null -eq $elsewhere) {
+            Write-Error "Could not check which apps are installed outside $Label; installing nothing."
+            return
+        }
+        if ($elsewhere.Count -gt 0) {
+            Write-Host ""
+            Write-Host "Installed outside $Label, so not offered ($($elsewhere.Count)):"
+            $elsewhere | ForEach-Object { Write-Host "  $_" }
+            $pending = @($pending | Where-Object { $elsewhere -notcontains $_ })
+        }
+    }
+
     if ($pending.Count -eq 0) {
         Write-Host ""
         $suffix = if ($ignoredHere.Count -gt 0) { ' or ignored here' } else { '' }
