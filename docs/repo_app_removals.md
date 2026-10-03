@@ -183,26 +183,38 @@ every run repeated the same failures:
 
 `scripts/my_updater.ps1` now upgrades by name from a plan,
 `app_lists.py --upgrades winget` and `--upgrades choco`, and prints what each
-plan holds back with its reason under "left alone":
+plan holds back with its reason under "left alone".
+
+**winget upgrades an app only when a winget app list names it.** The list is
+what makes an app winget's, so nothing is guessed: Chocolatey's apps, a
+component another app installs and maintains for itself (Epic Online Services,
+which winget offers and then refuses to replace because a different kind of
+installer put it there), and anything installed by hand are all left alone.
+**Chocolatey upgrades what it installed**, which is all `choco outdated` ever
+lists. On top of that:
 
 | Manager | Held back | Why |
 | --- | --- | --- |
-| winget | an app Chocolatey installed, matched by name the same way as above with a `.install` / `.portable` suffix dropped (`git.install` is `Git.Git`) | Chocolatey upgrades it next |
+| either | a package `app_upgrade_holds.yaml` names | an app that updates itself, whose package then fails its own checksum on every run (GoogleChrome, parsec); the install is untouched |
+| winget | a listed id Chocolatey also installed | the lists disagree; drop it from one |
 | winget | an offer whose leading version numbers are not past the installed ones | it is the release already installed |
 | winget | Windows Terminal while a Terminal window is open | Windows will not replace a running package; the Store updates it once closed |
 | choco | a package whose app `winget list` shows at or past the version on offer | something else upgraded it and the installer would push an older build over it |
 
-Everything else is upgraded, one manager per app, so a second run right after
-the first has the same plan minus whatever the first one upgraded.
-`my_updater.ps1 --check` counts from the same plans. If a plan cannot be worked
-out (no uv, the manager not answering) that manager upgrades nothing and the
-step fails, rather than falling back to "all".
+Everything else is upgraded, one package at a time and quietly: the terminal
+gets one line per package (`upgraded`, or `failed, reported at the end`) and
+everything the manager printed goes to `~/logs/updater/upgrades_<time>.log`.
+The failures are listed once, in the closing summary, each with a plain reason
+read from that output - the package's checksum is out of date, winget will not
+replace the installed copy, the app is running, or the installer stopped
+because named running programs have its files open (OBS Studio's installer
+exits 6 while anything has its virtual camera loaded, which any app that lists
+cameras does). A failed upgrade fails the "updating os packages" step.
 
-What a plan cannot hold back is an upgrade that is real but fails for a reason
-outside this repo, and it is attempted again on every run until the cause goes:
-a Chocolatey package whose download no longer matches its own checksum
-(GoogleChrome, parsec), or an installer that refuses while another program has
-its files open (OBS Studio's while anything has the virtual camera loaded).
+A second run right after the first has the same plan minus whatever the first
+one upgraded. `my_updater.ps1 --check` counts from the same plans. If a plan
+cannot be worked out (no uv, the manager not answering) that manager upgrades
+nothing and the step fails, rather than falling back to "all".
 
 Anything the finder cannot see - an optional feature beside a package, like the
 in-box OpenSSH server - still takes a line with `replaced_by`.

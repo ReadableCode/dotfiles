@@ -178,9 +178,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   at an installer's per-app question is written to
   `~/.dotfiles_ignored_apps` on that machine and never offered there again;
   each run that leaves one out names the file. On Windows it also plans the
-  upgrades (`--upgrades winget|choco`, read by `scripts/my_updater.ps1`): each
-  manager upgrades only its own apps and never to a version already installed,
-  and `--elsewhere` keeps the choco installer from offering an app installed
+  upgrades (`--upgrades winget|choco`, read by `scripts/my_updater.ps1`): winget
+  upgrades only what a winget list names, neither manager goes to a version
+  already installed or touches an app `app_upgrade_holds.yaml` names, and
+  `--elsewhere` keeps the choco installer from offering an app installed
   another way. Doc:
   `docs/repo_app_removals.md`, "Context app lists".
 - **`clone_repos.py`** — offers to clone every repo the cloned contexts'

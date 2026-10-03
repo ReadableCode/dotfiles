@@ -1,8 +1,10 @@
 # OS package updates for Windows: the `updatepackages` step, nothing more.
 # winget first, then Chocolatey, each only when it is installed. Each upgrades
-# only what src/app_lists.py --upgrades names for it, never "all": winget
-# leaves the apps Chocolatey installed to Chocolatey, and neither runs an
-# installer for a version that is already there. Repo pulls and
+# only what src/app_lists.py --upgrades names for it, never "all": winget only
+# the apps a winget app list names, and neither runs an installer for a version
+# that is already there. Each upgrade runs quietly into ~/logs/updater, one
+# line per package, and the failures are reported once at the end with a plain
+# reason. Repo pulls and
 # config deploys live in src/refresh_machine.py, which runs this between the
 # pull and the deploy when called with --packages (the myupdater command). The
 # macOS/Linux twin is scripts/my_updater.sh.
@@ -99,9 +101,9 @@ function Get-UpdaterPolicyText {
 function Get-UpgradePlan {
     # What one manager (winget or choco) should upgrade, as src/app_lists.py
     # --upgrades prints it: "upgrade <name>" per app, and "held <name>
-    # <reason>" per app it must leave alone - for winget an app Chocolatey
-    # installed or an offer of the release already installed, for choco a
-    # package whose app is already past the version on offer. `winget upgrade
+    # <reason>" per app it must leave alone - for winget an app no winget app
+    # list names, for choco a package whose app is already past the version on
+    # offer, for both an app app_upgrade_holds.yaml names. `winget upgrade
     # --all` and `choco upgrade all` know none of that, so neither is used.
     # Throws when the lookup fails, so nothing is upgraded on a guess.
     param([string]$Manager)
@@ -127,6 +129,101 @@ function Show-Held {
         Write-Host "  left alone ($($Plan.Held.Count)):"
         $Plan.Held | ForEach-Object { Write-Host "    $_" }
     }
+}
+
+function Get-AppsHolding {
+    # The running programs that have a file of this package open: a module
+    # loaded from a folder named like the package (obs-studio is
+    # C:\Program Files\obs-studio\...). An installer that finds its files in
+    # use stops, and its exit code alone does not say who has them.
+    param([string]$Name)
+    $folder = ('\' + ($Name -replace '\.(install|portable)$', '') + '\').ToLower()
+    $holders = @()
+    foreach ($process in Get-Process) {
+        try {
+            $open = $process.Modules | Where-Object { $_.FileName -and $_.FileName.ToLower().Contains($folder) }
+            if ($open) { $holders += $process.Name }
+        }
+        catch { }
+    }
+    return @($holders | Sort-Object -Unique)
+}
+
+function Get-FailureReason {
+    # One plain line for why an upgrade did not go through, read from what the
+    # manager printed. The full output is in the log either way.
+    param([string]$Name, [string]$Text, [int]$Code)
+    if ($Text -match 'hashes do not match|did not meet') {
+        return "the download does not match the package's own checksum, so the package is out of date; nothing was installed"
+    }
+    if ($Text -match 'install technology is different') {
+        return "winget will not replace the installed copy, which a different kind of installer put there"
+    }
+    if ($Text -match '0x80073D02|need to be closed') {
+        return "the app is running; close it and run this again"
+    }
+    if ($Text -match 'Installer hash does not match') {
+        return "the download does not match winget's recorded hash, so the manifest is out of date; nothing was installed"
+    }
+    if ($Text -match 'No applicable (upgrade|update)|No available upgrade') {
+        return "winget found no upgrade that applies to the installed copy"
+    }
+    $holders = @(Get-AppsHolding $Name)
+    if ($holders.Count -gt 0) {
+        return "its installer stopped (exit $Code) because these running programs have its files open: $($holders -join ', '); close them and run this again"
+    }
+    if ($Text -match "1603") {
+        return "its MSI installer failed (1603); nothing was installed"
+    }
+    return "its installer exited with code $Code"
+}
+
+$script:UpgradeFailures = @()
+$script:UpgradeLog = ''
+
+function Invoke-Upgrade {
+    # One package, quietly: everything the manager prints goes to the log, the
+    # terminal gets one line, and a failure is kept for the closing report
+    # instead of scrolling past in red in the middle of the run.
+    param([string]$Manager, [string]$Name, [string]$Command)
+    if (-not $script:UpgradeLog) {
+        $folder = Join-Path $HOME 'logs\updater'
+        New-Item -ItemType Directory -Force -Path $folder | Out-Null
+        $script:UpgradeLog = Join-Path $folder ("upgrades_{0}.log" -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    }
+    Write-Host -NoNewline "  $Name ... "
+    # Through cmd so stderr joins stdout as plain text in either PowerShell.
+    $text = (cmd /c "$Command 2>&1" | Out-String)
+    $code = $LASTEXITCODE
+    Add-Content -LiteralPath $script:UpgradeLog -Encoding UTF8 -Value "===== $Manager $Name (exit $code) =====`r`n$text"
+    # 3010 and 1641 are an installer's "done, restart needed".
+    if ($code -eq 0 -or $code -eq 3010 -or $code -eq 1641) {
+        Write-Host "upgraded"
+        return
+    }
+    Write-Host "failed, reported at the end"
+    $script:UpgradeFailures += [pscustomobject]@{
+        Manager = $Manager
+        Name    = $Name
+        Reason  = Get-FailureReason -Name $Name -Text $text -Code $code
+    }
+}
+
+function Write-UpgradeReport {
+    # The failures, once, after everything has run. Under refresh_machine.py
+    # (which sets UPGRADE_REPORT) they go to its closing summary instead, so
+    # they are the last thing on the screen and not the middle of a long run.
+    if ($script:UpgradeFailures.Count -eq 0) { return }
+    if ($env:UPGRADE_REPORT) {
+        $lines = @($script:UpgradeFailures | ForEach-Object { "$($_.Manager)`t$($_.Name)`t$($_.Reason)" })
+        $lines += "log`t`t$script:UpgradeLog"
+        Add-Content -LiteralPath $env:UPGRADE_REPORT -Encoding UTF8 -Value $lines
+        return
+    }
+    Write-Host ""
+    Write-Host "$($script:UpgradeFailures.Count) upgrade(s) did not go through:"
+    $script:UpgradeFailures | ForEach-Object { Write-Host "  $($_.Manager):$($_.Name)  $($_.Reason)" }
+    Write-Host "  full output: $script:UpgradeLog"
 }
 
 function Get-UpdaterPolicy {
@@ -363,10 +460,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
         Show-Held $plan
         if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for winget to upgrade." }
         foreach ($id in $plan.Upgrade) {
-            # winget's own refusals ("the install technology is different")
-            # do not say which app they are about.
-            Write-Host "  $id"
-            winget upgrade --id $id --exact --disable-interactivity --accept-package-agreements --accept-source-agreements
+            Invoke-Upgrade winget $id "winget upgrade --id $id --exact --disable-interactivity --accept-package-agreements --accept-source-agreements"
         }
     }
     catch {
@@ -380,7 +474,9 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
         $plan = Get-UpgradePlan choco
         Show-Held $plan
         if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for chocolatey to upgrade." }
-        else { choco upgrade @($plan.Upgrade) -y }
+        foreach ($name in $plan.Upgrade) {
+            Invoke-Upgrade choco $name "choco upgrade $name -y --no-progress"
+        }
     }
     catch {
         Write-Host "  chocolatey upgrades skipped: $_"
@@ -388,9 +484,9 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
     }
 }
 
-# winget exits nonzero when some package has no applicable upgrade, which is
-# not a failure of this step; the upgrade output above is the report. A
-# setting the inventory asks for and this run could not make is one, and so is
-# not being able to work out what a manager should upgrade.
-if ($settingsFailed) { exit 1 }
+# An upgrade that did not go through fails this step, and so does a setting
+# the inventory asks for that this run could not make, or not being able to
+# work out what a manager should upgrade.
+Write-UpgradeReport
+if ($settingsFailed -or $script:UpgradeFailures.Count -gt 0) { exit 1 }
 exit 0

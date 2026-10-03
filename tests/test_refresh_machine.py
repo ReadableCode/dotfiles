@@ -460,6 +460,24 @@ def test_the_summary_says_when_missing_apps_could_not_be_checked():
     assert "could not work out which listed apps are installed" in text
 
 
+def test_the_summary_lists_the_upgrades_that_failed_with_their_reason():
+    upgrades = ([("choco", "obs-studio", "its files are open in: claude")], "C:/logs/upgrades.log")
+    text = refresh_machine.summary(["updating os packages"], 13, False, upgrades=upgrades)
+    assert "1 upgrade(s) did not go through:" in text
+    assert "choco:obs-studio  its files are open in: claude" in text
+    assert "full output: C:/logs/upgrades.log" in text
+
+
+def test_the_upgrade_report_is_read_as_failures_and_a_log(tmp_path):
+    report = tmp_path / "report.tsv"
+    report.write_text("\ufeffchoco\tparsec\tchecksum is out of date\r\nlog\t\tC:/logs/u.log\r\n", encoding="utf-8")
+    assert refresh_machine.read_upgrade_report(str(report)) == (
+        [("choco", "parsec", "checksum is out of date")],
+        "C:/logs/u.log",
+    )
+    assert refresh_machine.read_upgrade_report(str(tmp_path / "none.tsv")) == ([], "")
+
+
 def test_the_summary_says_nothing_about_apps_when_not_asked():
     assert "listed app" not in refresh_machine.summary([], 5, False)
 

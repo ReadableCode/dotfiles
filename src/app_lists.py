@@ -291,6 +291,23 @@ UPGRADES_END = re.compile(r"^\d+ upgrades? available", re.MULTILINE)
 RELEASE_NUMBER = re.compile(r"v?(\d+(?:\.\d+)*)")
 CHOCO_VARIANT = re.compile(r"\.(install|portable)$", re.IGNORECASE)
 WINDOWS_TERMINAL = "microsoft.windowsterminal"
+UPGRADE_HOLDS = os.path.join(REPO_ROOT, "app_upgrade_holds.yaml")
+
+
+def load_upgrade_holds(path=None):
+    """``{(manager, package lowercased): reason}`` from app_upgrade_holds.yaml; {} when the file is absent."""
+    path = path or UPGRADE_HOLDS
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as handle:
+        entries = yaml.safe_load(handle) or []
+    holds = {}
+    for entry in entries:
+        missing = [key for key in ("name", "manager", "package", "reason") if not entry.get(key)]
+        if missing:
+            raise ValueError(f"Upgrade hold {entry.get('name', entry)} in {path} lacks {', '.join(missing)}")
+        holds[(entry["manager"], entry["package"].lower())] = " ".join(str(entry["reason"]).split())
+    return holds
 
 
 def release_number(version):
@@ -329,21 +346,26 @@ def choco_name(package):
     return CHOCO_VARIANT.sub("", package)
 
 
-def winget_upgrades(run=None, which=shutil.which):
+def winget_upgrades(run=None, which=shutil.which, app_lists=APP_LISTS, overlay_paths=None, holds=None):
     """
     ``(upgrade, held)`` for what `winget upgrade` offers, or None when winget
     could not be asked. ``upgrade`` is the winget ids to upgrade; ``held`` is
-    ``(id, reason)`` for the ones winget must leave alone:
+    ``(id, reason)`` for the ones winget must leave alone.
 
-    - an app Chocolatey installed. `winget upgrade --all` sees every installed
-      program, not only its own, so it put TightVNC 2.8.89 over the 2.8.88
-      Chocolatey had recorded; `choco upgrade` is what moves those.
-    - an offer of the release already installed, which winget makes when it
-      cannot compare the installer's version string (Barrier registers
-      ``2.4.0-release`` and is offered ``2.4.0`` on every run, forever).
-    - Windows Terminal while a Terminal window is open, which is where this
-      usually runs: Windows refuses to replace a running package, and the
-      Store updates it once it is closed.
+    winget upgrades an app only when a winget app list names it. `winget
+    upgrade --all` goes for every installed program it can match to its
+    source, whoever installed it: Chocolatey's apps (it put TightVNC 2.8.89
+    over the 2.8.88 Chocolatey had recorded), a component another app
+    installs and maintains for itself (Epic Online Services, which winget then
+    refuses to replace), anything installed by hand. The list is what says an
+    app is winget's, so nothing is guessed from names.
+
+    A listed id is still held when it is on the holds file, when Chocolatey
+    also installed it (the lists disagree), when the offer is the release
+    already installed (winget cannot compare some version strings: Barrier
+    registers ``2.4.0-release`` and is offered ``2.4.0`` forever), and for
+    Windows Terminal while a Terminal window is open, which Windows refuses to
+    replace and the Store updates once it is closed.
     """
     import app_removals
 
@@ -354,12 +376,19 @@ def winget_upgrades(run=None, which=shutil.which):
     # Only the first table: after its count winget lists what it cannot or will not upgrade.
     end = UPGRADES_END.search(output)
     rows = app_removals.parse_winget_list(output[: end.start()] if end else output)
-    choco = sorted(app_removals.choco_versions(run=run)) if which("choco") else []
+    listed = {name.lower() for name in wanted_packages("winget", app_lists, overlay_paths)}
+    holds = load_upgrade_holds() if holds is None else holds
+    choco = sorted(app_removals.choco_versions(run=run)) if which("choco") and rows else []
     upgrade, held = [], []
     for row in rows:
         owner = next((name for name in choco if app_removals.names_row(choco_name(name), row)), None)
-        if owner:
-            held.append((row.id, f"chocolatey installed it (choco:{owner}), so choco upgrades it"))
+        if row.id.lower() not in listed:
+            mine = f"chocolatey installed it (choco:{owner})" if owner else "no winget app list names it"
+            held.append((row.id, f"{mine}, so winget does not upgrade it"))
+        elif ("winget", row.id.lower()) in holds:
+            held.append((row.id, holds[("winget", row.id.lower())]))
+        elif owner:
+            held.append((row.id, f"chocolatey also installed it (choco:{owner}); drop it from one app list"))
         elif at_or_past(row.version, row.available):
             held.append((row.id, f"{row.available} is the installed {row.version} under another name"))
         elif row.id.lower() == WINDOWS_TERMINAL and process_running("WindowsTerminal.exe", run):
@@ -369,15 +398,19 @@ def winget_upgrades(run=None, which=shutil.which):
     return upgrade, held
 
 
-def choco_upgrades(run=None, which=shutil.which):
+def choco_upgrades(run=None, which=shutil.which, holds=None):
     """
     ``(upgrade, held)`` for what `choco outdated` lists, or None when
-    Chocolatey could not be asked. ``held`` is ``(package, reason)`` for a
-    package whose app is really installed at or past the version Chocolatey
-    offers: something else upgraded it (the app itself, or winget before it
-    was kept off Chocolatey's apps), Chocolatey's record is behind, and its
-    installer would be pushing an older build over a newer one - OpenVPN 2.6.16
-    over 2.7.7 failed with MSI 1603 on every run.
+    Chocolatey could not be asked. Chocolatey only ever lists what it
+    installed itself, so every package is its own; ``held`` is ``(package,
+    reason)`` for the ones it must still leave alone:
+
+    - a package on the holds file (apps that update themselves, whose package
+      then fails its own checksum on every run).
+    - a package whose app is really installed at or past the version
+      Chocolatey offers: something else upgraded it, Chocolatey's record is
+      behind, and its installer would push an older build over a newer one -
+      OpenVPN 2.6.16 over 2.7.7 failed with MSI 1603 on every run.
     """
     import app_removals
 
@@ -386,6 +419,7 @@ def choco_upgrades(run=None, which=shutil.which):
     if code is None:
         return None
     outdated = [line.strip().split("|") for line in output.splitlines() if line.count("|") >= 3]
+    holds = load_upgrade_holds() if holds is None else holds
     rows = []
     if outdated and which("winget"):
         code, listing = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
@@ -403,7 +437,9 @@ def choco_upgrades(run=None, which=shutil.which):
             ),
             None,
         )
-        if ahead:
+        if ("choco", package.lower()) in holds:
+            held.append((package, holds[("choco", package.lower())]))
+        elif ahead:
             held.append((package, f"{ahead.version} is installed, at or past the {available} chocolatey offers"))
         else:
             upgrade.append(package)

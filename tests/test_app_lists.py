@@ -298,31 +298,62 @@ def upgrade_run(choco_list="", terminal_open=False):
     return run
 
 
-def test_winget_leaves_chocos_apps_and_same_release_offers_alone():
-    choco = "obs-studio|32.1.2\ntightvnc|2.8.88\ngit.install|2.56.0\n"
-    upgrade, held = app_lists.winget_upgrades(run=upgrade_run(choco), which=lambda name: True)
-    assert upgrade == ["EpicGames.EpicOnlineServices", "Microsoft.WindowsTerminal"]
+def winget_plan(tmp_path, listed, choco_list="", terminal_open=False, holds=None):
+    write(tmp_path, "windows_apps_personal_winget.txt", "".join(f"{name}\n" for name in listed))
+    return app_lists.winget_upgrades(
+        run=upgrade_run(choco_list, terminal_open),
+        which=lambda name: True,
+        app_lists=str(tmp_path),
+        overlay_paths=[],
+        holds=holds or {},
+    )
+
+
+def test_winget_upgrades_only_what_a_winget_list_names(tmp_path):
+    choco = "obs-studio|32.1.2\ntightvnc|2.8.88\n"
+    upgrade, held = winget_plan(tmp_path, ["Git.Git"], choco)
+    assert upgrade == ["Git.Git"]
     reasons = dict(held)
+    assert "no winget app list names it" in reasons["EpicGames.EpicOnlineServices"]
+    assert "no winget app list names it" in reasons["Microsoft.WindowsTerminal"]
     assert "choco:obs-studio" in reasons["OBSProject.OBSStudio"]
     assert "choco:tightvnc" in reasons["GlavSoft.TightVNC"]
-    assert "choco:git.install" in reasons["Git.Git"]
-    assert "2.4.0-release" in reasons["DebaucheeOpenSourceGroup.Barrier"]
 
 
-def test_winget_upgrades_everything_real_when_there_is_no_choco():
-    upgrade, held = app_lists.winget_upgrades(run=upgrade_run(), which=lambda name: name == "winget")
-    assert [package for package, _ in held] == ["DebaucheeOpenSourceGroup.Barrier"]
-    assert len(upgrade) == 5
+def test_nothing_is_wingets_when_no_list_names_anything(tmp_path):
+    upgrade, held = winget_plan(tmp_path, [])
+    assert upgrade == []
+    assert len(held) == 6
 
 
-def test_winget_leaves_windows_terminal_alone_while_a_window_is_open():
-    upgrade, held = app_lists.winget_upgrades(run=upgrade_run(terminal_open=True), which=lambda name: name == "winget")
-    assert "Microsoft.WindowsTerminal" not in upgrade
+def test_a_listed_id_chocolatey_also_installed_is_a_conflict_not_an_upgrade(tmp_path):
+    upgrade, held = winget_plan(tmp_path, ["GlavSoft.TightVNC"], "tightvnc|2.8.88\n")
+    assert upgrade == []
+    assert "drop it from one app list" in dict(held)["GlavSoft.TightVNC"]
+
+
+def test_a_listed_offer_of_the_installed_release_is_left_alone(tmp_path):
+    upgrade, held = winget_plan(tmp_path, ["DebaucheeOpenSourceGroup.Barrier"])
+    assert upgrade == []
+    assert "2.4.0-release" in dict(held)["DebaucheeOpenSourceGroup.Barrier"]
+
+
+def test_winget_leaves_windows_terminal_alone_while_a_window_is_open(tmp_path):
+    upgrade, _ = winget_plan(tmp_path, ["Microsoft.WindowsTerminal"])
+    assert upgrade == ["Microsoft.WindowsTerminal"]
+    upgrade, held = winget_plan(tmp_path, ["Microsoft.WindowsTerminal"], terminal_open=True)
+    assert upgrade == []
     assert "Terminal window is open" in dict(held)["Microsoft.WindowsTerminal"]
 
 
-def test_the_winget_plan_is_the_same_asked_twice():
-    plans = [app_lists.winget_upgrades(run=upgrade_run("tightvnc|2.8.88\n"), which=lambda name: True) for _ in "12"]
+def test_a_held_winget_id_is_left_alone_with_its_reason(tmp_path):
+    upgrade, held = winget_plan(tmp_path, ["Git.Git"], holds={("winget", "git.git"): "updates itself"})
+    assert upgrade == []
+    assert dict(held)["Git.Git"] == "updates itself"
+
+
+def test_the_winget_plan_is_the_same_asked_twice(tmp_path):
+    plans = [winget_plan(tmp_path, ["Git.Git"], "tightvnc|2.8.88\n") for _ in "12"]
     assert plans[0] == plans[1]
 
 
@@ -331,7 +362,7 @@ def test_winget_upgrades_are_unknown_when_winget_cannot_run():
 
 
 def test_choco_leaves_a_package_alone_when_the_app_is_already_past_its_offer():
-    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: True)
+    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: True, holds={})
     # Chrome 154 is behind the 155 on offer and OBS 31 behind 32, so those are real upgrades;
     # Parsec's 150-104a is behind choco's date version. messenger is not outdated, vlc is pinned.
     assert upgrade == ["GoogleChrome", "obs-studio", "parsec"]
@@ -339,14 +370,34 @@ def test_choco_leaves_a_package_alone_when_the_app_is_already_past_its_offer():
     assert "2.7.701" in held[0][1] and "2.6.16.1" in held[0][1]
 
 
+def test_choco_leaves_held_packages_alone_with_their_reason():
+    holds = {("choco", "googlechrome"): "Chrome updates itself", ("choco", "parsec"): "Parsec updates itself"}
+    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: True, holds=holds)
+    assert upgrade == ["obs-studio"]
+    assert dict(held)["GoogleChrome"] == "Chrome updates itself"
+    assert dict(held)["parsec"] == "Parsec updates itself"
+
+
 def test_choco_upgrades_everything_outdated_when_winget_cannot_say_what_is_installed():
-    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: name == "choco")
+    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: name == "choco", holds={})
     assert upgrade == ["GoogleChrome", "obs-studio", "openvpn", "parsec"]
     assert held == []
 
 
 def test_choco_upgrades_are_unknown_when_choco_cannot_run():
     assert app_lists.choco_upgrades(run=lambda argv: (None, ""), which=lambda name: True) is None
+
+
+def test_the_committed_upgrade_holds_load_and_name_listed_packages():
+    holds = app_lists.load_upgrade_holds()
+    assert ("choco", "googlechrome") in holds and ("choco", "parsec") in holds
+    assert all(reason for reason in holds.values())
+
+
+def test_an_upgrade_hold_without_a_reason_is_refused(tmp_path):
+    path = write(tmp_path, "holds.yaml", "- name: x\n  manager: choco\n  package: x\n")
+    with pytest.raises(ValueError, match="lacks reason"):
+        app_lists.load_upgrade_holds(path)
 
 
 def test_at_or_past_compares_the_leading_numbers():

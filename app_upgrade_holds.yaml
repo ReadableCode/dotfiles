@@ -1,0 +1,27 @@
+# Upgrade holds - listed apps a package manager installs but must not upgrade.
+# Consumed by `src/app_lists.py --upgrades` (see docs/repo_app_removals.md,
+# "Upgrades keep to the manager that installed the app").
+#
+# An app list says which manager installs an app. That manager also upgrades
+# it, except for the entries here: apps that update themselves, whose package
+# then fails on every run. A Chocolatey package for such an app downloads the
+# vendor's "latest" installer and checks it against the checksum recorded when
+# the package was built; the vendor replaces that file with each release, so
+# the check fails until the package's maintainer catches up, and by then the
+# app has updated itself anyway.
+#
+# Schema: name (unique), manager (choco or winget), package (as the app list
+# spells it), reason (one line, printed under "left alone" on every run).
+#
+# The install is untouched: the app list still offers the app on a machine
+# that lacks it. Drop a line to let the manager upgrade it again.
+
+- name: chrome_choco
+  manager: choco
+  package: googlechrome
+  reason: Chrome updates itself, and the package's checksum is out of date whenever Google ships a build
+
+- name: parsec_choco
+  manager: choco
+  package: parsec
+  reason: Parsec updates itself, and Chocolatey marks the package possibly broken (its checksum no longer matches)

@@ -44,7 +44,9 @@ HELP_PAGE = """# refresh_machine
    when the pull moves dotfiles, the run starts again from the code it just pulled, so a fix applies on this run
 2. with `--packages` only: upgrade os packages, before the deploy so a config an upgrade clobbers is linked again
    runs `scripts/my_updater.sh` on macos and linux, `scripts/my_updater.ps1` on windows
-   on windows each manager upgrades only its own apps, and never to a version that is already installed
+   on windows winget upgrades only what a winget app list names and chocolatey only what it installed,
+   neither to a version already there, nor an app `app_upgrade_holds.yaml` names; each upgrade is one quiet line,
+   its output goes to `~/logs/updater`, and the ones that failed are listed in the summary with the reason
    a step whose tool is missing offers to install it with `scripts/bootstrap.sh --only <tool>` first
    once an os release upgrade is downloaded, steps 7 and 7b wait for its reboot: any package change would undo it
 3. offer to clone repos this machine should have but is missing, asking [y/N/q] first
@@ -244,6 +246,31 @@ def app_list_installers(dotfiles, system, which=shutil.which):
 def app_plan_path():
     """The file the installers' ask phase writes and their install phase reads, one per run."""
     return os.path.join(tempfile.gettempdir(), f"refresh_machine_apps_{os.getpid()}.tsv")
+
+
+def upgrade_report_path():
+    """The file my_updater.ps1 writes its failed upgrades to, one per run, for the closing summary."""
+    return os.path.join(tempfile.gettempdir(), f"refresh_machine_upgrades_{os.getpid()}.tsv")
+
+
+def read_upgrade_report(path):
+    """
+    ``(failures, log)`` from the updater's report: ``failures`` is
+    ``(manager, package, reason)`` per upgrade that did not go through and
+    ``log`` the file holding every upgrade's full output, "" when none ran.
+    """
+    failures, log = [], ""
+    if not os.path.exists(path):
+        return failures, log
+    with open(path, encoding="utf-8-sig") as handle:
+        for line in handle:
+            manager, _, rest = line.rstrip("\r\n").partition("\t")
+            package, _, reason = rest.partition("\t")
+            if manager == "log":
+                log = reason
+            elif manager and package:
+                failures.append((manager, package, reason))
+    return failures, log
 
 
 def pending_release(dotfiles, system, capture=subprocess.run):
@@ -502,7 +529,7 @@ def missing_apps(dotfiles, capture=subprocess.run, which=shutil.which):
     return found
 
 
-def summary(failed, total, color, check=False, missing=None, asked_missing=False):
+def summary(failed, total, color, check=False, missing=None, asked_missing=False, upgrades=None):
     paint = terminal_style.paint
     word = "reported drift" if check else "failed"
     lines = [terminal_style.section("done", color)]
@@ -511,6 +538,13 @@ def summary(failed, total, color, check=False, missing=None, asked_missing=False
         lines.append(paint(text, "amber" if check else "red", color, bold=True))
     else:
         lines.append(paint(f"   all {total} steps ok", "green", color, bold=True))
+    failures, log = upgrades or ([], "")
+    if failures:
+        lines.append(paint(f"   {len(failures)} upgrade(s) did not go through:", "red", color, bold=True))
+        for manager, package, reason in failures:
+            lines.append(paint(f"     {manager}:{package}", "red", color) + paint(f"  {reason}", "muted", color))
+        if log:
+            lines.append(paint(f"     full output: {log}", "muted", color))
     if asked_missing and missing is None:
         lines.append(
             paint("   could not work out which listed apps are installed (app_lists.py --missing)", "red", color)
@@ -571,6 +605,10 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
     )
     failed = []
     total = len(steps)
+    upgrades = None
+    if args.packages and not args.check:
+        # my_updater.ps1 writes the upgrades that failed here, for the summary.
+        os.environ["UPGRADE_REPORT"] = upgrade_report_path()
     if args.after_pull:
         steps = steps[1:]
         failed = ["pulling every repo"] if args.pull_failed else []
@@ -588,17 +626,19 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
             steps = steps[1:]
             out.write("\n")
         failed += execute(steps, out, color, dotfiles=dotfiles)
+        upgrades = read_upgrade_report(upgrade_report_path())
     except KeyboardInterrupt:
         out.write("\n" + terminal_style.paint("interrupted: the remaining steps did not run", "red", color) + "\n")
         return 130
     finally:
-        if os.path.exists(app_plan_path()):
-            os.remove(app_plan_path())
+        for leftover in (app_plan_path(), upgrade_report_path()):
+            if os.path.exists(leftover):
+                os.remove(leftover)
     # Package runs only: listing what is installed costs a winget list, which
     # a plain pull should not pay for.
     asked_missing = args.packages and not args.pull_only
     missing = missing_apps(os.path.join(git_dir, "dotfiles")) if asked_missing else None
-    out.write("\n" + summary(failed, total, color, args.check, missing, asked_missing))
+    out.write("\n" + summary(failed, total, color, args.check, missing, asked_missing, upgrades))
     return 1 if failed or (asked_missing and missing is None) else 0
 
 
