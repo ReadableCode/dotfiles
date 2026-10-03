@@ -84,6 +84,66 @@
     {repo_parent} only, so this line names that literal path and prune deletes
     the link plus the empty chain it sits in.
 
+- name: removed_literal_context_repo_placeholder_env
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.env"
+    linux: "{repo_parent}/{context_repo}/.env"
+    windows: "{repo_parent}/{context_repo}/.env"
+  note: >-
+    The same pull-order accident as removed_literal_context_repo_placeholder_link,
+    for the other per-repo links an old deploy wrote under the literal
+    placeholder (found on RyzenWhite 2026-10-02, written 2026-09-11). The fake
+    .git folder made git_puller report the placeholder as a repo that failed to
+    pull on every run.
+
+- name: removed_literal_context_repo_placeholder_settings_local
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.claude/settings.local.json"
+    linux: "{repo_parent}/{context_repo}/.claude/settings.local.json"
+    windows: "{repo_parent}/{context_repo}/.claude/settings.local.json"
+  note: >-
+    The same pull-order accident as removed_literal_context_repo_placeholder_link,
+    for the other per-repo links an old deploy wrote under the literal
+    placeholder (found on RyzenWhite 2026-10-02, written 2026-09-11). The fake
+    .git folder made git_puller report the placeholder as a repo that failed to
+    pull on every run.
+
+- name: removed_literal_context_repo_placeholder_mcp_json
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.mcp.json"
+    linux: "{repo_parent}/{context_repo}/.mcp.json"
+    windows: "{repo_parent}/{context_repo}/.mcp.json"
+  note: >-
+    The same pull-order accident as removed_literal_context_repo_placeholder_link,
+    for the other per-repo links an old deploy wrote under the literal
+    placeholder (found on RyzenWhite 2026-10-02, written 2026-09-11). The fake
+    .git folder made git_puller report the placeholder as a repo that failed to
+    pull on every run.
+
+- name: removed_literal_context_repo_placeholder_pre_push
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.git/hooks/pre-push"
+    linux: "{repo_parent}/{context_repo}/.git/hooks/pre-push"
+    windows: "{repo_parent}/{context_repo}/.git/hooks/pre-push"
+  note: >-
+    The same pull-order accident as removed_literal_context_repo_placeholder_link,
+    for the other per-repo links an old deploy wrote under the literal
+    placeholder (found on RyzenWhite 2026-10-02, written 2026-09-11). The fake
+    .git folder made git_puller report the placeholder as a repo that failed to
+    pull on every run.
+
+- name: removed_literal_context_repo_placeholder_pre_commit
+  dest:
+    darwin: "{repo_parent}/{context_repo}/.git/hooks/pre-commit"
+    linux: "{repo_parent}/{context_repo}/.git/hooks/pre-commit"
+    windows: "{repo_parent}/{context_repo}/.git/hooks/pre-commit"
+  note: >-
+    The same pull-order accident as removed_literal_context_repo_placeholder_link,
+    for the other per-repo links an old deploy wrote under the literal
+    placeholder (found on RyzenWhite 2026-10-02, written 2026-09-11). The fake
+    .git folder made git_puller report the placeholder as a repo that failed to
+    pull on every run.
+
 - name: removed_cmdr_binary
   dest:
     darwin: "{repo_parent}/dotfiles/go_apps/cmdr/cmdr"
