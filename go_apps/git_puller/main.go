@@ -59,8 +59,10 @@ func gitPull(
 		dirty <- fmt.Sprintf("[DIRTY] %s (%d uncommitted):\n\t%s", absRepo, len(files), strings.Join(files, "\n\t"))
 	}
 
-	// run the git command with -C to change to the repo directory
-	cmd := exec.Command("git", "-C", absRepo, "pull")
+	// run the git command with -C to change to the repo directory; fast-forward
+	// only, so a branch with local commits the upstream lacks is reported and
+	// left alone, never merged or rebased, whatever the machine's pull config
+	cmd := exec.Command("git", "-C", absRepo, "pull", "--ff-only")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

@@ -33,7 +33,7 @@ layout must exist on the Mac and on the servers.
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
 | `personal_credentials` | `personal.env` (KEY="value" secrets) and `personal_hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is this checkout (`receive.denyCurrentBranch=updateInstead`), so a push from any machine lands in the working tree directly. Listed in `~/GitHub/.skiprepos` so nothing tries to fetch it; `git_pull.sh` treats it as a *hub* repo and redeploys its consumers when HEAD moves. |
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. Also owns elitedesk's crontabs — see [Cron](#cron-how-scheduled-jobs-are-declared). |
-| `dotfiles` | `go_apps/git_puller` (bulk repo puller, reads `.skiprepos`). |
+| `dotfiles` | `go_apps/git_puller` (bulk repo puller, fast-forward only, reads `.skiprepos`). |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
 | app repos | `load-log`, `Assistant`, `postgrest-auth`, `website`, `charlie-personal-website` and one client-facing app repo — each built into containers by the Docker repo. |
 
@@ -59,7 +59,10 @@ Key behaviors:
   services whose compose config changed).
 - Ignore list: `~/GitHub/.skiprepos` (one repo name per line; shared with the
   go git_puller). Contains `personal_credentials` and every other
-  credentials repo whose git hub lives on this box.
+  credentials repo whose git hub lives on this box. Deployed like any other
+  config: a link to `personal_credentials/git/skiprepos.elitedesk.txt`
+  (manifest entry `skiprepos_personal`); every machine with a skip list has
+  a `skiprepos.<host>.txt` in the credentials repo that owns it.
 - **Hub repos** (skipped, mapped to services, updated in place by push):
   `personal_credentials`. The loop compares HEAD with the rev it last
   deployed, recorded in `~/GitHub/.git_pull_state/<repo>.rev`, and recreates
