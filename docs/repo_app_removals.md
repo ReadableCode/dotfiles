@@ -165,6 +165,45 @@ same run.
 Two rows with different ids are not a duplicate even under one name: RustDesk's
 MSI registers itself twice, and both rows uninstall the one product.
 
+### Upgrades keep to the manager that installed the app
+
+`winget upgrade --all` upgrades every installed program winget can match to
+its source, not only the ones winget installed, and `choco upgrade all` runs
+an installer for every package whose record is behind its feed, whatever is
+really on the disk. Until 2026-10-02 `myupdater` ran both, and on RyzenWhite
+every run repeated the same failures:
+
+- winget re-ran Barrier's installer, because Barrier registers `2.4.0-release`
+  and winget offers `2.4.0`; the installer aborted on the running Barrier,
+  which winget prints as "You cancelled the installation".
+- winget went for TightVNC 2.8.89 and OBS Studio, both Chocolatey's.
+- winget tried to replace Windows Terminal from inside a Terminal window.
+- Chocolatey, whose record said OpenVPN 2.5.7, ran the 2.6.16 MSI over the
+  2.7.7 that was really installed and failed with 1603.
+
+`scripts/my_updater.ps1` now upgrades by name from a plan,
+`app_lists.py --upgrades winget` and `--upgrades choco`, and prints what each
+plan holds back with its reason under "left alone":
+
+| Manager | Held back | Why |
+| --- | --- | --- |
+| winget | an app Chocolatey installed, matched by name the same way as above with a `.install` / `.portable` suffix dropped (`git.install` is `Git.Git`) | Chocolatey upgrades it next |
+| winget | an offer whose leading version numbers are not past the installed ones | it is the release already installed |
+| winget | Windows Terminal while a Terminal window is open | Windows will not replace a running package; the Store updates it once closed |
+| choco | a package whose app `winget list` shows at or past the version on offer | something else upgraded it and the installer would push an older build over it |
+
+Everything else is upgraded, one manager per app, so a second run right after
+the first has the same plan minus whatever the first one upgraded.
+`my_updater.ps1 --check` counts from the same plans. If a plan cannot be worked
+out (no uv, the manager not answering) that manager upgrades nothing and the
+step fails, rather than falling back to "all".
+
+What a plan cannot hold back is an upgrade that is real but fails for a reason
+outside this repo, and it is attempted again on every run until the cause goes:
+a Chocolatey package whose download no longer matches its own checksum
+(GoogleChrome, parsec), or an installer that refuses while another program has
+its files open (OBS Studio's while anything has the virtual camera loaded).
+
 Anything the finder cannot see - an optional feature beside a package, like the
 in-box OpenSSH server - still takes a line with `replaced_by`.
 

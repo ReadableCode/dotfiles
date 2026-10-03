@@ -245,6 +245,119 @@ def test_the_installers_question_uses_the_same_elsewhere_answer():
     assert app_lists.elsewhere_packages("choco", ["tailscale"], lambda name: False, run) == []
 
 
+WINGET_UPGRADE = (
+    "Name                  Id                               Version       Available   Source\n"
+    "--------------------------------------------------------------------------------------\n"
+    "Barrier 2.4.0-release DebaucheeOpenSourceGroup.Barrier 2.4.0-release 2.4.0       winget\n"
+    "Epic Online Services  EpicGames.EpicOnlineServices     4.2.1         4.3.1       winget\n"
+    "OBS Studio            OBSProject.OBSStudio             31.0.4        32.2.2      winget\n"
+    "TightVNC              GlavSoft.TightVNC                2.8.88.0      2.8.89      winget\n"
+    "Git                   Git.Git                          2.56.0        2.57.0      winget\n"
+    "Windows Terminal      Microsoft.WindowsTerminal        1.24.11911.0  1.25.2733.0 winget\n"
+    "6 upgrades available.\n"
+    "1 package(s) have version numbers that cannot be determined. Use --include-unknown to see all results.\n"
+)
+
+
+WINGET_LIST = (
+    "Name                     Id                          Version        Source\n"
+    "--------------------------------------------------------------------------\n"
+    "OpenVPN 2.7.7-I001 amd64 OpenVPNTechnologies.OpenVPN 2.7.701        winget\n"
+    "OpenVPN Connect          OpenVPNTechnologies.OpenVPNConnect 3.9.0   winget\n"
+    "Google Chrome            Google.Chrome               154.0.8037.98  winget\n"
+    "OBS Studio               OBSProject.OBSStudio        31.0.4         winget\n"
+    "Parsec                   Parsec.Parsec               150-104a       winget\n"
+    "Messenger                ARP\\User\\X64\\c1b3adcf     223.0.649571860\n"
+)
+CHOCO_OUTDATED = (
+    "GoogleChrome|153.0.8010.12|155.0.8059.12|false\n"
+    "messenger|205.0.564654621|205.0.564654621|false\n"
+    "obs-studio|32.1.2|32.2.2|false\n"
+    "openvpn|2.5.7|2.6.16.1|false\n"
+    "parsec|20220429.0.0|20240209.0.0|false\n"
+    "vlc|3.0.24|3.0.25|true\n"
+)
+
+
+def upgrade_run(choco_list="", terminal_open=False):
+    """winget and choco answering as RyzenWhite did on 2026-10-02."""
+
+    def run(argv):
+        if argv[:2] == ["winget", "upgrade"]:
+            return 0, WINGET_UPGRADE
+        if argv[:2] == ["winget", "list"]:
+            return 0, WINGET_LIST
+        if argv[:2] == ["choco", "list"]:
+            return 0, choco_list
+        if argv[:2] == ["choco", "outdated"]:
+            return 0, CHOCO_OUTDATED
+        if argv[0] == "tasklist":
+            return 0, '"WindowsTerminal.exe","15932","Console","2","90,000 K"\n' if terminal_open else "INFO: none\n"
+        return None, ""
+
+    return run
+
+
+def test_winget_leaves_chocos_apps_and_same_release_offers_alone():
+    choco = "obs-studio|32.1.2\ntightvnc|2.8.88\ngit.install|2.56.0\n"
+    upgrade, held = app_lists.winget_upgrades(run=upgrade_run(choco), which=lambda name: True)
+    assert upgrade == ["EpicGames.EpicOnlineServices", "Microsoft.WindowsTerminal"]
+    reasons = dict(held)
+    assert "choco:obs-studio" in reasons["OBSProject.OBSStudio"]
+    assert "choco:tightvnc" in reasons["GlavSoft.TightVNC"]
+    assert "choco:git.install" in reasons["Git.Git"]
+    assert "2.4.0-release" in reasons["DebaucheeOpenSourceGroup.Barrier"]
+
+
+def test_winget_upgrades_everything_real_when_there_is_no_choco():
+    upgrade, held = app_lists.winget_upgrades(run=upgrade_run(), which=lambda name: name == "winget")
+    assert [package for package, _ in held] == ["DebaucheeOpenSourceGroup.Barrier"]
+    assert len(upgrade) == 5
+
+
+def test_winget_leaves_windows_terminal_alone_while_a_window_is_open():
+    upgrade, held = app_lists.winget_upgrades(run=upgrade_run(terminal_open=True), which=lambda name: name == "winget")
+    assert "Microsoft.WindowsTerminal" not in upgrade
+    assert "Terminal window is open" in dict(held)["Microsoft.WindowsTerminal"]
+
+
+def test_the_winget_plan_is_the_same_asked_twice():
+    plans = [app_lists.winget_upgrades(run=upgrade_run("tightvnc|2.8.88\n"), which=lambda name: True) for _ in "12"]
+    assert plans[0] == plans[1]
+
+
+def test_winget_upgrades_are_unknown_when_winget_cannot_run():
+    assert app_lists.winget_upgrades(run=lambda argv: (None, ""), which=lambda name: True) is None
+
+
+def test_choco_leaves_a_package_alone_when_the_app_is_already_past_its_offer():
+    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: True)
+    # Chrome 154 is behind the 155 on offer and OBS 31 behind 32, so those are real upgrades;
+    # Parsec's 150-104a is behind choco's date version. messenger is not outdated, vlc is pinned.
+    assert upgrade == ["GoogleChrome", "obs-studio", "parsec"]
+    assert [package for package, _ in held] == ["openvpn"]
+    assert "2.7.701" in held[0][1] and "2.6.16.1" in held[0][1]
+
+
+def test_choco_upgrades_everything_outdated_when_winget_cannot_say_what_is_installed():
+    upgrade, held = app_lists.choco_upgrades(run=upgrade_run(), which=lambda name: name == "choco")
+    assert upgrade == ["GoogleChrome", "obs-studio", "openvpn", "parsec"]
+    assert held == []
+
+
+def test_choco_upgrades_are_unknown_when_choco_cannot_run():
+    assert app_lists.choco_upgrades(run=lambda argv: (None, ""), which=lambda name: True) is None
+
+
+def test_at_or_past_compares_the_leading_numbers():
+    assert app_lists.at_or_past("2.4.0-release", "2.4.0")
+    assert app_lists.at_or_past("1.2.0.0", "1.2")
+    assert app_lists.at_or_past("2.7.701", "2.6.16.1")
+    assert not app_lists.at_or_past("2.8.88.0", "2.8.89")
+    assert not app_lists.at_or_past("Unknown", "1.19.3")
+    assert not app_lists.at_or_past("154.0.8037.98", "155.0.8059.12")
+
+
 # %%
 # Ignored on this machine #
 

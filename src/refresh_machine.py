@@ -44,6 +44,7 @@ HELP_PAGE = """# refresh_machine
    when the pull moves dotfiles, the run starts again from the code it just pulled, so a fix applies on this run
 2. with `--packages` only: upgrade os packages, before the deploy so a config an upgrade clobbers is linked again
    runs `scripts/my_updater.sh` on macos and linux, `scripts/my_updater.ps1` on windows
+   on windows each manager upgrades only its own apps, and never to a version that is already installed
    a step whose tool is missing offers to install it with `scripts/bootstrap.sh --only <tool>` first
    once an os release upgrade is downloaded, steps 7 and 7b wait for its reboot: any package change would undo it
 3. offer to clone repos this machine should have but is missing, asking [y/N/q] first

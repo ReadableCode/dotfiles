@@ -396,6 +396,7 @@ class Install:
     name: str
     id: str
     version: str
+    available: str = ""  # the version on offer, in `winget upgrade` output
 
 
 @dataclass
@@ -427,6 +428,8 @@ def parse_winget_list(output):
     version_at = header.index("Version")
     after_version = [header.find(column) for column in ("Available", "Source") if header.find(column) > version_at]
     version_end = min(after_version) if after_version else None
+    available_at = header.find("Available")
+    source_at = header.find("Source") if header.find("Source") > available_at else None
     rows = []
     for line in lines[header_at + 1 :]:
         if not line.strip() or set(line.strip()) == {"-"} or len(line) <= version_at:
@@ -436,6 +439,7 @@ def parse_winget_list(output):
                 name=line[:id_at].strip(),
                 id=line[id_at:version_at].strip(),
                 version=line[version_at:version_end].strip(),
+                available=line[available_at:source_at].strip() if available_at > version_at else "",
             )
         )
     return rows

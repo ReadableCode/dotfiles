@@ -287,6 +287,142 @@ def elsewhere_packages(manager, names, which=shutil.which, run=None):
     return [name for name in names if any(app_removals.names_row(name, row) for row in rows)]
 
 
+UPGRADES_END = re.compile(r"^\d+ upgrades? available", re.MULTILINE)
+RELEASE_NUMBER = re.compile(r"v?(\d+(?:\.\d+)*)")
+CHOCO_VARIANT = re.compile(r"\.(install|portable)$", re.IGNORECASE)
+WINDOWS_TERMINAL = "microsoft.windowsterminal"
+
+
+def release_number(version):
+    """The leading numbers of a version as a tuple, trailing zeros dropped, or None when it has none."""
+    found = RELEASE_NUMBER.match(version.strip())
+    if not found:
+        return None
+    parts = [int(part) for part in found.group(1).split(".")]
+    while len(parts) > 1 and parts[-1] == 0:
+        parts.pop()
+    return tuple(parts)
+
+
+def at_or_past(installed, available):
+    """
+    Whether the installed version is already the one on offer, or newer.
+    Barrier's ``2.4.0-release`` is at ``2.4.0``; ``2.7.701`` is past
+    ``2.6.16.1``. A version with no leading number ("Unknown") cannot be
+    compared and is never at or past.
+    """
+    numbers = release_number(installed), release_number(available)
+    return None not in numbers and numbers[0] >= numbers[1]
+
+
+def process_running(image, run=None):
+    """Whether a process with this image name is running (tasklist prints a row for it)."""
+    import app_removals
+
+    run = run or app_removals.run_capture
+    code, output = run(["tasklist", "/FI", f"IMAGENAME eq {image}", "/FO", "CSV", "/NH"])
+    return code == 0 and image.lower() in output.lower()
+
+
+def choco_name(package):
+    """The app a choco package installs: ``git.install`` and ``putty.portable`` are git and putty."""
+    return CHOCO_VARIANT.sub("", package)
+
+
+def winget_upgrades(run=None, which=shutil.which):
+    """
+    ``(upgrade, held)`` for what `winget upgrade` offers, or None when winget
+    could not be asked. ``upgrade`` is the winget ids to upgrade; ``held`` is
+    ``(id, reason)`` for the ones winget must leave alone:
+
+    - an app Chocolatey installed. `winget upgrade --all` sees every installed
+      program, not only its own, so it put TightVNC 2.8.89 over the 2.8.88
+      Chocolatey had recorded; `choco upgrade` is what moves those.
+    - an offer of the release already installed, which winget makes when it
+      cannot compare the installer's version string (Barrier registers
+      ``2.4.0-release`` and is offered ``2.4.0`` on every run, forever).
+    - Windows Terminal while a Terminal window is open, which is where this
+      usually runs: Windows refuses to replace a running package, and the
+      Store updates it once it is closed.
+    """
+    import app_removals
+
+    run = run or app_removals.run_capture
+    code, output = run(["winget", "upgrade", "--disable-interactivity", "--accept-source-agreements"])
+    if code is None:
+        return None
+    # Only the first table: after its count winget lists what it cannot or will not upgrade.
+    end = UPGRADES_END.search(output)
+    rows = app_removals.parse_winget_list(output[: end.start()] if end else output)
+    choco = sorted(app_removals.choco_versions(run=run)) if which("choco") else []
+    upgrade, held = [], []
+    for row in rows:
+        owner = next((name for name in choco if app_removals.names_row(choco_name(name), row)), None)
+        if owner:
+            held.append((row.id, f"chocolatey installed it (choco:{owner}), so choco upgrades it"))
+        elif at_or_past(row.version, row.available):
+            held.append((row.id, f"{row.available} is the installed {row.version} under another name"))
+        elif row.id.lower() == WINDOWS_TERMINAL and process_running("WindowsTerminal.exe", run):
+            held.append((row.id, "a Terminal window is open; the Store updates it once Terminal is closed"))
+        else:
+            upgrade.append(row.id)
+    return upgrade, held
+
+
+def choco_upgrades(run=None, which=shutil.which):
+    """
+    ``(upgrade, held)`` for what `choco outdated` lists, or None when
+    Chocolatey could not be asked. ``held`` is ``(package, reason)`` for a
+    package whose app is really installed at or past the version Chocolatey
+    offers: something else upgraded it (the app itself, or winget before it
+    was kept off Chocolatey's apps), Chocolatey's record is behind, and its
+    installer would be pushing an older build over a newer one - OpenVPN 2.6.16
+    over 2.7.7 failed with MSI 1603 on every run.
+    """
+    import app_removals
+
+    run = run or app_removals.run_capture
+    code, output = run(["choco", "outdated", "--limit-output"])
+    if code is None:
+        return None
+    outdated = [line.strip().split("|") for line in output.splitlines() if line.count("|") >= 3]
+    rows = []
+    if outdated and which("winget"):
+        code, listing = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
+        rows = app_removals.parse_winget_list(listing) if code == 0 else []
+    upgrade, held = [], []
+    for package, current, available, pinned, *_ in outdated:
+        # choco lists a pinned package, and one whose latest is what it has (messenger 205 -> 205).
+        if pinned.lower() == "true" or app_removals.version_key(current) == app_removals.version_key(available):
+            continue
+        ahead = next(
+            (
+                row
+                for row in rows
+                if app_removals.names_row(choco_name(package), row) and at_or_past(row.version, available)
+            ),
+            None,
+        )
+        if ahead:
+            held.append((package, f"{ahead.version} is installed, at or past the {available} chocolatey offers"))
+        else:
+            upgrade.append(package)
+    return upgrade, held
+
+
+def print_upgrades(manager):
+    plan = winget_upgrades() if manager == "winget" else choco_upgrades()
+    if plan is None:
+        print(f"could not ask {manager} what it would upgrade", file=sys.stderr)
+        return 1
+    upgrade, held = plan
+    for package in upgrade:
+        print(f"upgrade {package}")
+    for package, reason in held:
+        print(f"held {package} {reason}")
+    return 0
+
+
 def missing_packages(
     which=shutil.which, run=None, app_lists=APP_LISTS, overlay_paths=None, release=None, ignore_file=None
 ):
@@ -354,6 +490,12 @@ def parse_args(argv):
         help="read package names on stdin, print the ones this machine ignores for that manager",
     )
     mode.add_argument(
+        "--upgrades",
+        metavar="MANAGER",
+        choices=("winget", "choco"),
+        help="print 'upgrade NAME' per app this manager should upgrade and 'held NAME reason' per one it must not",
+    )
+    mode.add_argument(
         "--elsewhere",
         metavar="MANAGER",
         choices=MANAGERS,
@@ -402,6 +544,8 @@ def main(argv=None):
     args = parse_args(argv)
     if args.missing:
         return print_missing()
+    if args.upgrades:
+        return print_upgrades(args.upgrades)
     if args.ignored:
         names = [line.strip() for line in sys.stdin if line.strip()]
         lines = ignored_packages(args.ignored, names)

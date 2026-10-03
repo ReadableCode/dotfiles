@@ -1,5 +1,8 @@
 # OS package updates for Windows: the `updatepackages` step, nothing more.
-# winget first, then Chocolatey, each only when it is installed. Repo pulls and
+# winget first, then Chocolatey, each only when it is installed. Each upgrades
+# only what src/app_lists.py --upgrades names for it, never "all": winget
+# leaves the apps Chocolatey installed to Chocolatey, and neither runs an
+# installer for a version that is already there. Repo pulls and
 # config deploys live in src/refresh_machine.py, which runs this between the
 # pull and the deploy when called with --packages (the myupdater command). The
 # macOS/Linux twin is scripts/my_updater.sh.
@@ -91,6 +94,39 @@ function Get-UpdaterPolicyText {
         throw "src/updater_policy.py failed for $Key"
     }
     return $value
+}
+
+function Get-UpgradePlan {
+    # What one manager (winget or choco) should upgrade, as src/app_lists.py
+    # --upgrades prints it: "upgrade <name>" per app, and "held <name>
+    # <reason>" per app it must leave alone - for winget an app Chocolatey
+    # installed or an offer of the release already installed, for choco a
+    # package whose app is already past the version on offer. `winget upgrade
+    # --all` and `choco upgrade all` know none of that, so neither is used.
+    # Throws when the lookup fails, so nothing is upgraded on a guess.
+    param([string]$Manager)
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        throw "uv not found, so src/app_lists.py cannot say what $Manager should upgrade"
+    }
+    $dotfiles = Split-Path $PSScriptRoot -Parent
+    $lines = @(uv run --project $dotfiles python (Join-Path $dotfiles 'src\app_lists.py') --upgrades $Manager)
+    if ($LASTEXITCODE -ne 0) {
+        throw "src/app_lists.py --upgrades $Manager failed"
+    }
+    $plan = @{ Upgrade = @(); Held = @() }
+    foreach ($line in $lines) {
+        if ($line -match '^upgrade\s+(\S+)') { $plan.Upgrade += $Matches[1] }
+        elseif ($line -match '^held\s+(\S+)\s+(.*)$') { $plan.Held += "$($Matches[1]): $($Matches[2])" }
+    }
+    return $plan
+}
+
+function Show-Held {
+    param($Plan)
+    if ($Plan.Held.Count -gt 0) {
+        Write-Host "  left alone ($($Plan.Held.Count)):"
+        $Plan.Held | ForEach-Object { Write-Host "    $_" }
+    }
 }
 
 function Get-UpdaterPolicy {
@@ -258,25 +294,33 @@ if ($mode -eq "check") {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         $managers += 1
         Write-Host "checking winget..."
-        # `winget upgrade` without --all only lists. --include-unknown keeps the
-        # packages whose installed version winget cannot read, which are exactly
-        # the ones that otherwise look current forever. The trailing summary
-        # line is what says whether anything is upgradable; winget's exit code
-        # is nonzero when nothing is, which is not a failure of this check.
-        $report = (winget upgrade --include-unknown | Out-String)
-        Write-Host $report.TrimEnd()
-        if ($report -match '(\d+)\s+upgrades?\s+available') {
-            $outdated += [int]$Matches[1]
+        # The same plan the real run upgrades from, so the count is what a
+        # run would change: not the apps Chocolatey owns, which are counted
+        # under chocolatey below.
+        try {
+            $plan = Get-UpgradePlan winget
+            $plan.Upgrade | ForEach-Object { Write-Host "  $_" }
+            Show-Held $plan
+            $outdated += $plan.Upgrade.Count
+        }
+        catch {
+            Write-Host "  winget upgrades unknown: $_"
+            $outdated += 1
         }
     }
     if (Get-Command choco -ErrorAction SilentlyContinue) {
         $managers += 1
         Write-Host "checking chocolatey..."
-        # --limit-output prints one `name|installed|available|pinned` line per
-        # outdated package and nothing else, so counting lines is the answer.
-        $lines = @(choco outdated --limit-output | Where-Object { $_ -match '\|' })
-        foreach ($line in $lines) { Write-Host $line }
-        $outdated += $lines.Count
+        try {
+            $plan = Get-UpgradePlan choco
+            $plan.Upgrade | ForEach-Object { Write-Host "  $_" }
+            Show-Held $plan
+            $outdated += $plan.Upgrade.Count
+        }
+        catch {
+            Write-Host "  chocolatey upgrades unknown: $_"
+            $outdated += 1
+        }
     }
     if ($managers -eq 0) {
         Write-Host "neither winget nor chocolatey found, so there are no packages to check."
@@ -314,15 +358,36 @@ catch {
 
 if (Get-Command winget -ErrorAction SilentlyContinue) {
     Write-Host "updating via winget..."
-    winget upgrade --all
+    try {
+        $plan = Get-UpgradePlan winget
+        Show-Held $plan
+        if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for winget to upgrade." }
+        foreach ($id in $plan.Upgrade) {
+            winget upgrade --id $id --exact --disable-interactivity --accept-package-agreements --accept-source-agreements
+        }
+    }
+    catch {
+        Write-Host "  winget upgrades skipped: $_"
+        $settingsFailed = $true
+    }
 }
 if (Get-Command choco -ErrorAction SilentlyContinue) {
     Write-Host "updating via chocolatey..."
-    choco upgrade all -y
+    try {
+        $plan = Get-UpgradePlan choco
+        Show-Held $plan
+        if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for chocolatey to upgrade." }
+        else { choco upgrade @($plan.Upgrade) -y }
+    }
+    catch {
+        Write-Host "  chocolatey upgrades skipped: $_"
+        $settingsFailed = $true
+    }
 }
 
 # winget exits nonzero when some package has no applicable upgrade, which is
 # not a failure of this step; the upgrade output above is the report. A
-# setting the inventory asks for and this run could not make is one.
+# setting the inventory asks for and this run could not make is one, and so is
+# not being able to work out what a manager should upgrade.
 if ($settingsFailed) { exit 1 }
 exit 0
