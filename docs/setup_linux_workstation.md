@@ -15,7 +15,7 @@ Add `--dry-run` first to see what it would do without changing anything, and
 not in this public repo, see `notes/cloning_credentials_repos.md` in the personal credentials
 repo.
 
-Bootstrap installs git and uv if missing, clones dotfiles to `~/GitHub`, runs `uv sync`,
+Bootstrap installs git, uv and claude code if missing, clones dotfiles to `~/GitHub`, runs `uv sync`,
 `clone_repos.py`, `sync_python_envs.py` and `deploy_configs.py`, then installs packages
 with whichever manager the machine has:
 

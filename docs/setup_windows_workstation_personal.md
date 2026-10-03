@@ -202,10 +202,15 @@ A tie goes to winget, which ships with Windows 11, needs no admin for per-user
 installs and no bootstrap; Chocolatey is kept where its package is ahead or
 winget has none. The comparison is recorded next to the entry (as a trailing
 comment in the list, or in the context file's header), dated, so the next look
-starts from it. As of 2026-09-24: Claude and Claude Code on choco (2.7032.0 vs
-1.44121.2, 2.1.273 vs 2.1.268), Slack, AWS CLI, Hoppscotch and Teams on winget,
-DBeaver on choco. An app on both lists is reported by `app_removals.py` as a
-conflict and never has a copy removed until one list lets go.  Two contexts
+starts from it. As of 2026-09-24: Claude on choco (2.7032.0 vs 1.44121.2),
+Slack, AWS CLI, Hoppscotch and Teams on winget, DBeaver on choco. Claude Code
+is on neither since 2026-10-02: both packages trail Anthropic's releases by
+days, and the choco shim sat ahead of `~\.local\bin` on PATH so T3 Code ran
+the stale copy and could not update it. It comes from Anthropic's installer
+(the `claude` step of `scripts/bootstrap.ps1`), which self-updates on launch;
+`app_removals.yaml` retires the choco copy. An app on both lists is reported
+by `app_removals.py` as a conflict and never has a copy removed until one list
+lets go.  Two contexts
 naming the same app on the same manager is fine: a machine in both is offered
 it once, so a client's list can grow to a full profile without a clash.
 

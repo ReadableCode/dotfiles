@@ -134,6 +134,20 @@ if (Test-Have uv) {
     if (Test-Path $uvBin) { $env:PATH = "$uvBin;$env:PATH" }
 }
 
+# Anthropic's own installer, not the choco or winget package: both repackage
+# releases days late and T3 Code rejects a stale claude outright (see the
+# claude_code_choco entry in app_removals.yaml). It self-updates on launch.
+Write-Step "claude"
+if (Test-Have claude) {
+    Write-Skip "claude present ($(claude --version))"
+} elseif ($DryRun) {
+    Write-Todo "install claude code"
+} elseif (Confirm-Step "install claude code?") {
+    Invoke-Expression (Invoke-RestMethod https://claude.ai/install.ps1)
+    $claudeBin = Join-Path $HOME '.local\bin'
+    if (Test-Path $claudeBin) { $env:PATH = "$claudeBin;$env:PATH" }
+}
+
 # %%
 # dotfiles #
 

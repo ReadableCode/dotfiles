@@ -39,7 +39,7 @@ REPOS_ROOT=""
 CREDENTIALS_URLS=""
 ONLY_STEP=""
 # What --only accepts; each name has an ensure_<name> function below.
-ONLY_STEPS="git uv"
+ONLY_STEPS="git uv claude"
 MANUAL_NOTES=""
 
 # %%
@@ -174,6 +174,33 @@ ensure_uv() {
     fi
 }
 
+ensure_claude() {
+    if have claude; then
+        skip "claude present ($(claude --version 2>/dev/null))"
+        return 0
+    fi
+    case "$PLATFORM" in
+        mac)
+            # The Brewfile's claude-code@latest cask tracks the same channel.
+            warn "claude missing - install_mac_apps.sh (Brewfile cask claude-code@latest) owns it on mac"
+            return 0 ;;
+        termux)
+            warn "claude has no termux build - skipping"
+            return 0 ;;
+    esac
+    warn "claude missing"
+    # Anthropic's own installer, not apt or a snap: those repackage releases
+    # days late and T3 Code rejects a stale claude outright. It self-updates on
+    # launch. ~/.local/bin is on PATH here already (see ensure_uv), so the
+    # installer has no reason to touch the rc files that symlink into this repo.
+    if confirm "install claude code?"; then
+        run sh -c 'curl -fsSL https://claude.ai/install.sh | bash'
+        [ -x "$HOME/.local/bin/claude" ] && PATH="$HOME/.local/bin:$PATH"
+    else
+        note_manual "install claude code: curl -fsSL https://claude.ai/install.sh | bash"
+    fi
+}
+
 if [ -n "$ONLY_STEP" ]; then
     case " $ONLY_STEPS " in
         *" $ONLY_STEP "*)
@@ -251,6 +278,9 @@ ensure_git
 
 step "uv"
 ensure_uv
+
+step "claude"
+ensure_claude
 
 # %%
 # dotfiles #

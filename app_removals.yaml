@@ -155,3 +155,23 @@
   manager: dnf
   package: krb5-devel
   note: Dropped from app_lists/linux_apps_dnf.txt.
+
+# --- Claude Code from chocolatey, retired 2026-10-02 ---
+#
+# Chosen over winget on 2026-09-24 because its package was newer that day. Both
+# repackage Anthropic's release days late (choco 2.1.273 installed, 2.1.285
+# offered, winget 2.1.286, native 2.1.288 on 2026-10-02), and the choco shim
+# sits ahead of ~/.local/bin on PATH, so T3 Code ran the stale copy and its
+# update warning never cleared: `claude update` cannot touch a choco-owned
+# binary. Claude Code now comes from Anthropic's own installer, the
+# `claude` step of scripts/bootstrap.ps1 / bootstrap.sh, which self-updates
+# on launch. macOS keeps the claude-code@latest cask, which tracks the same
+# channel.
+
+- name: claude_code_choco
+  manager: choco
+  package: claude-code
+  note: >-
+    Dropped from the context app lists that named it. Install the native copy
+    first (bootstrap.ps1, or `irm https://claude.ai/install.ps1 | iex`) so
+    T3 Code finds a claude once the shim is gone.
