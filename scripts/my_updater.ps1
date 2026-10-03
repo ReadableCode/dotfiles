@@ -363,6 +363,9 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
         Show-Held $plan
         if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for winget to upgrade." }
         foreach ($id in $plan.Upgrade) {
+            # winget's own refusals ("the install technology is different")
+            # do not say which app they are about.
+            Write-Host "  $id"
             winget upgrade --id $id --exact --disable-interactivity --accept-package-agreements --accept-source-agreements
         }
     }
