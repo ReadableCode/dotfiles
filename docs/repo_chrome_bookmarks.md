@@ -18,6 +18,7 @@ means reading two trees side by side; the script does it in one pass.
 |------|------|
 | `personal_credentials/bookmarks/personal_bookmarks.json` | the deduped tree in Chrome's own order, only `name`, `url`, `type`, `date_added` and `children` per node; edit this |
 | `personal_credentials/bookmarks/personal_bookmarks.html` | Netscape import file generated from the JSON; never edit |
+| `personal_credentials/bookmarks/personal_bookmarks.txt` | the same tree as an indented outline, one line per folder and per bookmark, names and urls only; generated from the JSON, never edit. The file to read, and the diff to review |
 | `personal_credentials/bookmarks/Bookmarks-organized.md` | the cleanup write-up: what was collapsed, what was judged stale |
 
 Bookmarks are synced, so there is one file, not one per host. Only the
@@ -34,29 +35,41 @@ through these steps; the Chrome import in step 4 stays manual.
    uv run python src/chrome_bookmarks.py
    ```
 
-   Reads Chrome's `Bookmarks` file for the `Default` profile, merges same-name
-   sibling folders (recursively, keeping additions made to either copy), drops
-   a url repeated inside one folder, prints every merge and drop, and writes
-   both repo files. On macOS the terminal needs Full Disk Access to read the
-   Chrome profile folder.
+   Reads the `Default` profile's `Bookmarks` and `AccountBookmarks` files,
+   whichever exist (Chrome keeps device-local bookmarks in the first and a
+   signed-in account's in the second, and shows them as one tree; since
+   2026-09 the synced personal profile holds only `AccountBookmarks`), merges
+   same-name sibling folders (recursively, keeping additions made to either
+   copy), drops a url repeated inside one folder, prints every merge and drop,
+   and writes the three repo files. On macOS the terminal needs Full Disk
+   Access to read the Chrome profile folder.
 
    The JSON is deterministic: Chrome's `guid`, `id`, `date_modified`,
    `date_last_used`, `meta_info`, `checksum` and `sync_metadata` are dropped
    (they change on every sync and differ between the duplicate copies), keys
    are sorted, indent is Chrome's three spaces, and bookmark order is
    Chrome's, never alphabetical. Re-running on an unchanged tree reproduces
-   the file byte for byte, so a diff shows only bookmarks added, removed or
-   moved.
+   the file byte for byte. It still carries `date_added`, which the import
+   needs and which a re-import rewrites, so the diff to read is the outline's:
+
+   ```bash
+   git -C ../personal_credentials diff bookmarks/personal_bookmarks.txt
+   ```
+
+   The outline holds no dates, so it changes only when a bookmark or folder
+   is added, removed, renamed or moved. `--check` compares the same outlines,
+   which is why dates alone are never drift.
 
 2. Edit `personal_bookmarks.json` if anything needs deciding: stale items that
    a reconnecting device brought back, a url bookmarked loose on the bar that
-   already lives in a folder. Then regenerate the HTML from the edited copy:
+   already lives in a folder. Then regenerate the HTML and the outline from the
+   edited copy:
 
    ```bash
    uv run python src/chrome_bookmarks.py --input ../personal_credentials/bookmarks/personal_bookmarks.json
    ```
 
-3. Commit both files in `personal_credentials`.
+3. Commit the three files in `personal_credentials`.
 
 4. In Chrome's Bookmark Manager on the personal profile, delete everything in
    the Bookmarks bar, Other bookmarks and Mobile bookmarks, then import the

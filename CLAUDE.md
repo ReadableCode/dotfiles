@@ -231,7 +231,7 @@ is the one-paragraph orientation so an agent knows which file to open.
   is ever applied across the fleet, and the machine it runs on is skipped.
 - **`chrome_bookmarks.py`** — saves the personal Chrome profile's bookmarks
   into `personal_credentials/bookmarks/` as an editable JSON plus the HTML to
-  re-import through the Bookmark Manager, collapsing the duplicate folders
+  re-import through the Bookmark Manager and a dateless outline to read and diff, collapsing the duplicate folders
   Chrome Sync leaves when a device reconnects. Doc:
   `docs/repo_chrome_bookmarks.md`.
 - **`ssh_devices.py`** — pulls configs from devices over ssh.

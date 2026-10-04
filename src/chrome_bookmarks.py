@@ -2,13 +2,10 @@
 # Imports #
 
 import argparse
-import contextlib
 import difflib
-import io
 import json
 import os
 import sys
-import tempfile
 import time
 
 # %%
@@ -20,6 +17,13 @@ BASE_NAME = "personal_bookmarks"
 # between the duplicate copies, so keeping them makes every diff unreadable.
 URL_KEYS = ("date_added", "name", "type", "url")
 FOLDER_KEYS = ("children", "date_added", "name", "type")
+# Chrome keeps a profile's bookmarks in up to two files: Bookmarks for the ones
+# local to the device, AccountBookmarks for a signed-in account's. A synced
+# profile may hold only the second.
+LIVE_FILE_NAMES = ("Bookmarks", "AccountBookmarks")
+# The outline names the roots the way the Bookmark Manager does.
+ROOT_TITLES = (("bookmark_bar", "Bookmarks bar"), ("other", "Other bookmarks"), ("synced", "Mobile bookmarks"))
+OUTLINE_INDENT = "    "
 ATTR_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"), ('"', "&quot;"))
 TEXT_ESCAPES = (("&", "&amp;"), ("<", "&lt;"), (">", "&gt;"))
 # How much of the diff --check prints: enough to recognise what moved, not the
@@ -31,16 +35,40 @@ DIFF_PREVIEW_LINES = 20
 # Functions #
 
 
-def get_default_bookmarks_file_path(profile="Default"):
+def get_profile_dir(profile="Default"):
     # sys.platform distinguishes macOS from Linux; os.name calls both "posix"
     if sys.platform == "darwin":
-        return os.path.expanduser(f"~/Library/Application Support/Google/Chrome/{profile}/Bookmarks")
+        return os.path.expanduser(f"~/Library/Application Support/Google/Chrome/{profile}")
     elif sys.platform.startswith("linux"):
-        return os.path.expanduser(f"~/.config/google-chrome/{profile}/Bookmarks")
+        return os.path.expanduser(f"~/.config/google-chrome/{profile}")
     elif os.name == "nt":
-        return os.path.join(os.getenv("LOCALAPPDATA"), f"Google/Chrome/User Data/{profile}/Bookmarks")
+        return os.path.join(os.getenv("LOCALAPPDATA"), f"Google/Chrome/User Data/{profile}")
     else:
         raise OSError("Unsupported operating system")
+
+
+def read_live_bookmarks(profile_dir):
+    """One document holding everything the profile shows, or None when it has no bookmarks file.
+
+    Chrome shows the device-local and the account bookmarks as one tree, so
+    the roots of whichever files exist are joined here, local first; the
+    dedupe then treats a folder present in both like any other doubled folder.
+    """
+    combined = None
+    for file_name in LIVE_FILE_NAMES:
+        path = os.path.join(profile_dir, file_name)
+        if not os.path.exists(path):
+            continue
+        bookmarks = read_bookmarks(path)
+        if combined is None:
+            combined = bookmarks
+            continue
+        for root_name, root in bookmarks["roots"].items():
+            if not isinstance(root, dict):
+                continue
+            target = combined["roots"].setdefault(root_name, dict(root, children=[]))
+            target["children"] = target.get("children", []) + root.get("children", [])
+    return combined
 
 
 def repo_bookmarks_dir(context="personal"):
@@ -207,6 +235,35 @@ def export_bookmarks_as_html(bookmarks, output_file_path):
     print(f"Exported importable HTML to: {output_file_path}")
 
 
+def _emit_outline_node(node, depth, lines):
+    indent = OUTLINE_INDENT * depth
+    name = node.get("name", "") or "(no name)"
+    if node.get("type") == "url":
+        lines.append(f"{indent}{name}  ->  {node.get('url', '')}")
+        return
+    children = node.get("children", [])
+    lines.append(f"{indent}{name}/" if children else f"{indent}{name}/  (empty)")
+    for child in children:
+        _emit_outline_node(child, depth + 1, lines)
+
+
+def render_outline(bookmarks):
+    """The tree as indented text: one line per folder and per bookmark, in Chrome's order.
+
+    Only names and urls, so it changes exactly when a bookmark is added,
+    removed, renamed or moved - the file to read and to diff. Dates stay in
+    the JSON, where the import needs them.
+    """
+    lines = []
+    for root_name, title in ROOT_TITLES:
+        root = bookmarks["roots"].get(root_name)
+        if not isinstance(root, dict):
+            continue
+        _emit_outline_node(dict(root, name=title), 0, lines)
+        lines.append("")
+    return "\n".join(lines).rstrip("\n") + "\n"
+
+
 def count_urls(children):
     total = 0
     for child in children:
@@ -232,37 +289,35 @@ def write_outputs(bookmarks, output_dir):
         f.write("\n")
     print(f"Exported deduped bookmarks JSON to: {json_path}")
     export_bookmarks_as_html(deduped, os.path.join(output_dir, f"{BASE_NAME}.html"))
+    outline_path = os.path.join(output_dir, f"{BASE_NAME}.txt")
+    with open(outline_path, "w", encoding="utf-8") as f:
+        f.write(render_outline(deduped))
+    print(f"Exported readable outline to: {outline_path}")
 
 
 def check_drift(bookmarks, repo_json_path):
-    """Report how the live bookmarks differ from the committed copy, writing nothing to the repo.
+    """Report how the live bookmarks differ from the committed copy, writing nothing.
 
-    The read-only twin of a normal run: the export goes to a temporary
-    directory, so a probe never leaves a file in personal_credentials or
-    updates it behind a real export. Returns the exit code - 1 when the two
-    differ, 0 when they match and 0 when there is no committed copy to compare
-    against (personal_credentials not cloned, or bookmarks never exported).
+    The read-only twin of a normal run. Both sides are compared as outlines,
+    so the report is names and urls under their folders and a difference in
+    ``date_added`` alone (what a re-import leaves) is not drift. Returns the
+    exit code - 1 when the two differ, 0 when they match and 0 when there is
+    no committed copy to compare against (personal_credentials not cloned, or
+    bookmarks never exported).
     """
     if not os.path.exists(repo_json_path):
         print(f"No committed copy at {repo_json_path}; nothing to compare against.")
         return 0
-    with tempfile.TemporaryDirectory() as temp_dir:
-        # The export names the temporary directory it wrote to, which is noise
-        # in a drift report; the diff below is the report.
-        with contextlib.redirect_stdout(io.StringIO()):
-            write_outputs(bookmarks, temp_dir)
-        with open(get_repo_json_path(temp_dir), "r", encoding="utf-8") as f:
-            fresh = f.readlines()
-    with open(repo_json_path, "r", encoding="utf-8") as f:
-        committed = f.readlines()
+    committed = render_outline(read_bookmarks(repo_json_path)).splitlines()
+    fresh = render_outline(dedupe_bookmarks(bookmarks)).splitlines()
 
-    diff = list(difflib.unified_diff(committed, fresh, fromfile="repo copy", tofile="chrome now"))
+    diff = list(difflib.unified_diff(committed, fresh, fromfile="repo copy", tofile="chrome now", lineterm=""))
     if not diff:
         print(f"Bookmarks match {repo_json_path}.")
         return 0
     print(f"Bookmarks differ from {repo_json_path} ({len(diff)} diff lines):")
     for line in diff[:DIFF_PREVIEW_LINES]:
-        print(line.rstrip("\n"))
+        print(line)
     if len(diff) > DIFF_PREVIEW_LINES:
         print(f"... and {len(diff) - DIFF_PREVIEW_LINES} more diff lines")
     print("Run this script with no arguments to update the repo copy.")
@@ -277,8 +332,9 @@ if __name__ == "__main__":
         description=(
             "Save Chrome bookmarks to that context's credentials repo, collapsing the "
             "duplicate folders Chrome Sync creates when a device reconnects. Writes "
-            f"{BASE_NAME}.json (the editable copy) and {BASE_NAME}.html (for re-import "
-            "through the Bookmark Manager). --check writes nothing and only reports "
+            f"{BASE_NAME}.json (the editable copy), {BASE_NAME}.html (for re-import "
+            f"through the Bookmark Manager) and {BASE_NAME}.txt (the outline to read "
+            "and diff). --check writes nothing and only reports "
             "drift. See docs/repo_chrome_bookmarks.md."
         )
     )
@@ -294,7 +350,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--input",
-        help="read this bookmarks JSON (e.g. the repo copy after editing) instead of the live Chrome file",
+        help="read this bookmarks JSON (e.g. the repo copy after editing) instead of the live Chrome files",
     )
     parser.add_argument(
         "--output-dir",
@@ -310,10 +366,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    source = args.input or get_default_bookmarks_file_path(args.profile)
-    if not os.path.exists(source):
-        sys.exit(f"bookmarks file not found: {source}")
-    bookmarks = read_bookmarks(source)
+    if args.input:
+        if not os.path.exists(args.input):
+            sys.exit(f"bookmarks file not found: {args.input}")
+        bookmarks = read_bookmarks(args.input)
+    else:
+        profile_dir = get_profile_dir(args.profile)
+        bookmarks = read_live_bookmarks(profile_dir)
+        if bookmarks is None:
+            sys.exit(f"bookmarks file not found: none of {', '.join(LIVE_FILE_NAMES)} in {profile_dir}")
     if args.check:
         sys.exit(check_drift(bookmarks, get_repo_json_path(context=args.context)))
     destination = assert_credentials_dir(args.output_dir) if args.output_dir else get_bookmarks_dir(args.context)

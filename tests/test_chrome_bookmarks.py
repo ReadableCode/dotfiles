@@ -1,6 +1,7 @@
 # %%
 # Imports #
 
+import json
 import os
 
 import config_test_utils  # noqa F401
@@ -96,10 +97,69 @@ def test_html_escapes_apostrophes_the_way_chrome_decodes_them(tmp_path):
     assert text.index(">Loose</A>") > text.index("</DL><p>")
 
 
-def test_write_outputs_writes_both_files(tmp_path):
+def test_write_outputs_writes_all_three_files(tmp_path):
     chrome_bookmarks.write_outputs(sync_duplicated_tree(), str(tmp_path))
     assert (tmp_path / "personal_bookmarks.json").exists()
     assert (tmp_path / "personal_bookmarks.html").exists()
+    assert (tmp_path / "personal_bookmarks.txt").read_text(encoding="utf-8") == chrome_bookmarks.render_outline(
+        chrome_bookmarks.dedupe_bookmarks(sync_duplicated_tree())
+    )
+
+
+def test_outline_is_the_tree_as_indented_names_and_urls():
+    tree = sync_duplicated_tree()
+    tree["roots"]["other"]["children"] = [url("", "http://unnamed")]
+
+    assert chrome_bookmarks.render_outline(chrome_bookmarks.dedupe_bookmarks(tree)) == (
+        "Bookmarks bar/\n"
+        "    Self-Hosted/\n"
+        "        Behemoth/\n"
+        "            Plex  ->  http://a/plex\n"
+        "        Nukbuntu/\n"
+        "            Kuma  ->  http://b/kuma\n"
+        "    Plex  ->  https://app.plex.tv/desktop#\n"
+        "\n"
+        "Other bookmarks/\n"
+        "    (no name)  ->  http://unnamed\n"
+        "\n"
+        "Mobile bookmarks/  (empty)\n"
+    )
+
+
+def test_outline_does_not_change_with_dates():
+    tree = sync_duplicated_tree()
+    before = chrome_bookmarks.render_outline(chrome_bookmarks.dedupe_bookmarks(tree))
+    tree["roots"]["bookmark_bar"]["children"][0]["date_added"] = "13433786583783080"
+
+    assert chrome_bookmarks.render_outline(chrome_bookmarks.dedupe_bookmarks(tree)) == before
+
+
+def test_read_live_bookmarks_finds_a_profile_holding_only_account_bookmarks(tmp_path):
+    (tmp_path / "AccountBookmarks").write_text(json.dumps(sync_duplicated_tree()), encoding="utf-8")
+
+    live = chrome_bookmarks.read_live_bookmarks(str(tmp_path))
+    assert [c["name"] for c in live["roots"]["bookmark_bar"]["children"]] == [
+        "Self-Hosted",
+        "Self-Hosted",
+        "Plex",
+        "Plex",
+    ]
+
+
+def test_read_live_bookmarks_joins_local_and_account_files(tmp_path):
+    local = sync_duplicated_tree()
+    local["roots"]["bookmark_bar"]["children"] = [folder("Self-Hosted", [url("Local Only", "http://local")])]
+    (tmp_path / "Bookmarks").write_text(json.dumps(local), encoding="utf-8")
+    (tmp_path / "AccountBookmarks").write_text(json.dumps(sync_duplicated_tree()), encoding="utf-8")
+
+    deduped = chrome_bookmarks.dedupe_bookmarks(chrome_bookmarks.read_live_bookmarks(str(tmp_path)))
+    self_hosted = deduped["roots"]["bookmark_bar"]["children"][0]
+    assert [c["name"] for c in self_hosted["children"]] == ["Local Only", "Behemoth", "Nukbuntu"]
+
+
+def test_read_live_bookmarks_is_none_for_a_profile_with_neither_file(tmp_path):
+    (tmp_path / "Bookmarks.bak").write_text("{}", encoding="utf-8")
+    assert chrome_bookmarks.read_live_bookmarks(str(tmp_path)) is None
 
 
 def test_check_drift_says_so_and_passes_when_there_is_no_repo_copy(tmp_path, capsys):
@@ -119,6 +179,16 @@ def test_check_drift_passes_when_the_repo_copy_matches(tmp_path, capsys):
     assert chrome_bookmarks.check_drift(sync_duplicated_tree(), str(repo_json)) == 0
     assert "match" in capsys.readouterr().out
     assert repo_json.read_text(encoding="utf-8") == before
+
+
+def test_check_drift_passes_when_only_dates_differ(tmp_path, capsys):
+    # What a re-import leaves: the same tree with new date_added values.
+    chrome_bookmarks.write_outputs(sync_duplicated_tree(), str(tmp_path))
+    live = sync_duplicated_tree()
+    live["roots"]["bookmark_bar"]["children"][0]["date_added"] = "13433786583783080"
+
+    assert chrome_bookmarks.check_drift(live, str(tmp_path / "personal_bookmarks.json")) == 0
+    assert "match" in capsys.readouterr().out
 
 
 def test_check_drift_exits_one_and_shows_the_lines_that_differ(tmp_path, capsys):
@@ -146,7 +216,11 @@ def test_check_drift_prints_at_most_the_preview_and_never_writes_to_the_repo(tmp
     diff_lines = [line for line in out.splitlines() if line.startswith(("+", "-", "@@"))]
     assert len(diff_lines) <= chrome_bookmarks.DIFF_PREVIEW_LINES
     assert "more diff lines" in out
-    assert sorted(p.name for p in tmp_path.iterdir()) == ["personal_bookmarks.html", "personal_bookmarks.json"]
+    assert sorted(p.name for p in tmp_path.iterdir()) == [
+        "personal_bookmarks.html",
+        "personal_bookmarks.json",
+        "personal_bookmarks.txt",
+    ]
     assert {p.name: p.stat().st_mtime_ns for p in (repo_json, repo_html)} == stamps
 
 
