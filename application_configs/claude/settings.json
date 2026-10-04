@@ -6,6 +6,7 @@
     "sessionUrl": false
   },
   "model": "fable[1m]",
+  "enableAllProjectMcpServers": true,
   "hooks": {
     "Notification": [
       {
@@ -75,7 +76,6 @@
   "enabledPlugins": {
     "swift-lsp@claude-plugins-official": true
   },
-  "enableAllProjectMcpServers": true,
   "feedbackSurveyRate": 0,
   "effortLevel": "high",
   "autoUpdatesChannel": "latest",
