@@ -19,8 +19,12 @@ GENERATED_NAME = ".mcp.json"
 # declaring context (<context>.mcp.json), and the per-repo manifest entries link
 # each context's file into that context's checkouts as <repo>/.mcp.json.
 GENERATED_DIRNAME = os.path.join("data", "mcp")
-REQUIRED_SERVER_KEYS = ("name", "command")
-KNOWN_SERVER_KEYS = REQUIRED_SERVER_KEYS + ("args", "env", "env_secrets", "env_file")
+# A server is one of two transports: a local stdio subprocess (command) or a
+# remote Streamable HTTP endpoint (url). Each key belongs to one transport, so
+# a declaration mixing them is a mistake rather than something to merge.
+STDIO_KEYS = ("command", "args", "env", "env_secrets")
+HTTP_KEYS = ("url", "headers", "bearer_secret")
+KNOWN_SERVER_KEYS = ("name", "env_file") + STDIO_KEYS + HTTP_KEYS
 REDACTED = "***"
 
 # Placeholders expanded in command/args/env so a declaration never carries an
@@ -124,9 +128,10 @@ def _parse_server_config(config_path):
     for server in parsed:
         if not isinstance(server, dict):
             raise ValueError(f"MCP server declaration in {config_path} must be a mapping: {server}")
-        missing = [key for key in REQUIRED_SERVER_KEYS if not server.get(key)]
-        if missing:
-            raise ValueError(f"MCP server declaration in {config_path} is missing {', '.join(missing)}: {server}")
+        if not server.get("name"):
+            raise ValueError(f"MCP server declaration in {config_path} is missing name: {server}")
+        if not server.get("command") and not server.get("url"):
+            raise ValueError(f"MCP server declaration in {config_path} is missing command or url: {server}")
         unknown = [key for key in server if key not in KNOWN_SERVER_KEYS]
         if unknown:
             raise ValueError(
@@ -138,27 +143,42 @@ def _parse_server_config(config_path):
 
 
 def _validate_shapes(server, config_path):
-    """args must be a list of strings; env/env_secrets flat string maps."""
+    """
+    One transport per server; args a list of strings; env/env_secrets/headers
+    flat string maps; every named secret resolvable.
+    """
+    foreign = [key for key in (STDIO_KEYS if server.get("url") else HTTP_KEYS) if key in server]
+    if foreign:
+        raise ValueError(
+            f"MCP server '{server['name']}' in {config_path} mixes stdio and http keys: {', '.join(foreign)}"
+        )
     args = server.get("args", [])
     if not isinstance(args, list) or any(not isinstance(item, str) for item in args):
         raise ValueError(f"MCP server '{server['name']}' in {config_path} has non-string args: {args}")
-    for key in ("env", "env_secrets"):
+    for key in ("env", "env_secrets", "headers"):
         mapping = server.get(key, {})
         if not isinstance(mapping, dict) or any(
             not isinstance(name, str) or not isinstance(value, str) for name, value in mapping.items()
         ):
             raise ValueError(f"MCP server '{server['name']}' in {config_path} has a non-string {key} map: {mapping}")
-    if server.get("env_secrets") and not server.get("env_file") and not _all_in_environment(server["env_secrets"]):
-        # resolve_secret would raise later with a clearer message, but saying it
-        # here names the file that needs the env_file key.
-        raise ValueError(
-            f"MCP server '{server['name']}' in {config_path} declares env_secrets "
-            f"but no env_file, and the named vars are not in the environment"
-        )
+    bearer = server.get("bearer_secret", "")
+    if not isinstance(bearer, str):
+        raise ValueError(f"MCP server '{server['name']}' in {config_path} has a non-string bearer_secret: {bearer}")
+    for key, secret_vars in (
+        ("env_secrets", list(server.get("env_secrets", {}).values())),
+        ("bearer_secret", [bearer]),
+    ):
+        if any(secret_vars) and not server.get("env_file") and not _all_in_environment(secret_vars):
+            # resolve_secret would raise later with a clearer message, but saying it
+            # here names the file that needs the env_file key.
+            raise ValueError(
+                f"MCP server '{server['name']}' in {config_path} declares {key} "
+                f"but no env_file, and the named vars are not in the environment"
+            )
 
 
-def _all_in_environment(env_secrets):
-    return all(os.environ.get(var) for var in env_secrets.values())
+def _all_in_environment(secret_vars):
+    return all(os.environ.get(var) for var in secret_vars)
 
 
 def _git_output(repo_dir, *args):
@@ -221,6 +241,8 @@ def expand_tokens(value, repo_root, repo_parent):
 
 def render_server(server, repo_root, repo_parent, redact=False):
     """One declaration -> the mcpServers entry Claude Code reads."""
+    if server.get("url"):
+        return render_http_server(server, redact=redact)
     rendered = {"command": expand_tokens(server["command"], repo_root, repo_parent)}
     if server.get("args"):
         rendered["args"] = expand_tokens(server["args"], repo_root, repo_parent)
@@ -229,6 +251,22 @@ def render_server(server, repo_root, repo_parent, redact=False):
         env[target_var] = REDACTED if redact else _resolve_env_secret(server, source_var)
     if env:
         rendered["env"] = env
+    return rendered
+
+
+def render_http_server(server, redact=False):
+    """
+    A remote server's entry. bearer_secret names the var whose value becomes
+    the Authorization header, so the scheme prefix never has to be stored
+    beside the token.
+    """
+    rendered = {"type": "http", "url": server["url"]}
+    headers = dict(server.get("headers", {}))
+    if server.get("bearer_secret"):
+        token = REDACTED if redact else _resolve_env_secret(server, server["bearer_secret"])
+        headers["Authorization"] = f"Bearer {token}"
+    if headers:
+        rendered["headers"] = headers
     return rendered
 
 

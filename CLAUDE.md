@@ -81,8 +81,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   Only contexts some loaded entry links get a file: a machine holding a
   context's declaration but not the overlay that consumes it generates
   nothing for it.
-  `{repo_root}` / `{repo_parent}` tokens and `env_secrets` var names resolve
-  at generate time, which is why no per-host payload exists. Doc:
+  `{repo_root}` / `{repo_parent}` tokens and `env_secrets` / `bearer_secret`
+  var names resolve at generate time, which is why no per-host payload exists. Doc:
   `docs/setup_google_mcp.md`.
 - **`google_mcp.py`** — stdio MCP server exposing one context's Google
   Calendar, Gmail (mailboxes from `<context>_googlemail.yaml`) and Drive

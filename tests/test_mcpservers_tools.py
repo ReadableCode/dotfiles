@@ -70,6 +70,12 @@ JIRA_SERVER = {
     "env_secrets": {"JIRA_API_TOKEN": "JIRA_TOKEN"},
     "env_file": "acme.env",
 }
+HOME_SERVER = {
+    "name": "home",
+    "url": "https://home.example.com/api/mcp",
+    "bearer_secret": "HOME_TOKEN",
+    "env_file": "acme.env",
+}
 
 
 def parse_one(tmp_path, server):
@@ -163,7 +169,15 @@ def test_an_empty_declaration_file_is_valid(tmp_path):
     "server, message",
     [
         ({"command": "uv"}, "missing name"),
-        ({"name": "google"}, "missing command"),
+        ({"name": "google"}, "missing command or url"),
+        (
+            {"name": "home", "url": "https://home.example.com/mcp", "command": "uv"},
+            "mixes stdio and http keys: command",
+        ),
+        ({"name": "home", "url": "https://home.example.com/mcp", "env": {"A": "b"}}, "mixes stdio and http keys: env"),
+        ({"name": "google", "command": "uv", "headers": {"X-A": "b"}}, "mixes stdio and http keys: headers"),
+        ({"name": "home", "url": "https://home.example.com/mcp", "headers": {"X-A": 1}}, "non-string headers map"),
+        ({"name": "home", "url": "https://home.example.com/mcp", "bearer_secret": 3}, "non-string bearer_secret"),
         ({"name": "google", "command": "uv", "argz": []}, "unknown keys: argz"),
         ({"name": "google", "command": "uv", "args": "run"}, "non-string args"),
         ({"name": "google", "command": "uv", "args": ["run", 3]}, "non-string args"),
@@ -195,6 +209,17 @@ def test_env_secrets_without_an_env_file_is_rejected_unless_the_vars_are_already
 
     monkeypatch.setenv("JIRA_TOKEN", "from-environment")
     assert parse_one(tmp_path, server)["name"] == "jira"
+
+
+def test_bearer_secret_without_an_env_file_is_rejected_unless_the_var_is_already_set(tmp_path, monkeypatch):
+    server = {"name": "home", "url": "https://home.example.com/api/mcp", "bearer_secret": "HOME_TOKEN"}
+    monkeypatch.delenv("HOME_TOKEN", raising=False)
+
+    with pytest.raises(ValueError, match="declares bearer_secret but no env_file"):
+        parse_one(tmp_path, server)
+
+    monkeypatch.setenv("HOME_TOKEN", "from-environment")
+    assert parse_one(tmp_path, server)["name"] == "home"
 
 
 # %%
@@ -272,6 +297,37 @@ def test_a_missing_secret_names_the_server_rather_than_writing_an_empty_value(tm
 
     with pytest.raises(ValueError, match="'jira': env var JIRA_TOKEN is not set"):
         mtools.render_server(dict(JIRA_SERVER, _base_dir=credentials), str(tmp_path / "dotfiles"), str(tmp_path))
+
+
+def test_render_http_server_resolves_the_bearer_secret_into_the_authorization_header(tmp_path, monkeypatch):
+    credentials = make_credentials_repo(tmp_path, "acme", servers=[HOME_SERVER], env={"HOME_TOKEN": "live-token"})
+    monkeypatch.delenv("HOME_TOKEN", raising=False)
+    server = dict(HOME_SERVER, _base_dir=credentials, headers={"X-Client": "desk"})
+
+    rendered = mtools.render_server(server, str(tmp_path / "dotfiles"), str(tmp_path))
+
+    assert rendered == {
+        "type": "http",
+        "url": "https://home.example.com/api/mcp",
+        "headers": {"X-Client": "desk", "Authorization": "Bearer live-token"},
+    }
+
+
+def test_render_http_server_without_headers_is_only_a_type_and_a_url():
+    rendered = mtools.render_server(
+        {"name": "home", "url": "https://home.example.com/mcp"}, "/clones/dotfiles", "/clones"
+    )
+
+    assert rendered == {"type": "http", "url": "https://home.example.com/mcp"}
+
+
+def test_redaction_hides_the_bearer_token_without_resolving_it(tmp_path, monkeypatch):
+    monkeypatch.delenv("HOME_TOKEN", raising=False)
+    server = dict(HOME_SERVER, _base_dir=str(tmp_path), env_file=None)
+
+    rendered = mtools.render_server(server, str(tmp_path / "dotfiles"), str(tmp_path), redact=True)
+
+    assert rendered["headers"] == {"Authorization": f"Bearer {mtools.REDACTED}"}
 
 
 def test_build_document_sorts_servers_so_the_generated_file_diffs_cleanly():

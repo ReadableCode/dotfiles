@@ -12,7 +12,8 @@
 # {repo_root} is this dotfiles clone, {repo_parent} its parent. Use them instead
 # of absolute paths: deploy has no templating, so a literal path here would send
 # every machine at the path of whichever machine wrote it. Never put a secret
-# VALUE in this file - env_secrets names the env var to resolve at generate time
+# VALUE in this file - env_secrets (or bearer_secret, for a remote server declared
+# by url) names the env var to resolve at generate time
 # (see docs/setup_google_mcp.md).
 #
 # dotfiles declares NO servers of its own today. The google server's CODE lives

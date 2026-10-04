@@ -87,7 +87,10 @@ the things that silently fail a plausible remote workflow.
 
 - Internet URL `https://homeassistant.tinkernet.me`; REST API works there
   with the long-lived token. Creds are `HOME_ASSISTANT_*` in dotfiles' `.env`;
-  grep the one key you need, never `source` the whole file.
+  grep the one key you need, never `source` the whole file. Cloudflare
+  answers 403 `error code: 1010` to the standard library's `urllib` (its
+  default `Python-urllib` user agent is on the blocked list); `requests`,
+  `curl`, `aiohttp` and `websockets` pass, and the LAN address takes anything.
 - SSH is the Advanced SSH & Web Terminal add-on (user hassio, password). The
   `ha` CLI needs a login shell (`bash -l -c 'ha ...'`) for its supervisor
   token.

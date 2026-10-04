@@ -91,6 +91,18 @@ same `src/utils/secret_tools.py` path the calendar board uses:
   env_file: acme.env
 ```
 
+A remote server is declared by `url` instead of `command` and rendered as a
+Streamable HTTP entry. `bearer_secret` names the var whose value becomes the
+`Authorization: Bearer` header, and `headers` carries any literal ones. The
+two shapes do not mix: a `url` server takes no `args`/`env`/`env_secrets`.
+
+```yaml
+- name: acme_home
+  url: https://home.example.com/api/mcp
+  bearer_secret: HOME_TOKEN
+  env_file: acme.env
+```
+
 The generated files live in dotfiles' gitignored `data/mcp/` — never in a
 checkout's tracked tree, and since a document can carry a live token each is
 written `0600`. Updates are written **in place** rather than by rename: on
