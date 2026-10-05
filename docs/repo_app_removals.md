@@ -216,6 +216,14 @@ one upgraded. `my_updater.ps1 --check` counts from the same plans. If a plan
 cannot be worked out (no uv, the manager not answering) that manager upgrades
 nothing and the step fails, rather than falling back to "all".
 
+**An upgrade that closes a logon app starts it again.** An installer closes
+the app it replaces, and the app's Run key fires only at logon, so in a session
+that stays signed in the app stayed down until the next restart. The run notes
+which logon apps (Run-key entries that are switched on) are running before the first upgrade, and after the last one starts any that
+are no longer running, on the signed-in desktop and unelevated, through a
+one-off scheduled task that it removes again. With nobody signed in the app is
+left for logon to start.
+
 Anything the finder cannot see - an optional feature beside a package, like the
 in-box OpenSSH server - still takes a line with `replaced_by`.
 
