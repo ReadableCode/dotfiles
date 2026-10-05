@@ -1702,7 +1702,7 @@ def cmd_dispatch_workflow(args):
     """
     Start a workflow_dispatch workflow (the "Run workflow" button) on a ref,
     with its inputs. GitHub answers 204 with no run id, so the run is found
-    afterwards with workflow-runs.
+    afterwards with workflow-runs --commit <ref>.
     """
     provider, repo = repo_spec(args.repo)
     if provider != "github":
@@ -1737,38 +1737,92 @@ def summarize_run(run):
     }
 
 
+def resolve_commit(repo, ref, headers):
+    """The full sha a commit, short sha, branch or tag names right now, so a later push cannot move it."""
+    return http_json("GET", f"{GITHUB_API}/repos/{repo}/commits/{urllib.parse.quote(ref, safe='/')}", headers)["sha"]
+
+
+def list_workflow_runs(url, headers, sha=None):
+    """
+    One listing, newest first by our own sort rather than GitHub's order, and
+    with --commit only that sha's runs, even if GitHub returns others.
+    """
+    runs = [summarize_run(r) for r in http_json("GET", url, headers)["workflow_runs"]]
+    if sha:
+        runs = [r for r in runs if r["sha"] == sha]
+    return sorted(runs, key=lambda r: (r["created_at"] or "", r["id"]), reverse=True)
+
+
+def wait_for_commit_run(repo, url, headers, sha, args):
+    """
+    Poll until the commit has a run, then follow that run by id until it
+    completes, so no later listing can swap it for another commit's run.
+
+    Returns:
+        (runs, timed_out): the listing with its newest run refreshed, and True
+        when the timeout hit first, else None.
+    """
+    deadline = time.monotonic() + args.timeout
+    runs = list_workflow_runs(url, headers, sha)
+    while not runs:
+        if time.monotonic() >= deadline:
+            return runs, True
+        print(f"waiting for a {args.workflow} run on {sha[:12]} ...", flush=True)
+        time.sleep(args.interval)
+        runs = list_workflow_runs(url, headers, sha)
+    while runs[0]["status"] != "completed":
+        if time.monotonic() >= deadline:
+            return runs, True
+        print(f"waiting on run {runs[0]['id']} ({runs[0]['status']}) ...", flush=True)
+        time.sleep(args.interval)
+        runs[0] = summarize_run(http_json("GET", f"{GITHUB_API}/repos/{repo}/actions/runs/{runs[0]['id']}", headers))
+    return runs, None
+
+
 def cmd_workflow_runs(args):
     """
     The newest runs of one workflow, newest first, optionally filtered by
-    branch and event. --wait polls until the newest of them has completed, so
-    a deploy started by a merge or by dispatch-workflow can be followed to its
-    conclusion; --jobs lists each run's jobs with the ids job-log takes.
+    branch, event and commit. --jobs lists each run's jobs with the ids
+    job-log takes.
+
+    --wait follows the run for one --commit to its conclusion, so a deploy
+    started by a merge or by dispatch-workflow can be watched. It never means
+    "the newest run": right after a push the commit's run does not exist yet,
+    and GitHub has listed a weeks-old run as the newest, so following the
+    newest reports some other commit's result. Runs for any other sha are
+    dropped even when GitHub returns them, the wait keeps polling until the
+    commit's run appears, and once found that run is followed by id rather
+    than re-listed.
     """
     provider, repo = repo_spec(args.repo)
     if provider != "github":
         raise SystemExit("workflow-runs is GitHub-only")
+    if args.wait and not args.commit:
+        raise SystemExit(
+            "--wait needs --commit <sha|branch|tag>: the newest run of a workflow is not necessarily "
+            "the run for the commit you mean"
+        )
     query = {"per_page": args.limit}
     if args.branch:
         query["branch"] = args.branch
     if args.event:
         query["event"] = args.event
-    url = f"{GITHUB_API}/repos/{repo}/actions/workflows/{args.workflow}/runs?{urllib.parse.urlencode(query)}"
     if args.dry_run:
+        if args.commit:
+            query["head_sha"] = args.commit
+        url = f"{GITHUB_API}/repos/{repo}/actions/workflows/{args.workflow}/runs?{urllib.parse.urlencode(query)}"
         print(f"[dry-run] GET {url}")
         emit("dry run", {"workflow": args.workflow, "runs": [], "timed_out": None})
         return
     headers = github_headers()
-    deadline = time.monotonic() + args.timeout
-    timed_out = None
-    while True:
-        runs = [summarize_run(r) for r in http_json("GET", url, headers)["workflow_runs"]]
-        if not args.wait or not runs or runs[0]["status"] == "completed":
-            break
-        if time.monotonic() >= deadline:
-            timed_out = True
-            break
-        print(f"waiting on run {runs[0]['id']} ({runs[0]['status']}) ...", flush=True)
-        time.sleep(args.interval)
+    sha = resolve_commit(repo, args.commit, headers) if args.commit else None
+    if sha:
+        query["head_sha"] = sha
+    url = f"{GITHUB_API}/repos/{repo}/actions/workflows/{args.workflow}/runs?{urllib.parse.urlencode(query)}"
+    if args.wait:
+        runs, timed_out = wait_for_commit_run(repo, url, headers, sha, args)
+    else:
+        runs, timed_out = list_workflow_runs(url, headers, sha), None
     for run in runs:
         print(f"{run['id']} {run['status']} {run['conclusion'] or '-'} {run['event']} {run['branch']} {run['title']}")
         if args.jobs:
@@ -1990,13 +2044,22 @@ def build_parser():
     dispatch.add_argument("--input", action="append", default=[], help="workflow input as KEY=VALUE; repeatable")
     dispatch.set_defaults(func=cmd_dispatch_workflow)
 
-    runs = sub.add_parser("workflow-runs", help="a workflow's newest runs; --wait follows the newest to completion")
+    runs = sub.add_parser(
+        "workflow-runs", help="a workflow's newest runs; --wait follows one --commit's run to completion"
+    )
     runs.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     runs.add_argument("--workflow", required=True, help="workflow file name (e.g. deploy.yaml) or id")
     runs.add_argument("--branch", help="only runs on this branch")
     runs.add_argument("--event", help="only runs from this event, e.g. push, release, workflow_dispatch")
+    runs.add_argument(
+        "--commit", help="only runs for this commit: a sha, short sha, branch or tag, resolved once at call time"
+    )
     runs.add_argument("--limit", type=int, default=5, help="number of runs listed (default 5)")
-    runs.add_argument("--wait", action="store_true", help="poll until the newest listed run has completed")
+    runs.add_argument(
+        "--wait",
+        action="store_true",
+        help="with --commit, poll until that commit's run exists and has completed",
+    )
     runs.add_argument("--jobs", action="store_true", help="also list each run's jobs, with the ids job-log takes")
     runs.add_argument("--interval", type=int, default=60, help="poll interval seconds")
     runs.add_argument("--timeout", type=int, default=3600, help="max wait seconds")

@@ -751,18 +751,23 @@ def test_dispatch_workflow_rejects_an_input_without_a_value(monkeypatch):
         )
 
 
-def _run(run_id, status, conclusion=None):
+def _run(run_id, status, conclusion=None, sha="abc", created_at="2026-01-01T00:00:00Z"):
     return {
         "id": run_id,
         "status": status,
         "conclusion": conclusion,
         "event": "release",
         "head_branch": "main",
-        "head_sha": "abc",
+        "head_sha": sha,
         "display_title": "v1",
-        "created_at": "2026-01-01T00:00:00Z",
+        "created_at": created_at,
         "html_url": f"https://github.com/acme/widgets/actions/runs/{run_id}",
     }
+
+
+NEW_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+OLD_SHA = "0f9e8d7c6b5a49382716051f2e3d4c5b6a798011"
+RUNS_URL = "https://api.github.com/repos/acme/widgets/actions/workflows/deploy.yaml/runs"
 
 
 def test_workflow_runs_filters_by_branch_and_event(monkeypatch, capsys):
@@ -798,21 +803,136 @@ def test_workflow_runs_filters_by_branch_and_event(monkeypatch, capsys):
     assert result["timed_out"] is None
 
 
-def test_workflow_runs_wait_polls_until_the_newest_run_completes(monkeypatch, capsys):
-    monkeypatch.setenv("GITHUB_TOKEN", "t")
-    polls = iter(
-        [
-            {"workflow_runs": [_run(5, "in_progress")]},
-            {"workflow_runs": [_run(5, "completed", "success")]},
-        ]
-    )
-    monkeypatch.setattr(ticket_pr, "http_json", lambda *a, **k: next(polls))
+def _fake_github(monkeypatch, listings, runs_by_id=None):
+    """http_json stand-in: the commit lookup resolves to NEW_SHA, each listing poll pops the next response."""
+    seen = []
+    listings = iter(listings)
+    runs_by_id = {k: iter(v) for k, v in (runs_by_id or {}).items()}
+
+    def fake_http(method, url, *a, **k):
+        seen.append(url)
+        if "/commits/" in url:
+            return {"sha": NEW_SHA}
+        if url.startswith(RUNS_URL):
+            return next(listings)
+        run_id = int(url.rsplit("/", 1)[1])
+        return next(runs_by_id[run_id])
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
     monkeypatch.setattr(ticket_pr.time, "sleep", lambda s: None)
-    ticket_pr.main(["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--wait"])
+    return seen
+
+
+def test_workflow_runs_wait_without_commit_refuses(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    with pytest.raises(SystemExit, match="--wait needs --commit"):
+        ticket_pr.main(["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--wait"])
+
+
+def test_workflow_runs_commit_resolves_once_and_drops_other_shas(monkeypatch, capsys):
+    # GitHub once answered per_page=1 with a weeks-old run for another commit
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    seen = _fake_github(
+        monkeypatch,
+        [
+            {
+                "workflow_runs": [
+                    _run(1, "completed", "success", sha=OLD_SHA),
+                    _run(9, "completed", "failure", sha=NEW_SHA),
+                ]
+            }
+        ],
+    )
+    ticket_pr.main(
+        ["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--commit", "a1b2c3d4", "--limit", "1"]
+    )
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert seen == [
+        "https://api.github.com/repos/acme/widgets/commits/a1b2c3d4",
+        f"{RUNS_URL}?per_page=1&head_sha={NEW_SHA}",
+    ]
+    assert [(r["id"], r["sha"]) for r in result["runs"]] == [(9, NEW_SHA)]
+
+
+def test_workflow_runs_lists_newest_first_whatever_order_github_returns(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    _fake_github(
+        monkeypatch,
+        [
+            {
+                "workflow_runs": [
+                    _run(1, "completed", "success", created_at="2026-09-16T20:50:55Z"),
+                    _run(3, "completed", "success", created_at="2026-10-05T20:16:37Z"),
+                    _run(2, "completed", "success", created_at="2026-10-02T22:02:05Z"),
+                ]
+            }
+        ],
+    )
+    ticket_pr.main(["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml"])
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert [r["id"] for r in result["runs"]] == [3, 2, 1]
+
+
+def test_workflow_runs_wait_keeps_polling_until_the_commits_run_exists(monkeypatch, capsys):
+    # right after a merge the newest listed run is the previous commit's finished one
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    seen = _fake_github(
+        monkeypatch,
+        [
+            {"workflow_runs": [_run(4, "completed", "success", sha=OLD_SHA)]},
+            {"workflow_runs": [_run(5, "in_progress", sha=NEW_SHA)]},
+        ],
+        runs_by_id={5: [_run(5, "completed", "success", sha=NEW_SHA)]},
+    )
+    ticket_pr.main(
+        ["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--commit", "master", "--wait"]
+    )
     out = capsys.readouterr().out
+    assert "waiting for a deploy.yaml run on a1b2c3d4e5f6" in out
     assert "waiting on run 5 (in_progress)" in out
     result = json.loads(out.strip().splitlines()[-1])
+    assert [(r["id"], r["conclusion"]) for r in result["runs"]] == [(5, "success")]
+    assert seen[-1] == "https://api.github.com/repos/acme/widgets/actions/runs/5"
+
+
+def test_workflow_runs_wait_follows_the_found_run_by_id_not_the_listing(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    seen = _fake_github(
+        monkeypatch,
+        [{"workflow_runs": [_run(5, "in_progress", sha=NEW_SHA)]}],
+        runs_by_id={5: [_run(5, "in_progress", sha=NEW_SHA), _run(5, "completed", "success", sha=NEW_SHA)]},
+    )
+    ticket_pr.main(
+        ["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--commit", NEW_SHA, "--wait"]
+    )
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert result["runs"][0]["conclusion"] == "success"
+    assert sum(u.startswith(RUNS_URL) for u in seen) == 1
+    assert seen[-2:] == ["https://api.github.com/repos/acme/widgets/actions/runs/5"] * 2
+
+
+def test_workflow_runs_wait_times_out_when_the_commits_run_never_appears(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    _fake_github(monkeypatch, [{"workflow_runs": [_run(4, "completed", "success", sha=OLD_SHA)]}] * 3)
+    clock = iter([0, 0, 30, 61])
+    monkeypatch.setattr(ticket_pr.time, "monotonic", lambda: next(clock))
+    ticket_pr.main(
+        [
+            "workflow-runs",
+            "--repo",
+            "acme/widgets",
+            "--workflow",
+            "deploy.yaml",
+            "--commit",
+            NEW_SHA,
+            "--wait",
+            "--timeout",
+            "60",
+        ]
+    )
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert result["runs"] == []
+    assert result["timed_out"] is True
 
 
 def test_update_pr_dry_run_patches_the_pull(monkeypatch, capsys):
