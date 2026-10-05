@@ -4,7 +4,9 @@
 # the apps a winget app list names, and neither runs an installer for a version
 # that is already there. Each upgrade runs quietly into ~/logs/updater, one
 # line per package, and the failures are reported once at the end with a plain
-# reason. Repo pulls and
+# reason. A logon app (Run key) that was running before the
+# upgrades and is not after them is started again on the signed-in desktop.
+# Repo pulls and
 # config deploys live in src/refresh_machine.py, which runs this between the
 # pull and the deploy when called with --packages (the myupdater command). The
 # macOS/Linux twin is scripts/my_updater.sh.
@@ -350,6 +352,84 @@ function Show-Drift {
     }
 }
 
+function Split-LogonCommand {
+    # A logon command line as its program and arguments: the program quoted,
+    # or unquoted up to the first .exe. $null for anything else.
+    param([string]$Command)
+    $text = [Environment]::ExpandEnvironmentVariables("$Command").Trim()
+    if ($text -match '^"([^"]+\.exe)"\s*(.*)$') { return @{ Program = $Matches[1]; Arguments = $Matches[2] } }
+    if ($text -match '^([^"]+?\.exe)(?:\s+(.*))?$') { return @{ Program = $Matches[1]; Arguments = "$($Matches[2])" } }
+    return $null
+}
+
+function Get-LogonApps {
+    # Every program a Run key starts at logon and this machine has not turned
+    # off, as name, program and arguments.
+    $apps = @()
+    foreach ($source in $LogonRunSources) {
+        $key = Get-Item -Path $source.Run -ErrorAction SilentlyContinue
+        if ($null -eq $key) { continue }
+        foreach ($name in $key.GetValueNames()) {
+            if (-not $name -or (Test-ApprovedOff $source.Approved $name)) { continue }
+            $command = Split-LogonCommand $key.GetValue($name)
+            if ($command) { $apps += [pscustomobject]@{ Name = $name; Program = $command.Program; Arguments = $command.Arguments } }
+        }
+    }
+    return $apps
+}
+
+function Get-RunningPrograms {
+    # The path of every running program, lower-cased, as a set.
+    $paths = New-Object 'System.Collections.Generic.HashSet[string]'
+    foreach ($process in Get-Process) {
+        try { if ($process.Path) { [void]$paths.Add($process.Path.ToLower()) } } catch { }
+    }
+    return , $paths
+}
+
+function Start-LogonApp {
+    # Start one logon app on the signed-in desktop, unelevated, the way logon
+    # would have: through a one-off scheduled task, because this run is
+    # elevated or over ssh, where a plain start gives the app the wrong token
+    # or no desktop at all. True when its process is there afterwards; nobody
+    # signed in means it is not, and logon starts the app then.
+    param($App)
+    $task = 'myupdater_start_logon_app'
+    try {
+        $action = if ($App.Arguments) { New-ScheduledTaskAction -Execute $App.Program -Argument $App.Arguments } else { New-ScheduledTaskAction -Execute $App.Program }
+        $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
+        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+        Register-ScheduledTask -TaskName $task -Action $action -Principal $principal -Settings $settings -Force -ErrorAction Stop | Out-Null
+        Start-ScheduledTask -TaskName $task -ErrorAction Stop
+        foreach ($second in 1..15) {
+            if ((Get-RunningPrograms).Contains($App.Program.ToLower())) { return $true }
+            Start-Sleep -Seconds 1
+        }
+        return $false
+    }
+    catch { return $false }
+    finally { Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue }
+}
+
+function Restore-LogonApps {
+    # Start again every logon app that was running before the upgrades and is
+    # not now. An installer closes the app it replaces and its Run key fires
+    # only at logon, so in a session that stays signed in the app stayed down
+    # until the next restart (Stream Deck and SyncTrayzor on RyzenWhite, two
+    # and a half days). The command is read again by name, since an upgrade
+    # may have moved the program.
+    param($Before)
+    if ($Before.Count -eq 0) { return }
+    $running = Get-RunningPrograms
+    $closed = @(Get-LogonApps | Where-Object { $Before -contains $_.Name -and -not $running.Contains($_.Program.ToLower()) })
+    if ($closed.Count -eq 0) { return }
+    Write-Host "starting the logon apps the upgrades closed..."
+    foreach ($app in $closed) {
+        if (Start-LogonApp $app) { Write-Host "  $($app.Name): started again" }
+        else { Write-Host "  $($app.Name): not started; it starts at the next logon" }
+    }
+}
+
 function Test-Elevated {
     ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole(
         [Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -453,6 +533,9 @@ catch {
     $settingsFailed = $true
 }
 
+$running = Get-RunningPrograms
+$logonAppsRunning = @(Get-LogonApps | Where-Object { $running.Contains($_.Program.ToLower()) } | ForEach-Object { $_.Name })
+
 if (Get-Command winget -ErrorAction SilentlyContinue) {
     Write-Host "updating via winget..."
     try {
@@ -483,6 +566,8 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
         $settingsFailed = $true
     }
 }
+
+Restore-LogonApps $logonAppsRunning
 
 # An upgrade that did not go through fails this step, and so does a setting
 # the inventory asks for that this run could not make, or not being able to
