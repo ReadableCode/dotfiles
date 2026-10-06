@@ -11,3 +11,15 @@
 [[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
 
 [[ -f ~/.zshenv.local ]] && source ~/.zshenv.local
+
+# Microsoft's SQL Server ODBC driver (msodbcsql17, brew) dlopens libssl from
+# /opt/homebrew/opt/openssl/lib, the `openssl` alias, and only accepts 1.x or
+# 3.x. Since brew moved the alias to openssl@4 (2026-10) every pyodbc connect
+# fails with "OpenSSL library could not be loaded". Putting openssl@3 first on
+# the loader path is what the driver needs; no other installed binary links a
+# library by one of these leaf names at a different version. Drop this once
+# the driver formula depends on openssl@3 again (verify: strings
+# /opt/homebrew/lib/libmsodbcsql.17.dylib | grep opt/openssl).
+if [[ -f /opt/homebrew/lib/libmsodbcsql.17.dylib && -d /opt/homebrew/opt/openssl@3/lib ]]; then
+    export DYLD_LIBRARY_PATH="/opt/homebrew/opt/openssl@3/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
+fi
