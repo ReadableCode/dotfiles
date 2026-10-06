@@ -74,10 +74,12 @@ ticket is created only relabels the workspace entry):
    are printed as `not mirrored` — carry those by hand if the task needs them.
 2. **VS Code workspace** — inserts the folder entry into
    `<repo_parent>/<host>.code-workspace`, the deploy-managed link next to the
-   checkouts. VS Code watches that file, so the folder shows up in the open
-   window immediately with no reload. Idempotent by path. The file lives in
-   a **tracked** credentials-repo file (`personal_credentials/vscode/...` or the
-   client's), so this leaves that repo dirty on purpose.
+   checkouts, and into every narrower `<host>-<name>.code-workspace` beside it
+   that lists the main checkout (one line per file). VS Code watches those
+   files, so the folder shows up in the open window immediately with no
+   reload. Idempotent by path. Each is a **tracked** credentials-repo file
+   (`personal_credentials/vscode/...` or the client's), so this leaves that
+   repo dirty on purpose.
 3. **`uv sync`** — when the worktree has a `uv.lock`; each worktree gets its own
    `.venv`.
 
@@ -90,7 +92,8 @@ line explicitly — that is the one case that needs a human decision.
 If the workspace line says `no workspace file`, this host has no
 `<host>.code-workspace` variant deployed yet — see `dotfiles/docs/setup_vscode.md`.
 If it says `no anchor`, the main checkout itself is not in the workspace; add
-it by hand first.
+it by hand first. `skipped, repo not in this workspace` on a narrower
+workspace is expected: that workspace does not hold this repo.
 
 ## Step 5 — do NOT commit; leaving a worktree
 

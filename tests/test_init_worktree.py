@@ -198,18 +198,48 @@ def test_remove_restores_the_original_text():
 def test_update_workspace_uses_the_hosts_file_next_to_the_checkouts(repos):
     repo_parent, main, worktree = repos
     ws = write(os.path.join(repo_parent, "envy.code-workspace"), WORKSPACE)
-    status = init_worktree.update_workspace(main, worktree, "ACME-2482", hostname="Envy.local")
-    assert status.startswith("added (envy.code-workspace: ../.t3/worktrees/acme-app/abc)")
+    statuses = init_worktree.update_workspace(main, worktree, "ACME-2482", hostname="Envy.local")
+    assert statuses == ["added (envy.code-workspace: ../.t3/worktrees/acme-app/abc)"]
     with open(ws, encoding="utf-8") as file_handle:
         assert '"name": "│ acme-app · ACME-2482"' in file_handle.read()
-    assert init_worktree.update_workspace(main, worktree, None, remove=True, hostname="envy").startswith("removed")
+    assert init_worktree.update_workspace(main, worktree, None, remove=True, hostname="envy")[0].startswith("removed")
     with open(ws, encoding="utf-8") as file_handle:
         assert file_handle.read() == WORKSPACE
 
 
+def test_update_workspace_also_updates_the_hosts_narrower_workspaces_that_hold_the_repo(repos):
+    repo_parent, main, worktree = repos
+    write(os.path.join(repo_parent, "envy.code-workspace"), WORKSPACE)
+    holds = write(os.path.join(repo_parent, "envy-acme.code-workspace"), WORKSPACE)
+    other_repo = WORKSPACE.replace("acme-app", "another-app")
+    lacks = write(os.path.join(repo_parent, "envy-other.code-workspace"), other_repo)
+    not_this_host = write(os.path.join(repo_parent, "envylaptop-acme.code-workspace"), WORKSPACE)
+    statuses = init_worktree.update_workspace(main, worktree, "ACME-2482", hostname="envy")
+    assert [status.split(" (")[0] for status in statuses] == ["added", "added", "skipped, repo not in this workspace"]
+    with open(holds, encoding="utf-8") as file_handle:
+        assert '"name": "│ acme-app · ACME-2482"' in file_handle.read()
+    with open(lacks, encoding="utf-8") as file_handle:
+        assert file_handle.read() == other_repo
+    with open(not_this_host, encoding="utf-8") as file_handle:
+        assert file_handle.read() == WORKSPACE
+    statuses = init_worktree.update_workspace(main, worktree, None, remove=True, hostname="envy")
+    assert [status.split(" (")[0] for status in statuses] == ["removed", "removed", "absent"]
+    with open(holds, encoding="utf-8") as file_handle:
+        assert file_handle.read() == WORKSPACE
+
+
+def test_a_commented_out_main_checkout_is_not_an_anchor():
+    hidden = WORKSPACE.replace(
+        '    {\n      "name": "│ acme-app",\n      "path": "acme-app",\n    },\n',
+        '    // {\n    //   "name": "│ acme-app",\n    //   "path": "acme-app",\n    // },\n',
+    )
+    assert hidden != WORKSPACE
+    assert init_worktree.add_workspace_folder(hidden, "acme-app", "x", "../wt") == (hidden, "no anchor")
+
+
 def test_update_workspace_without_a_host_file_says_so(repos):
     _, main, worktree = repos
-    assert init_worktree.update_workspace(main, worktree, "x", hostname="nowhere").startswith("no workspace file")
+    assert init_worktree.update_workspace(main, worktree, "x", hostname="nowhere")[0].startswith("no workspace file")
 
 
 # ---------------------------------------------------------------- cli

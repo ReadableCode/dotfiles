@@ -46,7 +46,12 @@ venv, from any repo in any context.
    when a task needs them.
 2. **VS Code workspace.** Adds `│ <repo> · <label>` right after the main
    checkout's own folder entry in `<repo_parent>/<host>.code-workspace` — the
-   manifest-deployed link next to the checkouts (see `setup_vscode.md`). VS
+   manifest-deployed link next to the checkouts (see `setup_vscode.md`) — and
+   in every narrower `<host>-<name>.code-workspace` beside it that lists the
+   main checkout, so a one-context workspace follows the everything workspace;
+   one that does not hold the repo is reported as skipped. The main
+   checkout's entry is the gate in every file: a workspace where the repo is
+   absent or commented out never gets one of its worktrees. VS
    Code watches the workspace file, so the folder appears in the open window
    without a reload. The label defaults to the ticket key in the branch name,
    else in the subjects of commits the branch adds on top of master (never
@@ -72,8 +77,8 @@ the same two overlays for the same reason as `/init_worktree`.
 
 A thread runs it on itself, from inside its worktree, as the **last** command
 of the turn: the script steps out of the directory before deleting it. It
-drops the worktree's workspace entry (returning the credentials repo that owns
-the file to clean), then runs `git worktree remove --force` on that exact path
+drops the worktree's entry from each of the host's workspace files (returning
+the credentials repos that own them to clean), then runs `git worktree remove --force` on that exact path
 from the main checkout, which takes the directory and everything that
 accumulated in it — the `.venv`, the mirrored links, caches, anything placed
 by hand. There is no list of files to keep current: the directory is the only

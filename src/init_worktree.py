@@ -25,7 +25,9 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
 2. **VS Code workspace.** The host's ``<repo_parent>/<host>.code-workspace``
    (the manifest-deployed link next to the checkouts, see docs/setup_vscode.md)
    gets a folder entry for the worktree right after the main checkout's own
-   entry, named ``│ <repo> · <label>`` to match the hand-kept layout. VS Code
+   entry, named ``│ <repo> · <label>`` to match the hand-kept layout. So does
+   every narrower ``<host>-<name>.code-workspace`` beside it that lists the
+   main checkout; one that does not hold the repo is skipped. VS Code
    watches the workspace file, so the folder appears in the open window with
    no reload. The file is JSONC with trailing commas, so this is a text
    insertion, not a JSON round-trip. Idempotent by path; a re-run with a new
@@ -65,6 +67,7 @@ Wrapped by the ``/init_worktree`` Claude command
 """
 
 import argparse
+import glob
 import os
 import re
 import shutil
@@ -272,7 +275,8 @@ def teardown(main, worktree, dry_run=False, hostname=None):
     if reasons:
         return False, reasons
     branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
-    lines = [("workspace", update_workspace(main, worktree, None, remove=True, dry_run=dry_run, hostname=hostname))]
+    statuses = update_workspace(main, worktree, None, remove=True, dry_run=dry_run, hostname=hostname)
+    lines = [("workspace", status) for status in statuses]
     if os.path.realpath(os.getcwd()).startswith(worktree + os.sep) or os.path.realpath(os.getcwd()) == worktree:
         os.chdir(main)  # the cwd is about to be deleted
     lines.append(("worktree", remove_worktree(main, worktree, dry_run=dry_run)))
@@ -409,10 +413,14 @@ def short_host_token(hostname):
     return (hostname or "").split(".")[0].lower()
 
 
-def workspace_file(repo_parent, hostname=None):
-    """<repo_parent>/<host>.code-workspace - the link deploy_configs.py puts next to the checkouts."""
+def workspace_files(repo_parent, hostname=None):
+    """
+    The links deploy_configs.py puts next to the checkouts: <host>.code-workspace
+    first, then every narrower <host>-<name>.code-workspace beside it.
+    """
     token = short_host_token(hostname or socket.gethostname())
-    return os.path.join(repo_parent, f"{token}.code-workspace")
+    pattern = os.path.join(glob.escape(repo_parent), f"{glob.escape(token)}-*.code-workspace")
+    return [os.path.join(repo_parent, f"{token}.code-workspace")] + sorted(glob.glob(pattern))
 
 
 def _folder_block_re(path):
@@ -456,26 +464,36 @@ def workspace_relpath(repo_parent, path):
 
 
 def update_workspace(main, worktree, label, remove=False, dry_run=False, hostname=None):
-    """Add (or remove) the worktree's folder entry in this host's workspace file. Returns a status."""
+    """
+    Add (or remove) the worktree's folder entry in each of this host's workspace
+    files. Returns one status per file. The main checkout's own entry is the
+    gate: a file where it is absent or commented out never gets the worktree.
+    """
     repo_parent = os.path.dirname(main)
-    ws_path = workspace_file(repo_parent, hostname)
-    if not os.path.isfile(ws_path):
-        return f"no workspace file at {ws_path}"
-    with open(ws_path, encoding="utf-8") as file_handle:
-        text = file_handle.read()
+    ws_paths = workspace_files(repo_parent, hostname)
     wt_rel = workspace_relpath(repo_parent, worktree)
-    if remove:
-        new_text, status = remove_workspace_folder(text, wt_rel)
-    else:
-        repo_name = os.path.basename(main)
-        name = WORKSPACE_LABEL.format(repo=repo_name, label=label)
-        new_text, status = add_workspace_folder(text, workspace_relpath(repo_parent, main), name, wt_rel)
-    if new_text != text and not dry_run:
-        with open(ws_path, "w", encoding="utf-8") as file_handle:
-            file_handle.write(new_text)
-    elif new_text != text:
-        status = f"would be {status}"
-    return f"{status} ({os.path.basename(ws_path)}: {wt_rel})"
+    statuses = []
+    for ws_path in ws_paths:
+        narrower = ws_path != ws_paths[0]
+        if not os.path.isfile(ws_path):
+            statuses.append(f"no workspace file at {ws_path}")
+            continue
+        with open(ws_path, encoding="utf-8") as file_handle:
+            text = file_handle.read()
+        if remove:
+            new_text, status = remove_workspace_folder(text, wt_rel)
+        else:
+            name = WORKSPACE_LABEL.format(repo=os.path.basename(main), label=label)
+            new_text, status = add_workspace_folder(text, workspace_relpath(repo_parent, main), name, wt_rel)
+            if narrower and status == "no anchor":
+                status = "skipped, repo not in this workspace"
+        if new_text != text and not dry_run:
+            with open(ws_path, "w", encoding="utf-8") as file_handle:
+                file_handle.write(new_text)
+        elif new_text != text:
+            status = f"would be {status}"
+        statuses.append(f"{status} ({os.path.basename(ws_path)}: {wt_rel})")
+    return statuses
 
 
 # ---------------------------------------------------------------- uv
@@ -547,7 +565,8 @@ def main(argv=None):
                 "no ticket in the branch or its commits yet - labelling with the directory name; "
                 "re-run with --label once the ticket exists (or now, with a short description)"
             )
-        print("workspace:", update_workspace(main, worktree, label, dry_run=args.dry_run, hostname=args.hostname))
+        for status in update_workspace(main, worktree, label, dry_run=args.dry_run, hostname=args.hostname):
+            print("workspace:", status)
     if not args.no_sync:
         print("uv sync:", sync_venv(worktree, dry_run=args.dry_run))
 

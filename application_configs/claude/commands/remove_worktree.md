@@ -34,7 +34,8 @@ python3 "$(dirname "$MAIN")/dotfiles/src/init_worktree.py" --remove --dry-run
 Read the plan back before doing it. Three lines matter:
 
 - **workspace** — the folder entry `/init_worktree` added to this host's
-  `<host>.code-workspace` is dropped again, which returns that credentials
+  `<host>.code-workspace` (and to any narrower `<host>-<name>.code-workspace`,
+  one line per file) is dropped again, which returns that credentials
   repo to clean. `absent` is fine (the entry was never added, or already gone).
 - **worktree** — the directory and everything in it (`.venv`, the mirrored
   links, caches, anything placed by hand) goes.
