@@ -22,8 +22,8 @@ across a set of repos wait on this account, one PR's metadata with its diff on
 disk and every comment on it (the same shape from GitHub and Bitbucket), and
 the approve / request-changes / comment call; pr-comment posts a plain comment
 on either provider. activity is this account's own work in a date window: the
-Jira status moves it made, the GitHub PRs it opened, pushed to, edited or
-merged, and its commits on each repo's default branch. Every subcommand honors
+Jira status moves it made, the PRs it opened, pushed to, edited or merged on
+either provider, and its commits on each repo's default branch. Every subcommand honors
 the global ``--dry-run``
 flag, which prints the HTTP request(s) it would make and returns canned
 identifiers instead of touching the network - use it to exercise calling
@@ -1436,6 +1436,14 @@ PR_EDIT_EVENTS = (
     "review_requested",
 )
 SEARCH_QUERY_LIMIT = 256
+# What a Bitbucket PR update's "changes" keys and status values are called
+# here, in GitHub's event names so both providers read alike. An update with no
+# changes is the PR's creation or a push, which the opened action and the
+# commits list already carry.
+BB_STATUS_EVENTS = {"fulfilled": "merged", "rejected": "closed", "superseded": "closed", "open": "reopened"}
+BB_CHANGE_EVENTS = {"title": "renamed", "description": "edited"}
+BB_ACTIVITY_PR_FIELDS = "values.id,values.created_on,next"
+BB_ACTIVITY_COMMIT_FIELDS = "values.hash,values.date,values.message,values.author.user.uuid,values.links.html.href,next"
 
 
 def activity_window(since, until):
@@ -1605,6 +1613,7 @@ def github_my_pr_work(repo, number, me, headers, start, end):
     if not actions and not commits:
         return None
     return {
+        "provider": "github",
         "repo": repo,
         "pr": number,
         "title": pull["title"],
@@ -1635,6 +1644,7 @@ def github_my_default_branch_commits(repo, me, headers, start, end):
         )
         commits += [
             {
+                "provider": "github",
                 "repo": repo,
                 "sha": commit["sha"],
                 "message": commit["commit"]["message"].splitlines()[0],
@@ -1649,37 +1659,151 @@ def github_my_default_branch_commits(repo, me, headers, start, end):
         page += 1
 
 
+def bitbucket_pr_candidates(repo, headers, start, end):
+    """
+    Ids of every PR in the repo that may hold work from the window: updated
+    since it began and opened before it ended, whatever state it is in now.
+    """
+    utc = "%Y-%m-%dT%H:%M:%S+00:00"
+    query = urllib.parse.urlencode(
+        {
+            "q": f'updated_on >= "{start.astimezone(timezone.utc).strftime(utc)}" '
+            f'AND created_on < "{end.astimezone(timezone.utc).strftime(utc)}"',
+            "pagelen": 50,
+            "fields": BB_ACTIVITY_PR_FIELDS,
+        }
+    )
+    states = "".join(f"&state={state}" for state in ("OPEN", "MERGED", "DECLINED", "SUPERSEDED"))
+    url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests?{query}{states}"
+    return sorted(pull["id"] for pull in bb_paginate(url, headers))
+
+
+def bitbucket_update_events(update):
+    """The event names for one update entry of a Bitbucket PR's activity."""
+    changes = update.get("changes") or {}
+    events = [event for key, event in BB_CHANGE_EVENTS.items() if key in changes]
+    if "status" in changes:
+        events.append(BB_STATUS_EVENTS.get(changes["status"].get("new"), "closed"))
+    if "draft" in changes:
+        events.append("convert_to_draft" if changes["draft"].get("new") else "ready_for_review")
+    if (changes.get("reviewers") or {}).get("added"):
+        events.append("review_requested")
+    return events
+
+
+def bitbucket_my_pr_work(repo, number, me, headers, start, end):
+    """
+    What this account did to one Bitbucket PR inside the window, in the shape
+    github_my_pr_work returns: opening it, the updates it authored, and the
+    commits it authored. None when nothing.
+    """
+    base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}"
+    pull = http_json("GET", base_url, headers)
+    author = pull.get("author") or {}
+    actions = []
+    if author.get("uuid") == me and in_window(pull["created_on"], start, end):
+        actions.append({"event": "opened", "at": pull["created_on"]})
+    for entry in bb_paginate(f"{base_url}/activity?pagelen=50", headers):
+        update = entry.get("update") or {}
+        if (update.get("author") or {}).get("uuid") == me and in_window(update.get("date"), start, end):
+            actions += [{"event": event, "at": update["date"]} for event in bitbucket_update_events(update)]
+    commits = [
+        {"sha": commit["hash"], "message": commit["message"].splitlines()[0], "at": commit["date"]}
+        for commit in bb_paginate(f"{base_url}/commits?pagelen=100&fields={BB_ACTIVITY_COMMIT_FIELDS}", headers)
+        if ((commit.get("author") or {}).get("user") or {}).get("uuid") == me and in_window(commit["date"], start, end)
+    ]
+    if not actions and not commits:
+        return None
+    return {
+        "provider": "bitbucket",
+        "repo": repo,
+        "pr": number,
+        "title": pull["title"],
+        "author": author.get("display_name"),
+        "state": pull["state"].lower(),
+        "draft": bool(pull.get("draft")),
+        "source": pull["source"]["branch"]["name"],
+        "destination": pull["destination"]["branch"]["name"],
+        "actions": sorted(actions, key=lambda action: action["at"]),
+        "commits": commits,
+        "url": bb_pr_url(pull, repo),
+    }
+
+
+def bitbucket_my_default_branch_commits(repo, me, headers, start, end):
+    """
+    This account's commits on the repo's default branch inside the window.
+    Bitbucket cannot filter a commit list by author or date, so the list is
+    walked newest first and left at the first page that is wholly older than
+    the window.
+    """
+    base_url = f"{BITBUCKET_API}/repositories/{repo}"
+    branch = http_json("GET", f"{base_url}?fields=mainbranch.name", headers)["mainbranch"]["name"]
+    url = f"{base_url}/commits/{urllib.parse.quote(branch, safe='')}?pagelen=100&fields={BB_ACTIVITY_COMMIT_FIELDS}"
+    commits = []
+    while url:
+        page = http_json("GET", url, headers)
+        batch = page.get("values") or []
+        commits += [
+            {
+                "provider": "bitbucket",
+                "repo": repo,
+                "sha": commit["hash"],
+                "message": commit["message"].splitlines()[0],
+                "at": commit["date"],
+                "url": commit["links"]["html"]["href"],
+            }
+            for commit in batch
+            if ((commit.get("author") or {}).get("user") or {}).get("uuid") == me
+            and in_window(commit["date"], start, end)
+        ]
+        if not batch or all(datetime.fromisoformat(commit["date"]) < start for commit in batch):
+            return commits
+        url = page.get("next")
+    return commits
+
+
 def cmd_activity(args):
     """
     This account's own work between --since and --until (inclusive local
     dates; the previous 7 days through today by default): the Jira tickets it
-    moved, with each status change it made; the GitHub PRs in the given repos
-    it opened, pushed to, edited or merged, with those actions; and its commits
-    on each repo's default branch. Everything is matched to the token's own
-    account, never to a name or an email, so another person's work in the same
-    tickets and PRs is left out. --no-jira / --no-github drop a side.
+    moved, with each status change it made; the PRs in the given GitHub and
+    Bitbucket repos it opened, pushed to, edited or merged, with those actions;
+    and its commits on each repo's default branch. Everything is matched to
+    the token's own account, never to a name or an email, so another person's
+    work in the same tickets and PRs is left out. --no-jira / --no-repos drop
+    a side.
     """
     first, last, start, end = activity_window(args.since, args.until)
-    specs = [repo_spec(spec) for spec in args.repo or [None]] if not args.no_github else []
-    if any(provider != "github" for provider, _ in specs):
-        raise SystemExit("activity reads GitHub repos only")
-    repos = [repo for _, repo in specs]
+    specs = [repo_spec(spec) for spec in args.repo or [None]] if not args.no_repos else []
     window = {"since": first.isoformat(), "until": last.isoformat(), "start": start.isoformat(), "end": end.isoformat()}
     if args.dry_run:
+        repos = [f"{provider}:{repo}" for provider, repo in specs]
         print(f"[dry-run] would read Jira moves{' (skipped)' if args.no_jira else ''} and {repos} for {window}")
         emit("dry run", {"window": window, "tickets": [], "prs": [], "commits": [], "dry_run": True})
         return
     tickets = [] if args.no_jira else jira_my_moves(jira_base(), jira_headers(), start, end)
     prs, commits = [], []
-    if repos:
+    github_repos = [repo for provider, repo in specs if provider == "github"]
+    if github_repos:
         headers = github_headers()
         me = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
-        for repo, number in github_pr_candidates(repos, me, headers, start, end):
+        for repo, number in github_pr_candidates(github_repos, me, headers, start, end):
             work = github_my_pr_work(repo, number, me, headers, start, end)
             if work:
                 prs.append(work)
-        for repo in repos:
+        for repo in github_repos:
             commits += github_my_default_branch_commits(repo, me, headers, start, end)
+    bitbucket_repos = [repo for provider, repo in specs if provider == "bitbucket"]
+    if bitbucket_repos:
+        headers = bitbucket_headers()
+        me = http_json("GET", f"{BITBUCKET_API}/user", headers)["uuid"]
+        for repo in bitbucket_repos:
+            for number in bitbucket_pr_candidates(repo, headers, start, end):
+                work = bitbucket_my_pr_work(repo, number, me, headers, start, end)
+                if work:
+                    prs.append(work)
+            commits += bitbucket_my_default_branch_commits(repo, me, headers, start, end)
     lines = [f"{first} to {last}: {len(tickets)} ticket(s) moved, {len(prs)} PR(s), {len(commits)} commit(s)"]
     lines += [f"  {t['key']} " + ", ".join(f"{m['from']} -> {m['to']}" for m in t["moves"]) for t in tickets]
     lines += [f"  {p['url']} " + ", ".join(a["event"] for a in p["actions"]) for p in prs]
@@ -2437,10 +2561,12 @@ def build_parser():
     activity.add_argument("--since", help="first day, YYYY-MM-DD (default: 7 days before --until)")
     activity.add_argument("--until", help="last day, inclusive, YYYY-MM-DD (default: today)")
     activity.add_argument(
-        "--repo", action="append", help="github:owner/name; repeatable (default: parsed from origin remote)"
+        "--repo",
+        action="append",
+        help="github:owner/name or bitbucket:workspace/slug; repeatable (default: parsed from origin remote)",
     )
     activity.add_argument("--no-jira", action="store_true", help="skip the Jira side")
-    activity.add_argument("--no-github", action="store_true", help="skip the GitHub side")
+    activity.add_argument("--no-repos", action="store_true", help="skip the PR and commit side")
     activity.set_defaults(func=cmd_activity)
     return parser
 

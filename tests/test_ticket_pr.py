@@ -2,6 +2,7 @@
 
 import json
 import re
+import urllib.parse
 
 import pytest
 
@@ -1976,9 +1977,125 @@ def test_activity_dry_run_touches_nothing(monkeypatch, capsys):
     assert result["window"]["until"] == "2026-09-07"
 
 
-def test_activity_is_github_only(monkeypatch):
-    with pytest.raises(SystemExit, match="GitHub"):
-        ticket_pr.main(["activity", "--no-jira", "--repo", "bitbucket:ws/slug"])
+def test_activity_bitbucket_keeps_only_my_own_work_inside_the_window(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    inside, before, after = "2026-09-03T15:00:00+00:00", "2026-08-20T15:00:00+00:00", "2026-09-20T15:00:00+00:00"
+    me = {"uuid": "{me}", "display_name": "Me"}
+    sam = {"uuid": "{sam}", "display_name": "Sam"}
+
+    def pull(pr_id, author, created, state="OPEN"):
+        return {**_bb_pull(pr_id, f"PR {pr_id}", author, []), "created_on": created, "state": state}
+
+    def update(author, at, **changes):
+        return {"update": {"author": author, "date": at, "changes": changes}}
+
+    def commit(sha, author, at, message="work"):
+        return {
+            "hash": sha,
+            "date": at,
+            "message": message,
+            "author": {"raw": "Me <me@example.com>", **({"user": author} if author else {})},
+            "links": {"html": {"href": f"https://bitbucket.org/ws/slug/commits/{sha}"}},
+        }
+
+    pulls = {
+        1: pull(1, me, inside),  # mine, opened inside the window
+        2: pull(2, sam, before, state="MERGED"),  # sam's, merged by me
+        3: pull(3, sam, before),  # sam's, I only approved and commented
+        4: pull(4, me, before),  # mine, but nothing I did falls inside
+        5: pull(5, sam, before, state="DECLINED"),  # sam's, declined by me
+    }
+    activity = {
+        1: [
+            update(me, inside),  # the creation entry: no changes, already told by "opened"
+            update(me, inside, title={"old": "a", "new": "b"}, draft={"old": True, "new": False}),
+            update(me, inside, reviewers={"added": [sam]}),
+            update(sam, inside, title={"old": "b", "new": "c"}),
+        ],
+        2: [update(me, inside, status={"old": "open", "new": "fulfilled"})],
+        3: [{"approval": {"user": me, "date": inside}}, {"comment": {"user": me, "created_on": inside}}],
+        4: [update(me, after, description={"old": "a", "new": "b"})],
+        5: [update(me, inside, status={"old": "open", "new": "rejected"})],
+    }
+    pr_commits = {
+        1: [commit("a1", me, inside, "first\n\nbody"), commit("a2", sam, inside), commit("a3", None, inside)],
+        2: [commit("b1", sam, inside)],
+        3: [],
+        4: [commit("d1", me, before)],
+        5: [],
+    }
+    # A page is only the end of the walk when every commit on it is older than
+    # the window: page one still holds one inside it, page two holds none.
+    branch_pages = {
+        "1": {
+            "values": [commit("m0", me, after), commit("m1", me, inside), commit("m2", sam, inside)],
+            "next": "https://api.bitbucket.org/2.0/repositories/ws/slug/commits/main?page=2",
+        },
+        "2": {
+            "values": [commit("m3", me, before)],
+            "next": "https://api.bitbucket.org/2.0/repositories/ws/slug/commits/main?page=3",
+        },
+    }
+    calls = []
+
+    def fake(method, url, headers, **kwargs):
+        calls.append(url)
+        path = url.split("?")[0]
+        if path.endswith("/2.0/user"):
+            return me
+        if path.endswith("/repositories/ws/slug"):
+            return {"mainbranch": {"name": "main"}}
+        if path.endswith("/commits/main"):
+            page = re.search(r"[?&]page=(\d+)", url)
+            return branch_pages[page.group(1) if page else "1"]
+        if path.endswith("/pullrequests"):
+            return {"values": [{"id": pr_id} for pr_id in pulls]}
+        number = int(re.search(r"/pullrequests/(\d+)", path).group(1))
+        if path.endswith("/activity"):
+            return {"values": activity[number]}
+        if path.endswith("/commits"):
+            return {"values": pr_commits[number]}
+        return pulls[number]
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake)
+    ticket_pr.main(
+        ["activity", "--no-jira", "--since", "2026-09-01", "--until", "2026-09-07", "--repo", "bitbucket:ws/slug"]
+    )
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+    assert result["tickets"] == []
+    assert {p["pr"]: [a["event"] for a in p["actions"]] for p in result["prs"]} == {
+        1: ["opened", "renamed", "ready_for_review", "review_requested"],
+        2: ["merged"],
+        5: ["closed"],
+    }
+    assert [c["sha"] for c in result["prs"][0]["commits"]] == ["a1"]
+    assert result["prs"][0]["commits"][0]["message"] == "first"
+    assert [(p["provider"], p["state"], p["author"]) for p in result["prs"]] == [
+        ("bitbucket", "open", "Me"),
+        ("bitbucket", "merged", "Sam"),
+        ("bitbucket", "declined", "Sam"),
+    ]
+    assert [c["sha"] for c in result["commits"]] == ["m1"]
+    assert not any("page=3" in url for url in calls)
+    candidates = urllib.parse.unquote_plus(next(u for u in calls if u.split("?")[0].endswith("/pullrequests")))
+    assert "updated_on >=" in candidates and "created_on <" in candidates
+    assert all(f"state={state}" in candidates for state in ("OPEN", "MERGED", "DECLINED", "SUPERSEDED"))
+
+
+def test_activity_no_repos_reads_jira_alone(monkeypatch, capsys):
+    _jira_env(monkeypatch)
+
+    def fake(method, url, headers, **kwargs):
+        if "/rest/api/" not in url:
+            raise AssertionError(url)
+        return {"accountId": "acc-me"} if url.endswith("/myself") else {"issues": []}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake)
+    ticket_pr.main(["activity", "--no-repos", "--since", "2026-09-01", "--until", "2026-09-07"])
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert (result["tickets"], result["prs"], result["commits"]) == ([], [], [])
 
 
 def test_activity_keeps_only_my_own_work_inside_the_window(monkeypatch, capsys):
