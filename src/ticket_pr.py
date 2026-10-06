@@ -9,7 +9,8 @@ installed CLIs required. Credentials come from the calling repo's env file:
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
 transition-ticket, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
-dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review. get-ticket
+dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review,
+activity. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
 never has to go to the Jira API on its own; search-tickets runs a JQL query
@@ -20,7 +21,9 @@ review-queue, pr-diff and pr-review are the reviewer's side: which open PRs
 across a set of repos wait on this account, one PR's metadata with its diff on
 disk and every comment on it (the same shape from GitHub and Bitbucket), and
 the approve / request-changes / comment call; pr-comment posts a plain comment
-on either provider. Every subcommand honors
+on either provider. activity is this account's own work in a date window: the
+Jira status moves it made, the GitHub PRs it opened, pushed to, edited or
+merged, and its commits on each repo's default branch. Every subcommand honors
 the global ``--dry-run``
 flag, which prints the HTTP request(s) it would make and returns canned
 identifiers instead of touching the network - use it to exercise calling
@@ -64,7 +67,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
 GITHUB_API = "https://api.github.com"
 GITHUB_GRAPHQL = "https://api.github.com/graphql"
@@ -1417,6 +1420,272 @@ def cmd_review_queue(args):
     emit(f"{waiting} awaiting review; skipped {sum(skipped.values())}: {counts}", {"prs": prs, "skipped": skipped})
 
 
+# ---------------------------------------------------------------- activity
+
+# Timeline events that change a PR, as opposed to talking about it (reviews and
+# comments are left out). A "committed" event names no GitHub account, so a
+# PR's own commits are matched through the pulls commits list instead.
+PR_EDIT_EVENTS = (
+    "closed",
+    "reopened",
+    "merged",
+    "renamed",
+    "ready_for_review",
+    "convert_to_draft",
+    "head_ref_force_pushed",
+    "review_requested",
+)
+SEARCH_QUERY_LIMIT = 256
+
+
+def activity_window(since, until):
+    """
+    Local-time [start, end) for the inclusive --since..--until dates. With
+    neither given it is the previous 7 days through today; --since alone runs
+    to today, --until alone starts 7 days before it.
+    """
+    last = date.fromisoformat(until) if until else datetime.now().astimezone().date()
+    first = date.fromisoformat(since) if since else last - timedelta(days=7)
+    if first > last:
+        raise SystemExit(f"--since {first} is after --until {last}")
+    start = datetime.combine(first, datetime.min.time()).astimezone()
+    end = datetime.combine(last + timedelta(days=1), datetime.min.time()).astimezone()
+    return first, last, start, end
+
+
+def in_window(stamp, start, end):
+    """
+    Whether an ISO timestamp from Jira or GitHub falls inside [start, end).
+    Jira's "+0000" offset and GitHub's "Z" are rewritten to "+00:00" first:
+    fromisoformat only reads either from Python 3.11 on.
+    """
+    if not stamp:
+        return False
+    stamp = re.sub(r"(?:Z|([+-]\d\d)(\d\d))$", lambda m: f"{m[1]}:{m[2]}" if m[1] else "+00:00", stamp)
+    return start <= datetime.fromisoformat(stamp) < end
+
+
+def search_dates(start, end):
+    """
+    A date range for a server-side search, padded a day each side: the server
+    reads bare dates in its own timezone, so the exact cut is made here on the
+    timestamps that come back.
+    """
+    pad = timedelta(days=1)
+    return f"{(start - pad):%Y-%m-%d}", f"{(end + pad):%Y-%m-%d}"
+
+
+def jira_search_all(base, headers, jql, fields):
+    """Every issue matching ``jql``, following the Cloud search's nextPageToken."""
+    token = None
+    while True:
+        params = {"jql": jql, "fields": fields, "maxResults": 100}
+        if token:
+            params["nextPageToken"] = token
+        found = http_json("GET", f"{base}/rest/api/3/search/jql?{urllib.parse.urlencode(params)}", headers)
+        yield from found.get("issues") or []
+        token = found.get("nextPageToken")
+        if not token:
+            return
+
+
+def jira_changelog(base, headers, key):
+    """Every changelog entry on one issue, oldest first."""
+    start_at = 0
+    while True:
+        page = http_json("GET", f"{base}/rest/api/3/issue/{key}/changelog?startAt={start_at}&maxResults=100", headers)
+        values = page.get("values") or []
+        yield from values
+        start_at += len(values)
+        if page.get("isLast", True) or not values:
+            return
+
+
+def jira_my_moves(base, headers, start, end):
+    """
+    The status changes this account made inside the window, per ticket. The JQL
+    finds the candidates; the changelog decides, since only it says who made
+    each change and when to the second.
+    """
+    me = http_json("GET", f"{base}/rest/api/2/myself", headers)["accountId"]
+    first, last = search_dates(start, end)
+    jql = f'status CHANGED BY currentUser() DURING ("{first}", "{last}") ORDER BY updated DESC'
+    tickets = []
+    for issue in jira_search_all(base, headers, jql, JIRA_SEARCH_FIELDS):
+        moves = [
+            {"at": entry["created"], "from": item.get("fromString"), "to": item.get("toString")}
+            for entry in jira_changelog(base, headers, issue["key"])
+            if (entry.get("author") or {}).get("accountId") == me and in_window(entry.get("created"), start, end)
+            for item in entry.get("items") or []
+            if item.get("fieldId", item.get("field")) == "status"
+        ]
+        if moves:
+            fields = issue.get("fields") or {}
+            tickets.append(
+                {
+                    "key": issue["key"],
+                    "summary": fields.get("summary"),
+                    "status": (fields.get("status") or {}).get("name"),
+                    "type": (fields.get("issuetype") or {}).get("name"),
+                    "moves": moves,
+                    "url": f"{base}/browse/{issue['key']}",
+                }
+            )
+    return tickets
+
+
+def github_search_issues(query, headers):
+    """Every hit of a GitHub issue/PR search (the API stops at 1000)."""
+    page = 1
+    while True:
+        params = urllib.parse.urlencode({"q": query, "per_page": 100, "page": page})
+        items = http_json("GET", f"{GITHUB_API}/search/issues?{params}", headers).get("items") or []
+        yield from items
+        if len(items) < 100:
+            return
+        page += 1
+
+
+def github_pr_candidates(repos, me, headers, start, end):
+    """
+    (repo, number) of every PR that may hold this account's work in the window:
+    the ones it is involved in, plus every PR merged in the window, because
+    merging someone else's PR does not make the merger involved.
+    """
+    first, last = search_dates(start, end)
+    found = set()
+    for query in (f"is:pr involves:{me} updated:{first}..{last}", f"is:pr is:merged merged:{first}..{last}"):
+        for scoped in search_queries(query, repos):
+            for item in github_search_issues(scoped, headers):
+                found.add((item["repository_url"].split("/repos/", 1)[1], item["number"]))
+    return sorted(found)
+
+
+def search_queries(query, repos):
+    """
+    ``query`` with the repos as repo: qualifiers, split into as many queries as
+    it takes to keep each under GitHub's 256-character search cap.
+    """
+    queries, current = [], query
+    for repo in repos:
+        term = f" repo:{repo}"
+        if current != query and len(current) + len(term) > SEARCH_QUERY_LIMIT:
+            queries.append(current)
+            current = query
+        current += term
+    return queries + [current]
+
+
+def github_my_pr_work(repo, number, me, headers, start, end):
+    """
+    What this account did to one PR inside the window: opening it, the timeline
+    events it was the actor of, and the commits it authored. None when nothing.
+    """
+    pull = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers)
+    actions = []
+    if pull["user"]["login"] == me and in_window(pull["created_at"], start, end):
+        actions.append({"event": "opened", "at": pull["created_at"]})
+    for event in github_paginate(f"{GITHUB_API}/repos/{repo}/issues/{number}/timeline", headers):
+        if (
+            event.get("event") in PR_EDIT_EVENTS
+            and (event.get("actor") or {}).get("login") == me
+            and in_window(event.get("created_at"), start, end)
+        ):
+            actions.append({"event": event["event"], "at": event["created_at"]})
+    commits = [
+        {
+            "sha": commit["sha"],
+            "message": commit["commit"]["message"].splitlines()[0],
+            "at": commit["commit"]["committer"]["date"],
+        }
+        for commit in github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{number}/commits", headers)
+        if (commit.get("author") or {}).get("login") == me
+        and in_window(commit["commit"]["committer"]["date"], start, end)
+    ]
+    if not actions and not commits:
+        return None
+    return {
+        "repo": repo,
+        "pr": number,
+        "title": pull["title"],
+        "author": pull["user"]["login"],
+        "state": "merged" if pull.get("merged_at") else pull["state"],
+        "draft": bool(pull.get("draft")),
+        "source": pull["head"]["ref"],
+        "destination": pull["base"]["ref"],
+        "actions": sorted(actions, key=lambda action: action["at"]),
+        "commits": commits,
+        "url": pull["html_url"],
+    }
+
+
+def github_my_default_branch_commits(repo, me, headers, start, end):
+    """This account's commits on the repo's default branch inside the window."""
+    utc = "%Y-%m-%dT%H:%M:%SZ"
+    params = {
+        "author": me,
+        "since": start.astimezone(timezone.utc).strftime(utc),
+        "until": end.astimezone(timezone.utc).strftime(utc),
+        "per_page": 100,
+    }
+    commits, page = [], 1
+    while True:
+        batch = http_json(
+            "GET", f"{GITHUB_API}/repos/{repo}/commits?{urllib.parse.urlencode({**params, 'page': page})}", headers
+        )
+        commits += [
+            {
+                "repo": repo,
+                "sha": commit["sha"],
+                "message": commit["commit"]["message"].splitlines()[0],
+                "at": commit["commit"]["committer"]["date"],
+                "url": commit["html_url"],
+            }
+            for commit in batch
+            if (commit.get("author") or {}).get("login") == me
+        ]
+        if len(batch) < 100:
+            return commits
+        page += 1
+
+
+def cmd_activity(args):
+    """
+    This account's own work between --since and --until (inclusive local
+    dates; the previous 7 days through today by default): the Jira tickets it
+    moved, with each status change it made; the GitHub PRs in the given repos
+    it opened, pushed to, edited or merged, with those actions; and its commits
+    on each repo's default branch. Everything is matched to the token's own
+    account, never to a name or an email, so another person's work in the same
+    tickets and PRs is left out. --no-jira / --no-github drop a side.
+    """
+    first, last, start, end = activity_window(args.since, args.until)
+    specs = [repo_spec(spec) for spec in args.repo or [None]] if not args.no_github else []
+    if any(provider != "github" for provider, _ in specs):
+        raise SystemExit("activity reads GitHub repos only")
+    repos = [repo for _, repo in specs]
+    window = {"since": first.isoformat(), "until": last.isoformat(), "start": start.isoformat(), "end": end.isoformat()}
+    if args.dry_run:
+        print(f"[dry-run] would read Jira moves{' (skipped)' if args.no_jira else ''} and {repos} for {window}")
+        emit("dry run", {"window": window, "tickets": [], "prs": [], "commits": [], "dry_run": True})
+        return
+    tickets = [] if args.no_jira else jira_my_moves(jira_base(), jira_headers(), start, end)
+    prs, commits = [], []
+    if repos:
+        headers = github_headers()
+        me = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
+        for repo, number in github_pr_candidates(repos, me, headers, start, end):
+            work = github_my_pr_work(repo, number, me, headers, start, end)
+            if work:
+                prs.append(work)
+        for repo in repos:
+            commits += github_my_default_branch_commits(repo, me, headers, start, end)
+    lines = [f"{first} to {last}: {len(tickets)} ticket(s) moved, {len(prs)} PR(s), {len(commits)} commit(s)"]
+    lines += [f"  {t['key']} " + ", ".join(f"{m['from']} -> {m['to']}" for m in t["moves"]) for t in tickets]
+    lines += [f"  {p['url']} " + ", ".join(a["event"] for a in p["actions"]) for p in prs]
+    emit("\n".join(lines), {"window": window, "tickets": tickets, "prs": prs, "commits": commits})
+
+
 def github_pr_files(repo, number, headers):
     return [
         {
@@ -2161,6 +2430,18 @@ def build_parser():
     pr_review.add_argument("--body", help="review text, posted as the author will read it")
     pr_review.add_argument("--body-file", help="file containing the review text")
     pr_review.set_defaults(func=cmd_pr_review)
+
+    activity = sub.add_parser(
+        "activity", help="this account's own Jira moves, PR work and default-branch commits in a date window"
+    )
+    activity.add_argument("--since", help="first day, YYYY-MM-DD (default: 7 days before --until)")
+    activity.add_argument("--until", help="last day, inclusive, YYYY-MM-DD (default: today)")
+    activity.add_argument(
+        "--repo", action="append", help="github:owner/name; repeatable (default: parsed from origin remote)"
+    )
+    activity.add_argument("--no-jira", action="store_true", help="skip the Jira side")
+    activity.add_argument("--no-github", action="store_true", help="skip the GitHub side")
+    activity.set_defaults(func=cmd_activity)
     return parser
 
 

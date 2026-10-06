@@ -1946,3 +1946,164 @@ def test_workflow_runs_jobs_lists_each_runs_jobs(monkeypatch, capsys):
     ticket_pr.main(["workflow-runs", "--repo", "acme/widgets", "--workflow", "deploy.yaml", "--limit", "1", "--jobs"])
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert result["runs"][0]["jobs"] == [{"id": 70, "name": "deploy", "status": "completed", "conclusion": "failure"}]
+
+
+# ---------------------------------------------------------------- activity
+
+
+def test_activity_window_defaults_to_the_previous_7_days_through_today():
+    first, last, start, end = ticket_pr.activity_window(None, "2026-10-06")
+    assert (first.isoformat(), last.isoformat()) == ("2026-09-29", "2026-10-06")
+    assert (start.date().isoformat(), end.date().isoformat()) == ("2026-09-29", "2026-10-07")
+    assert start.hour == end.hour == 0
+
+
+def test_activity_window_refuses_a_backwards_range():
+    with pytest.raises(SystemExit, match="after"):
+        ticket_pr.activity_window("2026-10-06", "2026-10-01")
+
+
+def test_activity_dry_run_touches_nothing(monkeypatch, capsys):
+    _jira_env(monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    out = _run_cli(
+        ["--dry-run", "activity", "--since", "2026-09-01", "--until", "2026-09-07", "--repo", "github:owner/name"],
+        monkeypatch,
+        capsys,
+    )
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["window"]["since"] == "2026-09-01"
+    assert result["window"]["until"] == "2026-09-07"
+
+
+def test_activity_is_github_only(monkeypatch):
+    with pytest.raises(SystemExit, match="GitHub"):
+        ticket_pr.main(["activity", "--no-jira", "--repo", "bitbucket:ws/slug"])
+
+
+def test_activity_keeps_only_my_own_work_inside_the_window(monkeypatch, capsys):
+    _jira_env(monkeypatch)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    inside, before, after = "2026-09-03T15:00:00Z", "2026-08-20T15:00:00Z", "2026-09-20T15:00:00Z"
+
+    def history(account, created, field, from_, to):
+        return {
+            "author": {"accountId": account},
+            "created": created,
+            "items": [{"fieldId": field, "fromString": from_, "toString": to}],
+        }
+
+    changelogs = {
+        "ACME-1": [
+            history("acc-me", "2026-09-02T10:00:00.000+0000", "status", "Open", "In Progress"),
+            history("acc-other", "2026-09-03T10:00:00.000+0000", "status", "In Progress", "Done"),
+            history("acc-me", "2026-09-04T10:00:00.000+0000", "assignee", None, "Me"),
+            history("acc-me", "2026-08-01T10:00:00.000+0000", "status", "New", "Open"),
+        ],
+        "ACME-2": [history("acc-other", "2026-09-02T10:00:00.000+0000", "status", "Open", "Done")],
+    }
+
+    def pull(number, author, created, merged_at=None):
+        return {
+            "number": number,
+            "title": f"PR {number}",
+            "user": {"login": author},
+            "created_at": created,
+            "merged_at": merged_at,
+            "state": "closed" if merged_at else "open",
+            "head": {"ref": f"b{number}"},
+            "base": {"ref": "master"},
+            "html_url": f"https://github.com/owner/name/pull/{number}",
+        }
+
+    def commit(sha, login, at, message="work"):
+        return {
+            "sha": sha,
+            "author": {"login": login},
+            "commit": {"message": message, "committer": {"date": at}},
+            "html_url": f"https://github.com/owner/name/commit/{sha}",
+        }
+
+    def event(name, login, at):
+        return {"event": name, "actor": {"login": login}, "created_at": at}
+
+    pulls = {
+        10: pull(10, "me", inside),  # mine, opened inside the window
+        11: pull(11, "sam", before, merged_at=inside),  # sam's, merged by me
+        12: pull(12, "sam", before),  # sam's, I only reviewed and commented
+        13: pull(13, "me", before),  # mine, but nothing I did falls inside
+    }
+    timelines = {
+        10: [event("renamed", "me", inside), event("renamed", "sam", inside)],
+        11: [event("merged", "me", inside), event("reviewed", "me", inside)],
+        12: [event("commented", "me", inside), {"event": "reviewed", "user": {"login": "me"}, "submitted_at": inside}],
+        13: [event("renamed", "me", after)],
+    }
+    pr_commits = {
+        10: [commit("a1", "me", inside, "first\n\nbody"), commit("a2", "sam", inside)],
+        11: [commit("b1", "sam", inside)],
+        12: [],
+        13: [commit("d1", "me", before)],
+    }
+    calls = []
+
+    def fake(method, url, headers, **kwargs):
+        calls.append(url)
+        path = url.split("?")[0]
+        if path.endswith("/rest/api/2/myself"):
+            return {"accountId": "acc-me"}
+        if path.endswith("/rest/api/3/search/jql"):
+            return {"issues": [{"key": k, "fields": {"summary": k, "status": {"name": "Done"}}} for k in changelogs]}
+        if "/changelog" in path:
+            return {"values": changelogs[path.split("/issue/")[1].split("/")[0]], "isLast": True}
+        if path.endswith("/user"):
+            return {"login": "me"}
+        if path.endswith("/search/issues"):
+            numbers = [10, 12, 13] if "involves" in url else [11]
+            return {
+                "items": [{"repository_url": "https://api.github.com/repos/owner/name", "number": n} for n in numbers]
+            }
+        number = (
+            int(re.search(r"/(?:pulls|issues)/(\d+)", path).group(1))
+            if re.search(r"/(?:pulls|issues)/\d+", path)
+            else None
+        )
+        if path.endswith("/timeline"):
+            return timelines[number]
+        if path.endswith(f"/pulls/{number}/commits"):
+            return pr_commits[number]
+        if number:
+            return pulls[number]
+        if path.endswith("/repos/owner/name/commits"):
+            return [commit("m1", "me", inside), commit("m2", "sam", inside)]
+        raise AssertionError(url)
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake)
+    ticket_pr.main(["activity", "--since", "2026-09-01", "--until", "2026-09-07", "--repo", "github:owner/name"])
+    result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+
+    assert [t["key"] for t in result["tickets"]] == ["ACME-1"]
+    assert result["tickets"][0]["moves"] == [
+        {"at": "2026-09-02T10:00:00.000+0000", "from": "Open", "to": "In Progress"}
+    ]
+    assert {p["pr"]: [a["event"] for a in p["actions"]] for p in result["prs"]} == {
+        10: ["opened", "renamed"],
+        11: ["merged"],
+    }
+    assert [c["sha"] for c in result["prs"][0]["commits"]] == ["a1"]
+    assert result["prs"][0]["commits"][0]["message"] == "first"
+    assert result["prs"][1]["state"] == "merged"
+    assert [c["sha"] for c in result["commits"]] == ["m1"]
+    commits_url = next(u for u in calls if "/repos/owner/name/commits?" in u)
+    assert "author=me" in commits_url and "since=" in commits_url and "until=" in commits_url
+    jql = next(u for u in calls if "/search/jql" in u)
+    assert "currentUser" in jql
+
+
+def test_search_queries_split_to_stay_under_the_cap():
+    repos = [f"owner/repository-number-{n:02d}" for n in range(15)]
+    queries = ticket_pr.search_queries("is:pr involves:me updated:2026-09-01..2026-09-08", repos)
+    assert len(queries) > 1
+    assert all(len(q) <= ticket_pr.SEARCH_QUERY_LIMIT for q in queries)
+    assert all(q.startswith("is:pr involves:me") for q in queries)
+    assert sorted(re.findall(r"repo:(\S+)", " ".join(queries))) == sorted(repos)
