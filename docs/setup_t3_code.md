@@ -929,6 +929,49 @@ Running notes from daily use — each is either an upstream candidate
 ([github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code/issues)) or
 a doc/automation task in this repo.
 
+- **Snoozing a thread until "Tomorrow" shows the "Snoozed" toast and leaves
+  the thread in the inbox, while "In 1 hour" on the same thread works
+  (upstream, verified 2026-10-07 on desktop 0.0.45 against the `v0.0.45` tag
+  and `main @ 611132c171`)**: it happens only to a thread that was already
+  snoozed to that same wake time and then woke early. A snoozed thread whose
+  agent finishes a turn on its own (a background command or watcher
+  completing, no message from me) "raises its hand":
+  `threadRaisedHandWhileSnoozed` in
+  `packages/client-runtime/src/state/threadSettled.ts` stops classifying it as
+  snoozed once `latestTurn.completedAt > snoozedAt`, and the server keeps
+  `snoozedUntil` / `snoozedAt` set (no `thread.unsnoozed` is emitted; only a
+  user message clears them). Snoozing again to the same instant then hits the
+  duplicate rule in the `thread.snooze` case of
+  `apps/server/src/orchestration/decider.ts` (`existingSnoozedAt`): same
+  `snoozedUntil` re-emits `thread.snoozed` with the **original** `snoozedAt`,
+  so the turn that woke it is still newer than the snooze and the thread stays
+  awake. The command succeeds, which is why the toast and the mod+z undo
+  appear.
+  - **Why only "Tomorrow"**: the calendar presets (`resolveSnoozePresets`:
+    "This evening", "Tomorrow", "Next week") resolve to a fixed instant, so a
+    repeat sends an identical `snoozedUntil`. "In 1 hour" / "In 3 hours" are
+    `now + n`, differ every click, and always stamp a fresh `snoozedAt`.
+  - **Evidence**: `orchestration_events` in `~/.t3/userdata/state.sqlite`
+    (open with `mode=ro`). A failed attempt is a `thread.snoozed` row whose
+    payload `snoozedAt` is older than the row's `occurred_at`. On 2026-10-07
+    one thread had five of them in two episodes, each after a background task
+    completed and ran a turn while it was snoozed; no earlier day has any.
+  - **What changed**: nothing in the snooze logic. The duplicate rule and the
+    raised-hand rule both date from the original snooze commit (`202e5609ff`,
+    2026-07-23) and are identical in `v0.0.42` through `v0.0.45`; the V2
+    orchestrator on `main` carries the same rule
+    (`apps/server/src/orchestration-v2/Orchestrator.ts`, `sameWakeTime`). It
+    needs a turn that starts without a user message while the thread is
+    snoozed, which is what long background watchers now do. Unverified: which
+    release first let a background completion run a turn on a snoozed thread.
+  - **Workaround**: snooze to any other time first ("In 1 hour"), then
+    "Tomorrow"; a different wake time stamps fresh. Sending a message also
+    clears the stale snooze.
+  - **Upstream fix**: treat a same-time re-snooze as a duplicate only while
+    the thread still classifies as snoozed; once it has raised its hand, stamp
+    a fresh `snoozedAt`. The file is in the frozen orchestration layer, so this
+    is an issue comment, not a PR.
+
 - **The `/` menu shows no provider commands in one project while the same
   commands work in every other project (upstream, verified 2026-09-25 on
   desktop 0.0.42 against `main @ 7a12aff471`; re-checked 2026-09-30 against
