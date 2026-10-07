@@ -24,7 +24,12 @@
 # the manager argument, so the installers without one (Termux, MSYS2) offer
 # only yes or no.
 #
+# OFFER_IGNORED=1 is the other way back, and what installmissing sets: the
+# ignored apps are asked about with the rest, marked, and each one answered
+# yes is taken out of the ignore file.
+#
 # Environment:
+#   OFFER_IGNORED=1  ask about the apps this machine ignores too; a yes un-ignores the app
 #   ASSUME_YES=1   install everything pending without prompting (used by bootstrap)
 #   DRY_RUN=1      print what would be installed and change nothing
 #   APP_PHASE      unset: ask, then install. ask: ask, then append the chosen
@@ -56,17 +61,20 @@ app_lists_py() {
 ignored_note() {
     [ "$#" -gt 0 ] || return 0
     echo
-    echo "Not offered, ignored on this machine by $(app_lists_py --ignore-path) (delete a line there to be offered it again):"
+    echo "Not offered, ignored on this machine by $(app_lists_py --ignore-path) (delete a line there, or run installmissing, to be offered it again):"
     printf '  %s\n' "$@"
 }
 
 # Ask about each pending app, filling chosen and to_ignore. Enter or EOF means
-# not now, and q leaves the rest for next time.
+# not now, and q leaves the rest for next time. An app in offered_ignored is
+# one this machine ignores, asked about because OFFER_IGNORED is set.
 ask_each_app() {
     local manager="$1" app answer
     shift
     for app in "$@"; do
-        if [ -n "$manager" ]; then
+        if [ "${#offered_ignored[@]}" -gt 0 ] && printf '%s\n' "${offered_ignored[@]}" | grep -qxF "$app"; then
+            read -r -p "  $app (ignored here): [y]es, and stop ignoring / [N]ot now / [q]uit asking: " answer || answer=q
+        elif [ -n "$manager" ]; then
             read -r -p "  $app: [y]es / [N]ot now / [i]gnore here / [q]uit asking: " answer || answer=q
         else
             read -r -p "  $app: [y]es / [N]o / [q]uit asking: " answer || answer=q
@@ -174,12 +182,18 @@ install_from_list() {
         for app in "${pending[@]}"; do
             if printf '%s\n' "$skipped" | grep -qxF "$app"; then
                 ignored_here+=("$app")
+                # with OFFER_IGNORED these are asked about too, and a yes un-ignores them
+                [ -z "$OFFER_IGNORED" ] || offered+=("$app")
             else
                 offered+=("$app")
             fi
         done
         pending=()
         [ "${#offered[@]}" -eq 0 ] || pending=("${offered[@]}")
+    fi
+    local -a offered_ignored=()
+    if [ -n "$OFFER_IGNORED" ] && [ "${#ignored_here[@]}" -gt 0 ]; then
+        offered_ignored=("${ignored_here[@]}")
     fi
 
     if [ "${#pending[@]}" -eq 0 ]; then
@@ -191,7 +205,14 @@ install_from_list() {
 
     echo
     echo "Not installed (${#pending[@]}):"
-    printf '  %s\n' "${pending[@]}"
+    local mark
+    for app in "${pending[@]}"; do
+        mark=""
+        if [ "${#offered_ignored[@]}" -gt 0 ] && printf '%s\n' "${offered_ignored[@]}" | grep -qxF "$app"; then
+            mark="  (ignored here until you say yes)"
+        fi
+        printf '  %s%s\n' "$app" "$mark"
+    done
 
     local -a chosen=("${pending[@]}")
     local -a to_ignore=()
@@ -219,6 +240,30 @@ install_from_list() {
             ignored_here+=("${to_ignore[@]}")
         else
             echo "Could not write this machine's ignore file; ${to_ignore[*]} will be offered again." >&2
+        fi
+    fi
+
+    local -a wanted=()
+    if [ "${#offered_ignored[@]}" -gt 0 ] && [ "${#chosen[@]}" -gt 0 ]; then
+        for app in "${chosen[@]}"; do
+            if printf '%s\n' "${offered_ignored[@]}" | grep -qxF "$app"; then
+                wanted+=("$app")
+            fi
+        done
+    fi
+    if [ "${#wanted[@]}" -gt 0 ]; then
+        if [ -n "$DRY_RUN" ]; then
+            echo "DRY_RUN set — would stop ignoring on this machine: ${wanted[*]}"
+        elif app_lists_py --unignore "$manager" "${wanted[@]}" >/dev/null; then
+            echo "No longer ignored on this machine: ${wanted[*]}"
+            local -a still=()
+            for app in "${ignored_here[@]}"; do
+                printf '%s\n' "${wanted[@]}" | grep -qxF "$app" || still+=("$app")
+            done
+            ignored_here=()
+            [ "${#still[@]}" -eq 0 ] || ignored_here=("${still[@]}")
+        else
+            echo "Could not write this machine's ignore file; ${wanted[*]} stay ignored." >&2
         fi
     fi
 

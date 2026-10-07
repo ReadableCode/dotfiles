@@ -68,6 +68,7 @@ HELP_PAGE = """# refresh_machine
    an ignored app is never offered on this machine again, via `~/.dotfiles_ignored_apps`
    every question for every manager comes first, then everything chosen installs in one go
    runs the `scripts/install_*` for this machine's package managers, once to ask and once to install
+   `installmissing` is the same offer with the ignored apps in it, and a yes takes the app out of the ignore file
    a choco app already installed by hand or by winget is listed, not offered: choco would install a second copy
    on windows, the duplicate check of step 7 then runs again, so a second copy an install made is offered for removal
    runs `src/app_removals.py --duplicates`
@@ -90,6 +91,10 @@ HELP_PAGE = """# refresh_machine
 - only pull every repo (`--pull-only`):
 
 `pullrepos`
+
+- gitpullall plus the app offer with this machine's ignored apps in it, un-ignoring each yes (`--install-missing`):
+
+`installmissing`
 
 - report what is behind, stale or undeployed, changing nothing (`--check`):
 
@@ -206,10 +211,15 @@ def check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only):
     return steps
 
 
-def app_list_installers(dotfiles, system, which=shutil.which):
+def app_list_installers(dotfiles, system, which=shutil.which, offer_ignored=False):
     """
     The app-list installer(s) this machine's package managers call for, as
     (name, argv) pairs.
+
+    ``offer_ignored`` is what `installmissing` adds: the apps this machine
+    ignores are asked about too, and a yes takes the app out of the ignore
+    file. The bash installers take it from the environment, the PowerShell
+    ones as a switch.
 
     These are the same scripts bootstrap runs, not a second install path: the
     app_lists files are the one record of what a machine should have. Each one
@@ -224,22 +234,26 @@ def app_list_installers(dotfiles, system, which=shutil.which):
     def script(name):
         return os.path.join(scripts, name)
 
+    def bash(name):
+        return (["env", "OFFER_IGNORED=1"] if offer_ignored else []) + ["bash", script(name)]
+
     if system == "Darwin":
-        return [("mac apps", ["bash", script("install_mac_apps.sh")])]
+        return [("mac apps", bash("install_mac_apps.sh"))]
     if system == "Windows":
         shell = which("pwsh") or which("powershell") or "powershell"
         prefix = [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]
+        switches = ["-OfferIgnored"] if offer_ignored else []
         return [
-            ("choco apps", prefix + [script("install_windows_apps_with_chocolatey.ps1")]),
-            ("winget apps", prefix + [script("install_windows_apps_with_winget.ps1")]),
+            ("choco apps", prefix + [script("install_windows_apps_with_chocolatey.ps1")] + switches),
+            ("winget apps", prefix + [script("install_windows_apps_with_winget.ps1")] + switches),
         ]
     found = []
     if which("apt-get"):
-        found.append(("apt apps", ["bash", script("install_linux_apps.sh")]))
+        found.append(("apt apps", bash("install_linux_apps.sh")))
     if which("dnf"):
-        found.append(("dnf apps", ["bash", script("install_linux_apps_dnf.sh")]))
+        found.append(("dnf apps", bash("install_linux_apps_dnf.sh")))
     if which("flatpak"):
-        found.append(("flatpaks", ["bash", script("install_linux_apps_flatpak.sh")]))
+        found.append(("flatpaks", bash("install_linux_apps_flatpak.sh")))
     return found
 
 
@@ -310,13 +324,13 @@ def run_app_phase(argv, phase, plan, out, run=subprocess.run):
     return run(argv, env={**os.environ, "APP_PHASE": phase, "APP_PLAN": plan}).returncode
 
 
-def app_install_steps(dotfiles, system, which=shutil.which):
+def app_install_steps(dotfiles, system, which=shutil.which, offer_ignored=False):
     """
     Every installer asks, then every installer installs: all the questions for
     every package manager come before the first install, so the person at the
     terminal answers once and can walk away while it all installs.
     """
-    installers = app_list_installers(dotfiles, system, which)
+    installers = app_list_installers(dotfiles, system, which, offer_ignored)
     plan = app_plan_path()
 
     def step(title, argv, phase):
@@ -328,7 +342,9 @@ def app_install_steps(dotfiles, system, which=shutil.which):
     return asks + installs
 
 
-def build_steps(git_dir, system, machine, packages=False, pull_only=False, check=False, which=shutil.which):
+def build_steps(
+    git_dir, system, machine, packages=False, pull_only=False, check=False, install_missing=False, which=shutil.which
+):
     """The steps this run takes, in order."""
     dotfiles = os.path.join(git_dir, "dotfiles")
     windows = system == "Windows"
@@ -368,11 +384,15 @@ def build_steps(git_dir, system, machine, packages=False, pull_only=False, check
             )
         )
         steps += app_install_steps(dotfiles, system, which)
-        if windows:
-            # Again, after the installs: a copy one of them just put beside an
-            # existing install is offered for removal on this run, not the next.
-            twice = uv_python(dotfiles, "app_removals.py", "--duplicates")
-            steps.append(Step("checking for apps installed twice", twice, needs="uv"))
+    # installmissing: the same offer without the package upgrades or removals,
+    # with this machine's ignored apps asked about too.
+    elif install_missing:
+        steps += app_install_steps(dotfiles, system, which, offer_ignored=True)
+    if packages and windows:
+        # Again, after the installs: a copy one of them just put beside an
+        # existing install is offered for removal on this run, not the next.
+        twice = uv_python(dotfiles, "app_removals.py", "--duplicates")
+        steps.append(Step("checking for apps installed twice", twice, needs="uv"))
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-AutoFix", "-Full"]))
@@ -562,7 +582,8 @@ def summary(failed, total, color, check=False, missing=None, asked_missing=False
         if missing.get("ignored"):
             where = (missing.get("ignore-file") or ["the ignore file"])[0]
             text = f"   {len(missing['ignored'])} listed app(s) not offered, ignored on this machine by {where}"
-            lines.append(paint(text + " (delete a line there to be offered it again):", "muted", color))
+            text += " (delete a line there, or run `installmissing`, to be offered it again):"
+            lines.append(paint(text, "muted", color))
             lines += [paint(f"     {name}", "muted", color) for name in missing["ignored"]]
     return "\n".join(lines) + "\n"
 
@@ -573,6 +594,11 @@ def parse_args(argv):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--packages", action="store_true", help="upgrade os packages between the pull and the deploy")
     mode.add_argument("--pull-only", action="store_true", help="pull every repo and stop")
+    mode.add_argument(
+        "--install-missing",
+        action="store_true",
+        help="what `installmissing` runs: offer the app list entries this machine lacks, ignored ones included",
+    )
     parser.add_argument("--check", action="store_true", help="report what would change, write nothing")
     # internal: the restart after a pull that moved dotfiles (restart_argv)
     parser.add_argument("--after-pull", action="store_true", help=argparse.SUPPRESS)
@@ -602,6 +628,7 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
         args.packages,
         args.pull_only,
         args.check,
+        args.install_missing,
     )
     failed = []
     total = len(steps)
@@ -636,7 +663,7 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
                 os.remove(leftover)
     # Package runs only: listing what is installed costs a winget list, which
     # a plain pull should not pay for.
-    asked_missing = args.packages and not args.pull_only
+    asked_missing = (args.packages or args.install_missing) and not args.pull_only
     missing = missing_apps(os.path.join(git_dir, "dotfiles")) if asked_missing else None
     out.write("\n" + summary(failed, total, color, args.check, missing, asked_missing, upgrades))
     return 1 if failed or (asked_missing and missing is None) else 0

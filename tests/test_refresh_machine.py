@@ -374,7 +374,7 @@ def test_a_failed_install_still_fails_the_step(tmp_path, monkeypatch):
 
 def test_bootstrap_argv_asks_the_repos_own_installer():
     argv = refresh_machine.bootstrap_argv("/repos/dotfiles", "uv")
-    assert argv == ["bash", "/repos/dotfiles/scripts/bootstrap.sh", "--only", "uv", "--yes"]
+    assert argv == ["bash", os.path.join("/repos/dotfiles", "scripts", "bootstrap.sh"), "--only", "uv", "--yes"]
 
 
 # ------------------------------------------------- app-list installs
@@ -416,7 +416,7 @@ def test_app_phases_pass_the_phase_and_one_shared_plan(tmp_path):
             phase.func(*phase.args, None, run=fake_run)
     assert [phase for _, phase, _ in seen] == ["ask", "install"]
     assert seen[0][2] == seen[1][2] == refresh_machine.app_plan_path()
-    assert seen[0][0][1].endswith("scripts/install_mac_apps.sh")
+    assert seen[0][0][1].endswith(os.path.join("scripts", "install_mac_apps.sh"))
 
 
 def test_linux_gets_every_package_manager_it_actually_has(tmp_path):
@@ -505,7 +505,7 @@ def test_the_summary_names_the_ignore_file_for_ignored_apps():
     }
     text = refresh_machine.summary([], 5, False, missing=found, asked_missing=True)
     assert "ignored on this machine by /home/me/.dotfiles_ignored_apps" in text
-    assert "delete a line there to be offered it again" in text
+    assert "delete a line there, or run `installmissing`, to be offered it again" in text
     assert "brew:docker" in text
 
 
@@ -554,3 +554,40 @@ def test_only_linux_asks_about_a_pending_release(tmp_path):
         raise AssertionError("should not be asked")
 
     assert refresh_machine.pending_release(str(tmp_path), "Darwin", capture=boom) == ""
+
+
+# ------------------------------------------------- installmissing
+
+
+def test_install_missing_asks_and_installs_with_the_ignored_apps_offered(tmp_path):
+    steps = refresh_machine.build_steps(
+        str(tmp_path), "Darwin", "arm64", install_missing=True, which=lambda n: "/bin/" + n
+    )
+    titles = [s.title for s in steps]
+    # gitpullall's steps plus the app offer, with no package upgrade or removal in between
+    assert "updating os packages" not in titles and "checking for apps to remove" not in titles
+    assert titles.index("pruning removed configs") < titles.index("choosing missing mac apps")
+    assert titles.index("choosing missing mac apps") < titles.index("installing chosen mac apps")
+    argv = next(s.argv for s in steps if s.title == "choosing missing mac apps")
+    assert argv[:3] == ["env", "OFFER_IGNORED=1", "bash"]
+    assert argv[3].endswith(os.path.join("scripts", "install_mac_apps.sh"))
+
+
+def test_myupdater_never_offers_the_ignored_apps(tmp_path):
+    steps = refresh_machine.build_steps(str(tmp_path), "Darwin", "arm64", packages=True, which=lambda n: "/bin/" + n)
+    argv = next(s.argv for s in steps if s.title == "choosing missing mac apps")
+    assert "OFFER_IGNORED=1" not in argv
+
+
+def test_install_missing_passes_the_switch_to_the_windows_installers(tmp_path):
+    plain = refresh_machine.app_list_installers(str(tmp_path), "Windows", which=lambda n: "/bin/" + n)
+    forced = refresh_machine.app_list_installers(
+        str(tmp_path), "Windows", which=lambda n: "/bin/" + n, offer_ignored=True
+    )
+    assert all("-OfferIgnored" not in argv for _, argv in plain)
+    assert all(argv[-1] == "-OfferIgnored" for _, argv in forced)
+
+
+def test_install_missing_and_packages_are_one_or_the_other():
+    with pytest.raises(SystemExit):
+        refresh_machine.parse_args(["--packages", "--install-missing"])

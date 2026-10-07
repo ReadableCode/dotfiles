@@ -17,6 +17,10 @@
 # end, since deleting the line is how to be offered it again. Ignoring needs
 # -Manager.
 #
+# -OfferIgnored is the other way back, and what installmissing passes: the
+# ignored apps are asked about with the rest, marked, and each one answered
+# yes is taken out of the ignore file.
+#
 # $env:APP_PHASE and $env:APP_PLAN split the asking from the installing the
 # same way as in app_install_lib.sh, which describes them.
 #
@@ -26,6 +30,7 @@
 #                (each member context's <context>_app_lists.yaml) join the list.
 #                A lookup that fails installs nothing rather than a list that
 #                only looks complete.
+#   -OfferIgnored  ask about the apps this machine ignores too; a yes un-ignores the app
 #   -AssumeYes   install everything pending without prompting (used by bootstrap)
 #   -DryRun      print what would be installed and change nothing
 
@@ -69,7 +74,7 @@ function Write-IgnoredNote {
     if (-not $Names -or $Names.Count -eq 0) { return }
     $path = @(Invoke-AppListsPy -Arguments @('--ignore-path'))[0]
     Write-Host ""
-    Write-Host "Not offered, ignored on this machine by $path (delete a line there to be offered it again):"
+    Write-Host "Not offered, ignored on this machine by $path (delete a line there, or run installmissing, to be offered it again):"
     $Names | ForEach-Object { Write-Host "  $_" }
 }
 
@@ -102,6 +107,7 @@ function Install-FromList {
         [Parameter(Mandatory = $true)][scriptblock]$ListInstalled,
         [Parameter(Mandatory = $true)][scriptblock]$InstallApps,
         [string]$Manager,
+        [switch]$OfferIgnored,
         [switch]$AssumeYes,
         [switch]$DryRun
     )
@@ -153,8 +159,12 @@ function Install-FromList {
             return
         }
         $ignoredHere = @($pending | Where-Object { $skipped -contains $_ })
-        $pending = @($pending | Where-Object { $skipped -notcontains $_ })
+        if (-not $OfferIgnored) {
+            $pending = @($pending | Where-Object { $skipped -notcontains $_ })
+        }
     }
+    # with -OfferIgnored these stay in $pending, and a yes un-ignores them
+    $offeredIgnored = if ($OfferIgnored) { $ignoredHere } else { @() }
 
     # Installed by hand or by another manager: this manager's own list does not
     # show it, and installing it here would make a second copy.
@@ -166,7 +176,7 @@ function Install-FromList {
         }
         if ($elsewhere.Count -gt 0) {
             Write-Host ""
-            Write-Host "Installed outside $Label, so not offered ($($elsewhere.Count)):"
+            Write-Host "Installed outside $Label, so not offered ($($elsewhere.Count)); myupdater's removal step offers to reinstall them through $Label`:"
             $elsewhere | ForEach-Object { Write-Host "  $_" }
             $pending = @($pending | Where-Object { $elsewhere -notcontains $_ })
         }
@@ -182,7 +192,10 @@ function Install-FromList {
 
     Write-Host ""
     Write-Host "Not installed ($($pending.Count)):"
-    $pending | ForEach-Object { Write-Host "  $_" }
+    $pending | ForEach-Object {
+        $mark = if ($offeredIgnored -contains $_) { '  (ignored here until you say yes)' } else { '' }
+        Write-Host "  $_$mark"
+    }
 
     $chosen = $pending
     $toIgnore = @()
@@ -198,7 +211,10 @@ function Install-FromList {
         # Enter means not now, and q leaves the rest for next time.
         $chosen = @()
         foreach ($app in $pending) {
-            if ($Manager) {
+            if ($offeredIgnored -contains $app) {
+                $answer = Read-Host "  $app (ignored here)`: [y]es, and stop ignoring / [N]ot now / [q]uit asking"
+            }
+            elseif ($Manager) {
                 $answer = Read-Host "  $app`: [y]es / [N]ot now / [i]gnore here / [q]uit asking"
             }
             else {
@@ -222,6 +238,20 @@ function Install-FromList {
         }
         else {
             Write-Error "Could not write this machine's ignore file; $($toIgnore -join ', ') will be offered again."
+        }
+    }
+
+    $wanted = @($chosen | Where-Object { $offeredIgnored -contains $_ })
+    if ($wanted.Count -gt 0) {
+        if ($DryRun) {
+            Write-Host "DryRun set - would stop ignoring on this machine: $($wanted -join ', ')"
+        }
+        elseif ($null -ne (Invoke-AppListsPy -Arguments (@('--unignore', $Manager) + $wanted))) {
+            Write-Host "No longer ignored on this machine: $($wanted -join ', ')"
+            $ignoredHere = @($ignoredHere | Where-Object { $wanted -notcontains $_ })
+        }
+        else {
+            Write-Error "Could not write this machine's ignore file; $($wanted -join ', ') stay ignored."
         }
     }
 

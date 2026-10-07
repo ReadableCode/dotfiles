@@ -11,6 +11,10 @@ import pytest
 
 from utils import macmcp_tools as mtools
 
+# mac_mcp reads the local stores of the Mac apps, and pinning the zone below needs
+# time.tzset, which Windows lacks; there is no Windows mac_mcp to test
+pytestmark = pytest.mark.skipif(not hasattr(time, "tzset"), reason="mac_mcp is mac-only and needs time.tzset")
+
 # %%
 # Helpers #
 

@@ -5,6 +5,7 @@ import glob
 import json
 import os
 import subprocess
+import time
 
 import config_test_utils  # noqa F401
 import pytest
@@ -1119,8 +1120,17 @@ def _linked_pair(tmp_path, link_mtime, repo_mtime):
     dest = str(tmp_path / "sys" / "conf")
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     os.symlink(repo_file, dest)
-    os.utime(repo_file, (repo_mtime, repo_mtime))
-    os.utime(dest, (link_mtime, link_mtime), follow_symlinks=False)
+    if os.utime in os.supports_follow_symlinks:
+        os.utime(repo_file, (repo_mtime, repo_mtime))
+        os.utime(dest, (link_mtime, link_mtime), follow_symlinks=False)
+        return repo_file, dest
+    # Windows cannot set a link's own mtime, so place the repo file's just after
+    # (stale) or well before (fresh) the link's, then let that moment pass so a
+    # relink made now lands after the repo file
+    link_now = os.lstat(dest).st_mtime
+    repo_time = link_now + 0.01 if repo_mtime > link_mtime else link_now - 1000
+    os.utime(repo_file, (repo_time, repo_time))
+    time.sleep(0.02)
     return repo_file, dest
 
 
@@ -2026,12 +2036,12 @@ def test_run_deploy_routes_system_rows_to_the_privileged_path(tmp_path, monkeypa
                 "reload": "true",
             }
         ],
-        deploy_configs.get_platform_key(),
+        "linux",  # system rows exist only on linux and darwin; pinned so the routing is tested everywhere
         "HOST",
         repo_root=str(tmp_path),
     )
     deploy_configs.run_deploy(plan)
-    assert calls == [((repo_file, "/etc/x", "root:root", "0644"), {"reload": "true"})]
+    assert calls == [((repo_file, os.path.normpath("/etc/x"), "root:root", "0644"), {"reload": "true"})]
     assert "1 changed" in capsys.readouterr().out
 
 

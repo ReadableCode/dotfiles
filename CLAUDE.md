@@ -165,7 +165,11 @@ is the one-paragraph orientation so an agent knows which file to open.
   retires a Windows optional feature, and `replaced_by:` holds a removal back
   until its replacement is installed. On Windows it also finds the same app
   installed twice (one winget id listed twice) and offers the copy no app
-  list owns without any line, the way `clone_repos.py` offers a repo. Step 7
+  list owns without any line, the way `clone_repos.py` offers a repo, and
+  offers to reinstall through choco an app a choco list names that was
+  installed another way (never a browser web app, never a package choco does
+  not carry; a per-user copy is uninstalled without admin, and the taskbar
+  pins the reinstall costs are offered back). Step 7
   of `refresh_machine.py`, `--packages` only, so myupdater and not every
   gitpullall. Doc: `docs/repo_app_removals.md`.
 - **`app_lists.py`** — the one answer to "what should this machine have" per
@@ -178,7 +182,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   installed, which myupdater prints in its closing summary. An app ignored
   at an installer's per-app question is written to
   `~/.dotfiles_ignored_apps` on that machine and never offered there again;
-  each run that leaves one out names the file. On Windows it also plans the
+  each run that leaves one out names the file. `installmissing` offers those
+  too, and a yes takes the app's line out of the file (`--unignore`). On
+  Windows it also plans the
   upgrades (`--upgrades winget|choco`, read by `scripts/my_updater.ps1`): winget
   upgrades only what a winget list names, neither manager goes to a version
   already installed or touches an app `app_upgrade_holds.yaml` names, and
@@ -202,9 +208,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   clone, sync envs, deploy, prune, offer the `app_removals.py` uninstalls
   (`--packages` only), offer the app_lists installs (`--packages` only:
   one "go through them?" per package manager, then a question per app, and
-  everything chosen installs after the last answer), and the AutoHotkey fix
+  everything chosen installs after the last answer; `installmissing` is that
+  offer alone with the ignored apps asked about too), and the AutoHotkey fix
   on Windows. The shells wrap it as
-  `pullrepos` / `gitpullall` / `myupdater`, one flag each. A step whose tool is missing offers to install it with
+  `pullrepos` / `gitpullall` / `myupdater` / `installmissing`, one flag each. A step whose tool is missing offers to install it with
   `scripts/bootstrap.sh --only <tool>` (terminal only - an unattended run
   still just reports), so a tool has one installer and a fresh box can
   bring itself up. Both
@@ -238,7 +245,7 @@ is the one-paragraph orientation so an agent knows which file to open.
 - **`ssh_devices.py`** — pulls configs from devices over ssh.
 - **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,
   `secret_tools`, `calendarboard_tools`, `google_oauth_tools`,
-  `googlemcp_tools`, `mcpservers_tools`. Shared helpers come from the
+  `googlemcp_tools`, `mcpservers_tools`, `taskbar_tools`. Shared helpers come from the
   **`readable-utils`** package (github.com/ReadableCode/readable_utils), a uv
   git dependency pinned to a tag - no vendored copies. Homelab-only jobs
   (Bitwarden backup, Home Assistant/router pulls, log rotation) live in the

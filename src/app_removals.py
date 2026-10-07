@@ -25,7 +25,9 @@ no terminal reports and removes nothing.
 
 On Windows it also looks for the same app installed twice by two routes (see
 "Duplicate installs" below) and offers the copy no app list owns, the way
-``clone_repos.py`` offers a missing repo: found, not declared.
+``clone_repos.py`` offers a missing repo: found, not declared. It also offers
+to reinstall through choco an app a choco list names that was installed some
+other way (see "Installed another way" below).
 """
 
 # %%
@@ -35,8 +37,10 @@ import argparse
 import os
 import platform
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 
 import yaml
@@ -44,6 +48,7 @@ from readable_utils.host_tools import get_uppercase_hostname
 
 import app_lists
 from deploy_configs import REPO_ROOT, host_allowed, member_overlay_dirs
+from utils import taskbar_tools
 from utils.inventory_tools import overlay_context
 
 # %%
@@ -475,6 +480,51 @@ def winget_uninstall(package_id, version):
     return ["winget", "uninstall", "--disable-interactivity", "--exact", "--id", package_id, "--version", version]
 
 
+# A web app a Chromium browser installed (Chrome, Edge, Brave: "install this
+# site as an app") is registered for uninstall like any program, so `winget
+# list` shows it, under the site's name and an ARP id ending in its registry
+# key. A web app named Messenger is not the messenger an app list names, and
+# matching it by name made the listed app look installed. They are told apart
+# by how they uninstall: the browser itself, with --uninstall-app-id.
+WEB_APP_FLAG = "--uninstall-app-id"
+UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+
+
+def browser_web_apps():
+    """Lowercased uninstall key names of the web apps a browser installed for this user."""
+    if sys.platform != "win32":
+        return set()
+    import winreg
+
+    keys = set()
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as parent:
+            for index in range(winreg.QueryInfoKey(parent)[0]):
+                name = winreg.EnumKey(parent, index)
+                try:
+                    with winreg.OpenKey(parent, name) as key:
+                        command = str(winreg.QueryValueEx(key, "UninstallString")[0])
+                except OSError:
+                    continue
+                if WEB_APP_FLAG in command:
+                    keys.add(name.lower())
+    except OSError:
+        return set()
+    return keys
+
+
+def without_web_apps(rows):
+    """The rows that are programs: every ``ARP\\...\\<key>`` row a browser web app owns is dropped."""
+    web_apps = browser_web_apps()
+    if not web_apps:
+        return rows
+    return [
+        row
+        for row in rows
+        if not (row.id.upper().startswith("ARP\\") and row.id.rsplit("\\", 1)[-1].lower() in web_apps)
+    ]
+
+
 # What installers add around an app's name in Add/Remove Programs: a bracketed
 # edition, "version 2.2.0.0", the CPU architecture, a version number.
 NAME_DECORATION = re.compile(
@@ -612,6 +662,85 @@ def remove_duplicate(argv, run=subprocess.run):
         return False
 
 
+# winget refuses to uninstall a per-user copy from an elevated shell ("The
+# package installed for user scope cannot be uninstalled when running with
+# administrator privileges"), and myupdater runs elevated because choco needs
+# it. The extra copy is usually exactly that: the one an app's own installer
+# left in AppData. It is therefore uninstalled through the logged-in user's own
+# unelevated token: a one-off scheduled task at the Limited run level, which is
+# the one way an elevated process can start something without admin and wait
+# for its exit code. Its output goes to a file that is printed afterwards.
+UNELEVATED_TASK = "dotfiles app_removals unelevated"
+# LastTaskResult while the task has not started yet, and while it runs
+TASK_PENDING = {267011, 267009}
+
+
+def is_elevated():
+    if sys.platform != "win32":
+        return False
+    import ctypes
+
+    return bool(ctypes.windll.shell32.IsUserAnAdmin())
+
+
+def user_scoped(package_id, run=run_capture):
+    """Whether winget files this id under the per-user scope."""
+    code, _ = run(["winget", "list", "--exact", "--id", package_id, "--scope", "user", "--disable-interactivity"])
+    return code == 0
+
+
+def powershell_quote(text):
+    return "'" + str(text).replace("'", "''") + "'"
+
+
+def run_unelevated(argv, run=subprocess.run):
+    """Run argv as the logged-in user without admin, wait for it, print its output. True when it exited 0."""
+    workdir = tempfile.mkdtemp(prefix="app_removals_")
+    try:
+        output = os.path.join(workdir, "output.txt")
+        script = os.path.join(workdir, "run.ps1")
+        with open(script, "w", encoding="utf-8") as handle:
+            command = " ".join(powershell_quote(arg) for arg in argv)
+            handle.write(f"& {command} *>&1 | Out-File -Encoding utf8 {powershell_quote(output)}\n")
+            handle.write("exit $LASTEXITCODE\n")
+        task = powershell_quote(UNELEVATED_TASK)
+        arguments = powershell_quote(f'-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{script}"')
+        pending = ", ".join(str(code) for code in sorted(TASK_PENDING))
+        driver = f"""
+$ErrorActionPreference = 'Stop'
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument {arguments}
+$user = "$env:USERDOMAIN\\$env:USERNAME"
+$principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName {task} -Action $action -Principal $principal -Force | Out-Null
+try {{
+    Start-ScheduledTask -TaskName {task}
+    do {{
+        Start-Sleep -Milliseconds 500
+        $result = (Get-ScheduledTaskInfo -TaskName {task}).LastTaskResult
+    }} while ($result -in @({pending}))
+}} finally {{
+    Unregister-ScheduledTask -TaskName {task} -Confirm:$false
+}}
+if ($result -ne 0) {{ exit 1 }}
+"""
+        print(paint("  per-user copy: uninstalling it without admin, as winget requires", "dim"))
+        ok = remove_duplicate(["powershell", "-NoProfile", "-NonInteractive", "-Command", driver], run=run)
+        if os.path.isfile(output):
+            # Windows PowerShell 5 writes utf8 with a BOM
+            with open(output, encoding="utf-8-sig", errors="replace") as handle:
+                print(handle.read(), end="")
+        return ok
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def uninstall_copy(row, argv):
+    """Run one copy's uninstall, without admin when winget would refuse it from this elevated shell."""
+    if argv[0] == "winget" and is_elevated() and user_scoped(row.id):
+        return run_unelevated(argv)
+    return remove_duplicate(argv)
+
+
 def offer_duplicates(groups, assume_yes):
     """Ask per extra copy and uninstall the agreed ones. Returns the number that failed."""
     failures = 0
@@ -628,11 +757,138 @@ def offer_duplicates(groups, assume_yes):
             if answer == "n":
                 print(paint(f"  kept {group.id} {row.version}", "dim"))
                 continue
-            if remove_duplicate(argv):
+            if uninstall_copy(row, argv):
                 print(paint(f"  removed {group.id} {row.version}", "green"))
             else:
                 failures += 1
                 print(paint(f"  FAILED to remove {group.id} {row.version} (see output above)", "red"))
+    return failures
+
+
+# %%
+# Installed another way #
+#
+# A choco-listed app that `winget list` shows but Chocolatey never installed
+# (app_lists.missing_packages calls it "elsewhere"): put there by hand or by
+# winget, so choco never upgrades it and `choco install` would lay a second
+# copy beside it, which is why the choco installer leaves it out. The offer
+# here is to uninstall every copy that is there, then install it through
+# choco, leaving the one copy the list says choco manages. Uninstall first:
+# the same vendor installer run twice can share one product code, so
+# uninstalling after the choco install could take choco's copy too.
+#
+# Two things are settled before anything is offered, because the first version
+# of this uninstalled a Messenger that could never be put back:
+# - a web app a browser installed (browser_web_apps) is never the choco app,
+#   however alike the names, so it is never one of the copies.
+# - choco must have the package. A list naming one Chocolatey no longer carries
+#   is reported as a list to fix, and nothing is uninstalled for it.
+#
+# Uninstalling unpins an app from the taskbar and installing does not pin it
+# back, so the pins are saved before the first uninstall and the lost ones put
+# back at the end (utils/taskbar_tools.py).
+
+
+@dataclass
+class Elsewhere:
+    """One choco-listed app and the `winget list` rows that are it."""
+
+    package: str
+    rows: list
+    available: bool = True  # choco has a package by this name
+
+
+def choco_has(package, run=run_capture):
+    """Whether Chocolatey's sources carry a package by exactly this name."""
+    code, output = run(["choco", "search", package, "--exact", "--limit-output"])
+    return code == 0 and any(line.strip().lower().startswith(package.lower() + "|") for line in output.splitlines())
+
+
+def elsewhere_installs(run=run_capture):
+    """Every choco-listed app installed some other way, with the rows each prompt uninstalls."""
+    _, elsewhere, _, _ = app_lists.missing_packages(run=run)
+    if not elsewhere:
+        return []
+    code, output = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
+    rows = without_web_apps(parse_winget_list(output)) if code == 0 else []
+    found = []
+    for item in elsewhere:
+        package = item.partition(":")[2]
+        matches = [row for row in rows if names_row(package, row)]
+        if matches:
+            found.append(Elsewhere(package=package, rows=matches, available=choco_has(package, run=run)))
+    return found
+
+
+def report_elsewhere(found):
+    if not found:
+        return
+    print(paint("Installed, but not by choco, which their app list names:", "cyan"))
+    for item in found:
+        print(f"  {item.package}")
+        for row in item.rows:
+            print(f"    {row.version}  {row.name}  ({row.id})")
+        if not item.available:
+            text = f"    left alone: choco has no package named {item.package}; fix the app list that names it"
+            print(paint(text, "yellow"))
+
+
+def restore_pins(snap, assume_yes):
+    """Offer to put back the taskbar pins the reinstalls cost. Explorer restarts, so it asks first."""
+    back, gone = taskbar_tools.restorable(snap)
+    for name in gone:
+        print(paint(f"  taskbar pin {name} is not restored: its app is somewhere else now, pin it again", "yellow"))
+    if not back:
+        return
+    print()
+    print(paint(f"  the reinstalls unpinned from the taskbar: {', '.join(back)}", "dim"))
+    question = "Put them back? Explorer restarts, which closes open folder windows."
+    if not assume_yes and prompt_yes_no_quit(question) != "y":
+        print(paint("  taskbar left as it is", "dim"))
+        return
+    taskbar_tools.restore(
+        snap, back, restart=lambda: taskbar_tools.restart_explorer(start=lambda: run_unelevated(["explorer.exe"]))
+    )
+    print(paint(f"  put back {len(back)} taskbar pin(s)", "green"))
+
+
+def offer_elsewhere(found, assume_yes):
+    """Ask per app and reinstall the agreed ones through choco. Returns the number that failed."""
+    found = [item for item in found if item.available]
+    if not found:
+        return 0
+    workdir = tempfile.mkdtemp(prefix="app_removals_pins_")
+    try:
+        snap = taskbar_tools.snapshot(workdir)
+        failures = reinstall_elsewhere(found, assume_yes)
+        restore_pins(snap, assume_yes)
+        return failures
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def reinstall_elsewhere(found, assume_yes):
+    failures = 0
+    for item in found:
+        print()
+        print(paint("  winget has no dry run; this uninstalls the copies above, then choco installs it", "dim"))
+        answer = "y" if assume_yes else prompt_yes_no_quit(f"Reinstall {item.package} through choco?")
+        if answer == "q":
+            print(paint("Stopping; remaining apps left as they are.", "dim"))
+            return failures
+        if answer == "n":
+            print(paint(f"  kept {item.package} as it is", "dim"))
+            continue
+        uninstalled = all(uninstall_copy(row, winget_uninstall(row.id, row.version)) for row in item.rows)
+        if not uninstalled:
+            failures += 1
+            print(paint(f"  FAILED to uninstall {item.package} (see output above); choco install not run", "red"))
+            continue
+        if remove_duplicate(["choco", "install", item.package, "-y"]):
+            print(paint(f"  reinstalled {item.package} through choco", "green"))
+        else:
+            failures += 1
+            print(paint(f"  FAILED: {item.package} is uninstalled; run `choco install {item.package} -y`", "red"))
     return failures
 
 
@@ -793,8 +1049,10 @@ def run(
     groups = duplicate_groups(run=run_query) if system == "Windows" else []
     report_duplicates(groups, show_all)
     offers = [group for group in groups if group.offers]
+    elsewhere = elsewhere_installs(run=run_query) if system == "Windows" and not duplicates_only else []
+    report_elsewhere(elsewhere)
     problems = len(found.unknown)
-    if list_only or not (found.removable or offers):
+    if list_only or not (found.removable or offers or any(item.available for item in elsewhere)):
         return 1 if problems else 0
     if not assume_yes and not sys.stdin.isatty():
         print(paint("stdin is not a terminal; removing nothing (run src/app_removals.py directly).", "yellow"))
@@ -802,6 +1060,7 @@ def run(
     failures, stopped = offer_removals(found.removable, assume_yes)
     if not stopped:
         failures += offer_duplicates(offers, assume_yes)
+        failures += offer_elsewhere(elsewhere, assume_yes)
     return 1 if failures or problems else 0
 
 
@@ -813,7 +1072,8 @@ def main():
     parser = argparse.ArgumentParser(
         description=(
             "Offer to uninstall the packages an app removals file says must not be on this machine, "
-            "and on Windows the extra copies of apps an app list installs."
+            "and on Windows the extra copies of apps an app list installs and the choco-listed apps installed "
+            "another way."
         )
     )
     parser.add_argument("--list", action="store_true", help="only report, never prompt or uninstall")

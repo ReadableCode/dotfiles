@@ -203,7 +203,8 @@ _IGNORE_HEADER = """\
 # Written by the dotfiles installers when an app's question is answered i,
 # and read by them and by myupdater's closing summary, neither of which offer
 # or report these again here.
-# Delete a line to be offered that app again.
+# Delete a line to be offered that app again, or run installmissing, which
+# offers these too and deletes the line of each one you say yes to.
 """
 
 
@@ -234,6 +235,27 @@ def record_ignored(manager, names, path=None):
             handle.write(_IGNORE_HEADER)
         handle.writelines(line + "\n" for line in added)
     return added
+
+
+def forget_ignored(manager, names, path=None):
+    """Take the ``manager:name`` lines out of the ignore file. Returns the lines removed."""
+    path = path or IGNORE_FILE
+    if not os.path.exists(path):
+        return []
+    drop = {f"{manager}:{name}".lower() for name in names}
+    with open(path, "r", encoding="utf-8") as handle:
+        lines = handle.readlines()
+    kept, removed = [], []
+    for line in lines:
+        entry = line.replace("\r", "").split("#", 1)[0].strip()
+        if entry and entry.lower() in drop:
+            removed.append(entry)
+        else:
+            kept.append(line)
+    if removed:
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.writelines(kept)
+    return removed
 
 
 # %%
@@ -276,6 +298,7 @@ def elsewhere_packages(manager, names, which=shutil.which, run=None):
     same name: installed by hand or by another manager, so installing one
     through choco would make a second copy. The one answer both the closing
     summary and the installer's questions use. Only choco has this problem.
+    A web app a browser installed is not that copy: it only shares the name.
     """
     import app_removals
 
@@ -283,7 +306,7 @@ def elsewhere_packages(manager, names, which=shutil.which, run=None):
         return []
     run = run or app_removals.run_capture
     code, output = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
-    rows = app_removals.parse_winget_list(output) if code == 0 else []
+    rows = app_removals.without_web_apps(app_removals.parse_winget_list(output)) if code == 0 else []
     return [name for name in names if any(app_removals.names_row(name, row) for row in rows)]
 
 
@@ -543,10 +566,17 @@ def parse_args(argv):
         metavar="ARG",
         help="MANAGER PACKAGE...: record these as ignored on this machine, printing each line added",
     )
+    mode.add_argument(
+        "--unignore",
+        nargs="+",
+        metavar="ARG",
+        help="MANAGER PACKAGE...: stop ignoring these on this machine, printing each line removed",
+    )
     mode.add_argument("--ignore-path", action="store_true", help="print this machine's ignore file path")
     args = parser.parse_args(argv)
-    if args.ignore and args.ignore[0] not in MANAGERS:
-        parser.error(f"--ignore takes a manager first, one of {', '.join(MANAGERS)}")
+    for flag, given in (("--ignore", args.ignore), ("--unignore", args.unignore)):
+        if given and given[0] not in MANAGERS:
+            parser.error(f"{flag} takes a manager first, one of {', '.join(MANAGERS)}")
     return args
 
 
@@ -590,6 +620,8 @@ def main(argv=None):
         lines = elsewhere_packages(args.elsewhere, names)
     elif args.ignore:
         lines = record_ignored(args.ignore[0], args.ignore[1:])
+    elif args.unignore:
+        lines = forget_ignored(args.unignore[0], args.unignore[1:])
     elif args.ignore_path:
         lines = [IGNORE_FILE]
     elif args.where:

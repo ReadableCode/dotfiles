@@ -1,6 +1,12 @@
 import os
 import stat
 import subprocess
+import sys
+
+import pytest
+
+# the mac installer is a bash script around brew; there is no Windows run of it to test
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="install_mac_apps.sh is a mac bash script")
 
 SCRIPT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts", "install_mac_apps.sh")
 

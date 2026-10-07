@@ -1,6 +1,7 @@
 """Unit tests for src/init_worktree.py — bringing a git worktree up to parity with its main checkout."""
 
 import os
+import pathlib
 import subprocess
 
 import config_test_utils  # noqa F401
@@ -116,7 +117,11 @@ def test_ignored_links_are_mirrored_with_absolute_targets_and_plain_files_are_no
     repo_parent, main, worktree = repos
     entries = init_worktree.local_only_entries(main)
     statuses = {entry[0]: init_worktree.mirror_entry(entry, worktree) for entry in entries}
-    assert statuses == {".env": "linked", ".claude/settings.local.json": "linked", "token.json": "not mirrored"}
+    assert statuses == {
+        ".env": "linked",
+        os.path.join(".claude", "settings.local.json"): "linked",
+        "token.json": "not mirrored",
+    }
     env_link = os.path.join(worktree, ".env")
     assert os.path.islink(env_link)
     assert os.path.isabs(os.readlink(env_link))
@@ -337,7 +342,8 @@ def test_remove_deletes_only_this_worktree_and_its_workspace_entry(repos, tmp_pa
     assert not os.path.exists(worktree)
     assert os.path.isfile(os.path.join(other, "dirty.txt"))
     registered = subprocess.check_output(["git", "worktree", "list", "--porcelain"], cwd=main, text=True)
-    assert other in registered and worktree not in registered
+    # git prints worktree paths with forward slashes on every platform
+    assert pathlib.Path(other).as_posix() in registered and pathlib.Path(worktree).as_posix() not in registered
     assert "feature/ACME-2482-thing" in subprocess.check_output(["git", "branch"], cwd=main, text=True)
     with open(os.path.join(repo_parent, "envy.code-workspace"), encoding="utf-8") as file_handle:
         assert file_handle.read() == WORKSPACE

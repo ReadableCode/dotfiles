@@ -2,6 +2,8 @@
 # Imports #
 
 import os
+import re
+import subprocess
 
 import config_test_utils  # noqa F401
 import pytest
@@ -53,6 +55,12 @@ def no_machine_state(monkeypatch):
     """No test may read this machine's context app lists or its real winget."""
     monkeypatch.setattr(app_removals.app_lists, "discover_app_lists", lambda: [])
     monkeypatch.setattr(app_removals, "duplicate_groups", lambda **kwargs: [])
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: set())
+    monkeypatch.setattr(app_removals, "is_elevated", lambda: False)
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [])
+    # and none may touch the real taskbar or restart the real Explorer
+    monkeypatch.setattr(app_removals.taskbar_tools, "snapshot", lambda workdir: None)
+    monkeypatch.setattr(app_removals, "restore_pins", lambda snap, assume_yes: None)
 
 
 # %%
@@ -816,3 +824,230 @@ def test_after_is_skipped_when_the_removal_is_declined(monkeypatch):
     monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "n")
     monkeypatch.setattr(app_removals, "run_after", lambda e: pytest.fail("ran after: without a removal"))
     assert app_removals.run(entries=[entry], system="Darwin") == 0
+
+
+# %%
+# Browser web apps and per-user copies #
+
+# a hand installed app's winget id: winget files it under the registry key
+ARP_ID = r"ARP\User\X64\6214a426"
+
+
+def test_a_web_app_row_is_dropped_and_a_program_with_its_name_is_kept(monkeypatch):
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: {"6214a426"})
+    program = app_removals.Install("Claude", "Anthropic.Claude", "2.0")
+    assert app_removals.without_web_apps([app_removals.Install("Claude", ARP_ID, "1.0"), program]) == [program]
+
+
+def test_only_an_arp_row_can_be_a_web_app(monkeypatch):
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: {"claude"})
+    rows = [app_removals.Install("Claude", "Anthropic.Claude", "2.0"), app_removals.Install("Claude", ARP_ID, "1.0")]
+    assert app_removals.without_web_apps(rows) == rows
+
+
+def test_an_elevated_shell_uninstalls_a_per_user_copy_without_admin(monkeypatch):
+    """winget refuses a user-scope uninstall from an elevated shell, and myupdater runs elevated for choco."""
+    ran = {"unelevated": [], "direct": []}
+    monkeypatch.setattr(app_removals, "is_elevated", lambda: True)
+    monkeypatch.setattr(app_removals, "user_scoped", lambda package_id: package_id == ARP_ID)
+    monkeypatch.setattr(app_removals, "run_unelevated", lambda argv: ran["unelevated"].append(argv[-3]) or True)
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: ran["direct"].append(argv[-3]) or True)
+    for row in (app_removals.Install("Claude", ARP_ID, "1.0"), app_removals.Install("Claude", "Anthropic.Claude", "2")):
+        assert app_removals.uninstall_copy(row, app_removals.winget_uninstall(row.id, row.version))
+    assert ran == {"unelevated": [ARP_ID], "direct": ["Anthropic.Claude"]}
+
+
+def test_an_unelevated_shell_and_a_choco_uninstall_never_go_through_a_task(monkeypatch):
+    monkeypatch.setattr(app_removals, "user_scoped", lambda package_id: pytest.fail("asked the scope"))
+    monkeypatch.setattr(app_removals, "run_unelevated", lambda argv: pytest.fail("made a task"))
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: True)
+    row = app_removals.Install("Claude", ARP_ID, "1.0")
+    assert app_removals.uninstall_copy(row, app_removals.winget_uninstall(row.id, row.version))
+    monkeypatch.setattr(app_removals, "is_elevated", lambda: True)
+    assert app_removals.uninstall_copy(row, ["choco", "uninstall", "-y", "claude"])
+
+
+def test_the_unelevated_task_runs_the_exact_argv_and_is_removed_afterwards():
+    seen = {}
+
+    def fake_run(argv):
+        driver = argv[-1]
+        script = re.search(r'-File "([^"]+)"', driver).group(1)
+        seen["script"] = open(script, encoding="utf-8").read()
+        seen["driver"] = driver
+        return subprocess.CompletedProcess(argv, 0)
+
+    assert app_removals.run_unelevated(["winget", "uninstall", "--id", ARP_ID, "--version", "1.0"], run=fake_run)
+    assert f"'winget' 'uninstall' '--id' '{ARP_ID}' '--version' '1.0' *>&1" in seen["script"]
+    assert "-RunLevel Limited" in seen["driver"]
+    assert "Unregister-ScheduledTask" in seen["driver"]
+    assert not os.path.exists(os.path.dirname(re.search(r'-File "([^"]+)"', seen["driver"]).group(1)))
+
+
+# %%
+# Installed another way #
+
+
+def elsewhere_item():
+    return app_removals.Elsewhere(
+        package="claude",
+        rows=[
+            app_removals.Install("Claude", ARP_ID, "1.0"),
+            app_removals.Install("Claude", "Anthropic.Claude", "2.7032.0.0"),
+        ],
+    )
+
+
+def unavailable_item():
+    return app_removals.Elsewhere(
+        package="messenger", rows=[app_removals.Install("Messenger", "Meta.Messenger", "1.0")], available=False
+    )
+
+
+def test_elsewhere_finds_every_row_that_is_the_app(monkeypatch):
+    monkeypatch.undo()  # the autouse fixture stubs elsewhere_installs out
+    monkeypatch.setattr(app_removals.app_lists, "discover_app_lists", lambda: [])
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: set())
+    monkeypatch.setattr(
+        app_removals.app_lists, "missing_packages", lambda run: ([], ["choco:claude", "choco:gone"], [], [])
+    )
+    output = "\n".join(
+        [
+            "Name    Id                      Version    Source",
+            "---------------------------------------------------",
+            f"Claude  {ARP_ID:<24}1.0",
+            "Claude  Anthropic.Claude        2.7032.0.0 winget",
+            "Slack   SlackTechnologies.Slack 4.51.191   winget",
+        ]
+    )
+    answers = {"winget": (0, output), "choco": (0, "claude|2.9939.4\n")}
+    found = app_removals.elsewhere_installs(run=lambda argv: answers[argv[0]])
+    assert [item.package for item in found] == ["claude"]
+    assert [row.id for row in found[0].rows] == [ARP_ID, "Anthropic.Claude"]
+    assert found[0].available
+
+
+def test_a_browser_web_app_is_never_one_of_the_copies(monkeypatch):
+    """The Claude web app Chrome installed shares the name and nothing else; it must survive the reinstall."""
+    monkeypatch.undo()
+    monkeypatch.setattr(app_removals.app_lists, "discover_app_lists", lambda: [])
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: {"6214a426"})
+    monkeypatch.setattr(app_removals.app_lists, "missing_packages", lambda run: ([], ["choco:claude"], [], []))
+    output = "\n".join(
+        [
+            "Name    Id                      Version    Source",
+            "---------------------------------------------------",
+            f"Claude  {ARP_ID:<24}1.0",
+            "Claude  Anthropic.Claude        2.7032.0.0 winget",
+        ]
+    )
+    answers = {"winget": (0, output), "choco": (0, "claude|2.9939.4\n")}
+    [found] = app_removals.elsewhere_installs(run=lambda argv: answers[argv[0]])
+    assert [row.id for row in found.rows] == ["Anthropic.Claude"]
+
+
+def test_choco_has_needs_the_exact_name():
+    assert app_removals.choco_has("claude", run=lambda argv: (0, "Claude|2.9939.4\n"))
+    assert not app_removals.choco_has("claude", run=lambda argv: (0, "claude-code|2.1.268\n"))
+    assert not app_removals.choco_has("messenger", run=lambda argv: (0, ""))
+    assert not app_removals.choco_has("claude", run=lambda argv: (1, "claude|2.9939.4\n"))
+
+
+def test_reinstall_uninstalls_every_copy_then_installs_through_choco(monkeypatch, capsys):
+    ran = []
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [elsewhere_item()])
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "y")
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: ran.append(argv) or True)
+    assert app_removals.run(entries=[], system="Windows") == 0
+    assert [argv[:2] for argv in ran] == [["winget", "uninstall"], ["winget", "uninstall"], ["choco", "install"]]
+    assert ran[0][-4:] == ["--id", ARP_ID, "--version", "1.0"]
+    assert ran[-1] == ["choco", "install", "claude", "-y"]
+    assert "reinstalled claude through choco" in capsys.readouterr().out
+
+
+def test_a_failed_uninstall_never_runs_the_choco_install(monkeypatch, capsys):
+    ran = []
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [elsewhere_item()])
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "y")
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: ran.append(argv) and False)
+    assert app_removals.run(entries=[], system="Windows") == 1
+    assert all(argv[0] == "winget" for argv in ran)
+    assert "choco install not run" in capsys.readouterr().out
+
+
+def test_a_failed_choco_install_names_the_command_to_finish(monkeypatch, capsys):
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [elsewhere_item()])
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "y")
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: argv[0] == "winget")
+    assert app_removals.run(entries=[], system="Windows") == 1
+    assert "run `choco install claude -y`" in capsys.readouterr().out
+
+
+def test_declining_a_reinstall_runs_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [elsewhere_item()])
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "n")
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: pytest.fail("ran " + " ".join(argv)))
+    assert app_removals.run(entries=[], system="Windows") == 0
+    assert "kept claude as it is" in capsys.readouterr().out
+
+
+def test_list_only_reports_elsewhere_without_offering(monkeypatch, capsys):
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [elsewhere_item()])
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda *a: pytest.fail("prompted during --list"))
+    assert app_removals.run(list_only=True, entries=[], system="Windows") == 0
+    out = capsys.readouterr().out
+    assert "Installed, but not by choco" in out and "Anthropic.Claude" in out
+
+
+def test_elsewhere_is_not_looked_for_off_windows_or_in_the_duplicates_pass(monkeypatch):
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: pytest.fail("looked for elsewhere"))
+    assert app_removals.run(entries=[], system="Darwin") == 0
+    assert app_removals.run(entries=[], system="Windows", duplicates_only=True) == 0
+
+
+def test_an_app_choco_does_not_carry_is_reported_and_never_uninstalled(monkeypatch, capsys):
+    """Uninstalling first is only safe when the install can follow; messenger was gone from choco."""
+    monkeypatch.setattr(app_removals, "elsewhere_installs", lambda **kwargs: [unavailable_item()])
+    monkeypatch.setattr(app_removals.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: pytest.fail("offered " + question))
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: pytest.fail("ran " + " ".join(argv)))
+    assert app_removals.run(entries=[], system="Windows") == 0
+    assert "choco has no package named messenger" in capsys.readouterr().out
+
+
+def test_the_pins_are_saved_before_the_first_uninstall_and_offered_back_after_the_last(monkeypatch):
+    order = []
+    monkeypatch.setattr(app_removals.taskbar_tools, "snapshot", lambda workdir: order.append("snapshot") or "snap")
+    monkeypatch.setattr(app_removals, "restore_pins", lambda snap, assume_yes: order.append(f"restore {snap}"))
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "y")
+    monkeypatch.setattr(app_removals, "remove_duplicate", lambda argv: order.append(argv[1]) or True)
+    assert app_removals.offer_elsewhere([elsewhere_item(), unavailable_item()], assume_yes=False) == 0
+    assert order == ["snapshot", "uninstall", "uninstall", "install", "restore snap"]
+
+
+REAL_RESTORE_PINS = app_removals.restore_pins
+
+
+def test_lost_pins_are_put_back_only_after_a_yes(monkeypatch, capsys):
+    restored = []
+    monkeypatch.setattr(app_removals.taskbar_tools, "restorable", lambda snap: (["Claude.lnk"], ["Etcher.lnk"]))
+    monkeypatch.setattr(app_removals.taskbar_tools, "restore", lambda snap, names, restart: restored.append(names))
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "n")
+    REAL_RESTORE_PINS("snap", assume_yes=False)
+    assert restored == []
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: "y")
+    REAL_RESTORE_PINS("snap", assume_yes=False)
+    assert restored == [["Claude.lnk"]]
+    out = capsys.readouterr().out
+    assert "taskbar pin Etcher.lnk is not restored" in out and "put back 1 taskbar pin(s)" in out
+
+
+def test_no_lost_pins_means_no_prompt_and_no_explorer_restart(monkeypatch):
+    monkeypatch.setattr(app_removals.taskbar_tools, "restorable", lambda snap: ([], []))
+    monkeypatch.setattr(app_removals.taskbar_tools, "restore", lambda *a, **k: pytest.fail("restarted explorer"))
+    monkeypatch.setattr(app_removals, "prompt_yes_no_quit", lambda question: pytest.fail("prompted"))
+    REAL_RESTORE_PINS("snap", assume_yes=False)

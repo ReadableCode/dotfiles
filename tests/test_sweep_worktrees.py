@@ -1,6 +1,7 @@
 """Unit tests for src/sweep_worktrees.py — classifying T3 thread worktrees and picking candidates."""
 
 import os
+import pathlib
 import sqlite3
 
 import config_test_utils  # noqa F401
@@ -90,7 +91,7 @@ def test_discover_finds_repo_slash_id_only(tmp_path):
         os.makedirs(tmp_path / relpath)
     (tmp_path / "loose_file").write_text("", encoding="utf-8")
     found = sweep_worktrees.discover(str(tmp_path))
-    assert [os.path.relpath(path, tmp_path) for path in found] == [
+    assert [pathlib.Path(os.path.relpath(path, tmp_path)).as_posix() for path in found] == [
         "repo_a/t3code-1",
         "repo_a/t3code-2",
         "repo_b/t3code-3",
@@ -164,7 +165,7 @@ def test_render_names_every_worktree_and_its_verdict(tmp_path, monkeypatch, stub
     path = os.path.realpath(str(tmp_path / "repo" / "t3code-1"))
     states = {path: {"thread": "1", "title": "a thread", "branch": "", "state": "unsettled"}}
     text = sweep_worktrees.render(sweep_worktrees.survey([path], states), color=False)
-    assert "repo/t3code-1" in text and "unsettled" in text and "a thread" in text
+    assert os.path.join("repo", "t3code-1") in text and "unsettled" in text and "a thread" in text
 
 
 def test_advice_sends_an_unsettled_thread_back_to_its_own_thread(tmp_path, monkeypatch, stub_git):

@@ -115,6 +115,13 @@ installer added around it dropped ("SyncTrayzor (x64) version 2.2.0.0" is
 choco name with nothing in common with the app's own (`vscode`) is not
 recognised and is still offered, which is what the check below is for.
 
+A web app a browser installed (Chrome, Edge or Brave, "install this site as an
+app") is never that copy. `winget list` shows one under the site's name, so a
+Messenger web app made the listed `messenger` read as installed outside choco
+and it was never offered. The two are told apart by how they uninstall: a web
+app's uninstall command is the browser itself with `--uninstall-app-id`
+(`app_removals.browser_web_apps`).
+
 ### Ignoring an app on one machine
 
 Every listed app is offered at least once. Each installer first asks whether
@@ -128,11 +135,18 @@ run that leaves one out ends by naming the file, and deleting a line is how to
 be offered that app again. A Mac mini that has no use for docker or DBeaver
 answers `i` to each once.
 
+`installmissing` is the other way back: the same offer as `myupdater`'s,
+without the package upgrades or removals, with the ignored apps asked about
+too, each marked `(ignored here until you say yes)`. Answering yes installs
+the app and takes its line out of the ignore file; not now leaves it ignored.
+
 It is machine state rather than a committed list on purpose: it records one
 person's answer at one desk, while the lists stay the record of what a machine
 of that kind should have. `src/app_lists.py` is the one reader and writer
-(`--ignored`, `--ignore`, `--ignore-path`); both install helpers call it. The
-Termux and MSYS2 installers pass no manager, so they offer only yes or no.
+(`--ignored`, `--ignore`, `--unignore`, `--ignore-path`); both install helpers
+call it, and `installmissing` reaches them as `-OfferIgnored` on Windows and
+`OFFER_IGNORED=1` everywhere else. The Termux and MSYS2 installers pass no
+manager, so they offer only yes or no.
 
 ## Duplicate installs (Windows)
 
@@ -226,6 +240,58 @@ left for logon to start.
 
 Anything the finder cannot see - an optional feature beside a package, like the
 in-box OpenSSH server - still takes a line with `replaced_by`.
+
+myupdater runs elevated because choco needs admin, and winget refuses to
+uninstall a per-user copy from an elevated shell ("The package installed for
+user scope cannot be uninstalled when running with administrator privileges").
+The extra copy is usually exactly that, the one an app's own installer left in
+AppData. So when the shell is elevated and `winget list --scope user` files the
+id under the per-user scope, that one uninstall runs through your own
+unelevated token: a one-off scheduled task at the Limited run level, which is
+the one way an elevated process can start something without admin and wait for
+its exit code. The task is removed as soon as it finishes and its output is
+printed in the run.
+
+## Installed another way (Windows)
+
+The `elsewhere` apps from `app_lists.py --missing`: a choco list names the app,
+Chocolatey never installed it, and `winget list` shows it anyway, because it was
+put there by hand or by winget. Choco never upgrades that copy, and a
+`choco install` would lay a second one beside it, which is why the choco
+installer leaves them out. The removal step picks them up instead: it lists
+every `winget list` row that is the app, then asks once per app to reinstall
+it through choco. Each row is uninstalled with `winget uninstall --id <id>
+--version <v>`, then `choco install <package> -y` runs. That leaves one copy,
+the one the list says choco manages. Uninstalling comes first because the same
+vendor installer run twice can share a product code, so uninstalling afterwards
+could take choco's copy too. If an uninstall fails, the choco install is not
+run. If the choco install fails, the run says the app is now uninstalled and
+names the command to finish it. App data under AppData normally survives the
+reinstall.
+
+Two checks come before any offer, so nothing is uninstalled that cannot be put
+back:
+
+- A web app a browser installed is never one of the copies (see "The choco
+  installer asks the same question" above for how they are told apart). The
+  first version of this offer uninstalled a Messenger web app that could never
+  be put back.
+- Chocolatey must carry the package (`choco search <package> --exact`). When it
+  does not, the app is reported as `left alone: choco has no package named ...;
+  fix the app list that names it` and nothing is offered.
+
+Uninstalling unpins an app from the taskbar and installing does not pin it
+back. So the pins (the `.lnk` files and the `Taskband` registry values Explorer
+reads them from) are saved before the first uninstall. At the end the run lists
+the pins that went missing and whose target exists again, and asks once to put
+them back. Explorer has to restart to read them, which closes open folder
+windows, which is why it asks. A pin whose target did not come back is named
+and left for you to pin again. `src/utils/taskbar_tools.py` does this; the
+restart and whether Explorer then shows the restored pins have not yet been
+seen on a real reinstall, only the saving and the target check.
+
+A per-user copy is uninstalled without admin, the same route the duplicate
+copies above take.
 
 ## What a run does
 

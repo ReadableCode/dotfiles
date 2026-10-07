@@ -20,6 +20,14 @@ def own_ignore_file(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture(autouse=True)
+def no_browser_web_apps(monkeypatch):
+    """No test may read this machine's registry for the web apps a browser installed."""
+    import app_removals
+
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: set())
+
+
 def write(directory, name, text):
     path = os.path.join(str(directory), name)
     with open(path, "w", encoding="utf-8") as handle:
@@ -245,6 +253,22 @@ def test_the_installers_question_uses_the_same_elsewhere_answer():
     assert app_lists.elsewhere_packages("choco", ["tailscale"], lambda name: False, run) == []
 
 
+def test_a_browser_web_app_with_the_same_name_is_not_the_app(monkeypatch):
+    """A Messenger web app Chrome installed made the listed messenger look installed outside choco."""
+    import app_removals
+
+    monkeypatch.setattr(app_removals, "browser_web_apps", lambda: {"0ce69ced7fa3"})
+    listing = (
+        "Name       Id                         Version  Source\n"
+        "----------------------------------------------------\n"
+        "Messenger  ARP\\User\\X64\\0ce69ced7fa3  1.0\n"
+        "Tailscale  Tailscale.Tailscale        1.90.0   winget\n"
+    )
+    run = fake_run({"winget": (0, listing)})
+    have_winget = lambda name: name == "winget"  # noqa: E731
+    assert app_lists.elsewhere_packages("choco", ["messenger", "tailscale"], have_winget, run) == ["tailscale"]
+
+
 WINGET_UPGRADE = (
     "Name                  Id                               Version       Available   Source\n"
     "--------------------------------------------------------------------------------------\n"
@@ -417,7 +441,7 @@ def test_recording_creates_the_file_with_its_header(own_ignore_file):
     assert app_lists.record_ignored("brew", ["docker", "colima"]) == ["brew:docker", "brew:colima"]
     text = open(own_ignore_file, encoding="utf-8").read()
     assert text.startswith("# Apps this machine was offered and turned down")
-    assert "Delete a line to be offered that app again." in text
+    assert "Delete a line to be offered that app again, or run installmissing" in text
     assert text.rstrip().splitlines()[-2:] == ["brew:docker", "brew:colima"]
 
 
@@ -461,6 +485,32 @@ def test_the_cli_filters_stdin_through_the_ignore_file(own_ignore_file, monkeypa
 def test_the_cli_records_and_prints_the_lines_it_added(own_ignore_file, capsys):
     assert app_lists.main(["--ignore", "cask", "docker", "dbeaver-community"]) == 0
     assert capsys.readouterr().out.splitlines() == ["cask:docker", "cask:dbeaver-community"]
+
+
+def test_forgetting_takes_only_the_named_lines_out(own_ignore_file):
+    app_lists.record_ignored("brew", ["docker", "colima"])
+    app_lists.record_ignored("cask", ["docker"])
+    assert app_lists.forget_ignored("brew", ["Docker", "never-ignored"]) == ["brew:docker"]
+    assert app_lists.read_ignored() == {"brew:colima", "cask:docker"}
+    # the header that explains the file survives the rewrite
+    assert open(own_ignore_file, encoding="utf-8").read().startswith("# Apps this machine was offered")
+
+
+def test_forgetting_without_a_file_changes_nothing(own_ignore_file):
+    assert app_lists.forget_ignored("brew", ["docker"]) == []
+    assert not os.path.exists(own_ignore_file)
+
+
+def test_the_cli_unignores_and_prints_the_lines_it_removed(own_ignore_file, capsys):
+    app_lists.record_ignored("choco", ["dbeaver", "slack"])
+    assert app_lists.main(["--unignore", "choco", "dbeaver"]) == 0
+    assert capsys.readouterr().out.split() == ["choco:dbeaver"]
+    assert app_lists.read_ignored() == {"choco:slack"}
+
+
+def test_the_cli_rejects_an_unknown_manager_to_unignore_for():
+    with pytest.raises(SystemExit):
+        app_lists.main(["--unignore", "snap", "slack"])
 
 
 def test_the_cli_rejects_an_unknown_manager_to_ignore_for():

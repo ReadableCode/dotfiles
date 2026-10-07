@@ -375,7 +375,7 @@ function gsw {
 }
 
 # _RefreshMachine: run src/refresh_machine.py, the one implementation of
-# pullrepos, gitpullall and myupdater for every shell (the bash profile
+# pullrepos, gitpullall, myupdater and installmissing for every shell (the bash profile
 # launches the same script). Stdlib-only, so any python runs it before uv is
 # installed.
 function _RefreshMachine {
@@ -486,6 +486,11 @@ function ntfyme {
 # gitpullall plus OS package updates before the deploy and an offer of the
 # listed apps this machine lacks (refresh_machine.py --packages; --help shows what happens).
 function myupdater { _RefreshMachine --packages @args }
+
+# gitpullall plus the offer of the listed apps this machine lacks, with the
+# ones this machine ignores asked about too; a yes takes the app out of
+# ~/.dotfiles_ignored_apps (refresh_machine.py --install-missing).
+function installmissing { _RefreshMachine --install-missing @args }
 
 # Weather report from wttr.in.
 function weather {

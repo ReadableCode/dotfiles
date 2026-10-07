@@ -215,7 +215,7 @@ function gsw() {
 }
 
 # _refresh_machine ARGS...: run src/refresh_machine.py, the one implementation
-# of pullrepos, gitpullall and myupdater for every shell (the
+# of pullrepos, gitpullall, myupdater and installmissing for every shell (the
 # PowerShell profile
 # launches the same script). Stdlib-only, so a bare python3 runs it before uv
 # is installed.
@@ -273,6 +273,13 @@ function gitpullall() {
 # listed apps this machine lacks (refresh_machine.py --packages; --help shows what happens).
 function myupdater() {
     _refresh_machine --packages "$@"
+}
+
+# gitpullall plus the offer of the listed apps this machine lacks, with the
+# ones this machine ignores asked about too; a yes takes the app out of
+# ~/.dotfiles_ignored_apps (refresh_machine.py --install-missing).
+function installmissing() {
+    _refresh_machine --install-missing "$@"
 }
 
 ### tmux ###

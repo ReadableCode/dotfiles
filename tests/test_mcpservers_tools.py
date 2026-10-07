@@ -356,6 +356,7 @@ def test_write_reports_created_then_unchanged_then_updated(tmp_path):
         assert json.load(file_handle)["mcpServers"]["google"]["command"] == "python"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows file modes carry only a read-only bit, never owner-only")
 def test_the_generated_file_is_owner_only_because_it_can_hold_a_live_token(tmp_path):
     dest = str(tmp_path / mtools.GENERATED_NAME)
 
@@ -398,7 +399,8 @@ def test_an_update_rewrites_in_place_so_a_hard_link_keeps_seeing_it(tmp_path):
 
     assert os.stat(dest).st_ino == os.stat(linked).st_ino
     assert "python" in open(linked, "r", encoding="utf-8").read()
-    assert stat.S_IMODE(os.stat(dest).st_mode) == 0o600
+    if os.name != "nt":  # Windows file modes carry only a read-only bit
+        assert stat.S_IMODE(os.stat(dest).st_mode) == 0o600
 
 
 def test_no_temporary_file_is_left_behind(tmp_path):
@@ -515,8 +517,8 @@ def test_print_names_the_repos_that_declared_nothing(clones, capsys):
 
     printed = capsys.readouterr().out
     # relative to the clone root, so the line names the repo that declared it
-    assert "declared by dotfiles/mcp_servers.yaml" in printed
-    assert "declared by acme_credentials/acme_mcp_servers.yaml" in printed
+    assert "declared by " + os.path.join("dotfiles", "mcp_servers.yaml") in printed
+    assert "declared by " + os.path.join("acme_credentials", "acme_mcp_servers.yaml") in printed
     # the distinction that matters: scanned-and-silent, not simply absent
     assert "scanned, no mcp_servers.yaml of its own: quiet_credentials" in printed
     assert "# acme.mcp.json" in printed and "# dotfiles.mcp.json" in printed

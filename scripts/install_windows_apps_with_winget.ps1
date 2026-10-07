@@ -1,7 +1,7 @@
 # Install Windows apps from a winget package id list.
 # Set-ExecutionPolicy RemoteSigned may be needed to trust running this file.
 #
-# Usage: .\install_windows_apps_with_winget.ps1 [-AppList <path>] [-AssumeYes] [-DryRun]
+# Usage: .\install_windows_apps_with_winget.ps1 [-AppList <path>] [-OfferIgnored] [-AssumeYes] [-DryRun]
 # Defaults to app_lists\windows_apps_personal_winget.txt relative to the repo root.
 #
 # winget does not need an elevated shell for most packages, but individual
@@ -9,6 +9,7 @@
 
 param(
     [string]$AppList,
+    [switch]$OfferIgnored,
     [switch]$AssumeYes,
     [switch]$DryRun
 )
@@ -24,7 +25,7 @@ if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
     exit
 }
 
-Install-FromList -Label 'winget' -AppList $AppList -Manager winget -AssumeYes:$AssumeYes -DryRun:$DryRun `
+Install-FromList -Label 'winget' -AppList $AppList -Manager winget -OfferIgnored:$OfferIgnored -AssumeYes:$AssumeYes -DryRun:$DryRun `
     -ListInstalled {
         # winget list is fixed-width columns, so the Id is read by column offset taken
         # from the header. Pattern matching a dotted token instead picks up versions in

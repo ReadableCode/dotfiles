@@ -335,6 +335,9 @@ def derive_label(worktree):
 def absolute_link_target(link_path):
     """Where a symlink points, made absolute relative to the link's own directory."""
     target = os.readlink(link_path)
+    # Windows reads a link back with the \\?\ extended-length prefix it was never written with
+    if os.name == "nt" and target.startswith("\\\\?\\"):
+        target = "\\\\" + target[8:] if target[4:8].upper() == "UNC\\" else target[4:]
     if os.path.isabs(target):
         return os.path.normpath(target)
     return os.path.normpath(os.path.join(os.path.dirname(link_path), target))
