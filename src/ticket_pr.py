@@ -8,7 +8,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
         --project ACME --type Task --summary "Do the thing"
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
-transition-ticket, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
+transition-ticket, rank-tickets, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
 dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review,
 activity. get-ticket
 returns everything on the ticket in one call (fields, description, every
@@ -427,6 +427,29 @@ def cmd_add_comment(args):
     comment_id = response["id"] if response else "0"
     url = f"{base}/browse/{args.key}?focusedCommentId={comment_id}"
     emit(f"Commented on {args.key}: {url}", {"key": args.key, "id": comment_id, "url": url})
+
+
+def cmd_rank_tickets(args):
+    """
+    Put tickets in the given order on the board: each key is ranked directly
+    after the one before it, so the list ends up contiguous, starting where the
+    first key already sits. Tickets not named keep their order among themselves.
+    """
+    base, headers = jira_base(), jira_headers()
+    keys = args.keys
+    if len(keys) < 2:
+        raise SystemExit("rank-tickets needs at least two keys")
+    if len(set(keys)) != len(keys):
+        raise SystemExit("rank-tickets: a key is listed twice")
+    for before, key in zip(keys, keys[1:]):
+        http_json(
+            "PUT",
+            f"{base}/rest/agile/1.0/issue/rank",
+            headers,
+            payload={"issues": [key], "rankAfterIssue": before},
+            dry_run=args.dry_run,
+        )
+    emit(f"Ranked {len(keys)} tickets: {' > '.join(keys)}", {"keys": keys})
 
 
 def jira_comments(base, headers, key, page_size=100):
@@ -2401,6 +2424,10 @@ def build_parser():
     transition.add_argument("--to", help="transition or target status name as Jira shows it, e.g. Done")
     transition.add_argument("--resolution", help="resolution name when the transition's screen requires one, e.g. Done")
     transition.set_defaults(func=cmd_transition_ticket)
+
+    rank = sub.add_parser("rank-tickets", help="order Jira tickets on the board, first key on top")
+    rank.add_argument("--keys", required=True, nargs="+", help="issue keys in the wanted order, e.g. ACME-7 ACME-3")
+    rank.set_defaults(func=cmd_rank_tickets)
 
     create_pr = sub.add_parser("create-pr", help="open a GitHub PR for the current branch")
     create_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")

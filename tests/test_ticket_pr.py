@@ -608,6 +608,37 @@ def test_add_comment_rejects_empty_body(monkeypatch):
         ticket_pr.main(["add-comment", "--key", "ACME-401", "--body", "  "])
 
 
+def test_rank_tickets_ranks_each_after_the_previous(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    calls = []
+
+    def fake_http(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        return {}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["rank-tickets", "--keys", "ACME-7", "ACME-3", "ACME-9"])
+    out = capsys.readouterr().out
+    url = "https://example.atlassian.net/rest/agile/1.0/issue/rank"
+    assert calls == [
+        ("PUT", url, {"issues": ["ACME-3"], "rankAfterIssue": "ACME-7"}),
+        ("PUT", url, {"issues": ["ACME-9"], "rankAfterIssue": "ACME-3"}),
+    ]
+    assert json.loads(out.strip().splitlines()[-1]) == {"keys": ["ACME-7", "ACME-3", "ACME-9"]}
+
+
+def test_rank_tickets_rejects_short_or_repeated_lists(monkeypatch):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    with pytest.raises(SystemExit, match="at least two keys"):
+        ticket_pr.main(["rank-tickets", "--keys", "ACME-7"])
+    with pytest.raises(SystemExit, match="listed twice"):
+        ticket_pr.main(["rank-tickets", "--keys", "ACME-7", "ACME-3", "ACME-7"])
+
+
 def test_get_ticket_no_comments(monkeypatch, capsys):
     monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
     monkeypatch.setenv("JIRA_USER", "user@example.com")
