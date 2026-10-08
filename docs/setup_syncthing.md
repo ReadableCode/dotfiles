@@ -178,6 +178,16 @@ sudo systemctl stop syncthing@pi.service
 sudo systemctl disable syncthing@pi.service
 ```
 
+* Remove the unit file copied in during install. No package owns it, so
+  removing the app leaves it behind, and an enabled unit with no binary
+  restarts every 5 seconds forever.
+
+```bash
+sudo rm /etc/systemd/system/syncthing@.service
+sudo systemctl daemon-reload
+sudo systemctl reset-failed
+```
+
 * Kill the application
 
 ```bash
