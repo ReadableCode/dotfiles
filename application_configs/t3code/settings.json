@@ -19,6 +19,7 @@
     ]
   },
   "defaultRuntimeMode": "auto",
+  "deviceOnboardingCompleted": true,
   "projectSettingsFolded": true,
   "providerInstances": {
     "codex": {
