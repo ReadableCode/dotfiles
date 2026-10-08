@@ -242,6 +242,22 @@ def test_a_commented_out_main_checkout_is_not_an_anchor():
     assert init_worktree.add_workspace_folder(hidden, "acme-app", "x", "../wt") == (hidden, "no anchor")
 
 
+def test_update_workspace_skips_the_host_file_when_the_repo_is_commented_out_there(repos):
+    repo_parent, main, worktree = repos
+    hidden = WORKSPACE.replace(
+        '    {\n      "name": "│ acme-app",\n      "path": "acme-app",\n    },\n',
+        '    // {\n    //   "name": "│ acme-app",\n    //   "path": "acme-app",\n    // },\n',
+    )
+    host_wide = write(os.path.join(repo_parent, "envy.code-workspace"), hidden)
+    own_context = write(os.path.join(repo_parent, "envy-acme.code-workspace"), WORKSPACE)
+    statuses = init_worktree.update_workspace(main, worktree, "ACME-2482", hostname="envy")
+    assert [status.split(" (")[0] for status in statuses] == ["skipped, repo not in this workspace", "added"]
+    with open(host_wide, encoding="utf-8") as file_handle:
+        assert file_handle.read() == hidden
+    with open(own_context, encoding="utf-8") as file_handle:
+        assert '"name": "│ acme-app · ACME-2482"' in file_handle.read()
+
+
 def test_update_workspace_without_a_host_file_says_so(repos):
     _, main, worktree = repos
     assert init_worktree.update_workspace(main, worktree, "x", hostname="nowhere")[0].startswith("no workspace file")

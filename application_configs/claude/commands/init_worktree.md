@@ -72,10 +72,12 @@ ticket is created only relabels the workspace entry):
    different file or target is reported as `conflict` and left alone (exit 1).
    Remaining gitignored top-level files (OAuth tokens, `.pem` keys, reports)
    are printed as `not mirrored` — carry those by hand if the task needs them.
-2. **VS Code workspace** — inserts the folder entry into
-   `<repo_parent>/<host>.code-workspace`, the deploy-managed link next to the
-   checkouts, and into every narrower `<host>-<name>.code-workspace` beside it
-   that lists the main checkout (one line per file). VS Code watches those
+2. **VS Code workspace** — inserts the folder entry into each of this host's
+   workspace files that lists the main checkout: `<repo_parent>/<host>.code-workspace`,
+   the deploy-managed link next to the checkouts, and every one-context
+   `<host>-<name>.code-workspace` beside it (one line per file). A file where
+   the repo is absent or commented out is skipped, so the worktree lands only
+   in the workspace of its own context. VS Code watches those
    files, so the folder shows up in the open window immediately with no
    reload. Idempotent by path. Each is a **tracked** credentials-repo file
    (`personal_credentials/vscode/...` or the client's), so this leaves that
@@ -91,9 +93,9 @@ line explicitly — that is the one case that needs a human decision.
 
 If the workspace line says `no workspace file`, this host has no
 `<host>.code-workspace` variant deployed yet — see `dotfiles/docs/setup_vscode.md`.
-If it says `no anchor`, the main checkout itself is not in the workspace; add
-it by hand first. `skipped, repo not in this workspace` on a narrower
-workspace is expected: that workspace does not hold this repo.
+`skipped, repo not in this workspace` is expected on any workspace that does
+not hold this repo or has it commented out. If every line says it, the main
+checkout is in no workspace on this host; add it by hand first.
 
 ## Step 5 — do NOT commit; leaving a worktree
 

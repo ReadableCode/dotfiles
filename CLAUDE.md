@@ -129,8 +129,9 @@ is the one-paragraph orientation so an agent knows which file to open.
 - **`init_worktree.py`** — same contract; brings a fresh git worktree (T3
   Code makes one per thread under `~/.t3/worktrees/<repo>/`) up to parity
   with its main checkout: re-creates the deploy-managed gitignored links with
-  absolute targets, adds a folder entry to this host's `<host>.code-workspace`
-  and to each narrower `<host>-<name>.code-workspace` that lists the repo,
+  absolute targets, adds a folder entry to each of this host's workspace files
+  (`<host>.code-workspace` and every one-context `<host>-<name>.code-workspace`)
+  that lists the repo, so a worktree lands only in its own context's window,
   runs `uv sync`. `--remove` is the teardown twin: it drops the workspace
   entry, removes that one worktree and retires a spent `t3code/` placeholder
   branch, refusing whenever the worktree holds work that exists nowhere else.

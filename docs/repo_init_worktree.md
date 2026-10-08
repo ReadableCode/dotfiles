@@ -45,13 +45,15 @@ venv, from any repo in any context.
    copying secrets around by script is not the pattern; carry them by hand
    when a task needs them.
 2. **VS Code workspace.** Adds `│ <repo> · <label>` right after the main
-   checkout's own folder entry in `<repo_parent>/<host>.code-workspace` — the
-   manifest-deployed link next to the checkouts (see `setup_vscode.md`) — and
-   in every narrower `<host>-<name>.code-workspace` beside it that lists the
-   main checkout, so a one-context workspace follows the everything workspace;
-   one that does not hold the repo is reported as skipped. The main
-   checkout's entry is the gate in every file: a workspace where the repo is
-   absent or commented out never gets one of its worktrees. VS
+   checkout's own folder entry in each of this host's workspace files that
+   lists the main checkout: `<repo_parent>/<host>.code-workspace` and every
+   one-context `<host>-<name>.code-workspace` beside it, the manifest-deployed
+   links next to the checkouts (see `setup_vscode.md`). The main checkout's
+   entry is the gate in every file, the host-wide one included: a workspace
+   where the repo is absent or commented out is reported as skipped and never
+   gets one of its worktrees. So where a context has its own workspace and
+   its repos are commented out of the host-wide one, a worktree lands only in
+   that context's window. VS
    Code watches the workspace file, so the folder appears in the open window
    without a reload. The label defaults to the ticket key in the branch name,
    else in the subjects of commits the branch adds on top of master (never

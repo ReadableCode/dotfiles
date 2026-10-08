@@ -22,12 +22,14 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
    Other gitignored files in the main checkout (tokens, keys, reports) are
    listed so you know they were NOT carried over - they are deliberately not
    copied around by a script.
-2. **VS Code workspace.** The host's ``<repo_parent>/<host>.code-workspace``
-   (the manifest-deployed link next to the checkouts, see docs/setup_vscode.md)
+2. **VS Code workspace.** Each of the host's workspace files next to the
+   checkouts (the manifest-deployed links, see docs/setup_vscode.md) -
+   ``<repo_parent>/<host>.code-workspace`` and every one-context
+   ``<host>-<name>.code-workspace`` beside it - that lists the main checkout
    gets a folder entry for the worktree right after the main checkout's own
-   entry, named ``│ <repo> · <label>`` to match the hand-kept layout. So does
-   every narrower ``<host>-<name>.code-workspace`` beside it that lists the
-   main checkout; one that does not hold the repo is skipped. VS Code
+   entry, named ``│ <repo> · <label>`` to match the hand-kept layout. One
+   where the repo is absent or commented out is skipped, the host-wide file
+   included, so a worktree lands only in the workspace of its own context. VS Code
    watches the workspace file, so the folder appears in the open window with
    no reload. The file is JSONC with trailing commas, so this is a text
    insertion, not a JSON round-trip. Idempotent by path; a re-run with a new
@@ -477,7 +479,6 @@ def update_workspace(main, worktree, label, remove=False, dry_run=False, hostnam
     wt_rel = workspace_relpath(repo_parent, worktree)
     statuses = []
     for ws_path in ws_paths:
-        narrower = ws_path != ws_paths[0]
         if not os.path.isfile(ws_path):
             statuses.append(f"no workspace file at {ws_path}")
             continue
@@ -488,7 +489,7 @@ def update_workspace(main, worktree, label, remove=False, dry_run=False, hostnam
         else:
             name = WORKSPACE_LABEL.format(repo=os.path.basename(main), label=label)
             new_text, status = add_workspace_folder(text, workspace_relpath(repo_parent, main), name, wt_rel)
-            if narrower and status == "no anchor":
+            if status == "no anchor":
                 status = "skipped, repo not in this workspace"
         if new_text != text and not dry_run:
             with open(ws_path, "w", encoding="utf-8") as file_handle:
