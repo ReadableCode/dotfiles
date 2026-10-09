@@ -297,6 +297,80 @@ def test_main_end_to_end_reports_and_exits_zero(repos, capsys):
     assert os.path.islink(os.path.join(worktree, ".claude", "settings.local.json"))
 
 
+# ---------------------------------------------------------------- sibling sources
+
+
+PYPROJECT_WITH_SIBLING = """[project]
+name = "acme-app"
+dependencies = ["acme-lib", "acme-utils", "vendored"]
+
+[tool.uv.sources]
+acme-lib = { path = "../acme-lib", editable = true }
+acme-utils = { git = "https://example.com/acme/utils.git", tag = "v1" }
+vendored = { path = "vendor/vendored" }
+
+[dependency-groups]
+dev = ["pytest"]
+"""
+
+
+def with_sibling(repo_parent, main):
+    """Give the main checkout a pyproject that installs ../acme-lib by path, and create that sibling."""
+    lib = os.path.join(repo_parent, "acme-lib")
+    write(os.path.join(lib, "pyproject.toml"), '[project]\nname = "acme-lib"\n')
+    write(os.path.join(main, "pyproject.toml"), PYPROJECT_WITH_SIBLING)
+    git(["add", "pyproject.toml"], main)
+    git(["commit", "-q", "-m", "add pyproject"], main)
+    return lib
+
+
+def test_sibling_sources_lists_only_relative_path_entries(tmp_path):
+    checkout = str(tmp_path / "app")
+    write(os.path.join(checkout, "pyproject.toml"), PYPROJECT_WITH_SIBLING)
+    assert init_worktree.sibling_sources(checkout) == [("acme-lib", "../acme-lib"), ("vendored", "vendor/vendored")]
+    write(os.path.join(checkout, "pyproject.toml"), '[project]\nname = "app"\n')
+    assert init_worktree.sibling_sources(checkout) == []
+    assert init_worktree.sibling_sources(str(tmp_path / "nowhere")) == []
+
+
+def test_sibling_source_is_linked_beside_the_worktree_and_an_inside_path_is_left_to_git(repos):
+    repo_parent, main, worktree = repos
+    lib = with_sibling(repo_parent, main)
+    git(["merge", "-q", "--ff-only", "master"], worktree)  # pick up the pyproject in the worktree
+    dest, status = init_worktree.mirror_sibling(main, worktree, ("acme-lib", "../acme-lib"))
+    assert status == "linked"
+    assert dest == os.path.join(os.path.dirname(worktree), "acme-lib")
+    assert os.path.islink(dest) and os.path.realpath(dest) == os.path.realpath(lib)
+    assert init_worktree.mirror_sibling(main, worktree, ("acme-lib", "../acme-lib"))[1] == "ok"
+    _, status = init_worktree.mirror_sibling(main, worktree, ("vendored", "vendor/vendored"))
+    assert status == "inside the worktree, nothing to do"
+
+
+def test_sibling_source_conflict_and_missing_sibling_are_reported_not_forced(repos):
+    repo_parent, main, worktree = repos
+    with_sibling(repo_parent, main)
+    dest = os.path.join(os.path.dirname(worktree), "acme-lib")
+    os.makedirs(dest)
+    assert init_worktree.mirror_sibling(main, worktree, ("acme-lib", "../acme-lib"))[1] == "conflict"
+    os.rmdir(dest)
+    _, status = init_worktree.mirror_sibling(main, worktree, ("acme-other", "../acme-other"))
+    assert status.startswith("missing beside the main checkout too")
+    assert not os.path.lexists(os.path.join(os.path.dirname(worktree), "acme-other"))
+
+
+def test_main_links_sibling_sources_and_dry_run_does_not(repos, capsys):
+    repo_parent, main, worktree = repos
+    with_sibling(repo_parent, main)
+    git(["merge", "-q", "--ff-only", "master"], worktree)
+    dest = os.path.join(os.path.dirname(worktree), "acme-lib")
+    assert init_worktree.main(["--worktree", worktree, "--no-sync", "--no-workspace", "--dry-run"]) == 0
+    assert "would link   acme-lib" in capsys.readouterr().out
+    assert not os.path.lexists(dest)
+    assert init_worktree.main(["--worktree", worktree, "--no-sync", "--no-workspace"]) == 0
+    assert "linked       acme-lib" in capsys.readouterr().out
+    assert os.path.islink(dest)
+
+
 # ---------------------------------------------------------------- leaving
 
 
@@ -496,3 +570,39 @@ def test_ticket_branch_that_never_landed_is_not_called_safe(repos):
 
     note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
     assert "check it before deleting" in note and "safe to delete" not in note
+
+
+def test_remove_drops_the_sibling_link_only_with_the_last_worktree_beside_it(repos, tmp_path, capsys):
+    repo_parent, main, worktree = repos
+    with_sibling(repo_parent, main)
+    git(["merge", "-q", "--ff-only", "master"], worktree)
+    with_remote(main, worktree, tmp_path)
+    assert init_worktree.main(["--worktree", worktree, "--no-sync", "--no-workspace"]) == 0
+    dest = os.path.join(os.path.dirname(worktree), "acme-lib")
+    other = str(tmp_path / ".t3" / "worktrees" / "acme-app" / "other")
+    git(["worktree", "add", "-q", "--detach", other], main)
+    assert init_worktree.main(["--worktree", other, "--no-sync", "--no-workspace"]) == 0
+    assert "ok           acme-lib" in capsys.readouterr().out
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 0
+    out = capsys.readouterr().out
+    assert "kept (another worktree beside it still uses it)" in out
+    assert os.path.islink(dest) and not os.path.exists(worktree)
+    git(["checkout", "-q", "-b", "feature/last", "master"], other)
+    git(["push", "-q", "-u", "origin", "feature/last"], other)  # origin already exists from the first worktree
+    assert init_worktree.main(["--worktree", other, "--remove", "--hostname", "envy"]) == 0
+    out = capsys.readouterr().out
+    assert f"sibling:   {dest} removed" in out
+    assert not os.path.lexists(dest) and not os.path.exists(other)
+    assert os.path.isdir(os.path.join(repo_parent, "acme-lib"))  # the real sibling is untouched
+
+
+def test_remove_dry_run_leaves_the_sibling_link(repos, tmp_path, capsys):
+    repo_parent, main, worktree = repos
+    with_sibling(repo_parent, main)
+    git(["merge", "-q", "--ff-only", "master"], worktree)
+    with_remote(main, worktree, tmp_path)
+    assert init_worktree.main(["--worktree", worktree, "--no-sync", "--no-workspace"]) == 0
+    dest = os.path.join(os.path.dirname(worktree), "acme-lib")
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--dry-run", "--hostname", "envy"]) == 0
+    assert "would be removed" in capsys.readouterr().out
+    assert os.path.islink(dest) and os.path.isdir(worktree)

@@ -36,7 +36,17 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
    label renames the entry in place - T3 Code cuts worktrees from master on a
    placeholder branch and the ticket is created later from inside, so the
    usual sequence is init now, re-run once the ticket exists.
-3. **``uv sync``** when the worktree has a ``uv.lock`` and ``uv`` is on PATH -
+3. **Sibling sources.** A repo that installs another checkout by relative path
+   (``[tool.uv.sources] lib = { path = "../lib", editable = true }``) resolves
+   that path from wherever its ``pyproject.toml`` sits. Next to the main
+   checkout it finds the real repo; next to a worktree under
+   ``~/.t3/worktrees/<repo>/`` there is nothing, and ``uv sync`` fails. For
+   every relative ``path`` source that lands outside the worktree, the same
+   relative path is linked beside the worktree to the main checkout's sibling,
+   so the unchanged ``pyproject.toml`` resolves. Same rules as the local-only
+   links: never overwritten, a different target is a ``conflict``. ``--remove``
+   drops the link once no other worktree of the repo beside it still needs it.
+4. **``uv sync``** when the worktree has a ``uv.lock`` and ``uv`` is on PATH -
    a worktree gets its own ``.venv`` (``--no-sync`` to skip).
 
 **Leaving** (``--remove``) is the whole teardown in one command, and it only
@@ -52,10 +62,12 @@ on that exact path from the main checkout, which deletes the directory and
 everything that accumulated in it - the ``.venv``, the links above, caches,
 and any file placed there by hand. There is no list of files to keep current:
 the directory is the only place a worktree accumulates anything, and the
-directory goes. Before touching anything it refuses when the worktree holds
-work that exists nowhere else: uncommitted tracked changes, untracked files
-git does not ignore, a detached HEAD, or commits that are neither on the
-branch's upstream nor already on the default branch. A ticket branch is left
+directory goes. The one thing a worktree puts outside itself, a sibling
+source link (step 3), goes with the last worktree beside it that names it.
+Before touching anything it refuses when the worktree holds work that exists
+nowhere else: uncommitted tracked changes, untracked files git does not
+ignore, a detached HEAD, or commits that are neither on the branch's upstream
+nor already on the default branch. A ticket branch is left
 alone (it is pushed; it goes when its remote does); a ``t3code/`` placeholder
 branch whose tip is already on the default branch is deleted with its
 worktree, since the name is throwaway and must never be pushed. Other
@@ -82,6 +94,11 @@ TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
 LINK_SCAN_DIRS = ("", ".claude")
 # Ignored files that are noise, not config: never worth a "not mirrored" line.
 REPORT_SKIP = {".DS_Store", "desktop.ini"}
+# `[tool.uv.sources]` entries that install a checkout by path: `name = { path = "../lib", ... }`.
+SOURCES_TABLE_RE = re.compile(r"^\[tool\.uv\.sources\][ \t]*\n(?P<body>(?:(?!^\[).*\n?)*)", re.MULTILINE)
+SOURCE_PATH_RE = re.compile(
+    r'^[ \t]*(?P<name>[A-Za-z0-9_.\-]+)[ \t]*=[ \t]*\{[^}\n]*\bpath[ \t]*=[ \t]*"(?P<path>[^"\n]+)"', re.MULTILINE
+)
 WORKSPACE_LABEL = "│ {repo} · {label}"
 WORKSPACE_ENTRY = '{indent}{{\n{indent}  "name": "{name}",\n{indent}  "path": "{path}",\n{indent}}},\n'
 
@@ -277,11 +294,13 @@ def teardown(main, worktree, dry_run=False, hostname=None):
     if reasons:
         return False, reasons
     branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
+    sources = sibling_sources(worktree)  # read now: the pyproject goes with the directory
     statuses = update_workspace(main, worktree, None, remove=True, dry_run=dry_run, hostname=hostname)
     lines = [("workspace", status) for status in statuses]
     if os.path.realpath(os.getcwd()).startswith(worktree + os.sep) or os.path.realpath(os.getcwd()) == worktree:
         os.chdir(main)  # the cwd is about to be deleted
     lines.append(("worktree", remove_worktree(main, worktree, dry_run=dry_run)))
+    lines.extend(("sibling", status) for status in remove_sibling_links(main, worktree, sources, dry_run=dry_run))
     lines.append(("branch", retire_placeholder_branch(main, branch, dry_run=dry_run)))
     return True, lines
 
@@ -408,6 +427,80 @@ def mirror_entry(entry, worktree, dry_run=False):
             shutil.copy2(target, dest)
             return "copied (no symlink support)"
         raise
+
+
+# ---------------------------------------------------------------- sibling sources
+
+
+def sibling_sources(checkout):
+    """
+    The relative-path entries of ``[tool.uv.sources]`` in the checkout's
+    pyproject.toml, as (name, relpath). Stdlib-only and regex on purpose: this
+    runs before any venv exists, on Pythons without tomllib.
+    """
+    pyproject = os.path.join(checkout, "pyproject.toml")
+    if not os.path.isfile(pyproject):
+        return []
+    with open(pyproject, encoding="utf-8") as file_handle:
+        table = SOURCES_TABLE_RE.search(file_handle.read())
+    if not table:
+        return []
+    found = []
+    for match in SOURCE_PATH_RE.finditer(table.group("body")):
+        if not os.path.isabs(match.group("path")):
+            found.append((match.group("name"), match.group("path")))
+    return found
+
+
+def sibling_link(worktree, relpath):
+    """Where a relative source path lands from the worktree, or None when it stays inside it (git carries it)."""
+    dest = os.path.normpath(os.path.join(worktree, relpath))
+    if dest == worktree or dest.startswith(worktree + os.sep):
+        return None
+    return dest
+
+
+def mirror_sibling(main, worktree, source, dry_run=False):
+    """Link one sibling source beside the worktree to the main checkout's sibling. Returns (dest, status)."""
+    name, relpath = source
+    dest = sibling_link(worktree, relpath)
+    if dest is None:
+        return os.path.normpath(os.path.join(worktree, relpath)), "inside the worktree, nothing to do"
+    target = os.path.normpath(os.path.join(main, relpath))
+    if not os.path.isdir(target):
+        return dest, f"missing beside the main checkout too ({target})"
+    if os.path.lexists(dest):
+        if os.path.islink(dest) and absolute_link_target(dest) == target:
+            return dest, "ok"
+        return dest, "conflict"
+    if dry_run:
+        return dest, "would link"
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    os.symlink(target, dest, target_is_directory=True)
+    return dest, "linked"
+
+
+def remove_sibling_links(main, worktree, sources, dry_run=False):
+    """
+    Drop the sibling links this worktree put outside itself, unless another
+    registered worktree of the repo beside it still resolves to the same link.
+    Called after the worktree is gone, with the sources read while it existed.
+    """
+    others = [path for path in registered_worktrees(main) if path not in (main, worktree)]
+    statuses = []
+    for _, relpath in sources:
+        dest = sibling_link(worktree, relpath)
+        if dest is None or not os.path.islink(dest):
+            continue
+        if any(sibling_link(other, relpath) == dest for other in others):
+            statuses.append(f"{dest} kept (another worktree beside it still uses it)")
+            continue
+        if dry_run:
+            statuses.append(f"{dest} would be removed")
+            continue
+        os.remove(dest)
+        statuses.append(f"{dest} removed")
+    return statuses
 
 
 # ---------------------------------------------------------------- vs code workspace
@@ -561,6 +654,14 @@ def main(argv=None):
         conflicts += status == "conflict"
         target = entry[2] if entry[1] == "link" else ""
         print(f"  {status:<12} {entry[0]}{'  -> ' + target if target else ''}")
+
+    sources = sibling_sources(worktree)
+    if sources:
+        print("sibling sources:")
+        for source in sources:
+            dest, status = mirror_sibling(main, worktree, source, dry_run=args.dry_run)
+            conflicts += status == "conflict"
+            print(f"  {status:<12} {source[0]}  {dest}")
 
     if not args.no_workspace:
         label = args.label or derive_label(worktree) or os.path.basename(worktree)

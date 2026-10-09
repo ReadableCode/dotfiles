@@ -66,7 +66,24 @@ venv, from any repo in any context.
    JSON round-trip, and the edit is idempotent by path. That file is tracked
    in the credentials repo that owns it, so the repo is left dirty — the entry
    is temporary and `--remove` takes it out again.
-3. **`uv sync`** when the worktree has a `uv.lock` — each worktree gets its own
+3. **Sibling sources.** A repo that installs another checkout by relative path
+   (`[tool.uv.sources] acme-lib = { path = "../acme-lib", editable = true }`)
+   resolves that path from wherever its `pyproject.toml` sits. Beside the main
+   checkout under `~/GitHub` that is the real repo; beside a worktree under
+   `~/.t3/worktrees/<repo>/` there is nothing, and `uv sync` fails with
+   `Distribution not found at: file:///.../.t3/worktrees/<repo>/acme-lib`.
+   For every relative `path` source that lands outside the worktree, the same
+   relative path is linked beside the worktree to the main checkout's sibling,
+   so the unchanged `pyproject.toml` resolves and the editable install sees
+   edits in the real sibling checkout at once, exactly as in the main checkout.
+   Same rules as the local-only links: never overwritten, a different target
+   is a `conflict`, a path that stays inside the worktree is git's business
+   and skipped. The link is the one thing a worktree puts outside itself, so
+   `--remove` takes it out again once no other worktree of the repo beside it
+   still names it, and `sweep_worktrees.py` never mistakes it for a worktree.
+   The sources table is read with a regex, not `tomllib`: the script runs
+   with whatever bare `python3` the machine has, before any venv exists.
+4. **`uv sync`** when the worktree has a `uv.lock` — each worktree gets its own
    `.venv`; `--no-sync` skips it.
 
 ## Leaving: `--remove` and `/remove_worktree`
@@ -84,7 +101,9 @@ the credentials repos that own them to clean), then runs `git worktree remove --
 from the main checkout, which takes the directory and everything that
 accumulated in it — the `.venv`, the mirrored links, caches, anything placed
 by hand. There is no list of files to keep current: the directory is the only
-place a worktree accumulates anything, and the directory goes.
+place a worktree accumulates anything, and the directory goes. The one
+exception, a sibling source link beside it (step 3 above), goes with the last
+worktree of that repo that names it.
 
 A `t3code/` placeholder branch whose tip is already on the default branch is
 deleted with its worktree, since the name is throwaway and must never be

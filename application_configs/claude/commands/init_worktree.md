@@ -82,13 +82,19 @@ ticket is created only relabels the workspace entry):
    reload. Idempotent by path. Each is a **tracked** credentials-repo file
    (`personal_credentials/vscode/...` or the client's), so this leaves that
    repo dirty on purpose.
-3. **`uv sync`** — when the worktree has a `uv.lock`; each worktree gets its own
+3. **Sibling sources** — a repo whose `pyproject.toml` installs another checkout
+   by relative path (`[tool.uv.sources] lib = { path = "../lib" }`) gets that
+   same relative path linked beside the worktree to the main checkout's
+   sibling, so `uv sync` resolves it from the worktree too. Never overwritten;
+   a different target is a `conflict`. `--remove` drops the link with the last
+   worktree of the repo that names it.
+4. **`uv sync`** — when the worktree has a `uv.lock`; each worktree gets its own
    `.venv`.
 
 ## Step 4 — report
 
 Print the script's table back compactly: what was linked/copied, what was
-`not mirrored`, the workspace status, the uv result. Call out any `conflict`
+`not mirrored`, the sibling source links, the workspace status, the uv result. Call out any `conflict`
 line explicitly — that is the one case that needs a human decision.
 
 If the workspace line says `no workspace file`, this host has no

@@ -130,7 +130,11 @@ def thread_state(deleted_at, settled_at, override, status):
 
 
 def discover(root=WORKTREES_ROOT):
-    """Every ``<root>/<repo>/<id>`` directory on disk, realpath'd and sorted."""
+    """Every ``<root>/<repo>/<id>`` directory on disk, realpath'd and sorted.
+
+    A symlink beside the worktrees is a sibling source link init_worktree.py put there for
+    ``[tool.uv.sources]`` (it points at a real checkout under ~/GitHub), never a worktree.
+    """
     if not os.path.isdir(root):
         return []
     found = []
@@ -140,7 +144,7 @@ def discover(root=WORKTREES_ROOT):
             continue
         for entry in sorted(os.listdir(repo_dir)):
             path = os.path.join(repo_dir, entry)
-            if os.path.isdir(path):
+            if os.path.isdir(path) and not os.path.islink(path):
                 found.append(os.path.realpath(path))
     return found
 

@@ -98,6 +98,15 @@ def test_discover_finds_repo_slash_id_only(tmp_path):
     ]
 
 
+def test_discover_skips_a_sibling_source_link_beside_the_worktrees(tmp_path):
+    root = tmp_path / "worktrees"
+    os.makedirs(root / "repo_a" / "t3code-1")
+    os.makedirs(tmp_path / "GitHub" / "acme-lib")
+    os.symlink(str(tmp_path / "GitHub" / "acme-lib"), str(root / "repo_a" / "acme-lib"))
+    found = sweep_worktrees.discover(str(root))
+    assert [pathlib.Path(os.path.relpath(path, root)).as_posix() for path in found] == ["repo_a/t3code-1"]
+
+
 def test_discover_tolerates_a_missing_root(tmp_path):
     assert sweep_worktrees.discover(str(tmp_path / "gone")) == []
 
