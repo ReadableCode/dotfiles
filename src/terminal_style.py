@@ -46,6 +46,7 @@ TOKENS = {
     "green": "#56d364",  # GREEN_BRIGHT: the prompt glyph, // and step numbers
     "amber": "#e3b341",  # AMBER_BRIGHT: the command to type, warnings
     "red": "#f87171",  # RED: failures
+    "rule": "#273141",  # HAIRLINE: the rule under a section header of the closing page
 }
 
 PROMPT = "❯"

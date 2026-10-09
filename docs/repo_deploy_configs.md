@@ -392,6 +392,21 @@ to sync is reported and never stops the rest), the deploy, then
 cannot be pulled (local WIP, auth) is warned about but never blocks the run:
 the deploy proceeds from that repo's current, possibly stale, checkout.
 
+The steps stream to the terminal as they always did, and a status page follows
+the last one: every step with its outcome and time, then the repos that moved
+(`old -> new`, commits, files) or could not be pulled, the packages that
+changed version (`old -> new`), the configs linked, replaced or pruned, and
+the apps installed, removed or still missing. Nothing on that page is read from
+a step's output: each tool appends one tab-separated line per thing it did to
+the file `$REFRESH_REPORT` names (`src/refresh_report.py` lists the kinds), so
+every step keeps the real terminal and behaves exactly as when run by hand,
+where the variable is unset and nothing is written. The package versions come
+from the same listing taken before and after the upgrades (`brew list
+--versions`, `rpm -qa`, `dpkg-query`; on Windows the plan's installed and
+available versions), never from parsing a manager's output. The page fits the
+terminal: a long list is cut at its share of the screen and says how many rows
+are above in the log.
+
 `gitpullall --check` is the read-only twin of the whole chain: it fetches
 every repo to report which are behind, then asks each tool for its own check
 (`clone_repos.py --list`, `sync_python_envs.py --check`, `deploy_configs.py

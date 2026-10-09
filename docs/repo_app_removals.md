@@ -99,7 +99,7 @@ managers do not report installed, split into `missing` (nothing installed it)
 and `elsewhere` (a choco entry `winget list` shows under the same name, put
 there by hand or another manager, where a choco install would make a second
 copy). `myupdater` asks it once after every step and prints
-the answer in the closing summary, so a package an installer could not find is
+the answer on the closing page, so a package an installer could not find is
 read at the end rather than lost in the middle of a long run.
 
 The choco installer asks the same question before it offers anything
@@ -218,7 +218,7 @@ lists. On top of that:
 Everything else is upgraded, one package at a time and quietly: the terminal
 gets one line per package (`upgraded`, or `failed, reported at the end`) and
 everything the manager printed goes to `~/logs/updater/upgrades_<time>.log`.
-The failures are listed once, in the closing summary, each with a plain reason
+The failures are listed once, on the closing page, each with a plain reason
 read from that output - the package's checksum is out of date, winget will not
 replace the installed copy, the app is running, or the installer stopped
 because named running programs have its files open (OBS Studio's installer

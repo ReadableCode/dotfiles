@@ -9,6 +9,7 @@ import sys
 import yaml
 from readable_utils.host_tools import get_uppercase_hostname
 
+import refresh_report
 from config import grandparent_dir
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
@@ -300,9 +301,11 @@ def run(list_only=False, assume_yes=False):
             continue
         if clone_repo(entry):
             print(paint(f"  cloned {entry['name']}", "green"))
+            refresh_report.record("clone.cloned", entry["name"])
         else:
             failures += 1
             print(paint(f"  FAILED to clone {entry['name']} (see git output above)", "red"))
+            refresh_report.record("clone.failed", entry["name"])
     return 1 if failures else 0
 
 

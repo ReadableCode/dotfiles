@@ -12,6 +12,9 @@ that did. Ctrl+C stops the whole run. The exit code is 1 when any step failed.
 
 Stdlib-only on purpose, like ``src/ssh_aliases.py``: a bare ``python3`` runs it,
 so a machine without uv can still pull (the uv steps then say uv is missing).
+
+The steps stream to the terminal as they run; the page at the end comes from
+the report file every step appends to (``refresh_report.py`` has the format).
 """
 
 import argparse
@@ -24,9 +27,11 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
+import refresh_report
 import terminal_style
 
 HELP_PAGE = """# refresh_machine
@@ -34,6 +39,7 @@ HELP_PAGE = """# refresh_machine
 > pull every repo, then bring this machine's configs up to date.
 > gitpullall, myupdater and pullrepos all run this, from any directory, against `$gitDir`.
 > every step runs even when an earlier one fails, and the exit code is 1 when any did. ctrl+c stops the run.
+> the steps stream as they run; a status page follows: what pulled, upgraded (`old -> new`), deployed, installed.
 > `--check` is the read-only twin: it reports what the steps below would change and writes nothing.
 
 ## what happens
@@ -106,6 +112,11 @@ HELP_PAGE = """# refresh_machine
 """
 
 UNPULLED = re.compile(r"^\[(WIP PROTECTED|FAILED|AUTH REQUIRED)\]")
+# git_puller's per-repo tags, each followed by the repo's absolute path
+PULL_TAG = re.compile(r"^\[(PULLED|NO CHANGES|UPDATED|WIP PROTECTED|FAILED|AUTH REQUIRED|DIRTY)\] (.*?)(?::| \(|$)")
+FAST_FORWARD = re.compile(r"^Updating ([0-9a-f]+)\.\.([0-9a-f]+)")
+FILES_CHANGED = re.compile(r"^\s*(\d+) files? changed")
+DIRTY_COUNT = re.compile(r"\((\d+) uncommitted\)")
 
 
 @dataclass
@@ -115,6 +126,7 @@ class Step:
     needs: str = ""  # an executable that must be on PATH before the step can run
     pull: bool = False  # stream the output and count the repos git_puller could not pull
     action: object = None  # python-implemented step: action(out) -> exit code
+    family: str = ""  # which report lines the closing page sums up for this step (refresh_report.py)
 
 
 def resolve_git_dir(environ, script_path=__file__):
@@ -174,9 +186,11 @@ def fetch_check(git_dir, out, fetch=fetch_behind, workers=8):
     for name, count, problem in results:
         if problem:
             out.write("   " + name + ": " + problem + "\n")
+            refresh_report.record("pull.problem", name, problem)
         elif count:
             behind += 1
             out.write("   " + name + ": " + str(count) + " commit(s) behind\n")
+            refresh_report.record("pull.behind", name, refresh_report.plural(count, "commit") + " behind")
     out.write("   checked " + str(len(results)) + " repos: " + str(behind) + " behind\n")
     return 1 if behind else 0
 
@@ -188,20 +202,42 @@ def uv_python(dotfiles, script, *args):
 def check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only):
     """What each step would change, asked read-only. Every tool owns its own check."""
     steps = [
-        Step("checking every repo for upstream commits", [], action=functools.partial(fetch_check, git_dir)),
+        Step(
+            "checking every repo for upstream commits",
+            [],
+            action=functools.partial(fetch_check, git_dir),
+            family="pull",
+        ),
     ]
     if pull_only:
         return steps
     updater = os.path.join(dotfiles, "scripts", "my_updater.ps1" if windows else "my_updater.sh")
     if packages and windows:
-        steps.append(Step("checking os packages", powershell + ["-File", updater, "--check"]))
+        steps.append(Step("checking os packages", powershell + ["-File", updater, "--check"], family="package"))
     elif packages:
-        steps.append(Step("checking os packages", ["bash", updater, "--check"]))
+        steps.append(Step("checking os packages", ["bash", updater, "--check"], family="package"))
     steps += [
-        Step("checking for repos to clone", uv_python(dotfiles, "clone_repos.py", "--list"), needs="uv"),
-        Step("checking python environments", uv_python(dotfiles, "sync_python_envs.py", "--check"), needs="uv"),
-        Step("checking deployed configs", uv_python(dotfiles, "deploy_configs.py", "status", "--problems"), needs="uv"),
-        Step("checking for configs to prune", uv_python(dotfiles, "deploy_configs.py", "prune"), needs="uv"),
+        Step(
+            "checking for repos to clone", uv_python(dotfiles, "clone_repos.py", "--list"), needs="uv", family="clone"
+        ),
+        Step(
+            "checking python environments",
+            uv_python(dotfiles, "sync_python_envs.py", "--check"),
+            needs="uv",
+            family="env",
+        ),
+        Step(
+            "checking deployed configs",
+            uv_python(dotfiles, "deploy_configs.py", "status", "--problems"),
+            needs="uv",
+            family="deploy",
+        ),
+        Step(
+            "checking for configs to prune",
+            uv_python(dotfiles, "deploy_configs.py", "prune"),
+            needs="uv",
+            family="prune",
+        ),
     ]
     if packages:
         steps.append(Step("checking for apps to remove", uv_python(dotfiles, "app_removals.py", "--list"), needs="uv"))
@@ -262,29 +298,16 @@ def app_plan_path():
     return os.path.join(tempfile.gettempdir(), f"refresh_machine_apps_{os.getpid()}.tsv")
 
 
-def upgrade_report_path():
-    """The file my_updater.ps1 writes its failed upgrades to, one per run, for the closing summary."""
-    return os.path.join(tempfile.gettempdir(), f"refresh_machine_upgrades_{os.getpid()}.tsv")
-
-
-def read_upgrade_report(path):
+def report_path(environ=None):
     """
-    ``(failures, log)`` from the updater's report: ``failures`` is
-    ``(manager, package, reason)`` per upgrade that did not go through and
-    ``log`` the file holding every upgrade's full output, "" when none ran.
+    The report file this run's steps append to (refresh_report.py). The restart
+    after a pull that moved dotfiles inherits the parent's, so the pull it
+    already did is on the page; otherwise it is one new file per run.
     """
-    failures, log = [], ""
-    if not os.path.exists(path):
-        return failures, log
-    with open(path, encoding="utf-8-sig") as handle:
-        for line in handle:
-            manager, _, rest = line.rstrip("\r\n").partition("\t")
-            package, _, reason = rest.partition("\t")
-            if manager == "log":
-                log = reason
-            elif manager and package:
-                failures.append((manager, package, reason))
-    return failures, log
+    environ = os.environ if environ is None else environ
+    return environ.get(refresh_report.REPORT_ENV) or os.path.join(
+        tempfile.gettempdir(), f"refresh_machine_report_{os.getpid()}.tsv"
+    )
 
 
 def pending_release(dotfiles, system, capture=subprocess.run):
@@ -339,6 +362,8 @@ def app_install_steps(dotfiles, system, which=shutil.which, offer_ignored=False)
 
     asks = [step(f"choosing missing {name}", argv, "ask") for name, argv in installers]
     installs = [step(f"installing chosen {name}", argv, "install") for name, argv in installers]
+    for install in installs:
+        install.family = "install"
     return asks + installs
 
 
@@ -354,20 +379,26 @@ def build_steps(
         return check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only)
 
     puller = git_puller_binary(git_dir, system, machine)
-    steps = [Step("pulling every repo", [puller, "-path", git_dir, "-r"], pull=True)]
+    steps = [Step("pulling every repo", [puller, "-path", git_dir, "-r"], pull=True, family="pull")]
     if pull_only:
         return steps
 
     if packages and windows:
         updater = os.path.join(dotfiles, "scripts", "my_updater.ps1")
-        steps.append(Step("updating os packages", powershell + ["-File", updater]))
+        steps.append(Step("updating os packages", powershell + ["-File", updater], family="package"))
     elif packages:
-        steps.append(Step("updating os packages", ["bash", os.path.join(dotfiles, "scripts", "my_updater.sh")]))
+        updater = os.path.join(dotfiles, "scripts", "my_updater.sh")
+        steps.append(Step("updating os packages", ["bash", updater], family="package"))
     steps += [
-        Step("checking for repos to clone", uv_python(dotfiles, "clone_repos.py"), needs="uv"),
-        Step("syncing python environments", uv_python(dotfiles, "sync_python_envs.py"), needs="uv"),
-        Step("deploying configs", uv_python(dotfiles, "deploy_configs.py"), needs="uv"),
-        Step("pruning removed configs", uv_python(dotfiles, "deploy_configs.py", "prune", "--apply"), needs="uv"),
+        Step("checking for repos to clone", uv_python(dotfiles, "clone_repos.py"), needs="uv", family="clone"),
+        Step("syncing python environments", uv_python(dotfiles, "sync_python_envs.py"), needs="uv", family="env"),
+        Step("deploying configs", uv_python(dotfiles, "deploy_configs.py"), needs="uv", family="deploy"),
+        Step(
+            "pruning removed configs",
+            uv_python(dotfiles, "deploy_configs.py", "prune", "--apply"),
+            needs="uv",
+            family="prune",
+        ),
     ]
     # packages only: these are package-manager operations and they prompt, so
     # they ride with myupdater rather than every gitpullall. Nothing installs
@@ -381,6 +412,7 @@ def build_steps(
                 removals,
                 needs="uv",
                 action=functools.partial(unless_release_pending, dotfiles, system, remove_action),
+                family="remove",
             )
         )
         steps += app_install_steps(dotfiles, system, which)
@@ -392,7 +424,7 @@ def build_steps(
         # Again, after the installs: a copy one of them just put beside an
         # existing install is offered for removal on this run, not the next.
         twice = uv_python(dotfiles, "app_removals.py", "--duplicates")
-        steps.append(Step("checking for apps installed twice", twice, needs="uv"))
+        steps.append(Step("checking for apps installed twice", twice, needs="uv", family="remove"))
     ensure_ahk = os.path.join(dotfiles, "scripts", "ensure_autohotkey_v2.ps1")
     if windows and os.path.exists(ensure_ahk):
         steps.append(Step("checking autohotkey", powershell + ["-File", ensure_ahk, "-AutoFix", "-Full"]))
@@ -403,6 +435,11 @@ def make_executable(path):
     """A checkout on a filesystem that dropped the exec bit still runs git_puller."""
     if os.name != "nt" and os.path.isfile(path) and not os.access(path, os.X_OK):
         os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+def remove_if_exists(path):
+    if os.path.exists(path):
+        os.remove(path)
 
 
 def run_plain(argv):
@@ -419,25 +456,113 @@ def dotfiles_head(dotfiles, capture=subprocess.run):
     return done.stdout.strip() if done.returncode == 0 else None
 
 
-def restart_argv(argv, pull_failed, script_path=__file__):
+def restart_argv(argv, script_path=__file__):
     """
     This run again from the file on disk, without the pull it already did.
     The process running now holds the code from before the pull, so every fix
     to this file would otherwise only reach the run after the one that pulled it.
+    The pull's result reaches the restart through the report file it inherits.
     """
-    extra = ["--after-pull"] + (["--pull-failed"] if pull_failed else [])
-    return [sys.executable, os.path.abspath(script_path), *argv, *extra]
+    return [sys.executable, os.path.abspath(script_path), *argv, "--after-pull"]
 
 
-def run_pull(argv, out):
+def commits_between(path, old, new, capture=subprocess.run):
+    """How many commits a fast-forward covered, or 0 when git cannot say."""
+    try:
+        done = capture(["git", "-C", path, "rev-list", "--count", f"{old}..{new}"], capture_output=True, text=True)
+    except OSError:
+        return 0
+    return int(done.stdout.strip() or 0) if done.returncode == 0 else 0
+
+
+class PullLog:
+    """
+    What git_puller said about each repo, read from its stream as it passes
+    through to the terminal, and recorded for the closing page once the pull
+    is over. A repo is named by its directory; the paths git_puller prints are
+    absolute.
+    """
+
+    def __init__(self, commits=commits_between):
+        self.repos = {}  # path -> {"status": tag, "old": sha, "new": sha, "files": n, "detail": text}
+        self.current = None  # the [UPDATED] block whose git output is streaming now
+        self.commits = commits
+
+    def feed(self, line):
+        text = line.rstrip("\r\n")
+        tag = PULL_TAG.match(text)
+        if tag:
+            status, path = tag.group(1), tag.group(2).strip()
+            repo = self.repos.setdefault(path, {})
+            # the lines after [UPDATED], [WIP PROTECTED] and [FAILED] belong to that repo
+            self.current = repo if status in ("UPDATED", "WIP PROTECTED", "FAILED") else None
+            if status == "UPDATED":
+                return
+            if status == "DIRTY":
+                found = DIRTY_COUNT.search(text)
+                repo["dirty"] = found.group(1) if found else "some"
+                return
+            repo["status"] = status
+            if status in ("FAILED", "AUTH REQUIRED", "WIP PROTECTED"):
+                repo["detail"] = text.partition(path)[2].strip(" :()").replace("Skipping", "").strip()
+            return
+        if self.current is None:
+            return
+        if text.startswith("["):
+            self.current = None
+            return
+        moved = FAST_FORWARD.match(text)
+        if moved:
+            self.current["old"], self.current["new"] = moved.group(1), moved.group(2)
+        changed = FILES_CHANGED.match(text)
+        if changed:
+            self.current["files"] = int(changed.group(1))
+        if text.startswith("\t") and "detail" in self.current:
+            # git's own prose is above in the log; the page wants the file names
+            note = text.strip()
+            if note and not note.startswith(("error:", "Please", "Aborting", "hint:")):
+                self.current["detail"] = (self.current["detail"] + " " + note).strip()
+
+    def record(self, record=None):
+        record = refresh_report.record if record is None else record
+        for path in sorted(self.repos):
+            repo = self.repos[path]
+            name = os.path.basename(path.rstrip("/\\")) or path
+            status = repo.get("status")
+            if "dirty" in repo:
+                record("pull.dirty", name, f"{repo['dirty']} uncommitted")
+            if status == "PULLED":
+                parts = []
+                if "old" in repo:
+                    commits = self.commits(path, repo["old"], repo["new"])
+                    parts.append(f"{repo['old'][:7]}{refresh_report.ARROW}{repo['new'][:7]}")
+                    if commits:
+                        parts.append(refresh_report.plural(commits, "commit"))
+                if "files" in repo:
+                    parts.append(refresh_report.plural(repo["files"], "file"))
+                record("pull.pulled", name, "  ".join(parts))
+            elif status == "NO CHANGES":
+                record("pull.current", name, "")
+            elif status == "WIP PROTECTED":
+                record("pull.wip", name, repo.get("detail", ""))
+            elif status == "AUTH REQUIRED":
+                record("pull.auth", name, "")
+            elif status == "FAILED":
+                record("pull.failed", name, repo.get("detail", ""))
+
+
+def run_pull(argv, out, log=None):
     """Stream git_puller's output as it arrives and count the repos it could not pull."""
     unpulled = 0
+    log = PullLog() if log is None else log
     with subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, errors="replace") as proc:
         for line in proc.stdout:
             out.write(line)
             out.flush()
+            log.feed(line)
             if UNPULLED.match(line):
                 unpulled += 1
+    log.record()
     return proc.returncode, unpulled
 
 
@@ -482,17 +607,23 @@ def offer_dependency(need, dotfiles, out, color, run=run_plain, which=shutil.whi
     return bool(which(need))
 
 
-def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which, dotfiles=None):
-    """Run every step, even after a failure. Returns the titles of the steps that failed."""
+def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which, dotfiles=None, record=None):
+    """
+    Run every step, even after a failure. Returns the titles of the steps that
+    failed, and records each step's outcome and time for the closing page.
+    """
     paint = terminal_style.paint
+    record = refresh_report.record if record is None else record
     failed = []
     for index, step in enumerate(steps):
         out.write(("\n" if index else "") + terminal_style.section(step.title, color) + "\n")
         out.flush()
+        started = time.monotonic()
         if step.needs and not which(step.needs):
             if not offer_dependency(step.needs, dotfiles, out, color, run=run, which=which):
                 out.write(paint(f"   {step.needs} is not installed, so this step cannot run", "red", color) + "\n")
                 failed.append(step.title)
+                record("step", step.title, refresh_report.step_detail("failed", 0, step.family))
                 continue
         try:
             if step.action is not None:
@@ -514,6 +645,8 @@ def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which,
         if code:
             out.write(paint(f"   failed with exit code {code}", "red", color) + "\n")
             failed.append(step.title)
+        status = "failed" if code else "ok"
+        record("step", step.title, refresh_report.step_detail(status, time.monotonic() - started, step.family))
         out.flush()
     return failed
 
@@ -549,43 +682,23 @@ def missing_apps(dotfiles, capture=subprocess.run, which=shutil.which):
     return found
 
 
-def summary(failed, total, color, check=False, missing=None, asked_missing=False, upgrades=None):
-    paint = terminal_style.paint
-    word = "reported drift" if check else "failed"
-    lines = [terminal_style.section("done", color)]
-    if failed:
-        text = f"   {len(failed)} of {total} steps {word}: " + ", ".join(failed)
-        lines.append(paint(text, "amber" if check else "red", color, bold=True))
+def page(report, command, host, started, seconds, color, check=False, missing=None, asked_missing=False, size=None):
+    """The closing status page: every step's outcome, then what was pulled, upgraded, deployed and installed."""
+    lines = refresh_report.read(report)
+    return refresh_report.render(lines, command, host, started, seconds, color, check, missing, asked_missing, size)
+
+
+def command_name(args):
+    """The shell command this run answers to, for the page title."""
+    if args.pull_only:
+        name = "pullrepos"
+    elif args.packages:
+        name = "myupdater"
+    elif args.install_missing:
+        name = "installmissing"
     else:
-        lines.append(paint(f"   all {total} steps ok", "green", color, bold=True))
-    failures, log = upgrades or ([], "")
-    if failures:
-        lines.append(paint(f"   {len(failures)} upgrade(s) did not go through:", "red", color, bold=True))
-        for manager, package, reason in failures:
-            lines.append(paint(f"     {manager}:{package}", "red", color) + paint(f"  {reason}", "muted", color))
-        if log:
-            lines.append(paint(f"     full output: {log}", "muted", color))
-    if asked_missing and missing is None:
-        lines.append(
-            paint("   could not work out which listed apps are installed (app_lists.py --missing)", "red", color)
-        )
-    elif missing:
-        if missing["missing"]:
-            count = len(missing["missing"])
-            text = f"   {count} listed app(s) not installed on this machine; the next `myupdater` offers them again:"
-            lines.append(paint(text, "amber", color, bold=True))
-            lines += [paint(f"     {name}", "amber", color) for name in missing["missing"]]
-        if missing["elsewhere"]:
-            text = f"   {len(missing['elsewhere'])} listed app(s) installed, but not by the manager their list names:"
-            lines.append(paint(text, "amber", color))
-            lines += [paint(f"     {name}", "muted", color) for name in missing["elsewhere"]]
-        if missing.get("ignored"):
-            where = (missing.get("ignore-file") or ["the ignore file"])[0]
-            text = f"   {len(missing['ignored'])} listed app(s) not offered, ignored on this machine by {where}"
-            text += " (delete a line there, or run `installmissing`, to be offered it again):"
-            lines.append(paint(text, "muted", color))
-            lines += [paint(f"     {name}", "muted", color) for name in missing["ignored"]]
-    return "\n".join(lines) + "\n"
+        name = "gitpullall"
+    return name + (" --check" if args.check else "")
 
 
 def parse_args(argv):
@@ -602,11 +715,10 @@ def parse_args(argv):
     parser.add_argument("--check", action="store_true", help="report what would change, write nothing")
     # internal: the restart after a pull that moved dotfiles (restart_argv)
     parser.add_argument("--after-pull", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--pull-failed", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
-def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
+def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head, clock=time.time):
     argv = sys.argv[1:] if argv is None else argv
     args = parse_args(argv)
     environ = os.environ if environ is None else environ
@@ -619,6 +731,9 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
         )
         return 1
     out = sys.stdout
+    if hasattr(out, "reconfigure"):
+        # A legacy Windows console has no glyph for the page's dots and arrows; never crash on it.
+        out.reconfigure(errors="replace")
     color = terminal_style.use_color(out, environ)
     dotfiles = os.path.join(git_dir, "dotfiles")
     steps = build_steps(
@@ -630,42 +745,49 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head):
         args.check,
         args.install_missing,
     )
-    failed = []
-    total = len(steps)
-    upgrades = None
-    if args.packages and not args.check:
-        # my_updater.ps1 writes the upgrades that failed here, for the summary.
-        os.environ["UPGRADE_REPORT"] = upgrade_report_path()
+    # Every step appends what it did here (refresh_report.py); the page at the
+    # end is drawn from it. The restart after a pull inherits the parent's file.
+    inherited = refresh_report.REPORT_ENV in os.environ
+    report = report_path()
+    os.environ[refresh_report.REPORT_ENV] = report
+    started = clock()
     if args.after_pull:
         steps = steps[1:]
-        failed = ["pulling every repo"] if args.pull_failed else []
+        started -= sum(seconds for _, _, seconds, _ in refresh_report.steps_of(refresh_report.read(report)))
     try:
         if not (args.after_pull or args.check or args.pull_only):
             before = head(dotfiles)
-            failed = execute(steps[:1], out, color, dotfiles=dotfiles)
+            execute(steps[:1], out, color, dotfiles=dotfiles)
             if head(dotfiles) != before:
                 out.write(
                     terminal_style.paint("   dotfiles moved; continuing with the code just pulled", "muted", color)
                 )
                 out.write("\n\n")
                 out.flush()
-                return run(restart_argv(argv, bool(failed))).returncode
+                # the restart draws the page and removes the report it inherited
+                return run(restart_argv(argv)).returncode
             steps = steps[1:]
             out.write("\n")
-        failed += execute(steps, out, color, dotfiles=dotfiles)
-        upgrades = read_upgrade_report(upgrade_report_path())
+        execute(steps, out, color, dotfiles=dotfiles)
     except KeyboardInterrupt:
         out.write("\n" + terminal_style.paint("interrupted: the remaining steps did not run", "red", color) + "\n")
+        remove_if_exists(report)
         return 130
     finally:
-        for leftover in (app_plan_path(), upgrade_report_path()):
-            if os.path.exists(leftover):
-                os.remove(leftover)
+        remove_if_exists(app_plan_path())
     # Package runs only: listing what is installed costs a winget list, which
     # a plain pull should not pay for.
     asked_missing = (args.packages or args.install_missing) and not args.pull_only
-    missing = missing_apps(os.path.join(git_dir, "dotfiles")) if asked_missing else None
-    out.write("\n" + summary(failed, total, color, args.check, missing, asked_missing, upgrades))
+    missing = missing_apps(dotfiles) if asked_missing else None
+    recorded = refresh_report.steps_of(refresh_report.read(report))
+    failed = [title for title, status, _, _ in recorded if status != "ok"]
+    when = time.strftime("%Y-%m-%d %H:%M", time.localtime(started))
+    host = platform.node().split(".")[0].lower()
+    text = page(report, command_name(args), host, when, clock() - started, color, args.check, missing, asked_missing)
+    out.write("\n" + text)
+    remove_if_exists(report)
+    if not inherited:
+        del os.environ[refresh_report.REPORT_ENV]
     return 1 if failed or (asked_missing and missing is None) else 0
 
 

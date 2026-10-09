@@ -47,6 +47,7 @@ import yaml
 from readable_utils.host_tools import get_uppercase_hostname
 
 import app_lists
+import refresh_report
 from deploy_configs import REPO_ROOT, host_allowed, member_overlay_dirs
 from utils import taskbar_tools
 from utils.inventory_tools import overlay_context
@@ -759,9 +760,11 @@ def offer_duplicates(groups, assume_yes):
                 continue
             if uninstall_copy(row, argv):
                 print(paint(f"  removed {group.id} {row.version}", "green"))
+                refresh_report.record("app.removed", f"{argv[0]}:{group.id}", f"extra copy {row.version}")
             else:
                 failures += 1
                 print(paint(f"  FAILED to remove {group.id} {row.version} (see output above)", "red"))
+                refresh_report.record("app.remove-failed", f"{argv[0]}:{group.id}", f"extra copy {row.version}")
     return failures
 
 
@@ -886,6 +889,7 @@ def reinstall_elsewhere(found, assume_yes):
             continue
         if remove_duplicate(["choco", "install", item.package, "-y"]):
             print(paint(f"  reinstalled {item.package} through choco", "green"))
+            refresh_report.record("app.installed", f"choco:{item.package}", "reinstalled through choco")
         else:
             failures += 1
             print(paint(f"  FAILED: {item.package} is uninstalled; run `choco install {item.package} -y`", "red"))
@@ -1017,12 +1021,14 @@ def offer_removals(removable, assume_yes):
             continue
         if remove_package(entry):
             print(paint(f"  removed {entry['package']}", "green"))
+            refresh_report.record("app.removed", describe(entry))
             if not run_after(entry):
                 failures += 1
                 print(paint(f"  FAILED: {entry['after']} after removing {entry['package']} (see output above)", "red"))
         else:
             failures += 1
             print(paint(f"  FAILED to remove {entry['package']} (see output above)", "red"))
+            refresh_report.record("app.remove-failed", describe(entry))
     return failures, False
 
 

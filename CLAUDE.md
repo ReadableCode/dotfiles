@@ -218,7 +218,11 @@ is the one-paragraph orientation so an agent knows which file to open.
   bring itself up. Both
   shell profiles only launch it, so its `--help` is the one description of the
   steps. `--check` is the read-only twin: it fetches every repo to report what
-  is behind and asks each other tool for its own check, writing nothing. Stdlib-only; its step headers and tldr-style help page come from
+  is behind and asks each other tool for its own check, writing nothing. The
+  steps stream as they run and a status page follows the last one, drawn by
+  **`refresh_report.py`** from the report file (`$REFRESH_REPORT`) every step
+  appends to, never from a step's output, so each tool keeps the real
+  terminal and runs unchanged on its own. Stdlib-only; its step headers and tldr-style help page come from
   **`terminal_style.py`**, whose terminal-navy tokens copy
   `readable_utils.design_tokens` (a test keeps them equal). A help page lives
   in the tool that does the work, never in a shell alias.

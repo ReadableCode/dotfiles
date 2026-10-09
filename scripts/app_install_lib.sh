@@ -105,7 +105,23 @@ install_planned() {
         echo "DRY_RUN set — not installing."
         return 0
     fi
-    install_apps "${planned[@]}"
+    if install_apps "${planned[@]}"; then
+        report_apps "app.installed" "$label" "${planned[@]}"
+    else
+        report_apps "app.install-failed" "$label" "${planned[@]}"
+        return 1
+    fi
+}
+
+# One line per app for refresh_machine's closing page (src/refresh_report.py);
+# nothing when no refresh run is in progress.
+report_apps() {
+    local kind="$1" label="$2" app
+    shift 2
+    [ -n "$REFRESH_REPORT" ] || return 0
+    for app in "$@"; do
+        printf '%s\t%s\t\n' "$kind" "${label// /-}:$app" >> "$REFRESH_REPORT"
+    done
 }
 
 install_from_list() {

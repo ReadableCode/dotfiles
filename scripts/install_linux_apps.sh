@@ -12,10 +12,8 @@ source "$SCRIPT_DIR/app_install_lib.sh"
 # app_install_lib.sh) the upgrade already ran a step earlier.
 if [ -z "$APP_PHASE" ]; then
     sudo apt -y update
-    sudo apt -y upgrade
-    sudo apt -y dist-upgrade
-    sudo apt -y autoremove
     sudo apt -y full-upgrade
+    sudo apt -y autoremove
 fi
 
 list_installed() { dpkg-query -W -f='${Package}\n' 2>/dev/null; }

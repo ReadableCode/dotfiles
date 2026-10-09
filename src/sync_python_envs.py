@@ -29,6 +29,7 @@ import os
 import subprocess
 import sys
 
+import refresh_report
 from config import grandparent_dir
 
 # %%
@@ -102,6 +103,9 @@ def run(git_dir, list_only=False, check=False):
         print(f"-- {name}")
         if sync_project(project, check=check) != 0:
             failed.append(name)
+            refresh_report.record("env.failed", name)
+        elif not check:
+            refresh_report.record("env.synced", name)
     verb = "in sync" if check else "synced"
     if failed:
         what = "out of sync or failed" if check else "failed"

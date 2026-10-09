@@ -64,6 +64,7 @@ def test_tokens_match_readable_utils_design_tokens():
         "green": design_tokens.GREEN_BRIGHT,
         "amber": design_tokens.AMBER_BRIGHT,
         "red": design_tokens.RED,
+        "rule": design_tokens.HAIRLINE,
     }
 
 

@@ -17,6 +17,7 @@ import time
 import yaml
 from readable_utils.host_tools import get_uppercase_hostname
 
+import refresh_report
 from config import grandparent_dir, parent_dir
 from utils.inventory_tools import (
     CREDENTIALS_SUFFIX,
@@ -1392,8 +1393,10 @@ def run_deploy(plan):
                 counts["noop"] += 1
             elif result in ("skipped", "missing", "reload_failed"):
                 counts["skipped"] += 1
+                refresh_report.record("deploy.skipped", row["name"], f"{result.replace('_', ' ')} {row['dest']}")
             else:
                 counts["changed"] += 1
+                refresh_report.record("deploy.changed", row["name"], f"{result} {row['dest']}")
         print()
 
     print(
@@ -1403,6 +1406,8 @@ def run_deploy(plan):
             "green" if not counts["skipped"] else "yellow",
         )
     )
+    refresh_report.record("deploy.count", "already deployed", counts["noop"])
+    refresh_report.record("deploy.count", "not applicable", len(info))
     return 0
 
 
@@ -1654,6 +1659,8 @@ def run_prune(candidates, apply_changes=False):
         if not removable:
             print(f"  {paint('SKIP', 'yellow')}  {dest}  ({description}; {reason})")
             skipped += 1
+            if apply_changes:
+                refresh_report.record("prune.skipped", dest, description)
             continue
         if apply_changes:
             try:
@@ -1666,9 +1673,11 @@ def run_prune(candidates, apply_changes=False):
                 # clear) must not abort the rest of the prune
                 print(f"  {paint('FAILED', 'red')}  {dest}  ({exc}; {reason})")
                 skipped += 1
+                refresh_report.record("prune.skipped", dest, f"failed: {exc}")
                 continue
             remove_empty_parents(dest)
             print(f"  {paint('REMOVED', 'green')}  {dest}  ({description}; {reason})")
+            refresh_report.record("prune.removed", dest, reason)
         else:
             print(f"  {paint('WOULD REMOVE', 'yellow')}  {dest}  ({description}; {reason})")
         removed += 1

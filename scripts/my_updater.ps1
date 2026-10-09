@@ -117,10 +117,11 @@ function Get-UpgradePlan {
     if ($LASTEXITCODE -ne 0) {
         throw "src/app_lists.py --upgrades $Manager failed"
     }
-    $plan = @{ Upgrade = @(); Held = @() }
+    $plan = @{ Upgrade = @(); Held = @(); Versions = @{} }
     foreach ($line in $lines) {
         if ($line -match '^upgrade\s+(\S+)') { $plan.Upgrade += $Matches[1] }
         elseif ($line -match '^held\s+(\S+)\s+(.*)$') { $plan.Held += "$($Matches[1]): $($Matches[2])" }
+        elseif ($line -match '^version\s+(\S+)\s+(\S+)\s+(\S+)') { $plan.Versions[$Matches[1]] = "$($Matches[2]) -> $($Matches[3])" }
     }
     return $plan
 }
@@ -187,7 +188,7 @@ function Invoke-Upgrade {
     # One package, quietly: everything the manager prints goes to the log, the
     # terminal gets one line, and a failure is kept for the closing report
     # instead of scrolling past in red in the middle of the run.
-    param([string]$Manager, [string]$Name, [string]$Command)
+    param([string]$Manager, [string]$Name, [string]$Command, [string]$Change)
     if (-not $script:UpgradeLog) {
         $folder = Join-Path $HOME 'logs\updater'
         New-Item -ItemType Directory -Force -Path $folder | Out-Null
@@ -200,26 +201,32 @@ function Invoke-Upgrade {
     Add-Content -LiteralPath $script:UpgradeLog -Encoding UTF8 -Value "===== $Manager $Name (exit $code) =====`r`n$text"
     # 3010 and 1641 are an installer's "done, restart needed".
     if ($code -eq 0 -or $code -eq 3010 -or $code -eq 1641) {
-        Write-Host "upgraded"
+        if ($Change) { Write-Host "upgraded $Change" } else { Write-Host "upgraded" }
+        Write-RefreshReport 'package.upgraded' "${Manager}:$Name" $Change
         return
     }
     Write-Host "failed, reported at the end"
-    $script:UpgradeFailures += [pscustomobject]@{
-        Manager = $Manager
-        Name    = $Name
-        Reason  = Get-FailureReason -Name $Name -Text $text -Code $code
-    }
+    $reason = Get-FailureReason -Name $Name -Text $text -Code $code
+    $script:UpgradeFailures += [pscustomobject]@{ Manager = $Manager; Name = $Name; Reason = $reason }
+    Write-RefreshReport 'package.failed' "${Manager}:$Name" $reason
+}
+
+function Write-RefreshReport {
+    # One line for refresh_machine.py's closing page (src/refresh_report.py has
+    # the format); nothing when this runs on its own.
+    param([string]$Kind, [string]$Name, [string]$Detail)
+    if (-not $env:REFRESH_REPORT) { return }
+    Add-Content -LiteralPath $env:REFRESH_REPORT -Encoding UTF8 -Value "$Kind`t$Name`t$Detail"
 }
 
 function Write-UpgradeReport {
     # The failures, once, after everything has run. Under refresh_machine.py
-    # (which sets UPGRADE_REPORT) they go to its closing summary instead, so
-    # they are the last thing on the screen and not the middle of a long run.
+    # (which sets REFRESH_REPORT) each was already recorded for its closing
+    # page, so they are the last thing on the screen and not the middle of a
+    # long run; only the log's path is added here.
     if ($script:UpgradeFailures.Count -eq 0) { return }
-    if ($env:UPGRADE_REPORT) {
-        $lines = @($script:UpgradeFailures | ForEach-Object { "$($_.Manager)`t$($_.Name)`t$($_.Reason)" })
-        $lines += "log`t`t$script:UpgradeLog"
-        Add-Content -LiteralPath $env:UPGRADE_REPORT -Encoding UTF8 -Value $lines
+    if ($env:REFRESH_REPORT) {
+        Write-RefreshReport 'package.log' '' $script:UpgradeLog
         return
     }
     Write-Host ""
@@ -543,7 +550,7 @@ if (Get-Command winget -ErrorAction SilentlyContinue) {
         Show-Held $plan
         if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for winget to upgrade." }
         foreach ($id in $plan.Upgrade) {
-            Invoke-Upgrade winget $id "winget upgrade --id $id --exact --disable-interactivity --accept-package-agreements --accept-source-agreements"
+            Invoke-Upgrade winget $id "winget upgrade --id $id --exact --disable-interactivity --accept-package-agreements --accept-source-agreements" $plan.Versions[$id]
         }
     }
     catch {
@@ -558,7 +565,7 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
         Show-Held $plan
         if ($plan.Upgrade.Count -eq 0) { Write-Host "  nothing for chocolatey to upgrade." }
         foreach ($name in $plan.Upgrade) {
-            Invoke-Upgrade choco $name "choco upgrade $name -y --no-progress"
+            Invoke-Upgrade choco $name "choco upgrade $name -y --no-progress" $plan.Versions[$name]
         }
     }
     catch {

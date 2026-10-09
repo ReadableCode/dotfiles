@@ -98,6 +98,12 @@ function Install-Planned {
         return
     }
     & $InstallApps $planned
+    # One line per app for refresh_machine's closing page (src/refresh_report.py).
+    if ($env:REFRESH_REPORT) {
+        $kind = if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { 'app.install-failed' } else { 'app.installed' }
+        $lines = @($planned | ForEach-Object { "$kind`t${Label}:$_`t" })
+        Add-Content -LiteralPath $env:REFRESH_REPORT -Encoding UTF8 -Value $lines
+    }
 }
 
 function Install-FromList {

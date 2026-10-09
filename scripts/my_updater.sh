@@ -91,25 +91,24 @@ update_macos() {
     brew update
     echo "Upgrading Brew packages..."
     brew upgrade
+    # --greedy is a superset of the plain cask upgrade (it adds the casks that
+    # auto-update or carry no version), so one pass does it.
     echo "Upgrading Brew casks..."
-    brew upgrade --cask
     brew upgrade --cask --greedy
     echo "Cleaning up Brew..."
     brew cleanup
 }
 
 # Function for updating & upgrading a Debian/Ubuntu system with apt
+# full-upgrade is apt's name for dist-upgrade and covers everything a plain
+# upgrade does, so one pass does it.
 update_apt() {
     echo "Updating apt repositories..."
     sudo apt update
     echo "Upgrading packages..."
-    sudo apt -y upgrade
-    echo "Running distribution upgrade..."
-    sudo apt -y dist-upgrade
+    sudo apt -y full-upgrade
     echo "Removing unused packages..."
     sudo apt -y autoremove
-    echo "Running full upgrade..."
-    sudo apt -y full-upgrade
 }
 
 # Function for updating & upgrading a Fedora/RHEL system with dnf
@@ -135,6 +134,39 @@ update_uv() {
     else
         echo "$out"
     fi
+}
+
+# Every installed package as "manager:name version", one per line, for the
+# closing page of refresh_machine.py: the same listing before and after the
+# upgrades, and the names whose version differs are reported as "old -> new"
+# (src/refresh_report.py has the format). Read-only, and only taken under a
+# refresh run (REFRESH_REPORT set), so this script alone behaves as it did.
+installed_versions() {
+    case "$(uname)" in
+      "Darwin")
+        if command -v brew &> /dev/null; then
+            brew list --versions 2> /dev/null | awk '{print "brew:" $1, $NF}'
+            brew list --cask --versions 2> /dev/null | awk '{print "cask:" $1, $NF}'
+        fi
+        ;;
+      "Linux")
+        if command -v dnf &> /dev/null && command -v rpm &> /dev/null; then
+            rpm -qa --qf 'dnf:%{NAME} %{VERSION}-%{RELEASE}\n' 2> /dev/null
+        elif command -v dpkg-query &> /dev/null; then
+            dpkg-query -W -f='apt:${binary:Package} ${Version}\n' 2> /dev/null
+        fi
+        ;;
+    esac
+    command -v uv &> /dev/null && echo "uv:uv $(uv --version 2> /dev/null | awk '{print $2}')"
+    return 0
+}
+
+report_version_changes() {
+    local before="$1" after="$2"
+    [ -n "$REFRESH_REPORT" ] || return 0
+    awk 'NR == FNR { old[$1] = $2; next }
+         ($1 in old) && old[$1] != $2 { printf "package.upgraded\t%s\t%s -> %s\n", $1, old[$1], $2 }' \
+        "$before" "$after" >> "$REFRESH_REPORT"
 }
 
 # The read-only twin of the functions above, for `my_updater.sh --check`. It
@@ -1341,6 +1373,12 @@ if [ "$MODE" = "pending" ]; then
     exit 0
 fi
 
+VERSIONS_BEFORE=""
+if [ -n "$REFRESH_REPORT" ]; then
+    VERSIONS_BEFORE="$(mktemp)"
+    installed_versions > "$VERSIONS_BEFORE"
+fi
+
 # Detect the operating system
 OS="$(uname)"
 case "$OS" in
@@ -1392,6 +1430,13 @@ case "$OS" in
     echo "Unsupported operating system: $OS"
     ;;
 esac
+
+if [ -n "$VERSIONS_BEFORE" ]; then
+    VERSIONS_AFTER="$(mktemp)"
+    installed_versions > "$VERSIONS_AFTER"
+    report_version_changes "$VERSIONS_BEFORE" "$VERSIONS_AFTER"
+    rm -f "$VERSIONS_BEFORE" "$VERSIONS_AFTER"
+fi
 
 echo "############ System Info ############"
 

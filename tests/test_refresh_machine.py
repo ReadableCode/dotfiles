@@ -6,7 +6,7 @@ import os
 import config_test_utils  # noqa F401
 import pytest
 
-from src import refresh_machine, terminal_style
+from src import refresh_machine, refresh_report, terminal_style
 
 
 def make_git_dir(tmp_path):
@@ -141,11 +141,99 @@ def test_unpulled_tags_match_git_pullers_output():
     assert not refresh_machine.UNPULLED.match("[PULLED] some_repo")
 
 
-def test_summary_names_the_failed_steps():
-    assert refresh_machine.summary(["deploying configs"], 5, False) == (
-        "// done\n   1 of 5 steps failed: deploying configs\n"
+def test_execute_records_every_step_with_its_outcome_time_and_family():
+    steps = [
+        refresh_machine.Step("deploying configs", ["deploy"], family="deploy"),
+        refresh_machine.Step("pruning removed configs", ["prune"], family="prune"),
+    ]
+    recorded = []
+    out = io.StringIO()
+    refresh_machine.execute(
+        steps,
+        out,
+        False,
+        run=lambda argv: 2 if argv[0] == "deploy" else 0,
+        record=lambda *cells: recorded.append(cells),
     )
-    assert refresh_machine.summary([], 5, False) == "// done\n   all 5 steps ok\n"
+    assert [cells[:2] for cells in recorded] == [("step", "deploying configs"), ("step", "pruning removed configs")]
+    assert recorded[0][2].startswith("failed ") and recorded[0][2].endswith(" deploy")
+    assert recorded[1][2].startswith("ok ") and recorded[1][2].endswith(" prune")
+
+
+def test_a_missing_tool_is_recorded_as_a_failed_step():
+    steps = [refresh_machine.Step("deploying configs", ["uv", "run"], needs="uv", family="deploy")]
+    recorded = []
+    refresh_machine.execute(steps, io.StringIO(), False, which=lambda n: None, record=lambda *c: recorded.append(c))
+    assert recorded == [("step", "deploying configs", "failed 0.0 deploy")]
+
+
+# ---------------------------------------------------------------- reading the pull
+
+
+PULLER_OUTPUT = """[DIRTY] /home/me/GitHub/dotfiles (2 uncommitted):
+\tsrc/a.py
+\tsrc/b.py
+
+=== No Changes ===
+[NO CHANGES] /home/me/GitHub/personal_credentials
+
+=== Pull Results ===
+[UPDATED] /home/me/GitHub/dotfiles:
+Updating 47942b8..9c1e2f0
+Fast-forward
+ src/refresh_machine.py | 10 +++---
+ docs/x.md              |  2 +-
+ 2 files changed, 8 insertions(+), 4 deletions(-)
+
+=== Pulled Repos ===
+[PULLED] /home/me/GitHub/dotfiles
+
+=== Errors ===
+[AUTH REQUIRED] /home/me/GitHub/acme_private (Skipping)
+[FAILED] /home/me/GitHub/old_repo: fatal: couldn't find remote ref master
+
+=== Skipped: local edits overlap incoming changes (WIP protected) ===
+[WIP PROTECTED] /home/me/GitHub/acme_dev:
+\terror: Your local changes to the following files would be overwritten by merge:
+\t\tsrc/thing.py
+"""
+
+
+def test_pull_log_records_one_line_per_repo_from_git_pullers_stream():
+    recorded = []
+    log = refresh_machine.PullLog(commits=lambda path, old, new: 3)
+    for line in PULLER_OUTPUT.splitlines(keepends=True):
+        log.feed(line)
+    log.record(record=lambda *cells: recorded.append(cells))
+    assert ("pull.dirty", "dotfiles", "2 uncommitted") in recorded
+    assert ("pull.pulled", "dotfiles", "47942b8 -> 9c1e2f0  3 commits  2 files") in recorded
+    assert ("pull.current", "personal_credentials", "") in recorded
+    assert ("pull.auth", "acme_private", "") in recorded
+    assert ("pull.failed", "old_repo", "fatal: couldn't find remote ref master") in recorded
+    wip = [cells for cells in recorded if cells[0] == "pull.wip"]
+    assert wip[0][1] == "acme_dev" and "src/thing.py" in wip[0][2]
+    assert len(recorded) == 6
+
+
+def test_pull_log_without_a_fast_forward_line_still_reports_the_pull():
+    recorded = []
+    log = refresh_machine.PullLog(commits=lambda *a: 0)
+    for line in ["[UPDATED] /g/repo:\n", "Already up to date.\n", "[PULLED] /g/repo\n"]:
+        log.feed(line)
+    log.record(record=lambda *cells: recorded.append(cells))
+    assert recorded == [("pull.pulled", "repo", "")]
+
+
+def test_run_pull_feeds_the_stream_to_the_log(tmp_path, monkeypatch):
+    script = tmp_path / "puller.py"
+    script.write_text("print('[NO CHANGES] /g/a')\nprint('[FAILED] /g/b: boom')\n")
+    recorded = []
+    monkeypatch.setattr(refresh_machine.refresh_report, "record", lambda *cells: recorded.append(cells))
+    out = io.StringIO()
+    code, unpulled = refresh_machine.run_pull([os.fspath(refresh_machine.sys.executable), str(script)], out)
+    assert (code, unpulled) == (0, 1)
+    assert "[FAILED] /g/b: boom" in out.getvalue()
+    assert ("pull.current", "a", "") in recorded and ("pull.failed", "b", "boom") in recorded
 
 
 # ---------------------------------------------------------------- the command line
@@ -210,16 +298,43 @@ def test_a_pull_that_leaves_dotfiles_alone_carries_on_in_this_process(tmp_path, 
 
 
 def test_the_restart_skips_the_pull_and_still_counts_its_failure(tmp_path, monkeypatch, capsys):
-    code, ran, restarts = run_main_with_heads(tmp_path, monkeypatch, [], ["--after-pull", "--pull-failed"])
+    """The pull's result reaches the restart through the report file it inherits."""
+    report = tmp_path / "report.tsv"
+    report.write_text("step\tpulling every repo\tfailed 4.0 pull\npull.failed\tdotfiles\tboom\n")
+    monkeypatch.setenv(refresh_report.REPORT_ENV, str(report))
+    code, ran, restarts = run_main_with_heads(tmp_path, monkeypatch, [], ["--after-pull"])
     assert restarts == []
     assert "pulling every repo" not in ran[0]
     assert code == 1
-    assert "steps failed: pulling every repo" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "✖ pulling every repo" in out and "1 failed" in out
+    assert not report.exists()
 
 
-def test_restart_argv_keeps_the_mode_and_passes_the_pull_result():
-    argv = refresh_machine.restart_argv(["--packages"], True, script_path="/x/refresh_machine.py")
-    assert argv[1:] == [os.path.abspath("/x/refresh_machine.py"), "--packages", "--after-pull", "--pull-failed"]
+def test_restart_argv_keeps_the_mode():
+    argv = refresh_machine.restart_argv(["--packages"], script_path="/x/refresh_machine.py")
+    assert argv[1:] == [os.path.abspath("/x/refresh_machine.py"), "--packages", "--after-pull"]
+
+
+def test_main_sets_the_report_for_the_steps_and_clears_it_after(tmp_path, monkeypatch, capsys):
+    seen = []
+    monkeypatch.delenv(refresh_report.REPORT_ENV, raising=False)
+    monkeypatch.setattr(
+        refresh_machine, "execute", lambda steps, *a, **k: seen.append(os.environ.get(refresh_report.REPORT_ENV)) or []
+    )
+    code = refresh_machine.main(["--pull-only"], environ={"gitDir": make_git_dir(tmp_path)})
+    assert code == 0
+    assert seen and seen[0].endswith(".tsv")
+    assert refresh_report.REPORT_ENV not in os.environ
+    assert "❯ pullrepos" in capsys.readouterr().out
+
+
+def test_command_name_follows_the_mode():
+    names = {(): "gitpullall", ("--packages",): "myupdater", ("--pull-only",): "pullrepos"}
+    for argv, name in names.items():
+        assert refresh_machine.command_name(refresh_machine.parse_args(list(argv))) == name
+    assert refresh_machine.command_name(refresh_machine.parse_args(["--install-missing"])) == "installmissing"
+    assert refresh_machine.command_name(refresh_machine.parse_args(["--check"])) == "gitpullall --check"
 
 
 # ---------------------------------------------------------------- the check plan
@@ -288,9 +403,15 @@ def test_execute_runs_a_python_action_step():
     assert refresh_machine.execute(steps, out, False) == ["checking every repo for upstream commits"]
 
 
-def test_summary_says_drift_in_check_mode():
-    assert "reported drift" in refresh_machine.summary(["checking deployed configs"], 5, False, check=True)
-    assert "all 5 steps ok" in refresh_machine.summary([], 5, False, check=True)
+def test_fetch_check_records_the_repos_behind(tmp_path, monkeypatch):
+    recorded = []
+    monkeypatch.setattr(refresh_machine.refresh_report, "record", lambda *cells: recorded.append(cells))
+    git_dir = make_git_dir(tmp_path)
+    os.makedirs(tmp_path / "other" / ".git")
+    results = {"dotfiles": ("dotfiles", 2, ""), "other": ("other", 0, "no upstream branch")}
+    refresh_machine.fetch_check(git_dir, io.StringIO(), fetch=lambda entry: results[entry[0]])
+    assert ("pull.behind", "dotfiles", "2 commits behind") in recorded
+    assert ("pull.problem", "other", "no upstream branch") in recorded
 
 
 # ---------------------------------------------------- missing-dependency offer
@@ -443,43 +564,57 @@ def test_windows_runs_the_choco_and_winget_installers_through_powershell(tmp_pat
 
 
 # %%
-# Missing apps in the summary #
+# The closing page #
 
 
-def test_the_summary_ends_with_the_listed_apps_that_are_missing():
+def page_text(report, lines, **kwargs):
+    report.write_text("".join("\t".join(cells) + "\n" for cells in lines))
+    kwargs.setdefault("size", (100, 40))
+    return refresh_machine.page(str(report), "myupdater", "envy", "2026-10-09 14:02", 134, False, **kwargs)
+
+
+def test_the_page_ends_with_the_listed_apps_that_are_missing(tmp_path):
     found = {"missing": ["choco:dbeaver", "cask:slack"], "elsewhere": ["choco:tailscale"]}
-    text = refresh_machine.summary([], 5, False, missing=found, asked_missing=True)
-    assert text.index("all 5 steps ok") < text.index("2 listed app(s) not installed")
-    assert "choco:dbeaver" in text and "cask:slack" in text
-    assert "1 listed app(s) installed, but not by the manager their list names" in text
-    assert "choco:tailscale" in text
+    text = page_text(
+        tmp_path / "r.tsv", [("step", "deploying configs", "ok 1.0 deploy")], missing=found, asked_missing=True
+    )
+    assert text.index("deploying configs") < text.index("choco:dbeaver")
+    assert "cask:slack" in text and "listed, not installed" in text
+    assert "choco:tailscale" in text and "not by the manager its list names" in text
 
 
-def test_the_summary_says_when_missing_apps_could_not_be_checked():
-    text = refresh_machine.summary([], 5, False, missing=None, asked_missing=True)
+def test_the_page_says_when_missing_apps_could_not_be_checked(tmp_path):
+    text = page_text(tmp_path / "r.tsv", [], missing=None, asked_missing=True)
     assert "could not work out which listed apps are installed" in text
 
 
-def test_the_summary_lists_the_upgrades_that_failed_with_their_reason():
-    upgrades = ([("choco", "obs-studio", "its files are open in: claude")], "C:/logs/upgrades.log")
-    text = refresh_machine.summary(["updating os packages"], 13, False, upgrades=upgrades)
-    assert "1 upgrade(s) did not go through:" in text
-    assert "choco:obs-studio  its files are open in: claude" in text
+def test_the_page_lists_the_upgrades_with_arrows_and_the_failures_with_their_reason(tmp_path):
+    lines = [
+        ("step", "updating os packages", "failed 40.0 package"),
+        ("package.upgraded", "brew:node", "22.1.0 -> 22.2.0"),
+        ("package.failed", "choco:obs-studio", "its files are open in: claude"),
+        ("package.log", "", "C:/logs/upgrades.log"),
+    ]
+    text = page_text(tmp_path / "r.tsv", lines)
+    assert "✖ updating os packages" in text and "1 upgraded  1 failed" in text
+    assert "22.1.0 → 22.2.0" in text
+    assert "choco:obs-studio" in text and "its files are open in: claude" in text
     assert "full output: C:/logs/upgrades.log" in text
 
 
-def test_the_upgrade_report_is_read_as_failures_and_a_log(tmp_path):
-    report = tmp_path / "report.tsv"
-    report.write_text("\ufeffchoco\tparsec\tchecksum is out of date\r\nlog\t\tC:/logs/u.log\r\n", encoding="utf-8")
-    assert refresh_machine.read_upgrade_report(str(report)) == (
-        [("choco", "parsec", "checksum is out of date")],
-        "C:/logs/u.log",
-    )
-    assert refresh_machine.read_upgrade_report(str(tmp_path / "none.tsv")) == ([], "")
+def test_the_page_says_nothing_about_apps_when_not_asked(tmp_path):
+    assert "listed" not in page_text(tmp_path / "r.tsv", [("step", "deploying configs", "ok 1.0 deploy")])
 
 
-def test_the_summary_says_nothing_about_apps_when_not_asked():
-    assert "listed app" not in refresh_machine.summary([], 5, False)
+def test_the_page_names_the_ignore_file_for_ignored_apps(tmp_path):
+    found = {
+        "missing": [],
+        "elsewhere": [],
+        "ignored": ["brew:docker"],
+        "ignore-file": ["/home/me/.dotfiles_ignored_apps"],
+    }
+    text = page_text(tmp_path / "r.tsv", [], missing=found, asked_missing=True)
+    assert "ignored here by /home/me/.dotfiles_ignored_apps: brew:docker" in text
 
 
 def test_missing_apps_reads_one_entry_per_line(tmp_path):
@@ -496,29 +631,24 @@ def test_missing_apps_is_unknown_without_uv(tmp_path):
     assert refresh_machine.missing_apps(str(tmp_path), which=lambda n: None) is None
 
 
-def test_the_summary_names_the_ignore_file_for_ignored_apps():
-    found = {
-        "missing": [],
-        "elsewhere": [],
-        "ignored": ["brew:docker"],
-        "ignore-file": ["/home/me/.dotfiles_ignored_apps"],
-    }
-    text = refresh_machine.summary([], 5, False, missing=found, asked_missing=True)
-    assert "ignored on this machine by /home/me/.dotfiles_ignored_apps" in text
-    assert "delete a line there, or run `installmissing`, to be offered it again" in text
-    assert "brew:docker" in text
-
-
-def test_the_summary_paints_every_section_with_colour_on():
-    """Every role the summary asks for must be a terminal_style token; a missing one is a KeyError mid-run."""
-    missing = {
-        "missing": ["dnf:htop"],
-        "elsewhere": ["choco:slack"],
-        "ignored": ["dnf:samba"],
-        "ignore-file": ["/home/me/.dotfiles_ignored_apps"],
-    }
-    text = refresh_machine.summary(["deploying configs"], 5, True, missing=missing, asked_missing=True)
-    assert "dnf:samba" in text and "choco:slack" in text
+def test_the_page_paints_every_role_it_asks_for(tmp_path):
+    """Every role the page asks for must be a terminal_style token; a missing one is a KeyError mid-run."""
+    missing = {"missing": ["dnf:htop"], "elsewhere": ["choco:slack"], "ignored": ["dnf:samba"], "ignore-file": ["/i"]}
+    lines = [
+        ("step", "pulling every repo", "ok 3.0 pull"),
+        ("step", "deploying configs", "failed 1.0 deploy"),
+        ("pull.pulled", "dotfiles", "a -> b  1 commit"),
+        ("pull.wip", "acme_dev", "x.py"),
+        ("pull.current", "other", ""),
+        ("deploy.changed", "zshrc", "linked ~/.zshrc"),
+        ("deploy.skipped", "nut", "missing /etc/nut/x"),
+        ("prune.removed", "~/.old", "retired"),
+    ]
+    (tmp_path / "r.tsv").write_text("".join("\t".join(cells) + "\n" for cells in lines))
+    text = refresh_machine.page(
+        str(tmp_path / "r.tsv"), "gitpullall", "envy", "now", 5, True, missing=missing, asked_missing=True
+    )
+    assert "dnf:samba" in text and "choco:slack" in text and "\033[" in text
 
 
 def test_package_steps_stand_down_while_a_release_upgrade_waits(tmp_path):

@@ -369,11 +369,13 @@ def choco_name(package):
     return CHOCO_VARIANT.sub("", package)
 
 
-def winget_upgrades(run=None, which=shutil.which, app_lists=APP_LISTS, overlay_paths=None, holds=None):
+def winget_upgrades(run=None, which=shutil.which, app_lists=APP_LISTS, overlay_paths=None, holds=None, versions=None):
     """
     ``(upgrade, held)`` for what `winget upgrade` offers, or None when winget
     could not be asked. ``upgrade`` is the winget ids to upgrade; ``held`` is
-    ``(id, reason)`` for the ones winget must leave alone.
+    ``(id, reason)`` for the ones winget must leave alone. A ``versions`` dict
+    is filled with ``id -> (installed, available)`` for the ids to upgrade, so
+    the updater can say what each upgrade moved from and to.
 
     winget upgrades an app only when a winget app list names it. `winget
     upgrade --all` goes for every installed program it can match to its
@@ -418,15 +420,18 @@ def winget_upgrades(run=None, which=shutil.which, app_lists=APP_LISTS, overlay_p
             held.append((row.id, "a Terminal window is open; the Store updates it once Terminal is closed"))
         else:
             upgrade.append(row.id)
+            if versions is not None:
+                versions[row.id] = (row.version, row.available)
     return upgrade, held
 
 
-def choco_upgrades(run=None, which=shutil.which, holds=None):
+def choco_upgrades(run=None, which=shutil.which, holds=None, versions=None):
     """
     ``(upgrade, held)`` for what `choco outdated` lists, or None when
     Chocolatey could not be asked. Chocolatey only ever lists what it
     installed itself, so every package is its own; ``held`` is ``(package,
-    reason)`` for the ones it must still leave alone:
+    reason)`` for the ones it must still leave alone (``versions`` as in
+    winget_upgrades):
 
     - a package on the holds file (apps that update themselves, whose package
       then fails its own checksum on every run).
@@ -466,17 +471,27 @@ def choco_upgrades(run=None, which=shutil.which, holds=None):
             held.append((package, f"{ahead.version} is installed, at or past the {available} chocolatey offers"))
         else:
             upgrade.append(package)
+            if versions is not None:
+                versions[package] = (current, available)
     return upgrade, held
 
 
 def print_upgrades(manager):
-    plan = winget_upgrades() if manager == "winget" else choco_upgrades()
+    """
+    The plan as my_updater.ps1 reads it: ``upgrade <id>`` and ``held <id>
+    <reason>`` per app, plus ``version <id> <installed> <available>`` for each
+    upgrade so the closing page can draw the move.
+    """
+    versions: dict = {}
+    plan = winget_upgrades(versions=versions) if manager == "winget" else choco_upgrades(versions=versions)
     if plan is None:
         print(f"could not ask {manager} what it would upgrade", file=sys.stderr)
         return 1
     upgrade, held = plan
     for package in upgrade:
         print(f"upgrade {package}")
+        if package in versions:
+            print(f"version {package} {versions[package][0]} {versions[package][1]}")
     for package, reason in held:
         print(f"held {package} {reason}")
     return 0
