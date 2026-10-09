@@ -25,3 +25,8 @@
   manager: choco
   package: parsec
   reason: Parsec updates itself, and Chocolatey marks the package possibly broken (its checksum no longer matches)
+
+- name: epic_choco
+  manager: choco
+  package: epicgameslauncher
+  reason: the launcher updates itself, and the package reinstalls an older Epic MSI over it (left it unable to start on 2026-10-02)
