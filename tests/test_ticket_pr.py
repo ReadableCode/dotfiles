@@ -1368,6 +1368,53 @@ def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
     }
 
 
+def test_review_queue_requested_in_org_adds_prs_from_unlisted_repos(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+
+    def pull(repo, number, author, requested=()):
+        return {
+            "number": number,
+            "title": f"PR {number}",
+            "user": {"login": author},
+            "draft": False,
+            "requested_reviewers": [{"login": login} for login in requested],
+            "head": {"ref": f"b{number}"},
+            "base": {"ref": "main"},
+            "html_url": f"https://github.com/acme/{repo}/pull/{number}",
+        }
+
+    def hit(repo, number):
+        return {"number": number, "repository_url": f"https://api.github.com/repos/acme/{repo}"}
+
+    calls = []
+
+    def fake(method, url, headers, **kwargs):
+        calls.append(url)
+        if url.endswith("/user"):
+            return {"login": "me"}
+        if "/search/issues?" in url:
+            assert "review-requested%3Ame" in url and "org%3Aacme" in url
+            return {"items": [hit("listed", 1), hit("other", 9)]}
+        if url.endswith("/repos/acme/listed/pulls?state=open&per_page=100"):
+            return [pull("listed", 1, "sam", ["me"]), pull("listed", 2, "sam")]
+        if url.endswith("/repos/acme/other/pulls/9"):
+            return pull("other", 9, "sam", ["me"])
+        raise AssertionError(url)
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake)
+    ticket_pr.main(["review-queue", "--repo", "github:acme/listed", "--requested-in", "acme"])
+    out = capsys.readouterr().out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert [(pr["repo"], pr["pr"], pr["skip"]) for pr in result["prs"]] == [
+        ("acme/listed", 1, None),
+        ("acme/listed", 2, "not_requesting"),
+        ("acme/other", 9, None),
+    ]
+    # the listed repo's hit is not fetched twice
+    assert not any(url.endswith("/repos/acme/listed/pulls/1") for url in calls)
+    assert "https://github.com/acme/other/pull/9 PR 9" in out
+
+
 def test_pr_diff_bitbucket_writes_the_diff_and_file_stats(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")

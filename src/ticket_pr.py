@@ -18,7 +18,8 @@ and lists the hits so "is this already ticketed?" is answered here too;
 add-comment is the way to keep a ticket up to date and transition-ticket
 moves it between statuses by the name Jira shows on the button.
 review-queue, pr-diff and pr-review are the reviewer's side: which open PRs
-across a set of repos wait on this account, one PR's metadata with its diff on
+across a set of repos (plus any review request across a GitHub org) wait on
+this account, one PR's metadata with its diff on
 disk and every comment on it (the same shape from GitHub and Bitbucket), and
 the approve / request-changes / comment call; pr-comment posts a plain comment
 on either provider. activity is this account's own work in a date window: the
@@ -1334,34 +1335,54 @@ def queue_skip(own, draft, requested, approved_current):
     return None
 
 
+def github_queue_entry(pull, repo, me):
+    """
+    One queue row for a GitHub pull. Submitting a review drops the reviewer
+    from requested_reviewers, so being listed there means the PR is waiting.
+    """
+    author = pull["user"]["login"]
+    requested = me in [user["login"] for user in pull.get("requested_reviewers", [])]
+    draft = bool(pull.get("draft"))
+    return {
+        "provider": "github",
+        "repo": repo,
+        "pr": pull["number"],
+        "title": pull["title"],
+        "author": author,
+        "source": pull["head"]["ref"],
+        "destination": pull["base"]["ref"],
+        "url": pull["html_url"],
+        "draft": draft,
+        "review_requested": requested,
+        "my_state": None,
+        "commits_since_my_approval": None,
+        "skip": queue_skip(author == me, draft, requested, False),
+    }
+
+
 def github_queue(repo, headers, me):
-    """
-    Open PRs in a GitHub repo. Submitting a review drops the reviewer from
-    requested_reviewers, so being listed there means the PR is waiting.
-    """
+    """Open PRs in a GitHub repo."""
     query = urllib.parse.urlencode({"state": "open", "per_page": 100})
+    return [
+        github_queue_entry(pull, repo, me)
+        for pull in http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls?{query}", headers)
+    ]
+
+
+def github_requested_queue(org, headers, me, listed):
+    """
+    Open PRs anywhere in a GitHub org that request this account's review,
+    skipping the repos already listed (their queue covers them). A search
+    hit is an issue record, so each PR is fetched for its branches and
+    reviewers.
+    """
     entries = []
-    for pull in http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls?{query}", headers):
-        author = pull["user"]["login"]
-        requested = me in [user["login"] for user in pull.get("requested_reviewers", [])]
-        draft = bool(pull.get("draft"))
-        entries.append(
-            {
-                "provider": "github",
-                "repo": repo,
-                "pr": pull["number"],
-                "title": pull["title"],
-                "author": author,
-                "source": pull["head"]["ref"],
-                "destination": pull["base"]["ref"],
-                "url": pull["html_url"],
-                "draft": draft,
-                "review_requested": requested,
-                "my_state": None,
-                "commits_since_my_approval": None,
-                "skip": queue_skip(author == me, draft, requested, False),
-            }
-        )
+    for item in github_search_issues(f"is:pr is:open org:{org} review-requested:{me}", headers):
+        repo = item["repository_url"].split("/repos/", 1)[1]
+        if repo in listed:
+            continue
+        pull = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{item['number']}", headers)
+        entries.append(github_queue_entry(pull, repo, me))
     return entries
 
 
@@ -1407,15 +1428,18 @@ def bitbucket_queue(repo, headers, me):
 
 def cmd_review_queue(args):
     """
-    Every open PR across the given repos, each with ``skip`` naming why it is
-    not waiting on this account's review (own, not_requesting, draft, approved)
-    or null when it is. The account is whoever the token belongs to, looked up
-    once per provider.
+    Every open PR across the given repos, plus any PR in a ``--requested-in``
+    GitHub org that requests this account's review, each with ``skip`` naming
+    why it is not waiting on this account's review (own, not_requesting,
+    draft, approved) or null when it is. The account is whoever the token
+    belongs to, looked up once per provider.
     """
     specs = [repo_spec(spec) for spec in args.repo or [None]]
     if args.dry_run:
         for provider, repo in specs:
             print(f"[dry-run] would list open PRs in {provider}:{repo}")
+        for org in args.requested_in or []:
+            print(f"[dry-run] would search github org {org} for PRs requesting this account's review")
         emit("dry run", {"prs": [], "skipped": {}, "dry_run": True})
         return
     accounts, prs = {}, []
@@ -1430,6 +1454,13 @@ def cmd_review_queue(args):
             if provider not in accounts:
                 accounts[provider] = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
             prs += github_queue(repo, headers, accounts[provider])
+    if args.requested_in:
+        headers = github_headers()
+        if "github" not in accounts:
+            accounts["github"] = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
+        listed = {repo for provider, repo in specs if provider == "github"}
+        for org in args.requested_in:
+            prs += github_requested_queue(org, headers, accounts["github"], listed)
     skipped = {}
     for pr in prs:
         if pr["skip"]:
@@ -2563,6 +2594,12 @@ def build_parser():
         "--repo",
         action="append",
         help="github:owner/name or bitbucket:workspace/slug; repeatable (default: parsed from origin remote)",
+    )
+    queue.add_argument(
+        "--requested-in",
+        action="append",
+        metavar="ORG",
+        help="GitHub org to search for open PRs requesting this account's review, beyond --repo; repeatable",
     )
     queue.set_defaults(func=cmd_review_queue)
 
