@@ -222,6 +222,62 @@ def test_check_run_details_reads_output_and_link():
     assert ticket_pr.check_run_details({}) == {"details_url": None, "title": None, "summary": None}
 
 
+def test_failed_check_run_carries_its_annotations(monkeypatch):
+    run = {
+        "name": "SonarQube Code Analysis",
+        "status": "completed",
+        "conclusion": "failure",
+        "started_at": "2026-10-12T19:00:00Z",
+        "output": {"title": "Quality Gate failed", "annotations_count": 1, "annotations_url": "https://api/ann/1"},
+    }
+    passing = {
+        "name": "linter",
+        "status": "completed",
+        "conclusion": "success",
+        "started_at": "2026-10-12T19:00:00Z",
+        "output": {"annotations_count": 3, "annotations_url": "https://api/ann/2"},
+    }
+    calls = []
+
+    def fake_http(method, url, headers, **kwargs):
+        calls.append(url)
+        if "/check-runs" in url:
+            return {"check_runs": [run, passing]}
+        if url.startswith("https://api/ann/1"):
+            return [
+                {
+                    "path": "src/x.py",
+                    "start_line": 7,
+                    "annotation_level": "failure",
+                    "title": "python:S5754",
+                    "message": "Specify an exception class",
+                }
+            ]
+        return {"statuses": []}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    entries, _ = ticket_pr.collect_check_entries("acme/repo", "abc", {})
+
+    by_name = {e["name"]: e for e in entries}
+    assert by_name["SonarQube Code Analysis"]["details"]["annotations"] == [
+        {
+            "path": "src/x.py",
+            "line": 7,
+            "level": "failure",
+            "title": "python:S5754",
+            "message": "Specify an exception class",
+        }
+    ]
+    assert "annotations" not in by_name["linter"]["details"]
+    assert not any(url.startswith("https://api/ann/2") for url in calls)
+
+
+def test_check_run_without_annotations_makes_no_request(monkeypatch):
+    monkeypatch.setattr(ticket_pr, "http_json", lambda *a, **k: pytest.fail("no request expected"))
+    assert ticket_pr.check_run_annotations({"output": {"annotations_count": 0}}, {}) == []
+    assert ticket_pr.check_run_annotations({}, {}) == []
+
+
 def test_rollup_not_green_on_failure_or_pending():
     failing = ticket_pr.rollup([{"name": "linter", "bucket": "fail"}], [])
     assert failing["green"] is False and failing["failed"] == ["linter"]

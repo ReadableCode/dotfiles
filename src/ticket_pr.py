@@ -732,6 +732,27 @@ def check_run_details(run):
     }
 
 
+def check_run_annotations(run, headers):
+    """The file/line findings a check run attached, e.g. each issue SonarQube decorates a PR with.
+
+    Fetched only when output.annotations_count says there are some, so a check that posts none
+    costs no request. Each finding is reduced to where it is and what it says.
+    """
+    output = run.get("output") or {}
+    if not output.get("annotations_count") or not output.get("annotations_url"):
+        return []
+    return [
+        {
+            "path": a.get("path"),
+            "line": a.get("start_line"),
+            "level": a.get("annotation_level"),
+            "title": a.get("title"),
+            "message": a.get("message"),
+        }
+        for a in github_paginate(output["annotations_url"], headers)
+    ]
+
+
 def bucket_commit_status(status):
     state = (status.get("state") or "").lower()
     if state == "success":
@@ -765,7 +786,11 @@ def collect_check_entries(repo, sha, headers):
             name = run.get("name") or "<unnamed>"
             stamp = run.get("started_at") or ""
             if name not in latest or stamp >= latest[name][0]:
-                latest[name] = (stamp, bucket_check_run(run), check_run_details(run))
+                bucket = bucket_check_run(run)
+                details = check_run_details(run)
+                if bucket == "fail":
+                    details["annotations"] = check_run_annotations(run, headers)
+                latest[name] = (stamp, bucket, details)
         if len(runs) < CHECKS_PER_PAGE:
             break
         page += 1
@@ -957,6 +982,8 @@ def cmd_pr_status(args):
             print(detail["summary"].strip())
         if detail.get("details_url"):
             print(f"  {detail['details_url']}")
+        for note in detail.get("annotations") or []:
+            print(f"  {note['path']}:{note['line']} [{note['level']}] {note['title'] or ''}: {note['message']}")
     if not report["check_runs_visible"]:
         print(
             "WARNING: check runs (GitHub Actions) are NOT visible to this token - "
