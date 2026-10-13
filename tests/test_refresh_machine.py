@@ -2,6 +2,8 @@
 
 import io
 import os
+import subprocess
+import sys
 
 import config_test_utils  # noqa F401
 import pytest
@@ -721,3 +723,147 @@ def test_install_missing_passes_the_switch_to_the_windows_installers(tmp_path):
 def test_install_missing_and_packages_are_one_or_the_other():
     with pytest.raises(SystemExit):
         refresh_machine.parse_args(["--packages", "--install-missing"])
+
+
+# ---------------------------------------------------------------- a python upgraded mid-run
+
+
+def test_the_interpreter_is_gone_only_once_its_library_was_there_and_no_longer_is(monkeypatch):
+    assert refresh_machine.interpreter_gone() is False
+    assert refresh_machine.interpreter_gone(exists=lambda path: False) is True
+    monkeypatch.setattr(refresh_machine, "STDLIB_AT_START", False)
+    assert refresh_machine.interpreter_gone(exists=lambda path: False) is False
+
+
+def test_replacement_python_is_the_first_one_that_starts():
+    probed = []
+
+    def run(argv, capture_output):
+        probed.append(argv[0])
+        return type("Done", (), {"returncode": 0 if argv[0] == "/new/python" else 1})()
+
+    def which(name):
+        return {"python3": "/broken/python3", "python": "/new/python"}[name]
+
+    assert refresh_machine.replacement_python(gone=lambda: True, which=which, run=run) == "/new/python"
+    assert probed == ["/broken/python3", "/new/python"]
+
+
+def test_replacement_python_is_none_while_intact_and_when_nothing_starts():
+    def never(argv, capture_output):
+        raise OSError("gone")
+
+    assert refresh_machine.replacement_python(gone=lambda: False, run=lambda *a, **k: pytest.fail("probed")) is None
+    assert refresh_machine.replacement_python(gone=lambda: True, which=lambda name: None, run=never) is None
+
+
+def test_execute_stops_after_the_step_that_removed_python_once_it_is_recorded():
+    steps = [
+        refresh_machine.Step("updating os packages", ["upgrade"], family="package"),
+        refresh_machine.Step("deploying configs", ["deploy"], family="deploy"),
+    ]
+    ran, recorded = [], []
+    with pytest.raises(refresh_machine.InterpreterReplaced) as raised:
+        refresh_machine.execute(
+            steps,
+            io.StringIO(),
+            False,
+            run=lambda argv: ran.append(argv[0]) or 0,
+            record=lambda *cells: recorded.append(cells[1]),
+            replacement=lambda: "/new/python",
+        )
+    assert raised.value.python == "/new/python"
+    assert ran == ["upgrade"]
+    assert recorded == ["updating os packages"]
+
+
+def test_a_removed_python_hands_the_rest_of_the_run_to_the_new_one(tmp_path, monkeypatch):
+    restarts = []
+
+    def execute(steps, *args, **kwargs):
+        if len(steps) > 1:
+            raise refresh_machine.InterpreterReplaced("/new/python")
+        return []
+
+    def run(argv):
+        restarts.append(argv)
+        return type("Done", (), {"returncode": 7})()
+
+    monkeypatch.setattr(refresh_machine, "execute", execute)
+    code = refresh_machine.main(
+        ["--packages"], environ={"gitDir": make_git_dir(tmp_path)}, run=run, head=lambda dotfiles: "same"
+    )
+    assert code == 7
+    assert restarts == [["/new/python", os.path.abspath(refresh_machine.__file__), "--packages", "--resume"]]
+
+
+def test_the_resumed_run_skips_every_step_the_report_holds(tmp_path, monkeypatch, capsys):
+    report = tmp_path / "report.tsv"
+    report.write_text(
+        "step\tpulling every repo\tok 4.0 pull\n"
+        "step\tupdating os packages\tfailed 60.0 package\n"
+        "package.upgraded\tbrew:python@3.14\t3.14.8 -> 3.14.8_2\n"
+    )
+    monkeypatch.setenv(refresh_report.REPORT_ENV, str(report))
+    code, ran, restarts = run_main_with_heads(tmp_path, monkeypatch, [], ["--packages", "--resume"])
+    assert restarts == []
+    assert len(ran) == 1 and ran[0][0] == "checking for repos to clone"
+    assert "updating os packages" not in ran[0]
+    out = capsys.readouterr().out
+    assert "✖ updating os packages" in out and "python@3.14" in out
+    assert code == 1
+    assert not report.exists()
+
+
+def test_restart_argv_resumes_on_the_given_python_without_repeating_the_flag():
+    argv = refresh_machine.restart_argv(
+        ["--packages", "--resume"], script_path="/x/refresh_machine.py", flag="--resume", python="/new/python"
+    )
+    assert argv == ["/new/python", os.path.abspath("/x/refresh_machine.py"), "--packages", "--resume"]
+
+
+def test_the_app_plan_follows_the_report_a_restart_inherits(tmp_path, monkeypatch):
+    monkeypatch.delenv(refresh_report.REPORT_ENV, raising=False)
+    own = refresh_machine.app_plan_path()
+    assert own == refresh_machine.report_path() + ".apps" and str(os.getpid()) in own
+    monkeypatch.setenv(refresh_report.REPORT_ENV, str(tmp_path / "parent.tsv"))
+    assert refresh_machine.app_plan_path() == str(tmp_path / "parent.tsv") + ".apps"
+
+
+def test_read_drops_a_byte_order_mark_a_windows_writer_left(tmp_path):
+    report = tmp_path / "report.tsv"
+    report.write_bytes(b"\xef\xbb\xbfstep\tdeploying configs\tok 1.0 deploy\n")
+    assert refresh_report.read(str(report)) == [("step", "deploying configs", "ok 1.0 deploy")]
+
+
+def test_the_closing_page_draws_with_nothing_left_to_import(tmp_path):
+    """
+    The 2026-10-13 crash: by the time the page is drawn an upgrade may have
+    deleted this python's standard library, so nothing between the last step
+    and the page may need a module (or a codec) the process has not loaded.
+    The child blocks every further import, then runs main() to its page.
+    """
+    git_dir = make_git_dir(tmp_path)
+    src = os.path.dirname(os.path.abspath(refresh_machine.__file__))
+    script = (
+        "import sys\n"
+        f"sys.path.insert(0, {src!r})\n"
+        "import refresh_machine, refresh_report\n"
+        "def execute(steps, *args, **kwargs):\n"
+        "    for step in steps:\n"
+        "        refresh_report.record('step', step.title, refresh_report.step_detail('ok', 1.0, step.family))\n"
+        "    sys.meta_path[:] = []\n"
+        "    sys.path[:] = []\n"
+        "    sys.path_importer_cache.clear()\n"
+        "    return []\n"
+        "refresh_machine.execute = execute\n"
+        f"code = refresh_machine.main(['--pull-only'], environ={{'gitDir': {git_dir!r}}})\n"
+        "sys.stdout.flush()\n"
+        "raise SystemExit(code)\n"
+    )
+    environ = {key: value for key, value in os.environ.items() if key != refresh_report.REPORT_ENV}
+    done = subprocess.run(
+        [sys.executable, "-W", "ignore", "-c", script], capture_output=True, text=True, encoding="utf-8", env=environ
+    )
+    assert done.returncode == 0, done.stderr
+    assert "pulling every repo" in done.stdout

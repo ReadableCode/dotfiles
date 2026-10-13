@@ -55,6 +55,7 @@ HELP_PAGE = """# refresh_machine
    its output goes to `~/logs/updater`, and the ones that failed are listed in the summary with the reason
    a step whose tool is missing offers to install it with `scripts/bootstrap.sh --only <tool>` first
    once an os release upgrade is downloaded, steps 7 and 7b wait for its reboot: any package change would undo it
+   when an upgrade removes the python running this, the run carries on from the next step on the python now installed
 3. offer to clone repos this machine should have but is missing, asking [y/N/q] first
    the lists are each context's `<context>_repos.yaml`, which the pull just refreshed
    runs `src/clone_repos.py`
@@ -117,6 +118,9 @@ PULL_TAG = re.compile(r"^\[(PULLED|NO CHANGES|UPDATED|WIP PROTECTED|FAILED|AUTH 
 FAST_FORWARD = re.compile(r"^Updating ([0-9a-f]+)\.\.([0-9a-f]+)")
 FILES_CHANGED = re.compile(r"^\s*(\d+) files? changed")
 DIRTY_COUNT = re.compile(r"\((\d+) uncommitted\)")
+# The standard library this process loads from, as it stood at startup (interpreter_gone).
+STDLIB_MODULE = os.__file__
+STDLIB_AT_START = os.path.exists(STDLIB_MODULE)
 
 
 @dataclass
@@ -294,15 +298,18 @@ def app_list_installers(dotfiles, system, which=shutil.which, offer_ignored=Fals
 
 
 def app_plan_path():
-    """The file the installers' ask phase writes and their install phase reads, one per run."""
-    return os.path.join(tempfile.gettempdir(), f"refresh_machine_apps_{os.getpid()}.tsv")
+    """
+    The file the installers' ask phase writes and their install phase reads, one
+    per run: beside the report, so a restart between the two phases inherits it.
+    """
+    return report_path() + ".apps"
 
 
 def report_path(environ=None):
     """
-    The report file this run's steps append to (refresh_report.py). The restart
-    after a pull that moved dotfiles inherits the parent's, so the pull it
-    already did is on the page; otherwise it is one new file per run.
+    The report file this run's steps append to (refresh_report.py). A restart
+    (restart_argv) inherits the parent's, so the steps it already did are on
+    the page; otherwise it is one new file per run.
     """
     environ = os.environ if environ is None else environ
     return environ.get(refresh_report.REPORT_ENV) or os.path.join(
@@ -456,14 +463,60 @@ def dotfiles_head(dotfiles, capture=subprocess.run):
     return done.stdout.strip() if done.returncode == 0 else None
 
 
-def restart_argv(argv, script_path=__file__):
+def restart_argv(argv, script_path=__file__, flag="--after-pull", python=None):
     """
     This run again from the file on disk, without the pull it already did.
     The process running now holds the code from before the pull, so every fix
     to this file would otherwise only reach the run after the one that pulled it.
     The pull's result reaches the restart through the report file it inherits.
+
+    With ``--resume`` and another ``python`` it is the same hand-over after an
+    upgrade removed the interpreter running this (replacement_python): the
+    restart skips every step the report already holds.
     """
-    return [sys.executable, os.path.abspath(script_path), *argv, "--after-pull"]
+    return [python or sys.executable, os.path.abspath(script_path), *argv, *([] if flag in argv else [flag])]
+
+
+def interpreter_gone(exists=os.path.exists):
+    """
+    Whether the standard library this process started on has been deleted. A
+    package upgrade does that to the python running it: Homebrew pours the new
+    version into its own directory and removes the old one, so every module not
+    yet imported, down to a text codec, is unloadable for the rest of the run
+    (2026-10-13: ``unknown encoding`` drawing the page, after every step ran).
+    A python whose library was never a file on disk (a zip, a frozen build)
+    reports False, not a replacement that never ends.
+    """
+    return STDLIB_AT_START and not exists(STDLIB_MODULE)
+
+
+def replacement_python(gone=interpreter_gone, which=shutil.which, run=subprocess.run):
+    """
+    The python to carry the run on with once the one running it is gone, or
+    None while it is intact. The first of the shell's own ``python3``,
+    ``python`` and this interpreter's path that starts: a python without its
+    standard library cannot, so a half-replaced one is never handed the run.
+    None too when nothing starts, and the run finishes where it is.
+    """
+    if not gone():
+        return None
+    for candidate in (which("python3"), which("python"), sys.executable):
+        if not candidate:
+            continue
+        try:
+            if run([candidate, "-c", "pass"], capture_output=True).returncode == 0:
+                return candidate
+        except OSError:
+            continue
+    return None
+
+
+class InterpreterReplaced(Exception):
+    """Raised by execute between two steps; ``python`` is the interpreter to restart on."""
+
+    def __init__(self, python):
+        super().__init__(python)
+        self.python = python
 
 
 def commits_between(path, old, new, capture=subprocess.run):
@@ -607,10 +660,22 @@ def offer_dependency(need, dotfiles, out, color, run=run_plain, which=shutil.whi
     return bool(which(need))
 
 
-def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which, dotfiles=None, record=None):
+def execute(
+    steps,
+    out,
+    color,
+    run=run_plain,
+    pull=run_pull,
+    which=shutil.which,
+    dotfiles=None,
+    record=None,
+    replacement=replacement_python,
+):
     """
     Run every step, even after a failure. Returns the titles of the steps that
     failed, and records each step's outcome and time for the closing page.
+    Raises InterpreterReplaced after the step that removed this python, once
+    that step is recorded, so main hands the rest to the one now installed.
     """
     paint = terminal_style.paint
     record = refresh_report.record if record is None else record
@@ -648,6 +713,9 @@ def execute(steps, out, color, run=run_plain, pull=run_pull, which=shutil.which,
         status = "failed" if code else "ok"
         record("step", step.title, refresh_report.step_detail(status, time.monotonic() - started, step.family))
         out.flush()
+        python = replacement()
+        if python:
+            raise InterpreterReplaced(python)
     return failed
 
 
@@ -715,6 +783,8 @@ def parse_args(argv):
     parser.add_argument("--check", action="store_true", help="report what would change, write nothing")
     # internal: the restart after a pull that moved dotfiles (restart_argv)
     parser.add_argument("--after-pull", action="store_true", help=argparse.SUPPRESS)
+    # internal: the restart after an upgrade removed the python running this; skips the steps already recorded
+    parser.add_argument("--resume", action="store_true", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
 
 
@@ -751,24 +821,35 @@ def main(argv=None, environ=None, run=subprocess.run, head=dotfiles_head, clock=
     report = report_path()
     os.environ[refresh_report.REPORT_ENV] = report
     started = clock()
+    done = refresh_report.steps_of(refresh_report.read(report)) if args.after_pull or args.resume else []
+    started -= sum(seconds for _, _, seconds, _ in done)
     if args.after_pull:
         steps = steps[1:]
-        started -= sum(seconds for _, _, seconds, _ in refresh_report.steps_of(refresh_report.read(report)))
+    if args.resume:
+        recorded_titles = {title for title, _, _, _ in done}
+        steps = [step for step in steps if step.title not in recorded_titles]
     try:
-        if not (args.after_pull or args.check or args.pull_only):
-            before = head(dotfiles)
-            execute(steps[:1], out, color, dotfiles=dotfiles)
-            if head(dotfiles) != before:
-                out.write(
-                    terminal_style.paint("   dotfiles moved; continuing with the code just pulled", "muted", color)
-                )
-                out.write("\n\n")
-                out.flush()
-                # the restart draws the page and removes the report it inherited
-                return run(restart_argv(argv)).returncode
-            steps = steps[1:]
-            out.write("\n")
-        execute(steps, out, color, dotfiles=dotfiles)
+        try:
+            if not (args.after_pull or args.resume or args.check or args.pull_only):
+                before = head(dotfiles)
+                execute(steps[:1], out, color, dotfiles=dotfiles)
+                if head(dotfiles) != before:
+                    out.write(
+                        terminal_style.paint("   dotfiles moved; continuing with the code just pulled", "muted", color)
+                    )
+                    out.write("\n\n")
+                    out.flush()
+                    # the restart draws the page and removes the report it inherited
+                    return run(restart_argv(argv)).returncode
+                steps = steps[1:]
+                out.write("\n")
+            execute(steps, out, color, dotfiles=dotfiles)
+        except InterpreterReplaced as replaced:
+            note = f"   an upgrade removed the python running this; continuing on {replaced.python}"
+            out.write("\n" + terminal_style.paint(note, "muted", color) + "\n\n")
+            out.flush()
+            # the restart runs what is left, draws the page and removes the report it inherited
+            return run(restart_argv(argv, flag="--resume", python=replaced.python)).returncode
     except KeyboardInterrupt:
         out.write("\n" + terminal_style.paint("interrupted: the remaining steps did not run", "red", color) + "\n")
         remove_if_exists(report)

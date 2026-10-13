@@ -57,9 +57,12 @@ def read(path):
     if not path or not os.path.exists(path):
         return []
     lines = []
-    with open(path, encoding="utf-8-sig") as handle:
-        for raw in handle:
-            text = raw.rstrip("\r\n")
+    # utf-8 and the mark dropped by hand, never "utf-8-sig": that codec is loaded from
+    # the standard library on first use, and by the end of a run a package upgrade may
+    # have deleted the python this process started on. utf-8 itself is built in.
+    with open(path, encoding="utf-8") as handle:
+        for index, raw in enumerate(handle):
+            text = (raw.lstrip("\ufeff") if index == 0 else raw).rstrip("\r\n")
             if not text.strip():
                 continue
             kind, _, rest = text.partition("\t")
