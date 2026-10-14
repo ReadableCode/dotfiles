@@ -4,6 +4,7 @@
 import email
 import email.policy
 import glob
+import gzip
 import html
 import os
 import re
@@ -33,6 +34,7 @@ CALENDAR_DB = os.path.join(LIBRARY_DIR, "Group Containers", "group.com.apple.cal
 ACCOUNTS_DB = os.path.join(LIBRARY_DIR, "Accounts", "Accounts4.sqlite")
 ADDRESS_BOOK_DIR = os.path.join(LIBRARY_DIR, "Application Support", "AddressBook")
 ADDRESS_BOOK_NAME = "AddressBook-v22.abcddb"
+NOTES_DB = os.path.join(LIBRARY_DIR, "Group Containers", "group.com.apple.notes", "NoteStore.sqlite")
 
 # Core Data and Messages count from 2001-01-01 UTC, not the Unix epoch.
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -73,6 +75,14 @@ RECIPIENT_TYPES = {0: "to", 1: "cc", 2: "bcc"}
 PLAIN_MESSAGE_TYPE = 0
 # U+FFFC marks where an attachment sat in the message text.
 ATTACHMENT_PLACEHOLDER = "￼"
+
+# Notes keeps accounts, folders and notes as rows of this one table, told apart by Z_ENT.
+NOTES_TABLE = "ZICCLOUDSYNCINGOBJECT"
+# ZFOLDERTYPE of an account's Recently Deleted folder.
+NOTES_TRASH_FOLDER = 1
+# Protobuf path to a note's words: NoteStoreProto.document > Document.note > Note.note_text.
+NOTE_TEXT_PATH = (2, 3, 2)
+PROTO_VARINT, PROTO_FIXED64, PROTO_BYTES, PROTO_FIXED32 = 0, 1, 2, 5
 
 # Recurrence.frequency, and week_start (1 Monday .. 7 Sunday, 0 unset = RFC 5545's Monday default).
 RRULE_FREQUENCY = {1: rrule.DAILY, 2: rrule.WEEKLY, 3: rrule.MONTHLY, 4: rrule.YEARLY}
@@ -894,6 +904,215 @@ def messages_search(
     if query_text:
         rows = [row for row in rows if query_text.lower() in message_text(row).lower()]
     return _serialize_messages(rows[:limit], names, messages_db)
+
+
+# %%
+# Notes #
+
+
+def notes_schema(notes_db=None):
+    """
+    The entity number of each kind of row, and a builder for the column a kind
+    keeps a value in. Core Data numbers the columns two kinds share a name for
+    (ZTITLE1, ZTITLE2, ...) and the numbers move from one macOS to the next,
+    but a row fills only its own kind's column, so COALESCE over the numbered
+    family reads the right one whichever number it was given.
+    """
+    path = notes_db or NOTES_DB
+    entities = {row["name"]: row["ent"] for row in query(path, "SELECT Z_NAME AS name, Z_ENT AS ent FROM Z_PRIMARYKEY")}
+    columns = [row["name"] for row in query(path, f"PRAGMA table_info({NOTES_TABLE})")]
+
+    def family(alias, base):
+        members = [f"{alias}.{column}" for column in columns if re.fullmatch(rf"{base}\d*", column)]
+        if not members:
+            raise RuntimeError(f"the Notes store has no {base} column - its schema changed")
+        return members[0] if len(members) == 1 else f"COALESCE({', '.join(members)})"
+
+    return entities, family
+
+
+def scoped_note_folders(accounts, notes_db=None):
+    """
+    folder pk -> folder, for every Notes folder under the given accounts. A
+    Notes account carries the identifier of the Internet Account it syncs
+    with, which is what ties a folder to the address the config names; the
+    local "On My Mac" account has none and is never reached.
+    """
+    entities, family = notes_schema(notes_db)
+    rows = query(
+        notes_db or NOTES_DB,
+        f"SELECT f.Z_PK AS pk, {family('f', 'ZTITLE')} AS title, f.ZPARENT AS parent, f.ZFOLDERTYPE AS kind, "
+        f"a.ZIDENTIFIER AS account_id FROM {NOTES_TABLE} f JOIN {NOTES_TABLE} a ON a.Z_PK = {family('f', 'ZACCOUNT')} "
+        "WHERE f.Z_ENT = ? AND a.Z_ENT = ? AND COALESCE(f.ZMARKEDFORDELETION, 0) = 0",
+        (entities["ICFolder"], entities["ICAccount"]),
+    )
+    by_pk = {row["pk"]: row for row in rows}
+    folders = {}
+    for row in rows:
+        owner = owner_of(row["account_id"], accounts)
+        if not owner:
+            continue
+        parts, parent, hops = [row["title"] or ""], row["parent"], 0
+        while parent in by_pk and hops < len(rows):
+            parts.insert(0, by_pk[parent]["title"] or "")
+            parent, hops = by_pk[parent]["parent"], hops + 1
+        folders[row["pk"]] = {
+            "account": owner,
+            "path": "/".join(parts),
+            "is_trash": row["kind"] == NOTES_TRASH_FOLDER,
+        }
+    return folders
+
+
+def notes_list_folders(accounts, notes_db=None):
+    folders = scoped_note_folders(accounts, notes_db)
+    counts = {row["folder"]: row["total"] for row in _note_rows(folders, notes_db=notes_db, count=True)}
+    return sorted(
+        ({**folder, "total": counts.get(pk, 0)} for pk, folder in folders.items()),
+        key=lambda folder: (folder["account"], folder["path"].lower()),
+    )
+
+
+def _note_rows(folders, where="", params=(), with_body=False, count=False, notes_db=None):
+    """Live notes in ``folders``, newest change first - or, with ``count``, how many each folder holds."""
+    if not folders:
+        return []
+    entities, family = notes_schema(notes_db)
+    modified = family("n", "ZMODIFICATIONDATE")
+    if count:
+        select, tail = "n.ZFOLDER AS folder, COUNT(*) AS total", "GROUP BY n.ZFOLDER"
+    else:
+        select = (
+            f"n.ZIDENTIFIER AS identifier, n.ZFOLDER AS folder, {family('n', 'ZTITLE')} AS title, "
+            f"{family('n', 'ZSNIPPET')} AS snippet, {family('n', 'ZCREATIONDATE')} AS created, "
+            f"{modified} AS modified, n.ZISPASSWORDPROTECTED AS locked, "
+            f"{'d.ZDATA' if with_body else 'NULL'} AS data"
+        )
+        tail = f"ORDER BY {modified} DESC"
+    return query(
+        notes_db or NOTES_DB,
+        f"SELECT {select} FROM {NOTES_TABLE} n LEFT JOIN ZICNOTEDATA d ON d.Z_PK = n.ZNOTEDATA "
+        f"WHERE n.Z_ENT = ? AND COALESCE(n.ZMARKEDFORDELETION, 0) = 0 AND n.ZFOLDER IN ({placeholders(folders)}) "
+        f"{where.format(modified=modified)} {tail}",
+        [entities["ICNote"], *folders, *params],
+    )
+
+
+def _proto_varint(data, index):
+    value, shift = 0, 0
+    while True:
+        byte = data[index]
+        index += 1
+        value |= (byte & 0x7F) << shift
+        shift += 7
+        if byte < 0x80:
+            return value, index
+
+
+def proto_bytes_field(data, number):
+    """The first length-delimited field ``number`` of a protobuf message, or b"" when it has none."""
+    index = 0
+    while index < len(data):
+        key, index = _proto_varint(data, index)
+        wire = key & 7
+        if wire == PROTO_VARINT:
+            _, index = _proto_varint(data, index)
+        elif wire == PROTO_FIXED64:
+            index += 8
+        elif wire == PROTO_FIXED32:
+            index += 4
+        elif wire == PROTO_BYTES:
+            length, index = _proto_varint(data, index)
+            if key >> 3 == number:
+                return data[index : index + length]
+            index += length
+        else:
+            raise ValueError(f"note body has protobuf wire type {wire}, which this reader does not know")
+    return b""
+
+
+def decode_note_body(blob):
+    """
+    A note's words are a gzipped protobuf, the plain text three messages deep
+    (NOTE_TEXT_PATH) beside the runs that style it. Tables, drawings and images
+    are attachments, each a U+FFFC in the text, and are left out.
+    """
+    if not blob:
+        return ""
+    data = gzip.decompress(bytes(blob))
+    for number in NOTE_TEXT_PATH:
+        data = proto_bytes_field(data, number)
+    return data.decode("utf-8", errors="replace").replace(ATTACHMENT_PLACEHOLDER, "")
+
+
+def _serialize_note(row, folders):
+    folder = folders[row["folder"]]
+    return {
+        "note_id": row["identifier"],
+        "account": folder["account"],
+        "folder": folder["path"],
+        "title": row["title"] or "",
+        "created": local_iso(from_apple_seconds(row["created"])) if row["created"] is not None else None,
+        "modified": local_iso(from_apple_seconds(row["modified"])) if row["modified"] is not None else None,
+        "locked": bool(row["locked"]),
+    }
+
+
+def notes_search(
+    accounts, query_text="", folder="", since="", until="", include_deleted=False, max_results=25, notes_db=None
+):
+    """
+    Notes in the given accounts, most recently changed first. ``query_text``
+    matches the title and the whole body, which means decoding every candidate
+    note; a locked note is encrypted and matches on its title alone.
+    """
+    folders = scoped_note_folders(accounts, notes_db)
+    if folder:
+        wanted = folder.lower()
+        folders = {pk: entry for pk, entry in folders.items() if entry["path"].lower() == wanted}
+        if not folders:
+            raise ValueError(f"no Notes folder '{folder}' in these accounts - call notes_list_folders")
+    elif not include_deleted:
+        folders = {pk: entry for pk, entry in folders.items() if not entry["is_trash"]}
+    clauses, params = [], []
+    if since:
+        clauses.append("AND {modified} >= ?")
+        params.append(to_apple_seconds(parse_moment(since)))
+    if until:
+        clauses.append("AND {modified} < ?")
+        params.append(to_apple_seconds(parse_moment(until, end_of_day=True)))
+    needle = query_text.lower()
+    limit = max(1, min(max_results, MAX_RESULTS))
+    results = []
+    for row in _note_rows(folders, " ".join(clauses), params, with_body=bool(needle), notes_db=notes_db):
+        if needle and needle not in (row["title"] or "").lower():
+            if row["locked"] or needle not in decode_note_body(row["data"]).lower():
+                continue
+        results.append({**_serialize_note(row, folders), "snippet": (row["snippet"] or "")[:300]})
+        if len(results) == limit:
+            break
+    return results
+
+
+def notes_get_note(accounts, note_id, body_limit=20000, body_offset=0, notes_db=None):
+    """
+    One note in full as plain text. Refuses a note outside the given accounts -
+    an id from another context reads as not found. ``body_offset`` pages
+    through a note longer than ``body_limit``.
+    """
+    folders = scoped_note_folders(accounts, notes_db)
+    rows = _note_rows(folders, "AND n.ZIDENTIFIER = ?", [str(note_id)], with_body=True, notes_db=notes_db)
+    if not rows:
+        raise ValueError(f"no note {note_id} in these accounts")
+    row = rows[0]
+    body = "" if row["locked"] else decode_note_body(row["data"])
+    start = max(0, body_offset)
+    return {
+        **_serialize_note(row, folders),
+        "body": body[start : start + body_limit],
+        "body_length": len(body),
+        "body_truncated": len(body) > start + body_limit,
+    }
 
 
 # %%

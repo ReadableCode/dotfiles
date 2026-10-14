@@ -19,6 +19,8 @@ def test_every_tool_is_registered_once():
         "mail_get_message",
         "messages_search",
         "messages_get_chat",
+        "notes_search",
+        "notes_get_note",
         "calendar_agenda",
         "calendar_create_event",
         "calendar_delete_event",

@@ -96,10 +96,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   calendar board via `src/utils/google_oauth_tools.py`; nothing in that
   process may print to stdout or the JSON-RPC protocol breaks.
 - **`mac_mcp.py`** - stdio MCP server over the local copies Mail.app,
-  Calendar.app and Messages keep on a Mac, so any account signed in to
+  Calendar.app, Messages and Notes keep on a Mac, so any account signed in to
   Internet Accounts is reachable without an OAuth app of our own (the fix for
-  tenants that block consent). Read-only SQLite (`mode=ro`) for mail, texts
-  and calendars, recurring series expanded from their stored rules; calendar
+  tenants that block consent). Read-only SQLite (`mode=ro`) for mail, texts,
+  notes and calendars, recurring series expanded from their stored rules; calendar
   writes go through Calendar.app over AppleScript. Same per-context pinning as
   the Google server: each credentials repo declares `<context>_mac` and lists
   its addresses in `<context>_macaccounts.yaml`. Needs Full Disk Access on the

@@ -1,6 +1,7 @@
 # %%
 # Imports #
 
+import gzip
 import os
 import sqlite3
 import time
@@ -406,6 +407,123 @@ def test_messages_list_chats_names_participants(messages_db, address_book):
 def test_normalize_handle_matches_formatted_numbers():
     assert mtools.normalize_handle("+1 (512) 555-0100") == mtools.normalize_handle("5125550100")
     assert mtools.normalize_handle("Me@Acme.com") == "me@acme.com"
+
+
+# %%
+# Notes #
+
+
+def proto(number, payload):
+    length, encoded = len(payload), b""
+    while True:
+        encoded += bytes([length & 0x7F | (0x80 if length > 0x7F else 0)])
+        length >>= 7
+        if not length:
+            return bytes([number << 3 | 2]) + encoded + payload
+
+
+def note_blob(text):
+    """What Notes stores: gzip over store > document > note > text, with varint fields and style runs alongside."""
+    note = proto(2, text.encode()) + proto(5, b"\x08\x05")
+    return gzip.compress(b"\x08\x00" + proto(2, b"\x08\x00\x10\x00" + proto(3, note)))
+
+
+@pytest.fixture
+def notes_db(tmp_path):
+    changed = apple_seconds(datetime(2026, 3, 1, 12, tzinfo=timezone.utc))
+    note = (
+        "INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, Z_ENT, ZIDENTIFIER, ZTITLE1, ZSNIPPET, ZFOLDER, ZACCOUNT7, "
+        "ZNOTEDATA, ZCREATIONDATE3, ZMODIFICATIONDATE1, ZISPASSWORDPROTECTED) VALUES (?, 12, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    )
+    return build(
+        tmp_path / "NoteStore.sqlite",
+        """
+        CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER PRIMARY KEY, Z_NAME TEXT);
+        INSERT INTO Z_PRIMARYKEY VALUES (12, 'ICNote'), (14, 'ICAccount'), (15, 'ICFolder');
+        -- the numbered columns are the ones a real store has; ZTITLE and ZMODIFICATIONDATE belong to other kinds
+        CREATE TABLE ZICCLOUDSYNCINGOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZIDENTIFIER TEXT,
+            ZMARKEDFORDELETION INTEGER, ZISPASSWORDPROTECTED INTEGER, ZFOLDERTYPE INTEGER, ZPARENT INTEGER,
+            ZFOLDER INTEGER, ZNOTEDATA INTEGER, ZACCOUNT7 INTEGER, ZACCOUNT8 INTEGER, ZNAME TEXT, ZSNIPPET TEXT,
+            ZTITLE TEXT, ZTITLE1 TEXT, ZTITLE2 TEXT, ZCREATIONDATE3 REAL, ZMODIFICATIONDATE REAL,
+            ZMODIFICATIONDATE1 REAL);
+        CREATE TABLE ZICNOTEDATA (Z_PK INTEGER PRIMARY KEY, ZNOTE INTEGER, ZDATA BLOB);
+        INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, Z_ENT, ZIDENTIFIER, ZNAME) VALUES
+            (1, 14, 'AAAA-ACME-ROOT', 'Acme'), (2, 14, 'BBBB-HOME-ROOT', 'Home'), (3, 14, 'LocalAccount', 'On My Mac');
+        INSERT INTO ZICCLOUDSYNCINGOBJECT (Z_PK, Z_ENT, ZTITLE2, ZFOLDERTYPE, ZPARENT, ZACCOUNT8) VALUES
+            (10, 15, 'Notes', 0, NULL, 1), (11, 15, 'Projects', 0, 10, 1), (12, 15, 'Recently Deleted', 1, NULL, 1),
+            (13, 15, 'Notes', 0, NULL, 2), (14, 15, 'Notes', 0, NULL, 3);
+        """,
+        [
+            (note, (20, "NOTE-LOG", "Log", "first line", 10, 1, 30, changed, changed + 60, 0)),
+            (note, (21, "NOTE-PLAN", "Plan", "roadmap", 11, 1, 31, changed, changed, 0)),
+            (note, (22, "NOTE-GONE", "Gone", "old", 12, 1, 32, changed, changed, 0)),
+            (note, (23, "NOTE-HOME", "Groceries", "milk", 13, 2, 33, changed, changed, 0)),
+            (note, (24, "NOTE-LOCAL", "Scratch", "local", 14, 3, 34, changed, changed, 0)),
+            (note, (25, "NOTE-LOCKED", "Secret", "", 10, 1, 35, changed, changed - 60, 1)),
+            ("INSERT INTO ZICNOTEDATA VALUES (?, ?, ?)", (30, 20, note_blob("Log\nrelease went out\n￼\nthird line"))),
+            ("INSERT INTO ZICNOTEDATA VALUES (?, ?, ?)", (31, 21, note_blob("Plan\nship the release"))),
+            ("INSERT INTO ZICNOTEDATA VALUES (?, ?, ?)", (32, 22, note_blob("Gone\nrelease notes draft"))),
+            ("INSERT INTO ZICNOTEDATA VALUES (?, ?, ?)", (33, 23, note_blob("Groceries\nmilk before the release"))),
+            ("INSERT INTO ZICNOTEDATA VALUES (?, ?, ?)", (34, 24, note_blob("Scratch\nrelease"))),
+            ("INSERT INTO ZICNOTEDATA VALUES (?, ?, ?)", (35, 25, b"not a note the reader can open")),
+        ],
+    )
+
+
+def test_decode_note_body_reads_long_text_and_drops_attachment_marks():
+    text = "line of a long note\n" * 400
+    assert mtools.decode_note_body(note_blob(text + "￼")) == text
+    assert mtools.decode_note_body(None) == ""
+
+
+def test_notes_list_folders_is_scoped_with_nested_paths_and_counts(accounts_db, notes_db):
+    folders = mtools.notes_list_folders(scope(accounts_db, "acme"), notes_db)
+    assert [(folder["path"], folder["total"]) for folder in folders] == [
+        ("Notes", 2),
+        ("Notes/Projects", 1),
+        ("Recently Deleted", 1),
+    ]
+    assert {folder["account"] for folder in folders} == {"acme"}
+
+
+def test_notes_search_matches_bodies_inside_the_scope_and_skips_deleted(accounts_db, notes_db):
+    acme = scope(accounts_db, "acme")
+    found = mtools.notes_search(acme, query_text="RELEASE", notes_db=notes_db)
+    # newest change first; the other account's note, the local one and the deleted one stay out
+    assert [note["note_id"] for note in found] == ["NOTE-LOG", "NOTE-PLAN"]
+    assert found[0]["folder"] == "Notes" and found[0]["modified"] == "2026-03-01T06:01:00-06:00"
+    deleted = mtools.notes_search(acme, query_text="release", include_deleted=True, notes_db=notes_db)
+    assert "NOTE-GONE" in [note["note_id"] for note in deleted]
+
+
+def test_notes_search_lists_filters_by_folder_and_finds_a_locked_note_by_title(accounts_db, notes_db):
+    acme = scope(accounts_db, "acme")
+    assert [note["title"] for note in mtools.notes_search(acme, notes_db=notes_db)] == ["Log", "Plan", "Secret"]
+    assert [note["title"] for note in mtools.notes_search(acme, folder="notes/projects", notes_db=notes_db)] == ["Plan"]
+    assert [note["locked"] for note in mtools.notes_search(acme, query_text="secret", notes_db=notes_db)] == [True]
+    assert mtools.notes_search(acme, until="2026-02-28", notes_db=notes_db) == []
+    with pytest.raises(ValueError, match="no Notes folder"):
+        mtools.notes_search(acme, folder="Nowhere", notes_db=notes_db)
+
+
+def test_notes_get_note_pages_through_the_body(accounts_db, notes_db):
+    acme = scope(accounts_db, "acme")
+    note = mtools.notes_get_note(acme, "NOTE-LOG", notes_db=notes_db)
+    assert note["body"] == "Log\nrelease went out\n\nthird line"
+    assert (note["body_length"], note["body_truncated"]) == (32, False)
+    first = mtools.notes_get_note(acme, "NOTE-LOG", body_limit=3, notes_db=notes_db)
+    assert (first["body"], first["body_truncated"]) == ("Log", True)
+    rest = mtools.notes_get_note(acme, "NOTE-LOG", body_limit=100, body_offset=4, notes_db=notes_db)
+    assert (rest["body"], rest["body_truncated"]) == ("release went out\n\nthird line", False)
+
+
+def test_notes_get_note_refuses_another_contexts_note_and_leaves_a_locked_one_shut(accounts_db, notes_db):
+    acme = scope(accounts_db, "acme")
+    for note_id in ("NOTE-HOME", "NOTE-LOCAL"):
+        with pytest.raises(ValueError, match="no note"):
+            mtools.notes_get_note(acme, note_id, notes_db=notes_db)
+    locked = mtools.notes_get_note(acme, "NOTE-LOCKED", notes_db=notes_db)
+    assert (locked["locked"], locked["body"], locked["body_length"]) == (True, "", 0)
 
 
 # %%

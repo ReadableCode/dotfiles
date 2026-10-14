@@ -1,8 +1,9 @@
-# Mac MCP - Mail.app, Calendar.app and Messages in Claude Code
+# Mac MCP - Mail.app, Calendar.app, Messages and Notes in Claude Code
 
 `src/mac_mcp.py` is a stdio MCP server that lets Claude Code read the mail,
-calendars and texts already synced onto a Mac, and add events to those
-calendars. It reads the local copies Mail.app, Calendar.app and Messages keep,
+calendars, texts and notes already synced onto a Mac, and add events to those
+calendars. It reads the local copies Mail.app, Calendar.app, Messages and Notes
+keep,
 so it reaches any account signed in under System Settings > Internet Accounts
 (Exchange, Google Workspace, iCloud, IMAP) with no OAuth app of its own.
 
@@ -47,18 +48,20 @@ and lists the accounts that context reaches in `<context>_macaccounts.yaml`:
 ```
 
 An `internet_account` entry covers every account in Internet Accounts whose
-top-level username is that address, and both apps' data under it: Mail.app
+top-level username is that address, and each app's data under it: Mail.app
 names its account folders after a child IMAP/Exchange account and
 Calendar.app its stores after a child CalDAV one, and the server walks each
-child up to its root in `~/Library/Accounts/Accounts4.sqlite`. One Apple ID is
-often both the iCloud and a Google account, and then one entry covers both.
-Local-only data ("On My Mac" mailboxes, subscribed and birthday calendars)
-belongs to no account and is never reached.
+child up to its root in `~/Library/Accounts/Accounts4.sqlite`. Notes names its
+accounts after the root itself, so the same entry reaches that account's notes
+with no entry of their own. One Apple ID is often both the iCloud and a Google
+account, and then one entry covers both.
+Local-only data ("On My Mac" mailboxes and notes, subscribed and birthday
+calendars) belongs to no account and is never reached.
 
-Mail.app and Calendar.app hold every context's accounts side by side, so the
-pin is what keeps a session in one client's repo from reading another's mail:
-a pinned server sees only its own entries, a message or calendar id from
-another account reads as not found, and a pinned context with no config
+Mail.app, Calendar.app and Notes hold every context's accounts side by side, so
+the pin is what keeps a session in one client's repo from reading another's
+mail: a pinned server sees only its own entries, a message, note or calendar id
+from another account reads as not found, and a pinned context with no config
 reports no accounts. `list_accounts` shows, per entry, which Internet Accounts
 it matched here and how many mail folders and calendars that is.
 
@@ -92,6 +95,16 @@ keep the words in `attributedBody`, an archived NSAttributedString the server
 decodes. Handles resolve to names through the Contacts databases under
 `~/Library/Application Support/AddressBook`. Tapbacks are left out.
 
+**Notes** - `~/Library/Group Containers/group.com.apple.notes/NoteStore.sqlite`.
+Accounts, folders and notes are rows of one table, and the columns two kinds
+share a name for are numbered (`ZTITLE1`, `ZTITLE2`) differently from one macOS
+to the next, so the server reads each through `COALESCE` over the numbered
+family. A note's words are a gzipped protobuf in `ZICNOTEDATA`; the server
+walks to the plain text and skips the styling. Tables, drawings and images are
+attachments and are left out, a locked note is encrypted and returns no body,
+and search decodes every candidate note to match whole bodies. The copy is only
+as fresh as the last time Notes synced on this Mac.
+
 **Calendar** - `~/Library/Group Containers/group.com.apple.calendar/Calendar.sqlitedb`.
 Recurring series are expanded by the server from their stored rules
 (`Recurrence`, `ExceptionDate`, detached occurrences), in the event's own time
@@ -120,12 +133,13 @@ arguments, never spliced into the script.
   series edit moves every occurrence, so both are refused. Delete is not
   recoverable.
 
-Mail and Messages have no write tools.
+Mail, Messages and Notes have no write tools.
 
 ## Tools
 
 `list_accounts`; mail: `mail_list_mailboxes`, `mail_search`, `mail_get_message`;
 messages: `messages_list_chats`, `messages_get_chat`, `messages_search`;
+notes: `notes_list_folders`, `notes_search`, `notes_get_note`;
 calendar: `calendar_list_calendars`, `calendar_agenda`, `calendar_search_events`,
 `calendar_get_event`, `calendar_create_event`, `calendar_update_event`,
 `calendar_delete_event`. `account` defaults to every entry of the context.
@@ -134,8 +148,8 @@ calendar: `calendar_list_calendars`, `calendar_agenda`, `calendar_search_events`
 
 - macOS only. Windows and Linux are tracked in
   `backlog/mac-mcp-windows-linux.md`.
-- The stores are private formats. Mail's `V<n>` folder, the Messages archive and
-  the Calendar schema are what macOS 27 writes; a macOS upgrade that changes
+- The stores are private formats. Mail's `V<n>` folder, the Messages archive,
+  the Notes protobuf and the Calendar schema are what macOS 27 writes; a macOS upgrade that changes
   them shows up as a failing read, and the fix is in `src/utils/macmcp_tools.py`.
 - Anticipated failures (not configured, access denied, a refused write) are
   raised as the SDK's `ToolError` so their reason reaches the model; any other

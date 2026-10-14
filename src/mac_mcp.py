@@ -35,7 +35,7 @@ CREDENTIALS_ROOT = grandparent_dir
 _context = ""
 
 SERVER_INSTRUCTIONS = """
-Jason's Mail.app, Calendar.app and Messages on this Mac, read from the local
+Jason's Mail.app, Calendar.app, Messages and Notes on this Mac, read from the local
 copies those apps keep in sync - so it reaches any account signed in there
 (Exchange, Google Workspace, iCloud, IMAP) with no Google or Microsoft app
 registration of its own.
@@ -45,7 +45,9 @@ the context's credentials repo. `account` can be left out to search every
 account this context has; list_accounts shows them and what each matched on
 this Mac.
 
-Mail and Messages are read-only. Calendar writes go through Calendar.app, which
+Mail, Messages and Notes are read-only. Notes are the ones under the same
+accounts, as plain text: tables, drawings and images inside a note are left
+out, and a locked note has no readable body. Calendar writes go through Calendar.app, which
 syncs them to the owning account: create on any writable calendar, update and
 delete only on your own single events (never meetings with attendees or
 recurring series). Calendar.app sends no invitations from here, and calendar
@@ -257,6 +259,52 @@ def messages_search(
 
 
 # %%
+# Notes tools #
+
+
+@tool(description="Every Notes folder in the accounts, with how many notes each holds.")
+def notes_list_folders(account: str = "") -> list:
+    return mtools.notes_list_folders(_scope(account))
+
+
+@tool(
+    description=(
+        "Notes in the accounts, most recently changed first. query matches the title and the whole body; leave it "
+        "out to list. folder is a path from notes_list_folders. since / until are YYYY-MM-DD or ISO timestamps on "
+        "the last change. Recently Deleted is skipped unless include_deleted. Returns ids for notes_get_note."
+    )
+)
+def notes_search(
+    query: str = "",
+    folder: str = "",
+    since: str = "",
+    until: str = "",
+    include_deleted: bool = False,
+    max_results: int = 25,
+    account: str = "",
+) -> list:
+    return mtools.notes_search(
+        _scope(account),
+        query_text=query,
+        folder=folder,
+        since=since,
+        until=until,
+        include_deleted=include_deleted,
+        max_results=max_results,
+    )
+
+
+@tool(
+    description=(
+        "One note in full as plain text. body_length is the whole note; when body_truncated, read on with "
+        "body_offset. Tables, drawings and images are left out, and a locked note returns no body."
+    )
+)
+def notes_get_note(note_id: str, body_limit: int = 20000, body_offset: int = 0, account: str = "") -> dict:
+    return mtools.notes_get_note(_scope(account), note_id, body_limit=body_limit, body_offset=body_offset)
+
+
+# %%
 # Calendar tools #
 
 
@@ -372,7 +420,7 @@ def calendar_delete_event(event_id: str, calendar_id: str, account: str = "") ->
 
 
 def parse_args(argv=None):
-    parser = argparse.ArgumentParser(description="Mail.app, Calendar.app and Messages MCP stdio server (macOS).")
+    parser = argparse.ArgumentParser(description="Mail.app, Calendar.app, Messages and Notes MCP stdio server (macOS).")
     parser.add_argument(
         "--context",
         default="",
