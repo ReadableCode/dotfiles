@@ -226,6 +226,7 @@ exception.
 | `Book-Bot` | Conforms. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). Its `test_postgrest_real.py` stays red until `postgrest-auth` is redeployed — deploy the service **before** Book-Bot's app code, or every user locks out. |
 | `load-log` | Conforms. The schema converges from `deploy/*.sql` + `src/bootstrap.py` called from the Streamlit and TUI startup paths, and `users` is at the §3 shape. One open backlog item is fleet-level, not load-log's own conformance: its historic migration set `search_path` on the whole shared `apps` database (`load-log/backlog/shared-apps-search-path.md`). |
 | `Solitaire_Associations` | Conforms, on flow B. |
+| `personal_dev` | Not a web app: a repo of scripts that owns the `personal_dev` schema for data devices push in (the phone's notification log). No `users` table and no login flow; senders hold a non-expiring JWT for `personal_dev_user` whose `jti` names a row in `personal_dev.ingest_keys`, and RLS admits an insert only while that row is unrevoked, so revoking a row stops one sender (I4/I5 in that form). Reads use a five-minute `admin` token the script signs from `POSTGREST_JWT_SECRET`, as Sync_Plex's TUI does. I6 is met from `src/personal_db.py` at the start of every command that uses the schema. |
 
 ---
 
