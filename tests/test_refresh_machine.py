@@ -862,8 +862,15 @@ def test_the_closing_page_draws_with_nothing_left_to_import(tmp_path):
         "raise SystemExit(code)\n"
     )
     environ = {key: value for key, value in os.environ.items() if key != refresh_report.REPORT_ENV}
+    # The child writes in its own stdout codec (cp1252 into a pipe on Windows,
+    # so the page's middle dot arrives as 0xb7); only the ascii text is asserted.
     done = subprocess.run(
-        [sys.executable, "-W", "ignore", "-c", script], capture_output=True, text=True, encoding="utf-8", env=environ
+        [sys.executable, "-W", "ignore", "-c", script],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        env=environ,
     )
     assert done.returncode == 0, done.stderr
     assert "pulling every repo" in done.stdout
