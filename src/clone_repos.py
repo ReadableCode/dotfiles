@@ -28,7 +28,7 @@ GIT_DIR = grandparent_dir
 # provider token in <context>_repos.yaml -> ssh clone-URL host
 PROVIDER_HOSTS = {
     "github": "github.com",
-    "bitbucket": "bitbucket.org",
+    "bitbucket": "ssh.bitbucket.org",
 }
 
 # %%

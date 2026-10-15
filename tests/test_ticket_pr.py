@@ -112,6 +112,7 @@ def test_resolve_repo_explicit_wins(monkeypatch):
     "url",
     [
         "git@bitbucket.org:workspace/slug.git",
+        "git@ssh.bitbucket.org:workspace/slug.git",
         "https://bitbucket.org/workspace/slug.git",
         "https://bitbucket.org/workspace/slug",
     ],
