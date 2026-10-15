@@ -214,6 +214,7 @@ lists. On top of that:
 | winget | an offer whose leading version numbers are not past the installed ones | it is the release already installed |
 | winget | Windows Terminal while a Terminal window is open | Windows will not replace a running package; the Store updates it once closed |
 | choco | a package whose app `winget list` shows at or past the version on offer | something else upgraded it and the installer would push an older build over it |
+| choco | a `.install` / `.portable` package whose wrapper is installed too | the wrapper pins it to one exact version and carries it when the wrapper upgrades; upgrading it alone past the pin fails (vscode.install against vscode) |
 
 Everything else is upgraded, one package at a time and quietly: the terminal
 gets one line per package (`upgraded`, or `failed, reported at the end`) and
@@ -223,7 +224,10 @@ read from that output - the package's checksum is out of date, winget will not
 replace the installed copy, the app is running, or the installer stopped
 because named running programs have its files open (OBS Studio's installer
 exits 6 while anything has its virtual camera loaded, which any app that lists
-cameras does). A failed upgrade fails the "updating os packages" step.
+cameras does). A failed upgrade fails the "updating os packages" step. A choco upgrade
+that exits 1 but reports every package upgraded and no Failures section counts
+as done: that is the old package's beforeModify script failing (neovim's
+removal of its old folder) after the new version went in.
 
 A second run right after the first has the same plan minus whatever the first
 one upgraded. `my_updater.ps1 --check` counts from the same plans. If a plan
