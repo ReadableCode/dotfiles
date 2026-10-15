@@ -279,11 +279,11 @@ def winget_present(package, run=run_capture):
 # Candidates #
 
 
-def wanted_packages(manager, lists_dir=app_lists.APP_LISTS, overlay_paths=None, hostname=None):
+def wanted_packages(manager, lists_dir=app_lists.APP_LISTS, overlay_paths=None):
     """Every package an app list names for this manager on this machine, which no removal may touch."""
     if manager.name not in app_lists.BASE_LISTS:
         return set()
-    wanted = app_lists.wanted_packages(manager.name, lists_dir, overlay_paths, hostname)
+    wanted = app_lists.wanted_packages(manager.name, lists_dir, overlay_paths)
     if manager.name == "brew":
         # A tap formula is listed as "user/repo/formula" but installed, and
         # named in a removal, as its last segment.
@@ -351,7 +351,7 @@ def candidates(entries, system=None, hostname=None, lists_dir=app_lists.APP_LIST
         manager = manager_for(entry["manager"])
         if manager.system != system or not host_allowed(entry, hostname):
             continue
-        if entry["package"] in wanted_packages(manager, lists_dir, overlay_paths, hostname):
+        if entry["package"] in wanted_packages(manager, lists_dir, overlay_paths):
             found.protected.append(entry)
             continue
         present = package_present(entry, cache, run=run)

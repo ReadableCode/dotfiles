@@ -386,9 +386,9 @@ first, or the settings land on a throwaway bus.
 
 Desktops only. A portable Windows box runs no screen server (see the
 portables note above); UltraPocket's copy was retired 2026-10-15 through
-`app_removals.yaml`. The package stays in the personal overlay's choco list
-scoped with `hosts:` to the desktops that serve a screen, so `myupdater`
-keeps installing and upgrading it there and never on a portable.
+`app_removals.yaml`. The package left the personal overlay's choco list the
+same day because that list is fleet-wide, so `myupdater` no longer upgrades
+it on the desktops: `choco upgrade tightvnc` by hand when needed.
 
 - Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
 
