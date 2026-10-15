@@ -13,7 +13,7 @@
 #   file scan of the AutoHotkey roots   ~90 ms
 #   .ahk association (registry read)    ~5 ms
 #   registry uninstall scan             ~470 ms   -Full only
-#   choco list                          ~1840 ms  -Full only
+#   chocolatey lib\*.nuspec read        ~50 ms    -Full only
 #
 # The fast probe catches every real-world case (a v1 install puts files in one of
 # the standard roots); -Full additionally catches a v1 installed to a custom
@@ -88,12 +88,21 @@ function Get-AhkState {
             Where-Object { $_.DisplayName -like '*AutoHotkey*' -and $_.DisplayVersion -like '1.*' } |
             Select-Object -First 1
 
-        if (Get-Command choco -ErrorAction SilentlyContinue) {
-            foreach ($line in (choco list --limit-output 2>$null)) {
-                $parts = $line -split '\|'
-                if ($parts.Count -ge 2 -and $parts[0] -like 'autohotkey*' -and $parts[1] -like '1.*') {
-                    $v1Package = $parts[0]
-                }
+        # Read the .nuspec chocolatey keeps per installed package rather than
+        # running `choco list`: choco writes log4net errors to stderr whenever
+        # its summary log is held by another choco or not writable by this
+        # user, and under 'Stop' Windows PowerShell 5.1 turns that stderr line
+        # into a terminating NativeCommandError even with 2>$null. The lib
+        # folder is what `choco list` reads anyway, in ~50 ms instead of ~1840.
+        $chocoLib = if ($env:ChocolateyInstall) { Join-Path $env:ChocolateyInstall 'lib' }
+        if ($chocoLib -and (Test-Path -LiteralPath $chocoLib)) {
+            foreach ($dir in (Get-ChildItem -LiteralPath $chocoLib -Directory -Filter 'autohotkey*' -ErrorAction SilentlyContinue)) {
+                $nuspec = Join-Path $dir.FullName "$($dir.Name).nuspec"
+                if (-not (Test-Path -LiteralPath $nuspec)) { continue }
+                try {
+                    $version = ([xml](Get-Content -LiteralPath $nuspec -Raw)).package.metadata.version
+                } catch { continue }
+                if ($version -like '1.*') { $v1Package = $dir.Name }
             }
         }
     }

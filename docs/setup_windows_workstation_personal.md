@@ -152,7 +152,7 @@ Probe costs, which is why the startup pass is the cheap one:
 | AutoHotkey install dirs, file versions | ~90 ms | every shell |
 | `.ahk` association (registry read) | ~5 ms | every shell |
 | Uninstall-entry registry scan | ~470 ms | `-Full`, or once something looks wrong |
-| `choco list` | ~1840 ms | `-Full`, or once something looks wrong |
+| Chocolatey `lib\autohotkey*\*.nuspec` versions | ~50 ms | `-Full`, or once something looks wrong |
 
 Manual use, when you want to look rather than wait for a shell:
 
