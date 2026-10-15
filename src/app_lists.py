@@ -16,6 +16,16 @@ The overlay file is a mapping of manager to package names::
     choco: [slack, awscli]
     cask: [slack]
 
+An entry may be limited to named machines with the same ``hosts`` gate the
+manifests and removals use (full or short hostname, case-insensitive). On any
+other machine the entry does not exist: not installed, not upgraded, and not
+protected from a removal::
+
+    choco:
+      - slack
+      - package: tightvnc
+        hosts: [RYZENWHITE]
+
 A brew name may be a third-party tap's formula in full (``user/repo/formula``):
 ``install_mac_apps.sh`` taps it and trusts that one formula before installing.
 
@@ -45,8 +55,9 @@ import shutil
 import sys
 
 import yaml
+from readable_utils.host_tools import get_uppercase_hostname
 
-from deploy_configs import REPO_ROOT, member_overlay_dirs
+from deploy_configs import REPO_ROOT, host_allowed, member_overlay_dirs
 from utils.inventory_tools import overlay_context
 
 APP_LISTS = os.path.join(REPO_ROOT, "app_lists")
@@ -150,30 +161,54 @@ def discover_app_lists():
     return files
 
 
-def load_overlay(paths=None):
+def _overlay_entry(manager, item, path):
+    """``(package, hosts)`` from one list item: a bare name, or ``{package, hosts}``."""
+    if isinstance(item, str) and item.strip():
+        return item.strip(), None
+    if isinstance(item, dict) and isinstance(item.get("package"), str) and item["package"].strip():
+        hosts = item.get("hosts")
+        well_formed = (
+            isinstance(hosts, list) and hosts and all(isinstance(host, str) and host.strip() for host in hosts)
+        )
+        if set(item) != {"package", "hosts"} or not well_formed:
+            raise ValueError(
+                f"'{item['package']}' under '{manager}' in {path} must carry a non-empty hosts list and nothing else"
+            )
+        return item["package"].strip(), [host.strip() for host in hosts]
+    raise ValueError(f"'{manager}' in {path} must be a list of package names")
+
+
+def load_overlay(paths=None, hostname=None):
     """
-    ``{manager: [(package, source file), ...]}`` across every discovered file.
+    ``{manager: [(package, source file), ...]}`` across every discovered file,
+    for this machine (``hostname`` defaults to it): an entry scoped with
+    ``hosts`` to other machines is left out here.
 
     An unknown manager or a value that is not a list of names is a hard error:
     a typo here would otherwise quietly install nothing on every machine of
     that context.
     """
+    hostname = hostname or get_uppercase_hostname()
     found: dict = {}
     for path in discover_app_lists() if paths is None else paths:
         with open(path, "r", encoding="utf-8") as handle:
             parsed = yaml.safe_load(handle) or {}
         if not isinstance(parsed, dict):
             raise ValueError(f"App lists file {path} must be a mapping of manager to package names")
-        for manager, names in parsed.items():
+        for manager, items in parsed.items():
             if manager not in BASE_LISTS:
                 raise ValueError(f"Unknown manager '{manager}' in {path}; expected one of {', '.join(MANAGERS)}")
-            if not isinstance(names, list) or not all(isinstance(name, str) and name.strip() for name in names):
+            if not isinstance(items, list):
                 raise ValueError(f"'{manager}' in {path} must be a list of package names")
-            found.setdefault(manager, []).extend((name.strip(), path) for name in names)
+            bucket = found.setdefault(manager, [])
+            for item in items:
+                name, hosts = _overlay_entry(manager, item, path)
+                if host_allowed({"hosts": hosts}, hostname):
+                    bucket.append((name, path))
     return found
 
 
-def overlay_packages(manager, paths=None):
+def overlay_packages(manager, paths=None, hostname=None):
     """
     The package names this machine's contexts add for one manager, in file
     order, without repeats. Two contexts may name the same app (a machine in
@@ -181,16 +216,16 @@ def overlay_packages(manager, paths=None):
     treats names case-insensitively, so the repeat check does too.
     """
     names, seen = [], set()
-    for name, _ in load_overlay(paths).get(manager, []):
+    for name, _ in load_overlay(paths, hostname).get(manager, []):
         if name.lower() not in seen:
             seen.add(name.lower())
             names.append(name)
     return names
 
 
-def wanted_packages(manager, app_lists=APP_LISTS, overlay_paths=None):
+def wanted_packages(manager, app_lists=APP_LISTS, overlay_paths=None, hostname=None):
     """Every package any app list names for this manager on this machine."""
-    return base_packages(manager, app_lists) | set(overlay_packages(manager, overlay_paths))
+    return base_packages(manager, app_lists) | set(overlay_packages(manager, overlay_paths, hostname))
 
 
 # %%
