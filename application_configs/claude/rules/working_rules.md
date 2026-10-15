@@ -69,6 +69,9 @@ context's own user-level CLAUDE.md.
   everywhere at once and let me sequence the pushes.
 - Never disable or suppress a failing check; fix the code it points at, and
   confirm the fix is a fixed point for the formatter.
+- Never edit a lockfile (`uv.lock`, `package-lock.json`, any `*.lock`): it is
+  tool output. Regenerate it with its tool (`uv lock --upgrade-package <name>`,
+  or delete and relock) and commit only what the tool wrote.
 - Fix the code, not the editor: no `.vscode` workarounds for bad structure.
 - Tests run real from any machine. An unreachable dependency is red, never a
   silent skip, deselect or stale-cache green.

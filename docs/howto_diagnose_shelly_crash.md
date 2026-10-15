@@ -91,10 +91,11 @@ set to that non-default path and `C:\Windows\Minidump` stays empty. There is no
 ssh "$SHELLY" "powershell -NoProfile -Command \"Get-ChildItem C:\Windows\Minidumps -File | Select-Object Name,Length,LastWriteTime | Format-Table -AutoSize\""
 ```
 
-Analyse on Shelly with `kd`. WinDbg is installed from
-`app_lists\windows_apps_personal_winget.shelly.txt`, but `kd.exe` run from its
-WindowsApps folder over ssh writes nothing, so copy the folder out first (send
-as an encoded script):
+Analyse on Shelly with `kd`. WinDbg is not in any app list (nothing else
+needs it); install it on Shelly when diagnosing with
+`winget install Microsoft.WinDbg` from the signed-in session. `kd.exe` run
+from its WindowsApps folder over ssh writes nothing, so copy the folder out
+first (send as an encoded script):
 
 ```powershell
 Copy-Item "$((Get-AppxPackage Microsoft.WinDbg).InstallLocation)\amd64" C:\Temp\windbg_amd64 -Recurse

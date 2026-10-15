@@ -18,8 +18,10 @@ CPU, board and GPU temperatures, fan speeds and CPU power, logged to CSV every
 
 ## Install
 
-`app_lists\windows_apps_personal_winget.shelly.txt` holds
-`LibreHardwareMonitor.LibreHardwareMonitor`.
+The personal overlay app list (`personal_app_lists.yaml`, `winget:`) names
+`LibreHardwareMonitor.LibreHardwareMonitor` for every personal Windows machine,
+so the winget installer and `myupdater` install and upgrade it; only the
+logging task below is Shelly-specific.
 
 winget cannot reach its source from an ssh session (source update
 `Cancelled`, `winget show` fails with `0x80190194`). Inside the signed-in
