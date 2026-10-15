@@ -602,7 +602,12 @@ So the workflow is:
 3. `prune` (dry run) to see what would go, then `prune --apply` — or just
    deploy, which applies the removals **before** it links anything, so a
    removed link never sits where a new entry needs a real directory.
-4. Once every machine has pruned, the line can be dropped from the file.
+
+The line then stays. Nothing records which machines have pruned, and on a
+machine where the path is already gone it is a no-op, so the removals files
+are the standing list of what must not exist rather than a queue to drain
+(decided 2026-10-15). A line goes only when a live manifest entry wants the
+path again, and prune already defers to that.
 
 `prune` never touches a real directory, removes a file only if a removals entry
 names it, cleans up a directory left empty behind a removed file (e.g. a skill
@@ -621,6 +626,5 @@ notices.
 
 It is a separate *command*, not a separate *chore*: `gitpullall` runs
 `prune --apply` as its own step after the deploy, so pulling is all any machine
-needs to act on a removals line — which is what makes step 4 above (dropping a
-line once every machine has pruned) actually reachable. Nothing else invokes
-prune implicitly; `deploy_configs.py` with no subcommand still never deletes.
+needs to act on a removals line. Nothing else invokes prune implicitly;
+`deploy_configs.py` with no subcommand still never deletes.

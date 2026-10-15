@@ -24,8 +24,10 @@
 # the contradiction is printed. So re-adding a package beats a stale line here.
 #
 # Workflow: drop a package from an app list -> add it here -> every machine is
-# offered the removal on its next gitpullall, one package at a time, after its
-# manager's own dry run. Once every machine has run, the line can be dropped.
+# offered the removal on its next myupdater, one package at a time, after its
+# manager's own dry run. The line then stays: nothing records which machines
+# have run it, and it is a no-op where the package is already gone, so this is
+# the standing list of what must not be installed, not a queue (2026-10-15).
 
 # --- RealVNC, retired 2026-09-18 ---
 #

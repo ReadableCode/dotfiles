@@ -14,7 +14,9 @@
 #
 # Workflow: delete a manifest entry -> add its dest here -> every machine's
 # next deploy applies it automatically (or `prune --apply` by hand; bare
-# `prune` previews). Once every machine has deployed, the line can be dropped.
+# `prune` previews). The line then stays: nothing records which machines have
+# pruned, and it is a no-op where the path is already gone, so this is the
+# standing list of what must not exist, not a queue (2026-10-15).
 
 - name: removed_ahk_key_remaps_startup
   dest:
@@ -25,8 +27,7 @@
 
 # The .lnk shortcuts the deleted interactive creator used to make. A leftover
 # .lnk launches the same script a second time next to the manifest's symlink.
-# Nothing creates these any more, so drop these four lines once every Windows
-# machine has pruned.
+# Nothing creates these any more.
 
 - name: removed_ahk_app_jumping_lnk
   dest:
@@ -54,7 +55,7 @@
     on every machine that ever deployed it: two .mcp.json files listing the same
     servers merge into duplicate registrations, and the stale one keeps
     resurrecting servers deleted from the declarations. Nothing creates this
-    path any more - drop this line once every machine has pruned.
+    path any more.
 
 - name: removed_user_mcp_json
   dest:
@@ -157,6 +158,5 @@
     cmdr still holds ~5 MB there, and shows go_apps/cmdr as untracked once it
     pulls past that commit. Not a symlink - a regular file, which prune removes
     as a hard link / regular file, and the emptied go_apps/cmdr goes with it.
-    Nothing builds this path any more - drop these lines once every machine has
-    pruned.
+    Nothing builds this path any more.
 

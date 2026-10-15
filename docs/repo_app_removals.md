@@ -322,7 +322,13 @@ what is present without asking.
 
 ## Workflow
 
-1. drop the package from its `app_lists/` file
+1. drop the package from its `app_lists/` file (or scope the entry with
+   `hosts:` so it stays on the machines that should keep it)
 2. add an entry here
 3. every machine is offered the removal on its next `myupdater`
-4. once every machine has run, drop the line
+
+The line then stays. Nothing records which machines have run it, and on a
+machine where the package is already gone it is a no-op, so the file is the
+standing list of what must not be installed rather than a queue to drain
+(decided 2026-10-15). A line is deleted only when the package is wanted again,
+which is the app-list entry's job anyway.
