@@ -213,6 +213,14 @@ def test_a_host_that_cannot_serve_a_screen_gets_no_vnc_alias(tmp_path):
     assert generated["sshenvy"] == "ssh jason@192.168.1.20"
 
 
+def test_a_host_that_runs_no_screen_server_by_decision_gets_no_vnc_alias(tmp_path):
+    """A portable keeps 5900 closed, so its capable OS must not imply a vnc alias."""
+    write_inventory(tmp_path, "personal", [dict(VNC_HOST, vnc_server=False)])
+    generated = aliases(tmp_path, platform_token="linux")
+    assert "vncenvy" not in generated
+    assert generated["sshenvy"] == "ssh jason@192.168.1.20"
+
+
 def test_an_alias_not_named_for_the_ssh_convention_derives_nothing(tmp_path):
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, aliases=["box"])])
     assert aliases(tmp_path, platform_token="linux") == {"box": "ssh jason@192.168.1.20"}

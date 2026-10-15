@@ -27,3 +27,4 @@ system on the day they were written, and infrastructure moves on its own.
 | [go_apps: syncthing_artifact_cleanup has no callers and hard-codes personal folders](syncthing-artifact-cleanup-unused.md) | 2026-09-30 | open |
 | [context_leak_check: a public repo may name the user's home town, and nothing refuses it](leak-check-has-no-private-places.md) | 2026-09-30 | open |
 | [zephyrus: the agent server stops being reachable when its lid closes or it reboots](zephyrus-agent-server-unattended.md) | 2026-10-02 | open |
+| [ssh: the desktops still accept password logins](ssh-desktops-accept-password-logins.md) | 2026-10-15 | open |

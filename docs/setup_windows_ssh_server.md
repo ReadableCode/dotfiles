@@ -97,6 +97,19 @@
     PubkeyAuthentication yes
     ```
 
+  * Key-only logins on portable machines (UltraPocket, 2026-10-15): once a
+    key login from another machine works, add these two lines ABOVE the
+    `Match Group administrators` block (anything below a `Match` applies
+    only inside it), validate with
+    `& 'C:\Program Files\OpenSSH\sshd.exe' -t -f C:\ProgramData\ssh\sshd_config`,
+    then `Restart-Service sshd`. Confirm from the other machine that
+    `ssh -o PubkeyAuthentication=no jason@<host>` is refused.
+
+    ```bash
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no
+    ```
+
 * Run these commands in admin powershell to set the default shell to powershell:
 
   ```bash

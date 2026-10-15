@@ -175,3 +175,22 @@
     Dropped from the context app lists that named it. Install the native copy
     first (bootstrap.ps1, or `irm https://claude.ai/install.ps1 | iex`) so
     T3 Code finds a claude once the shim is gone.
+
+# --- TightVNC server on the portables, retired 2026-10-15 ---
+#
+# VNC Auth is a password-only protocol (8-byte DES challenge, no encryption, no
+# username) and a laptop offers it on 5900 to whatever network it joins. The
+# portables went key-only for ssh the same day; a screen server on them undoes
+# that. TightVNC was never in an app list (docs/setup_vnc_server.md "Install
+# TightVNC on Windows" is a by-hand choco step, now marked desktops only), so
+# this line is the only record that it must be absent. The host carries
+# "vnc_server": false in the inventory so ssh_aliases.py derives no vnc alias.
+
+- name: tightvnc_server_ultrapocket_choco
+  manager: choco
+  package: tightvnc
+  hosts: [ULTRAPOCKET]
+  note: >-
+    Retired 2026-10-15: a portable runs no screen server. The MSI uninstall
+    removes the tvnserver service and its inbound firewall rule with it.
+    Drop this line once UltraPocket has run it.

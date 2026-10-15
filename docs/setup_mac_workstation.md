@@ -659,8 +659,27 @@ the app lists or `app_removals.yaml` removes shims.
 
 ## Enable SSH Server
 
-- System Settings -> General -> Sharing -> Remote Management
-- System Settings -> General -> Sharing -> Remote Login
+- System Settings -> General -> Sharing -> Remote Management (desktops only;
+  a portable Mac keeps Remote Management and Screen Sharing off and carries
+  `"vnc_server": false` in the inventory, see `setup_vnc_server.md`)
+- System Settings -> General -> Sharing -> Remote Login (Allow access for:
+  Only these users -> Administrators)
+
+### Key-only logins on portable Macs
+
+Once a key login from another machine works (its `id_rsa.pub` is in
+`~/.ssh/authorized_keys` here), turn password and keyboard-interactive logins
+off. `sshd_config` includes `sshd_config.d/*` before its own settings and sshd
+keeps the first value it reads, so a file sorting before `100-macos.conf` wins.
+launchd starts sshd per connection, so no restart is needed. Done on
+MacBookProM5 2026-10-15.
+
+```bash
+printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' | sudo tee /etc/ssh/sshd_config.d/000-key-only.conf
+```
+
+Confirm from the other machine that `ssh -o PubkeyAuthentication=no jason@<host>`
+is refused with `Permission denied (publickey)`.
 
 ### Generate ssh keys if needed
 

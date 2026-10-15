@@ -39,6 +39,9 @@ vnc aliases are DERIVED from the ssh ones rather than declared: every
 be listed twice. A host may tune the target with ``vnc_hostname`` (when the
 screen server answers on a different address from ssh, e.g. a Tailscale name)
 and ``vnc_port`` (when it is not on 5900, as with a headless Xtigervnc on :1).
+A host whose OS could serve a screen but which runs no server by decision
+declares ``"vnc_server": false`` and derives nothing - the portables, since
+2026-10-15.
 
 Every platform gets these, and they all launch TigerVNC's ``vncviewer``. They
 used to be macOS-only and run ``open vnc://``, which hands the connection to
@@ -264,6 +267,10 @@ def vnc_command(host, platform_token):
     """
     host_os = str(host.get("os", "")).lower()
     if host_os not in VNC_CAPABLE_OS:
+        return None
+    # A capable OS that runs no screen server by decision (the portables, which
+    # leave the LAN and keep 5900 closed) says so and gets no vnc alias.
+    if host.get("vnc_server") is False:
         return None
     target = host.get("vnc_hostname") or host_target(host)
     if not target:

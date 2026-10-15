@@ -67,6 +67,15 @@ server rather than the OS. macOS targets are implicitly true. Probed
 | x0vncserver / Xtigervnc | VeNCrypt, VNC Auth | yes |
 | wayvnc (the Pis) | VeNCrypt, RSA-AES, RA2 | **no** |
 
+The portables run no screen server at all. VNC Auth is a password-only
+protocol (an 8-byte DES challenge, no encryption, no username), and a laptop
+offers it on 5900 to whatever network it joins; the same day their ssh went
+key-only (2026-10-15) UltraPocket's TightVNC was retired through
+`app_removals.yaml` and MacBookProM5's Screen Sharing was left off. Each
+carries `"vnc_server": false` in the inventory so `ssh_aliases.py` derives no
+`vnc<stem>` alias for it; screen access to a portable is `ssh<stem>` or the
+lid.
+
 Read any host's list yourself - it arrives before authentication:
 
 ```bash
@@ -374,6 +383,10 @@ first, or the settings land on a throwaway bus.
   RDP backend, which stays disabled; they are harmless.
 
 ## Install TightVNC on Windows
+
+Desktops only. A portable Windows box runs no screen server (see the
+portables note above); UltraPocket's copy was retired 2026-10-15 through
+`app_removals.yaml`.
 
 - Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
 
