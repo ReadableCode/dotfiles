@@ -98,3 +98,13 @@ context's own user-level CLAUDE.md.
   diffable JSON, never a pile of cross-referenced markdown.
 - Public-facing writing is plain and terse: no em-dashes, no emojis, no
   marketing phrases.
+
+## Shell
+
+- The Bash tool runs zsh. zsh does not word-split an unquoted variable and
+  errors on a non-matching glob, so `set -- $pair`, `for x in $list` and
+  `cmd $args` pass ONE word, not several. Loop over literals or an array
+  (`for h in a b c`, `hosts=(a b); for h in "${hosts[@]}"`), never over a
+  string. A loop whose first iteration prints the whole string as one field
+  has hit this; fix the loop before reading anything into the remote's
+  reply.
