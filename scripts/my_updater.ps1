@@ -199,8 +199,13 @@ function Invoke-Upgrade {
     $text = (cmd /c "$Command 2>&1" | Out-String)
     $code = $LASTEXITCODE
     Add-Content -LiteralPath $script:UpgradeLog -Encoding UTF8 -Value "===== $Manager $Name (exit $code) =====`r`n$text"
-    # 3010 and 1641 are an installer's "done, restart needed".
-    if ($code -eq 0 -or $code -eq 3010 -or $code -eq 1641) {
+    # 3010 and 1641 are an installer's "done, restart needed". Chocolatey also
+    # exits 1 on a finished upgrade when only the OLD package's beforeModify
+    # script failed (neovim 0.12.5's Remove-Item of C:\tools\neovim,
+    # 2026-10-15); its own "upgraded N/N" with no Failures section says it went
+    # through.
+    $chocoDone = $Manager -eq 'choco' -and $text -match 'Chocolatey upgraded (\d+)/\1 packages' -and [int]$Matches[1] -gt 0 -and $text -notmatch '(?m)^Failures'
+    if ($code -eq 0 -or $code -eq 3010 -or $code -eq 1641 -or $chocoDone) {
         if ($Change) { Write-Host "upgraded $Change" } else { Write-Host "upgraded" }
         Write-RefreshReport 'package.upgraded' "${Manager}:$Name" $Change
         return

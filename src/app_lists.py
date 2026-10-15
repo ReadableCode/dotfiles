@@ -474,6 +474,10 @@ def choco_upgrades(run=None, which=shutil.which, holds=None, versions=None):
       Chocolatey offers: something else upgraded it, Chocolatey's record is
       behind, and its installer would push an older build over a newer one -
       OpenVPN 2.6.16 over 2.7.7 failed with MSI 1603 on every run.
+    - a ``.install`` / ``.portable`` package whose wrapper is installed too:
+      the wrapper pins it to one exact version and upgrading the wrapper
+      carries it, while upgrading it alone past that pin fails (vscode.install
+      1.142.0 against vscode's ``= 1.141.2``, 2026-10-15).
     """
     import app_removals
 
@@ -483,6 +487,7 @@ def choco_upgrades(run=None, which=shutil.which, holds=None, versions=None):
         return None
     outdated = [line.strip().split("|") for line in output.splitlines() if line.count("|") >= 3]
     holds = load_upgrade_holds() if holds is None else holds
+    installed = app_removals.choco_versions(run=run) if any(CHOCO_VARIANT.search(row[0]) for row in outdated) else {}
     rows = []
     if outdated and which("winget"):
         code, listing = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
@@ -500,8 +505,11 @@ def choco_upgrades(run=None, which=shutil.which, holds=None, versions=None):
             ),
             None,
         )
+        wrapper = choco_name(package)
         if ("choco", package.lower()) in holds:
             held.append((package, holds[("choco", package.lower())]))
+        elif wrapper != package and wrapper.lower() in installed:
+            held.append((package, f"upgraded through {wrapper}, which pins its version"))
         elif ahead:
             held.append((package, f"{ahead.version} is installed, at or past the {available} chocolatey offers"))
         else:

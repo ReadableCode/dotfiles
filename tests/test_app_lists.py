@@ -434,6 +434,23 @@ def test_choco_upgrades_everything_outdated_when_winget_cannot_say_what_is_insta
     assert held == []
 
 
+def test_choco_upgrades_a_variant_only_through_its_installed_wrapper():
+    # ultrapocket 2026-10-15: vscode pins vscode.install to = 1.141.2, so upgrading the variant alone fails.
+    def run(argv):
+        if argv[:2] == ["choco", "outdated"]:
+            return (
+                0,
+                "vscode|1.140.0|1.141.2|false\nvscode.install|1.140.0|1.142.0|false\nputty.portable|0.84|0.85|false\n",
+            )
+        if argv[:2] == ["choco", "list"]:
+            return 0, "vscode|1.140.0\nvscode.install|1.140.0\nputty.portable|0.84\n"
+        return None, ""
+
+    upgrade, held = app_lists.choco_upgrades(run=run, which=lambda name: name == "choco", holds={})
+    assert upgrade == ["vscode", "putty.portable"]
+    assert held == [("vscode.install", "upgraded through vscode, which pins its version")]
+
+
 def test_choco_upgrades_are_unknown_when_choco_cannot_run():
     assert app_lists.choco_upgrades(run=lambda argv: (None, ""), which=lambda name: True) is None
 
