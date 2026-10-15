@@ -86,6 +86,32 @@ def test_wanted_packages_is_the_union_of_both_sources(tmp_path):
     assert app_lists.wanted_packages("choco", str(tmp_path), [overlay]) == {"7zip", "slack"}
 
 
+def test_a_hosts_scoped_entry_exists_only_on_those_hosts(tmp_path):
+    """The same hosts gate as manifests and removals: full or short name, any case."""
+    path = write(tmp_path, "acme_app_lists.yaml", "choco:\n  - slack\n  - package: tightvnc\n    hosts: [RYZENWHITE]\n")
+    assert app_lists.overlay_packages("choco", [path], hostname="RYZENWHITE") == ["slack", "tightvnc"]
+    assert app_lists.overlay_packages("choco", [path], hostname="ryzenwhite.lan") == ["slack", "tightvnc"]
+    assert app_lists.overlay_packages("choco", [path], hostname="ULTRAPOCKET") == ["slack"]
+
+
+def test_a_scoped_entry_is_not_wanted_elsewhere_so_a_removal_may_take_it(tmp_path):
+    write(tmp_path, "windows_apps_personal_choco.txt", "7zip\n")
+    overlay = write(tmp_path, "acme_app_lists.yaml", "choco:\n  - package: tightvnc\n    hosts: [RYZENWHITE]\n")
+    assert app_lists.wanted_packages("choco", str(tmp_path), [overlay], hostname="RYZENWHITE") == {"7zip", "tightvnc"}
+    assert app_lists.wanted_packages("choco", str(tmp_path), [overlay], hostname="ULTRAPOCKET") == {"7zip"}
+
+
+def test_a_scoped_entry_needs_a_hosts_list_and_nothing_else(tmp_path):
+    for text in (
+        "choco:\n  - package: tightvnc\n",
+        "choco:\n  - package: tightvnc\n    hosts: []\n",
+        "choco:\n  - package: tightvnc\n    hosts: [X]\n    note: y\n",
+    ):
+        path = write(tmp_path, "acme_app_lists.yaml", text)
+        with pytest.raises(ValueError, match="non-empty hosts list and nothing else"):
+            app_lists.load_overlay([path], hostname="X")
+
+
 def test_an_unknown_manager_is_a_hard_error(tmp_path):
     path = write(tmp_path, "acme_app_lists.yaml", "chocolatey: [slack]\n")
     with pytest.raises(ValueError, match="Unknown manager 'chocolatey'"):
