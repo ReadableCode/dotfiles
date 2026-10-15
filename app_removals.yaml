@@ -192,5 +192,6 @@
   hosts: [ULTRAPOCKET]
   note: >-
     Retired 2026-10-15: a portable runs no screen server. The MSI uninstall
-    removes the tvnserver service and its inbound firewall rule with it.
-    Drop this line once UltraPocket has run it.
+    removes the tvnserver service and its inbound firewall rule with it. Ran
+    on UltraPocket the same day; the line stays as the guard, so a copy put
+    back by hand is offered for removal again on the next myupdater.
