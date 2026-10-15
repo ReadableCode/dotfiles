@@ -16,6 +16,16 @@ The overlay file is a mapping of manager to package names::
     choco: [slack, awscli]
     cask: [slack]
 
+An entry may be limited to named machines with the same ``hosts`` gate the
+manifests and removals use (full or short hostname, case-insensitive). On any
+other machine the entry does not exist: not installed, not upgraded, and not
+protected from a removal::
+
+    choco:
+      - slack
+      - package: tightvnc
+        hosts: [RYZENWHITE]
+
 A brew name may be a third-party tap's formula in full (``user/repo/formula``):
 ``install_mac_apps.sh`` taps it and trusts that one formula before installing.
 
@@ -45,8 +55,9 @@ import shutil
 import sys
 
 import yaml
+from readable_utils.host_tools import get_uppercase_hostname
 
-from deploy_configs import REPO_ROOT, member_overlay_dirs
+from deploy_configs import REPO_ROOT, host_allowed, member_overlay_dirs
 from utils.inventory_tools import overlay_context
 
 APP_LISTS = os.path.join(REPO_ROOT, "app_lists")

@@ -1349,27 +1349,59 @@ def repo_spec(spec):
     return resolve_provider(spec), resolve_repo(spec)
 
 
-def queue_skip(own, draft, requested, approved_current):
-    """Why a PR is not waiting on this account's review, or None when it is."""
+def queue_skip(own, draft, requested, my_state, since):
+    """
+    Why a PR is not waiting on this account's review, or None when it is. A
+    review of any kind settles the PR until the author pushes ("approved" for
+    an approval, "reviewed" for the rest); a commit since puts it back in the
+    queue for a re-review, request or not.
+    """
     if own:
         return "own"
     if draft:
         return "draft"
+    if my_state:
+        return None if since else "approved" if my_state == "approved" else "reviewed"
     if not requested:
         return "not_requesting"
-    if approved_current:
-        return "approved"
     return None
 
 
-def github_queue_entry(pull, repo, me):
+def commits_after(commits, reviewed_at):
+    """
+    How many of (date, parent count) pairs landed after the review, parsed,
+    since stamps carry different UTC offsets. Merges of the base branch change
+    nothing the review read, so merge commits are not counted.
+    """
+    return sum(parents < 2 and datetime.fromisoformat(date) > reviewed_at for date, parents in commits)
+
+
+def github_my_review(repo, number, headers, me):
+    """(state, commits since) for this account's latest GitHub review, or (None, None)."""
+    pull_url = f"{GITHUB_API}/repos/{repo}/pulls/{number}"
+    mine = [r for r in github_paginate(f"{pull_url}/reviews", headers) if (r.get("user") or {}).get("login") == me]
+    mine = [r for r in mine if r.get("submitted_at") and r["state"] != "PENDING"]
+    if not mine:
+        return None, None
+    latest = max(mine, key=lambda r: r["submitted_at"])
+    reviewed_at = datetime.fromisoformat(latest["submitted_at"].replace("Z", "+00:00"))
+    commits = [
+        (c["commit"]["committer"]["date"].replace("Z", "+00:00"), len(c.get("parents", [])))
+        for c in github_paginate(f"{pull_url}/commits", headers)
+    ]
+    return latest["state"].lower(), commits_after(commits, reviewed_at)
+
+
+def github_queue_entry(pull, repo, me, headers):
     """
     One queue row for a GitHub pull. Submitting a review drops the reviewer
-    from requested_reviewers, so being listed there means the PR is waiting.
+    from requested_reviewers, so a reviewed PR reads as not requesting; its
+    my_state and commits_since_my_review say whether anything landed since.
     """
     author = pull["user"]["login"]
     requested = me in [user["login"] for user in pull.get("requested_reviewers", [])]
     draft = bool(pull.get("draft"))
+    state, since = (None, None) if author == me or draft else github_my_review(repo, pull["number"], headers, me)
     return {
         "provider": "github",
         "repo": repo,
@@ -1381,9 +1413,9 @@ def github_queue_entry(pull, repo, me):
         "url": pull["html_url"],
         "draft": draft,
         "review_requested": requested,
-        "my_state": None,
-        "commits_since_my_approval": None,
-        "skip": queue_skip(author == me, draft, requested, False),
+        "my_state": state,
+        "commits_since_my_review": since,
+        "skip": queue_skip(author == me, draft, requested, state, since),
     }
 
 
@@ -1391,7 +1423,7 @@ def github_queue(repo, headers, me):
     """Open PRs in a GitHub repo."""
     query = urllib.parse.urlencode({"state": "open", "per_page": 100})
     return [
-        github_queue_entry(pull, repo, me)
+        github_queue_entry(pull, repo, me, headers)
         for pull in http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls?{query}", headers)
     ]
 
@@ -1409,29 +1441,32 @@ def github_requested_queue(org, headers, me, listed):
         if repo in listed:
             continue
         pull = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{item['number']}", headers)
-        entries.append(github_queue_entry(pull, repo, me))
+        entries.append(github_queue_entry(pull, repo, me, headers))
     return entries
 
 
 def bitbucket_queue(repo, headers, me):
     """
-    Open PRs in a Bitbucket repo. Bitbucket keeps an approver in reviewers for
-    good, so an approval only settles a PR until its source branch moves: count
-    the commits dated after it, parsed, since the two stamps carry different
-    UTC offsets.
+    Open PRs in a Bitbucket repo. Bitbucket keeps a reviewer's vote in
+    participants for good, so a review only settles a PR until its source
+    branch moves: count the commits after it. A participant with no vote
+    commented, which reads as "commented".
     """
     base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests"
     entries = []
     for pull in bb_paginate(f"{base_url}?state=OPEN&pagelen=50&fields={BB_QUEUE_FIELDS}", headers):
         author = pull.get("author") or {}
         mine = next((p for p in pull.get("participants", []) if (p.get("user") or {}).get("uuid") == me), {})
-        state = mine.get("state")
-        since = None
-        if state == "approved":
-            approved_at = datetime.fromisoformat(mine["participated_on"])
-            commits = http_json("GET", f"{base_url}/{pull['id']}/commits?pagelen=50&fields=values.date", headers)
-            since = sum(datetime.fromisoformat(c["date"]) > approved_at for c in commits.get("values", []))
         draft = bool(pull.get("draft") or DRAFT_TITLE.match(pull["title"]))
+        state, since = None, None
+        if mine.get("participated_on") and author.get("uuid") != me and not draft:
+            state = mine.get("state") or "commented"
+            reviewed_at = datetime.fromisoformat(mine["participated_on"])
+            commits = http_json(
+                "GET", f"{base_url}/{pull['id']}/commits?pagelen=50&fields=values.date,values.parents.hash", headers
+            )
+            dated = [(c["date"], len(c.get("parents", []))) for c in commits.get("values", [])]
+            since = commits_after(dated, reviewed_at)
         requested = me in [r.get("uuid") for r in pull.get("reviewers", [])]
         entries.append(
             {
@@ -1446,8 +1481,8 @@ def bitbucket_queue(repo, headers, me):
                 "draft": draft,
                 "review_requested": requested,
                 "my_state": state,
-                "commits_since_my_approval": since,
-                "skip": queue_skip(author.get("uuid") == me, draft, requested, state == "approved" and not since),
+                "commits_since_my_review": since,
+                "skip": queue_skip(author.get("uuid") == me, draft, requested, state, since),
             }
         )
     return entries
@@ -1457,8 +1492,8 @@ def cmd_review_queue(args):
     """
     Every open PR across the given repos, plus any PR in a ``--requested-in``
     GitHub org that requests this account's review, each with ``skip`` naming
-    why it is not waiting on this account's review (own, not_requesting,
-    draft, approved) or null when it is. The account is whoever the token
+    why it is not waiting on this account's review (own, draft, approved,
+    reviewed, not_requesting) or null when it is. The account is whoever the token
     belongs to, looked up once per provider.
     """
     specs = [repo_spec(spec) for spec in args.repo or [None]]
@@ -1493,8 +1528,8 @@ def cmd_review_queue(args):
         if pr["skip"]:
             skipped[pr["skip"]] = skipped.get(pr["skip"], 0) + 1
             continue
-        since = pr["commits_since_my_approval"]
-        note = f" (re-review: {since} commit(s) since your approval)" if since else ""
+        since = pr["commits_since_my_review"]
+        note = f" (re-review: {since} commit(s) since your {pr['my_state']} review)" if since else ""
         print(f"{pr['url']} {pr['title']}{note}")
     waiting = sum(not pr["skip"] for pr in prs)
     counts = ", ".join(f"{n} {reason}" for reason, n in skipped.items()) or "none"

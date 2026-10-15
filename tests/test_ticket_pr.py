@@ -1389,9 +1389,9 @@ def test_review_queue_bitbucket_marks_what_waits_on_me(monkeypatch, capsys):
         5: "approved",
         6: None,
     }
-    assert result["prs"][5]["commits_since_my_approval"] == 1
+    assert result["prs"][5]["commits_since_my_review"] == 1
     assert result["skipped"] == {"own": 1, "not_requesting": 1, "draft": 1, "approved": 1}
-    assert "pull-requests/6 Approved, pushed to since (re-review: 1 commit(s) since your approval)" in out
+    assert "pull-requests/6 Approved, pushed to since (re-review: 1 commit(s) since your approved review)" in out
 
 
 def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
@@ -1413,7 +1413,7 @@ def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
     monkeypatch.setattr(
         ticket_pr,
         "http_json",
-        lambda m, url, h, **k: {"login": "me"} if url.endswith("/user") else pulls,
+        lambda m, url, h, **k: {"login": "me"} if url.endswith("/user") else [] if "/reviews?" in url else pulls,
     )
     ticket_pr.main(["review-queue", "--repo", "github:owner/name"])
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
@@ -1423,6 +1423,66 @@ def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
         3: "not_requesting",
         4: "draft",
     }
+
+
+def test_review_queue_github_settles_a_reviewed_pr_until_a_commit_lands(monkeypatch, capsys):
+    # A submitted review drops the reviewer from requested_reviewers, so a PR
+    # already commented on read as an unreviewed not_requesting PR and was
+    # summarised again as new. Its own latest review now settles it; a merge
+    # of the base branch since is not new work, a real commit is.
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+
+    def pull(number):
+        return {
+            "number": number,
+            "title": f"PR {number}",
+            "user": {"login": "sam"},
+            "draft": False,
+            "requested_reviewers": [],
+            "head": {"ref": f"b{number}"},
+            "base": {"ref": "main"},
+            "html_url": f"https://github.com/owner/name/pull/{number}",
+        }
+
+    def review(login, state, at):
+        return {"user": {"login": login}, "state": state, "submitted_at": at}
+
+    def commit(at, parents=1):
+        return {"commit": {"committer": {"date": at}}, "parents": [{}] * parents}
+
+    reviews = {
+        1: [review("me", "COMMENTED", "2026-10-14T16:26:29Z"), review("kim", "APPROVED", "2026-10-15T09:00:00Z")],
+        2: [review("me", "COMMENTED", "2026-10-14T16:26:29Z")],
+        3: [review("me", "APPROVED", "2026-10-14T16:26:29Z")],
+        4: [review("kim", "COMMENTED", "2026-10-14T16:26:29Z")],
+    }
+    before = commit("2026-10-14T09:58:20-05:00")
+    commits = {
+        1: [before, commit("2026-10-15T12:04:36-05:00", parents=2)],
+        2: [before, commit("2026-10-15T12:04:36-05:00")],
+        3: [before],
+    }
+
+    def fake(method, url, headers, **kwargs):
+        if url.endswith("/user"):
+            return {"login": "me"}
+        match = re.search(r"/pulls/(\d+)/(reviews|commits)\?", url)
+        if match:
+            number, kind = int(match.group(1)), match.group(2)
+            return (reviews if kind == "reviews" else commits)[number]
+        return [pull(1), pull(2), pull(3), pull(4)]
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake)
+    ticket_pr.main(["review-queue", "--repo", "github:owner/name"])
+    out = capsys.readouterr().out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert [(pr["pr"], pr["my_state"], pr["commits_since_my_review"], pr["skip"]) for pr in result["prs"]] == [
+        (1, "commented", 0, "reviewed"),
+        (2, "commented", 1, None),
+        (3, "approved", 0, "approved"),
+        (4, None, None, "not_requesting"),
+    ]
+    assert "pull/2 PR 2 (re-review: 1 commit(s) since your commented review)" in out
 
 
 def test_review_queue_requested_in_org_adds_prs_from_unlisted_repos(monkeypatch, capsys):
@@ -1449,6 +1509,8 @@ def test_review_queue_requested_in_org_adds_prs_from_unlisted_repos(monkeypatch,
         calls.append(url)
         if url.endswith("/user"):
             return {"login": "me"}
+        if "/reviews?" in url:
+            return []
         if "/search/issues?" in url:
             assert "review-requested%3Ame" in url and "org%3Aacme" in url
             return {"items": [hit("listed", 1), hit("other", 9)]}
