@@ -28,3 +28,4 @@ system on the day they were written, and infrastructure moves on its own.
 | [context_leak_check: a public repo may name the user's home town, and nothing refuses it](leak-check-has-no-private-places.md) | 2026-09-30 | open |
 | [zephyrus: the agent server stops being reachable when its lid closes or it reboots](zephyrus-agent-server-unattended.md) | 2026-10-02 | open |
 | [ssh: the desktops still accept password logins](ssh-desktops-accept-password-logins.md) | 2026-10-15 | open |
+| [python cells: the JupyterLab + jupytext workflow in T3 has no install method](jupyter-cells-in-t3-not-installed.md) | 2026-10-16 | open |
