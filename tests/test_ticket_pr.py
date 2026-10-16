@@ -1115,11 +1115,66 @@ def test_update_pr_needs_something_to_change(monkeypatch, capsys):
         _run_cli(["update-pr", "--repo", "acme/widgets", "--pr", "7"], monkeypatch, capsys)
 
 
-def test_update_pr_is_github_only(monkeypatch, capsys):
+def test_update_pr_bitbucket_state_is_github_only(monkeypatch, capsys):
     monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
     monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
-    with pytest.raises(SystemExit, match="GitHub-only"):
-        _run_cli(["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--title", "x"], monkeypatch, capsys)
+    with pytest.raises(SystemExit, match="--state is GitHub-only"):
+        _run_cli(["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--state", "closed"], monkeypatch, capsys)
+
+
+def test_update_pr_bitbucket_ready_keeps_the_title_and_requests_no_review(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    me = {"uuid": "{me}", "display_name": "Me"}
+    draft = _bb_pull(7, "ACME-1 Keep me", me, [], draft=True)
+    ready = _bb_pull(7, "ACME-1 Keep me", me, [], draft=False)
+    calls = _record_http(monkeypatch, {"/pullrequests/7": [draft, {}, ready]})
+    out = _run_cli(
+        ["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--ready", "--body", "What the branch does."],
+        monkeypatch,
+        capsys,
+    )
+    put = [call for call in calls if call[0] == "PUT"]
+    assert put == [
+        (
+            "PUT",
+            "https://api.bitbucket.org/2.0/repositories/ws/slug/pullrequests/7",
+            {"title": "ACME-1 Keep me", "description": "What the branch does.", "draft": False},
+        )
+    ]
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["draft"] is False and result["updated"] == ["body", "ready"]
+
+
+def test_update_pr_bitbucket_ready_fails_when_still_draft(monkeypatch, capsys):
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    me = {"uuid": "{me}", "display_name": "Me"}
+    draft = _bb_pull(7, "ACME-1", me, [], draft=True)
+    _record_http(monkeypatch, {"/pullrequests/7": [draft, {}, dict(draft)]})
+    with pytest.raises(SystemExit, match="still marked draft"):
+        _run_cli(["update-pr", "--repo", "bitbucket:ws/slug", "--pr", "7", "--ready"], monkeypatch, capsys)
+
+
+def test_update_pr_github_ready_uses_the_graphql_mutation(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    draft = {
+        "number": 7,
+        "node_id": "PR_1",
+        "draft": True,
+        "html_url": "https://github.com/acme/widgets/pull/7",
+        "title": "t",
+    }
+    ready = dict(draft, draft=False)
+    calls = _record_http(
+        monkeypatch,
+        {"/pulls/7": [draft, ready], "/graphql": {"data": {"markPullRequestReadyForReview": {}}}},
+    )
+    out = _run_cli(["update-pr", "--repo", "acme/widgets", "--pr", "7", "--ready"], monkeypatch, capsys)
+    assert [call[0] for call in calls] == ["GET", "POST", "GET"]
+    assert calls[1][2]["variables"] == {"id": "PR_1"}
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["draft"] is False and result["updated"] == ["ready"]
 
 
 def test_archive_repo_dry_run_patches_the_repo(monkeypatch, capsys):

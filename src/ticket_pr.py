@@ -1085,6 +1085,18 @@ def bb_find_member(workspace, headers, query):
     return None
 
 
+def github_mark_ready(pull, headers):
+    """Take a GitHub PR out of draft. REST cannot; only the GraphQL mutation can."""
+    mutation = (
+        "mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft } } }"
+    )
+    result = http_json(
+        "POST", GITHUB_GRAPHQL, headers, payload={"query": mutation, "variables": {"id": pull["node_id"]}}
+    )
+    if result.get("errors"):
+        raise SystemExit(f"failed to mark PR #{pull['number']} ready for review: {result['errors']}")
+
+
 def cmd_request_review(args):
     repo = resolve_repo(args.repo)
     if resolve_provider(args.repo) == "bitbucket":
@@ -1140,15 +1152,7 @@ def cmd_request_review(args):
     if args.dry_run:
         print(f"[dry-run] would mark PR #{number} ready for review if still a draft")
     elif was_draft:
-        mutation = (
-            "mutation($id: ID!) { markPullRequestReadyForReview("
-            "input: {pullRequestId: $id}) { pullRequest { isDraft } } }"
-        )
-        result = http_json(
-            "POST", GITHUB_GRAPHQL, headers, payload={"query": mutation, "variables": {"id": pull["node_id"]}}
-        )
-        if result.get("errors"):
-            raise SystemExit(f"failed to mark PR #{number} ready for review: {result['errors']}")
+        github_mark_ready(pull, headers)
     http_json(
         "POST",
         f"{GITHUB_API}/repos/{repo}/pulls/{number}/requested_reviewers",
@@ -2391,18 +2395,20 @@ def github_job_log(repo, job, headers, timeout=120):
 
 def cmd_update_pr(args):
     """
-    Change a PR's title, description and/or state. A PR opened before a design
-    changed describes work that is no longer there, which is what a reviewer
-    reads first; this rewrites it in place rather than burying a correction in
-    the comments. --state closed parks a PR without merging (the branch and
-    its commits stay); --state open reopens it.
+    Change a PR's title, description, state and/or draft flag. A PR opened
+    before a design changed describes work that is no longer there, which is
+    what a reviewer reads first; this rewrites it in place rather than burying
+    a correction in the comments. --state closed parks a PR without merging
+    (the branch and its commits stay); --state open reopens it. --ready takes
+    a draft out of draft without requesting anyone's review.
     """
     provider, repo = repo_spec(args.repo)
-    if provider != "github":
-        raise SystemExit("update-pr is GitHub-only")
     body = body_text(args) if (args.body or args.body_file) else None
-    if args.title is None and body is None and args.state is None:
-        raise SystemExit("update-pr needs --title, --body/--body-file and/or --state")
+    if args.title is None and body is None and args.state is None and not args.ready:
+        raise SystemExit("update-pr needs --title, --body/--body-file, --state and/or --ready")
+    if provider == "bitbucket":
+        _update_pr_bitbucket(args, repo, body)
+        return
     payload = {}
     if args.title is not None:
         payload["title"] = args.title
@@ -2410,20 +2416,71 @@ def cmd_update_pr(args):
         payload["body"] = body
     if args.state is not None:
         payload["state"] = args.state
+    updated = sorted(payload) + (["ready"] if args.ready else [])
     headers = github_headers()
     number = args.pr or resolve_pr(repo, headers, None)["number"]
-    pull = http_json("PATCH", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers, payload, dry_run=args.dry_run)
+    if args.ready:
+        if args.dry_run:
+            print(f"[dry-run] would mark PR #{number} ready for review if still a draft")
+        else:
+            current = resolve_pr(repo, headers, number)
+            if current.get("draft"):
+                github_mark_ready(current, headers)
+    pull = None
+    if payload:
+        pull = http_json("PATCH", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers, payload, dry_run=args.dry_run)
     if args.dry_run:
-        emit("dry run", {"pr": number, "updated": sorted(payload)})
+        emit("dry run", {"pr": number, "updated": updated})
         return
+    if args.ready:
+        pull = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{number}", headers)
+        if pull.get("draft"):
+            raise SystemExit(f"PR #{number} is still marked draft after the ready-for-review mutation")
     emit(
-        f"PR #{number} updated: {', '.join(sorted(payload))}",
+        f"PR #{number} updated: {', '.join(updated)}",
         {
             "pr": pull["number"],
             "url": pull["html_url"],
             "title": pull["title"],
             "state": pull.get("state"),
-            "updated": sorted(payload),
+            "draft": bool(pull.get("draft")),
+            "updated": updated,
+        },
+    )
+
+
+def _update_pr_bitbucket(args, repo, body):
+    """update-pr on Bitbucket: one PUT, which needs the title even when it is not changing."""
+    if args.state is not None:
+        raise SystemExit("--state is GitHub-only")
+    headers = bitbucket_headers()
+    pull = None if args.dry_run else bb_resolve_pr(repo, headers, args.pr)
+    number = pull["id"] if pull else (args.pr or 0)
+    payload = {"title": args.title if args.title is not None else (pull["title"] if pull else "<title>")}
+    updated = ["title"] if args.title is not None else []
+    if body is not None:
+        payload["description"] = body
+        updated.append("body")
+    if args.ready:
+        payload["draft"] = False
+        updated.append("ready")
+    url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{number}"
+    http_json("PUT", url, headers, payload=payload, dry_run=args.dry_run)
+    if args.dry_run:
+        emit("dry run", {"pr": number, "updated": updated})
+        return
+    refreshed = http_json("GET", url, headers)
+    if args.ready and refreshed.get("draft"):
+        raise SystemExit(f"PR #{number} is still marked draft after the update")
+    emit(
+        f"PR #{number} updated: {', '.join(updated)}",
+        {
+            "pr": refreshed["id"],
+            "url": bb_pr_url(refreshed, repo),
+            "title": refreshed["title"],
+            "state": refreshed.get("state"),
+            "draft": bool(refreshed.get("draft")),
+            "updated": updated,
         },
     )
 
@@ -2600,13 +2657,14 @@ def build_parser():
     runs.add_argument("--timeout", type=int, default=3600, help="max wait seconds")
     runs.set_defaults(func=cmd_workflow_runs)
 
-    update_pr = sub.add_parser("update-pr", help="change a PR's title, description and/or state")
+    update_pr = sub.add_parser("update-pr", help="change a PR's title, description, state and/or draft flag")
     update_pr.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
     update_pr.add_argument("--pr", help="PR number (default: current branch's open PR)")
     update_pr.add_argument("--title", help="new title; left alone when omitted")
     update_pr.add_argument("--body", help="new description text")
     update_pr.add_argument("--body-file", help="file containing the new description")
     update_pr.add_argument("--state", choices=["open", "closed"], help="close a PR without merging, or reopen it")
+    update_pr.add_argument("--ready", action="store_true", help="take a draft PR out of draft, requesting no reviews")
     update_pr.set_defaults(func=cmd_update_pr)
 
     archive = sub.add_parser("archive-repo", help="archive a GitHub repo (read-only, kept), or unarchive it")
