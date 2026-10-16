@@ -1598,6 +1598,15 @@ a doc/automation task in this repo.
   `brew upgrade --cask claude-code@latest` from a shell, both of which use
   the fresh cache. Threads started afterwards get the new binary.
 
+- **Enter in the composer presses the compact button instead of sending
+  (upstream, 0.1.0)**: seen 2026-10-16 after the update to 0.1.0 (the server
+  on the Linux box reports `serverVersion: "0.1.0"` in
+  `~/.t3/userdata/server-runtime.json`). Reported from use, not yet traced in
+  the source: which client build, and whether it happens only while the
+  compact button is showing, are not recorded. The same day's update also
+  moved thread state from `state.sqlite` to `statev2.sqlite` (see
+  `src/t3_state.py`).
+
 ## More docs
 
 Full install/config docs live in the project repo:
