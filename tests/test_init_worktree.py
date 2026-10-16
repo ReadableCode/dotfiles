@@ -9,6 +9,15 @@ import pytest
 
 from src import init_worktree
 
+
+@pytest.fixture(autouse=True)
+def jupyter_state(tmp_path, monkeypatch):
+    """Teardown asks jupyter_lab for a server on the worktree; never let it read the real ~/.cache."""
+    state_dir = str(tmp_path / "jupyter_lab")
+    monkeypatch.setattr(init_worktree.jupyter_lab, "STATE_DIR", state_dir)
+    return state_dir
+
+
 # ---------------------------------------------------------------- helpers
 
 WORKSPACE = """{
@@ -426,6 +435,7 @@ def test_remove_deletes_only_this_worktree_and_its_workspace_entry(repos, tmp_pa
     capsys.readouterr()
     assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 0
     out = capsys.readouterr().out
+    assert "jupyter:   none running" in out
     assert "workspace: removed" in out
     assert "worktree:  removed" in out
     assert "feature/ACME-2482-thing left in place" in out
@@ -449,6 +459,30 @@ def test_remove_dry_run_changes_nothing(repos, tmp_path, capsys):
     assert os.path.isdir(worktree)
     with open(os.path.join(repo_parent, "envy.code-workspace"), encoding="utf-8") as file_handle:
         assert "acme-app · ACME-2482" in file_handle.read()
+
+
+def test_remove_stops_the_jupyter_server_on_the_worktree_first(repos, tmp_path, monkeypatch, capsys):
+    repo_parent, main, worktree = repos
+    with_remote(main, worktree, tmp_path)
+    calls = []
+
+    def stop_for(path, dry_run=False):
+        calls.append((path, dry_run, os.path.isdir(path)))
+        return "would stop (port 8888)" if dry_run else "stopped (port 8888)"
+
+    monkeypatch.setattr(init_worktree.jupyter_lab, "stop_for", stop_for)
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--dry-run", "--hostname", "envy"]) == 0
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 0
+    assert calls == [(worktree, True, True), (worktree, False, True)]
+    out = capsys.readouterr().out
+    assert "jupyter:   would stop (port 8888)" in out and "jupyter:   stopped (port 8888)" in out
+
+
+def test_remove_leaves_the_server_alone_when_it_refuses(repos, monkeypatch):
+    _, _, worktree = repos
+    write(os.path.join(worktree, "untracked.txt"), "work")
+    monkeypatch.setattr(init_worktree.jupyter_lab, "stop_for", lambda *a, **k: pytest.fail("stopped a server"))
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 1
 
 
 def test_remove_refuses_a_path_that_is_not_a_worktree_of_main(repos):

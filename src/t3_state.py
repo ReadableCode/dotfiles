@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Read T3 Code's own thread state: which thread owns a worktree, and whether it is finished.
 
-The one reader of ``~/.t3/userdata/statev2.sqlite`` for every tool that acts on T3 threads (today
-``sweep_worktrees.py``: which worktrees are leftovers). The database is T3's private schema, so
-every query against it lives here and nowhere else.
+The one reader of ``~/.t3/userdata/statev2.sqlite`` for every tool that acts on T3 threads:
+``sweep_worktrees.py`` (which worktrees are leftovers) and ``jupyter_lab.py`` (when a thread's
+JupyterLab server should stop). The database is T3's private schema, so every query against it
+lives here and nowhere else.
 
 T3 moved its state from ``state.sqlite`` to ``statev2.sqlite`` on 2026-10-16 (server 0.1.0). The
 old file stays on disk, frozen at the migration, and the ``projection_threads`` /
@@ -23,6 +24,8 @@ import sqlite3
 STATE_DB = os.path.expanduser("~/.t3/userdata/statev2.sqlite")
 # Session statuses that mean a thread is live in its worktree right now.
 LIVE_SESSION = {"running", "ready"}
+# Verdicts that mean the thread is done: nothing it started needs to keep running.
+FINISHED = {"settled", "deleted"}
 
 THREADS_QUERY = """
 SELECT t.thread_id, t.title, t.deleted_at,
@@ -92,3 +95,38 @@ def thread_states(db_path=STATE_DB):
         }
         for thread_id, entry in threads.items()
     }
+
+
+def thread_verdict(thread_id, db_path=STATE_DB):
+    """One thread's verdict by id: `deleted` when T3 no longer has it, None when there is no database."""
+    connection = connect(db_path)
+    if connection is None:
+        return None
+    try:
+        threads = _threads(connection, "WHERE t.thread_id = ?", (thread_id,))
+    finally:
+        connection.close()
+    return threads[thread_id]["state"] if thread_id in threads else "deleted"
+
+
+def thread_for_session(session_id, db_path=STATE_DB):
+    """The T3 thread whose provider thread runs this Claude session (``CLAUDE_CODE_SESSION_ID``), or None.
+
+    T3 records the provider's own session id as ``nativeThreadRef.nativeId`` on the provider
+    thread; it is the only link from inside a session back to the thread that owns it.
+    """
+    if not session_id:
+        return None
+    connection = connect(db_path)
+    if connection is None:
+        return None
+    try:
+        row = connection.execute(
+            "SELECT thread_id FROM orchestration_v2_projection_provider_threads"
+            " WHERE json_extract(payload_json, '$.nativeThreadRef.nativeId') = ?"
+            " ORDER BY updated_at DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+    finally:
+        connection.close()
+    return row[0] if row else None
