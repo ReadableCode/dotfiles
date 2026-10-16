@@ -1,100 +1,126 @@
 # Xcode Setup Guide (Beta Workflow)
 
-Reference for installing and configuring Xcode as done on Envy (M4 Mac mini, macOS 27 beta, Xcode 27 beta 3), covering both the **external-SSD layout** (space-constrained machines) and the **internal-only layout** (MacBooks with adequate storage). Written against the beta flow actually used; non-beta differences are noted where relevant.
+How Xcode, the iOS and watchOS simulator runtimes and the toolchain are
+installed for building iPhone, iPad and Apple Watch apps, in two layouts: the
+**internal-only layout** (a Mac with internal disk to spare) and the
+**external-SSD layout** (a space-constrained Mac with an APFS external drive).
+Written against the beta flow actually used (macOS 27 beta host, Xcode 27
+beta); non-beta differences are noted where relevant.
 
 ---
 
-## Overview / What goes where
+## Which Macs get Xcode
 
-| Component | Approx. size | Relocatable? | External-SSD layout | Internal-only layout |
+Xcode is a per-host install, not a fleet one. Nothing in `app_lists/Brewfile`
+or a context's `<context>_app_lists.yaml` installs it, so bootstrap and
+myupdater never put it on a Mac; this page is the only way it arrives.
+
+| Host | Xcode | Why |
+|---|---|---|
+| MacBookProM5 | Yes, internal-only layout: `/Applications/Xcode-beta.app`, iOS + watchOS runtimes | The iOS / iPadOS / watchOS dev Mac. 460 GB internal, so everything stays on the default internal paths. |
+| Envy | **Not now.** Command Line Tools only | 228 GB internal and short on free space: the simulator runtimes (~20 GB on 27.2) must live on the internal disk whatever the layout, so the external SSD cannot take that part of the load. Envy ran Xcode 27 beta 3 in the external-SSD layout (`/Volumes/EnvyExtSSD`) earlier in 2026 and it has since been removed. If Envy gets Xcode back, use that layout and change this row first. |
+| Any other Mac | No | Add a row here first if one ever should. |
+
+Homebrew's Command Line Tools stay on every Mac; they are not Xcode and build
+nothing for iOS or watchOS.
+
+---
+
+## What goes where
+
+| Component | Approx. size | Relocatable? | Internal-only layout | External-SSD layout |
 |---|---|---|---|---|
-| `Xcode-beta.app` | ~4 GB (Xcode 27 beta; older release Xcode was 30+ GB) | Yes — plain app bundle | `/Volumes/EnvyExtSSD/Applications/` | `/Applications/` |
-| Platform runtimes (iOS, watchOS, ...) | ~5–9 GB each | **No** — cryptex-mounted by the OS | Internal (forced) | Internal |
-| Derived Data (build products, intermediates, module caches) | Grows with use | Yes — supported setting | `/Volumes/EnvyExtSSD/XCode/DerivedData` | Default (`~/Library/Developer/Xcode/DerivedData`) |
-| Archives | Small unless releasing often | Yes — supported setting | Optional | Default |
+| `Xcode-beta.app` | ~4 GB (Xcode 27 beta; older release Xcode was 30+ GB) | Yes, plain app bundle | `/Applications/` | `/Volumes/EnvyExtSSD/Applications/` |
+| iOS runtimes (iPhone **and** iPad simulators) | 8.25 GB general + 8.05 GB iPhone Duo (iOS 27.2 beta), see Step 4 | **No**, cryptex-mounted by the OS | Internal | Internal (forced) |
+| watchOS runtime (Apple Watch simulators) | 3.89 GB (watchOS 27.2 beta) | **No**, cryptex-mounted by the OS | Internal | Internal (forced) |
+| Derived Data (build products, intermediates, module caches) | Grows with use | Yes, supported setting | Default `~/Library/Developer/Xcode/DerivedData` | `/Volumes/EnvyExtSSD/XCode/DerivedData` |
+| Archives | Small unless releasing often | Yes, supported setting | Default | Optional |
 | Simulator devices/data | GBs over time | Not practically | Internal | Internal |
 
-Key architectural fact learned the hard way: **simulator runtimes cannot live on external storage.** They install as security-verified disk images mounted via cryptexd at `/private/var/run/com.apple.security.cryptexd/mnt/...` — they are mounted volumes, not files an app opens. Budget internal space for them (~14 GB for iOS + watchOS together).
+Key architectural fact learned the hard way: **simulator runtimes cannot live on external storage.** They install as security-verified disk images mounted via cryptexd at `/private/var/run/com.apple.security.cryptexd/mnt/...`; they are mounted volumes, not files an app opens. Budget internal space for them (~20 GB for iOS + watchOS together on 27.2). The external-SSD layout moves the app and Derived Data off the internal disk, never the runtimes.
 
-Second fact: **modern Xcode is small.** Xcode 27 beta downloads as a ~1.8 GB `.xip` expanding to ~3.9 GB. Everything platform-specific arrives afterward via on-demand runtime downloads. The old "Xcode is 30 GB" era ended; the runtimes are now the bulk.
+Second fact: **modern Xcode is small.** Xcode 27 beta downloads as a ~1.8 GB `.xip` expanding to ~3.9 GB. Everything platform-specific arrives afterward via on-demand runtime downloads. The runtimes are now the bulk.
 
 ---
 
 ## Prerequisites
 
 - Free Apple ID (no paid developer membership needed for simulator work or personal-device installs).
-- Command Line Tools may already be present (Homebrew installs them). Check:
+- Command Line Tools are already present (Homebrew installs them). Check:
 
 ```bash
 xcode-select -p
 ```
 
-- `/Library/Developer/CommandLineTools` → CLT only (typical pre-Xcode state)
-- `/Applications/Xcode.app/Contents/Developer` (or SSD equivalent) → full Xcode already selected
+- `/Library/Developer/CommandLineTools`: CLT only (the pre-Xcode state)
+- `/Applications/Xcode-beta.app/Contents/Developer` (or the SSD equivalent): full Xcode already selected
 
-CLT (~2–3 GB) is fine to leave installed; `xcode-select -s` later points the toolchain at full Xcode.
+CLT (~2 to 3 GB) is fine to leave installed; `xcode-select -s` later points the toolchain at full Xcode.
 
-**On a beta host OS, download the beta Xcode.** Apple pairs beta OS releases with beta Xcode; release Xcode may refuse to run, and targeting a beta iOS on-device requires the matching beta SDK anyway.
-
----
-
-## Step 1 — Download
-
-Go to **https://developer.apple.com/download/all/** (sign in with Apple ID; free tier works). Download the Xcode `.xip`.
-
-- **SSD layout:** set the browser's download destination to the external drive first — extraction needs working space and there's no reason to touch internal.
-- **Internal-only layout:** default Downloads location is fine; ensure ~15 GB free for download + extraction headroom (beta sizes; older/full releases needed ~40 GB).
-
-### Do not use Homebrew `xcodes` on a beta macOS
-
-`brew install xcodesorg/made/xcodes` **fails to build on macOS 27 beta** — no bottle exists for the pre-release OS, brew compiles from source, and the build dies linking an x86_64 slice against the macOS 27 SDK (`ld: symbol(s) not found for architecture x86_64`). Homebrew classifies beta macOS as Tier 2 (unsupported).
-
-If `xcodes` is wanted anyway, use the prebuilt binary from the project's GitHub releases instead of brew. On a **release** macOS, `brew install xcodesorg/made/xcodes aria2` works normally and is a nice alternative (Brewfile syntax: `tap "xcodesorg/made"` + `brew "xcodesorg/made/xcodes"`).
+**On a beta host OS, download the matching beta Xcode.** Apple pairs beta OS releases with beta Xcode; release Xcode may refuse to run, and targeting a beta iOS on-device requires the matching beta SDK anyway. Pick the Xcode beta whose number matches the macOS beta (macOS 27.2 beta: Xcode 27.2 beta). `sw_vers` shows the host's version; a build number ending in a lowercase letter (`26B5112a`) is a beta.
 
 ---
 
-## Step 2 — Extract
+## Step 1: Download
 
-`cd` to wherever the `.xip` landed and expand:
+Go to **https://developer.apple.com/download/all/** (sign in with Apple ID; free tier works) and download the Xcode `.xip`.
+
+- **Internal-only layout:** the default `~/Downloads` is fine; leave ~15 GB free for download + extraction headroom (beta sizes; older/full releases needed ~40 GB).
+- **External-SSD layout:** set the browser's download destination to the external drive first; extraction needs working space and there's no reason to touch internal.
+
+### Why not Homebrew
+
+Homebrew has no Xcode cask (`brew info --cask xcode`: no cask by that name);
+Apple's license does not allow redistributing Xcode, so any install goes
+through an Apple ID download. The only brew route is the third-party `xcodes`
+formula, which signs in to that same Apple ID and fetches the same `.xip`.
+
+`brew install xcodesorg/made/xcodes` **fails to build on macOS 27 beta**: no bottle exists for the pre-release OS, brew compiles from source, and the build dies linking an x86_64 slice against the macOS 27 SDK (`ld: symbol(s) not found for architecture x86_64`). Homebrew classifies beta macOS as Tier 2 (unsupported), and the tap's only bottles are tagged `mojave` (checked 2026-10-16 against xcodes 2.1.0), so every newer macOS builds it from source. The browser download is the method this page uses.
+
+If `xcodes` is wanted anyway, use the prebuilt binary from the project's GitHub releases instead of brew. On a **release** macOS with a bottle, `brew install xcodesorg/made/xcodes aria2` is the alternative (Brewfile syntax: `tap "xcodesorg/made"` + `brew "xcodesorg/made/xcodes"`), scoped to the Xcode host through its context's app list with `hosts:`, never the shared Brewfile.
+
+---
+
+## Step 2: Extract
 
 ```bash
-cd /Volumes/EnvyExtSSD        # or ~/Downloads on internal-only
-xip --expand Xcode_27_beta_3.xip
+cd ~/Downloads                # or /Volumes/EnvyExtSSD on the SSD layout
+xip --expand Xcode_*.xip
 ```
 
 Notes:
 
-- `xip` verifies Apple's signature during expansion — a successful expand **is** the integrity check. Truncated/corrupt downloads refuse to expand. Success output looks like:
+- `xip` verifies Apple's signature during expansion; a successful expand **is** the integrity check. Truncated/corrupt downloads refuse to expand. Success output looks like:
   `xip: signing certificate was "Software Update" (validation not attempted)` followed by `xip: expanded items from "..."`.
 - **Betas expand as `Xcode-beta.app`**, not `Xcode.app`. Adjust paths accordingly.
-- The app directory timestamp reflects Apple's packaging date, not your extraction time — don't let an "old" date alarm you.
+- The app directory timestamp reflects Apple's packaging date, not your extraction time.
 - Expansion takes a while with no progress indicator; apparent stalls are normal.
 
 Then place it and delete the archive:
 
 ```bash
-# SSD layout
-mkdir -p /Volumes/EnvyExtSSD/Applications
-mv Xcode-beta.app /Volumes/EnvyExtSSD/Applications/
-rm Xcode_27_beta_3.xip
-
 # Internal-only layout
 mv Xcode-beta.app /Applications/
-rm Xcode_27_beta_3.xip
+rm Xcode_*.xip
+
+# External-SSD layout
+mkdir -p /Volumes/EnvyExtSSD/Applications
+mv Xcode-beta.app /Volumes/EnvyExtSSD/Applications/
+rm Xcode_*.xip
 ```
 
 Running the app from an external volume requires the volume to be **APFS** (not HFS+/exFAT). Performance over Thunderbolt/USB4 is indistinguishable from internal for build work.
 
 ---
 
-## Step 3 — Wire up the toolchain
+## Step 3: Wire up the toolchain
 
 ```bash
-# SSD layout
-sudo xcode-select -s /Volumes/EnvyExtSSD/Applications/Xcode-beta.app/Contents/Developer
-
 # Internal-only layout
 sudo xcode-select -s /Applications/Xcode-beta.app/Contents/Developer
+
+# External-SSD layout
+sudo xcode-select -s /Volumes/EnvyExtSSD/Applications/Xcode-beta.app/Contents/Developer
 
 # Both layouts
 sudo xcodebuild -license accept
@@ -102,33 +128,46 @@ sudo xcodebuild -runFirstLaunch
 xcodebuild -version
 ```
 
-`-runFirstLaunch` installs embedded components non-interactively (prints a percentage progress line) so the first GUI launch doesn't stall on a progress bar. The final `xcodebuild -version` printing a version (e.g. `Xcode 27.0 / Build version 27A5218g`) is the all-clear that the app is complete and selected.
+`-runFirstLaunch` installs embedded components non-interactively (prints a percentage progress line) so the first GUI launch doesn't stall on a progress bar. The final `xcodebuild -version` printing a version (e.g. `Xcode 27.2 / Build version 27B5038j`) is the all-clear that the app is complete and selected.
 
 ---
 
-## Step 4 — Platform runtimes (the real download)
+## Step 4: Platform runtimes (the real download)
 
-Launch Xcode:
+The runtimes for iPhone, iPad and Apple Watch:
 
-```bash
-open /Volumes/EnvyExtSSD/Applications/Xcode-beta.app    # or open -a Xcode-beta
-```
-
-Go to **Settings (Cmd+,) → Components** (the beta houses platform downloads here; older Xcode called the tab "Platforms"). Download only what's needed:
-
-- **iOS** — covers iPhone **and** iPad simulators (one shared runtime)
-- **watchOS** — only if building watch apps
+- **iOS**: covers iPhone **and** iPad simulators (one shared runtime)
+- **watchOS**: Apple Watch simulators
 - Skip tvOS/visionOS unless targeting them
 
-These land **internal** regardless of layout (cryptex mounts, see Overview). Several GB each; runs in background.
+From the terminal (same downloads as the GUI, scriptable):
+
+```bash
+xcodebuild -downloadPlatform iOS
+xcodebuild -downloadPlatform watchOS
+```
+
+Or in the GUI: `open -a Xcode-beta` (or open the SSD copy by path), then **Settings (Cmd+,) → Components** (older Xcode called the tab "Platforms") and **Get** the iOS and watchOS rows.
+
+These land internal regardless of layout (cryptex mounts, see above).
+
+On 27.2, `-downloadPlatform iOS` installed **two** iOS runtimes: the general one (`com.apple.CoreSimulator.SimRuntime.iOS-27-2`, which carries the iPhone 18 / 17 / Air and all iPad simulators) and a device-specific one (`iOS-27-2-iPhone19-4`, 8 GB, whose only simulator is "iPhone Duo"). Keep both: the iPhone Duo is one of the devices apps here are tested on.
 
 Verify when finished:
 
 ```bash
 xcrun simctl list runtimes
+xcrun simctl list devicetypes | grep -E 'iPhone|iPad|Watch'
 ```
 
-Both/all desired runtimes listed as available = environment complete.
+An iOS and a watchOS runtime listed, plus iPhone, iPad and Apple Watch device types, means the environment is complete.
+
+### First GUI launch
+
+The first launch shows two onboarding screens from a helper process (an agent granted Xcode cannot click either, so a person does):
+
+1. **Import Settings** from another device over iCloud. On the internal-only layout choose **Skip**: an import from an SSD-layout Mac brings its `/Volumes/...` Derived Data path along.
+2. **Components**, with iOS and watchOS already switched on when Step 4 ran first. **Download & Install** then just confirms what is installed.
 
 ### Runtime hygiene (future)
 
@@ -141,7 +180,7 @@ xcrun simctl runtime delete <id>
 
 ---
 
-## Step 5 — Relocate Derived Data (SSD layout only)
+## Step 5: Relocate Derived Data (SSD layout only)
 
 Derived Data is the directory that silently grows with every project — build products, intermediates, indexes, module caches. On the SSD layout, move it; on internal-only, leave the default.
 
@@ -169,7 +208,7 @@ Verification after the first build of any project: the project's folder appears 
 
 ---
 
-## Step 6 — First project (beta flow quirks)
+## Step 6: First project (beta flow quirks)
 
 The Xcode 27 beta reworked the New Project flow. Differences from the classic flow, all encountered:
 
@@ -213,7 +252,7 @@ The Xcode 27 beta reworked the New Project flow. Differences from the classic fl
 
 ---
 
-## Step 7 — Session hygiene
+## Step 7: Session hygiene
 
 Simulators are separate apps that **outlive Xcode** — a booted simulator persists as dozens of background processes (the simulated device's own OS daemons, visible in `ps` as processes under `/private/var/run/com.apple.security.cryptexd/mnt/...`) even after quitting Xcode and with no Simulator window. End-of-session:
 
@@ -227,10 +266,27 @@ Worth aliasing (`alias simoff='xcrun simctl shutdown all'`). Occasionally-orphan
 
 ## Quick-reference: full command sequence
 
-### SSD layout (Envy)
+### Internal-only layout (MacBookProM5)
 
 ```bash
-# download .xip to /Volumes/EnvyExtSSD via browser, then:
+# download the matching beta .xip to ~/Downloads via browser, then:
+cd ~/Downloads
+xip --expand Xcode_*.xip
+mv Xcode-beta.app /Applications/
+rm Xcode_*.xip
+sudo xcode-select -s /Applications/Xcode-beta.app/Contents/Developer
+sudo xcodebuild -license accept
+sudo xcodebuild -runFirstLaunch
+xcodebuild -version
+xcodebuild -downloadPlatform iOS
+xcodebuild -downloadPlatform watchOS
+xcrun simctl list runtimes
+```
+
+### External-SSD layout (Envy, if it ever gets Xcode back)
+
+```bash
+# download the matching beta .xip to /Volumes/EnvyExtSSD via browser, then:
 cd /Volumes/EnvyExtSSD
 xip --expand Xcode_*.xip
 mkdir -p /Volumes/EnvyExtSSD/Applications
@@ -241,37 +297,20 @@ sudo xcodebuild -license accept
 sudo xcodebuild -runFirstLaunch
 xcodebuild -version
 defaults write com.apple.dt.Xcode IDECustomDerivedDataLocation /Volumes/EnvyExtSSD/XCode/DerivedData
-open /Volumes/EnvyExtSSD/Applications/Xcode-beta.app
-# GUI: Settings → Components → download iOS (+ watchOS if needed)
+xcodebuild -downloadPlatform iOS
+xcodebuild -downloadPlatform watchOS
 xcrun simctl list runtimes
 ```
 
-### Internal-only layout (MacBooks)
-
-```bash
-# download .xip to ~/Downloads via browser, then:
-cd ~/Downloads
-xip --expand Xcode_*.xip
-mv Xcode-beta.app /Applications/
-rm Xcode_*.xip
-sudo xcode-select -s /Applications/Xcode-beta.app/Contents/Developer
-sudo xcodebuild -license accept
-sudo xcodebuild -runFirstLaunch
-xcodebuild -version
-open -a Xcode-beta
-# GUI: Settings → Components → download iOS (+ watchOS if needed)
-xcrun simctl list runtimes
-```
-
-Internal-only skips the Derived Data relocation entirely; defaults are correct when internal space isn't constrained. Everything else — including all beta quirks in Step 6 — applies identically.
+Internal-only skips the Derived Data relocation entirely; defaults are correct when internal space isn't constrained. Everything else, including all beta quirks in Step 6, applies to both layouts.
 
 ---
 
 ## Disk budget summary
 
-| | SSD layout | Internal-only |
+| | Internal-only (MacBookProM5) | External-SSD |
 |---|---|---|
-| Internal cost | ~14 GB (iOS + watchOS runtimes) + simulator device data over time | Same + ~4 GB app + Derived Data growth |
-| Practical minimum free internal before starting | ~20 GB | ~30 GB |
+| Internal cost | ~4 GB app + ~20 GB (iOS + watchOS runtimes, 27.2) + simulator device data and Derived Data over time | ~20 GB (iOS + watchOS runtimes, 27.2) + simulator device data over time |
+| Practical minimum free internal before starting | ~30 GB | ~25 GB |
 
-On release (non-beta) Xcode versions, expect the `.xip` and expanded app to be larger (~3.5 GB / up to 30+ GB historically) — check sizes before assuming the beta's slim figures.
+On release (non-beta) Xcode versions, expect the `.xip` and expanded app to be larger; check sizes before assuming the beta's slim figures.

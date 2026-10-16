@@ -21,3 +21,10 @@ Installed from Logitech's own installers, not Homebrew:
 
 - WireGuard
 - GLKVM
+
+## Xcode (MacBookProM5 only)
+
+Xcode-beta and its iOS and watchOS simulator runtimes, for building iPhone,
+iPad and Apple Watch apps. Installed on MacBookProM5 and no other Mac: Envy
+and any other Mac keep only the Command Line Tools Homebrew brings. Steps and
+the reason for the scope in `docs/setup_xcode_beta.md`.

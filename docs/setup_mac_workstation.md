@@ -27,7 +27,7 @@ works if you just want a straight install of everything.
 - macOS system settings: hostname, scaling, Finder behaviour, keyboard, Dock, power
 - signing in to iCloud / App Store
 - licensed apps and their keys
-- Xcode and the beta toolchain (see `setup_xcode_beta.md`)
+- Xcode and the iOS / watchOS simulator runtimes, on MacBookProM5 only (see `setup_xcode_beta.md`)
 
 The rest of this page is the reference detail behind those steps.
 
@@ -117,8 +117,8 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - Steam
 - Epic Games
 - Activity Monitor
-- Xcode Beta
-- Device Hub
+- Xcode Beta (MacBookProM5 only)
+- Device Hub (MacBookProM5 only)
 - Stream Deck
 
 The Downloads stack and Trash sit past the divider at the end of the Dock.
