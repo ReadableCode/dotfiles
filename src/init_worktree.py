@@ -57,8 +57,7 @@ it - settling never deletes a directory. T3 Code does re-create a missing
 worktree as a fresh, empty checkout of the same branch when a NEW turn starts
 in that thread, so a thread that is spoken to again after cleaning up simply
 runs the same command again at the end; nothing accumulates in between.
-it stops a JupyterLab server serving that worktree (``jupyter_lab.stop_for``),
-drops that worktree's workspace entry, then ``git worktree remove --force``
+it drops that worktree's workspace entry, then ``git worktree remove --force``
 on that exact path from the main checkout, which deletes the directory and
 everything that accumulated in it - the ``.venv``, the links above, caches,
 and any file placed there by hand. There is no list of files to keep current:
@@ -89,10 +88,6 @@ import shutil
 import socket
 import subprocess
 import sys
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-import jupyter_lab  # noqa: E402
 
 TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
 # Where deploy-managed links live in a checkout: the root, and .claude/ for settings.local.json.
@@ -300,9 +295,8 @@ def teardown(main, worktree, dry_run=False, hostname=None):
         return False, reasons
     branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
     sources = sibling_sources(worktree)  # read now: the pyproject goes with the directory
-    lines = [("jupyter", jupyter_lab.stop_for(worktree, dry_run=dry_run))]
     statuses = update_workspace(main, worktree, None, remove=True, dry_run=dry_run, hostname=hostname)
-    lines.extend(("workspace", status) for status in statuses)
+    lines = [("workspace", status) for status in statuses]
     if os.path.realpath(os.getcwd()).startswith(worktree + os.sep) or os.path.realpath(os.getcwd()) == worktree:
         os.chdir(main)  # the cwd is about to be deleted
     lines.append(("worktree", remove_worktree(main, worktree, dry_run=dry_run)))
