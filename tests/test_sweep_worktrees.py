@@ -2,86 +2,11 @@
 
 import os
 import pathlib
-import sqlite3
 
 import config_test_utils  # noqa F401
 import pytest
 
 from src import sweep_worktrees
-
-# ---------------------------------------------------------------- helpers
-
-SCHEMA = """
-CREATE TABLE projection_threads (
-  thread_id TEXT PRIMARY KEY, project_id TEXT, title TEXT, branch TEXT, worktree_path TEXT,
-  created_at TEXT, updated_at TEXT, deleted_at TEXT, settled_override TEXT, settled_at TEXT);
-CREATE TABLE projection_thread_sessions (
-  thread_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT);
-"""
-
-
-def make_db(path, threads):
-    """threads: list of (thread_id, title, branch, worktree_path, deleted_at, settled_at, override, status)."""
-    connection = sqlite3.connect(path)
-    connection.executescript(SCHEMA)
-    for thread_id, title, branch, worktree, deleted, settled, override, status in threads:
-        connection.execute(
-            "INSERT INTO projection_threads (thread_id, title, branch, worktree_path, deleted_at,"
-            " settled_at, settled_override) VALUES (?,?,?,?,?,?,?)",
-            (thread_id, title, branch, worktree, deleted, settled, override),
-        )
-        if status:
-            connection.execute(
-                "INSERT INTO projection_thread_sessions (thread_id, status) VALUES (?,?)", (thread_id, status)
-            )
-    connection.commit()
-    connection.close()
-    return path
-
-
-# ---------------------------------------------------------------- thread_state
-
-
-@pytest.mark.parametrize(
-    "deleted, settled, override, status, expected",
-    [
-        (None, None, None, "stopped", "unsettled"),
-        (None, "2026-09-11T00:00:00Z", None, "stopped", "settled"),
-        (None, None, "settled", "stopped", "settled"),
-        ("2026-09-11T00:00:00Z", None, None, "stopped", "deleted"),
-        (None, "2026-09-11T00:00:00Z", None, "running", "active"),
-        (None, None, None, "ready", "active"),
-        ("2026-09-11T00:00:00Z", None, None, "running", "active"),
-        (None, "2026-09-11T00:00:00Z", "unsettled", "stopped", "unsettled"),
-    ],
-)
-def test_thread_state_precedence(deleted, settled, override, status, expected):
-    """A live session outranks everything; a re-opened thread beats its own stale settled_at."""
-    assert sweep_worktrees.thread_state(deleted, settled, override, status) == expected
-
-
-# ---------------------------------------------------------------- thread_states
-
-
-def test_thread_states_reads_the_projection(tmp_path):
-    db = make_db(
-        str(tmp_path / "state.sqlite"),
-        [("abcdef1234", "a title", "t3code/x", str(tmp_path / "wt"), None, None, None, "stopped")],
-    )
-    states = sweep_worktrees.thread_states(db)
-    entry = states[os.path.realpath(str(tmp_path / "wt"))]
-    assert entry == {"thread": "abcdef12", "title": "a title", "branch": "t3code/x", "state": "unsettled"}
-
-
-def test_thread_states_is_none_without_a_database(tmp_path):
-    """No T3 on this machine means no verdicts at all, which is what makes everything `unknown`."""
-    assert sweep_worktrees.thread_states(str(tmp_path / "nope.sqlite")) is None
-
-
-def test_thread_states_ignores_threads_with_no_worktree(tmp_path):
-    db = make_db(str(tmp_path / "state.sqlite"), [("a", "no worktree", None, None, None, None, None, "stopped")])
-    assert sweep_worktrees.thread_states(db) == {}
-
 
 # ---------------------------------------------------------------- discover
 

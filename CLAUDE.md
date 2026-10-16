@@ -143,12 +143,17 @@ is the one-paragraph orientation so an agent knows which file to open.
 - **`sweep_worktrees.py`** — the other half: the leftovers from threads that
   ended without tearing their worktree down. One row per directory under
   `~/.t3/worktrees` matched against T3's own thread state
-  (`~/.t3/userdata/state.sqlite`, opened read-only while the app runs):
+  (`~/.t3/userdata/statev2.sqlite` through `t3_state.py`, opened read-only while the app runs):
   `settled` / `deleted` / `orphan` are candidates, `active` and `unsettled` are
   sent back to their own thread, `unknown` (no state db) is never a candidate.
   Removal is `init_worktree.teardown` called once per agreed path, so there is
   one teardown implementation and this tool has no delete of its own. Wrapped
   by `/sweep_worktrees`. Doc: `docs/repo_init_worktree.md`.
+- **`t3_state.py`** — the one reader of T3 Code's private thread state
+  (`~/.t3/userdata/statev2.sqlite`, read-only): each worktree's thread and
+  its verdict (`active` / `unsettled` / `settled` / `deleted`). T3 moved to
+  that file from `state.sqlite` on 2026-10-16 and left the old one frozen, so
+  nothing may read it. Used by `sweep_worktrees.py`.
 - **`context_leak_check.py`** — refuses one context's identifiers inside
   another: derives each context's identifiers from its own credentials repo
   (so this file names none), forbids them in every other repo, and forbids

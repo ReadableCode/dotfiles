@@ -12,8 +12,8 @@ leftovers from threads that ended without running it.
     python3 ~/GitHub/dotfiles/src/sweep_worktrees.py --remove   # prompt per candidate
 
 Every worktree found on disk is matched against T3's own thread state
-(``~/.t3/userdata/state.sqlite``, opened read-only while the app runs) and gets
-one verdict:
+(``~/.t3/userdata/statev2.sqlite`` through ``t3_state.py``, opened read-only
+while the app runs) and gets one verdict:
 
 ``active``     a thread is running or ready in it - never a candidate.
 ``unsettled``  a live thread still owns it. NOT swept: settle that thread, or
@@ -42,18 +42,15 @@ it before any venv exists.
 
 import argparse
 import os
-import sqlite3
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import init_worktree  # noqa: E402
+import t3_state  # noqa: E402
 import terminal_style  # noqa: E402
 
 WORKTREES_ROOT = os.path.expanduser("~/.t3/worktrees")
-STATE_DB = os.path.expanduser("~/.t3/userdata/state.sqlite")
-# Session statuses that mean a thread is live in its worktree right now.
-LIVE_SESSION = {"running", "ready"}
 SWEEPABLE = {"settled", "deleted", "orphan"}
 VERDICT_ROLE = {"settled": "green", "deleted": "green", "orphan": "green", "unsettled": "amber", "active": "red"}
 
@@ -75,55 +72,6 @@ state and given a verdict.
 An `unsettled` thread is never swept: settle it, or open that thread and run
 /remove_worktree there. The thread that knows the work decides.
 """
-
-
-# ---------------------------------------------------------------- t3 state
-
-
-def thread_states(db_path=STATE_DB):
-    """Map realpath(worktree) -> {thread, title, branch, state} from T3's projection tables.
-
-    Opened read-only through a file: URI so a running T3 is never disturbed. Returns None when
-    there is no database on this machine, which is what makes every worktree `unknown`.
-    """
-    if not os.path.isfile(db_path):
-        return None
-    uri = "file:" + db_path.replace("?", "%3f").replace("#", "%23") + "?mode=ro"
-    connection = sqlite3.connect(uri, uri=True, timeout=5)
-    try:
-        rows = connection.execute(
-            """
-            SELECT t.worktree_path, t.thread_id, t.title, t.branch, t.deleted_at,
-                   t.settled_at, t.settled_override, s.status
-            FROM projection_threads t
-            LEFT JOIN projection_thread_sessions s ON s.thread_id = t.thread_id
-            WHERE t.worktree_path IS NOT NULL
-            """
-        ).fetchall()
-    finally:
-        connection.close()
-    states = {}
-    for path, thread_id, title, branch, deleted_at, settled_at, override, status in rows:
-        states[os.path.realpath(path)] = {
-            "thread": (thread_id or "")[:8],
-            "title": title or "",
-            "branch": branch or "",
-            "state": thread_state(deleted_at, settled_at, override, status),
-        }
-    return states
-
-
-def thread_state(deleted_at, settled_at, override, status):
-    """One thread's verdict, most binding first: live session, then deleted, then settled."""
-    if status in LIVE_SESSION:
-        return "active"
-    if deleted_at:
-        return "deleted"
-    if override == "unsettled":
-        return "unsettled"
-    if settled_at or override == "settled":
-        return "settled"
-    return "unsettled"
 
 
 # ---------------------------------------------------------------- discovery
@@ -259,7 +207,7 @@ def parse_args(argv=None):
     )
     parser.add_argument("--dry-run", action="store_true", help="with --remove: walk the prompts, change nothing")
     parser.add_argument("--root", default=WORKTREES_ROOT, help=argparse.SUPPRESS)
-    parser.add_argument("--state", default=STATE_DB, help=argparse.SUPPRESS)
+    parser.add_argument("--state", default=t3_state.STATE_DB, help=argparse.SUPPRESS)
     parser.add_argument("--hostname", help=argparse.SUPPRESS)
     terminal_style.add_help_page(parser, HELP_PAGE)
     return parser.parse_args(argv)
@@ -268,7 +216,7 @@ def parse_args(argv=None):
 def main(argv=None):
     args = parse_args(argv)
     color = terminal_style.use_color(sys.stdout)
-    states = thread_states(args.state)
+    states = t3_state.thread_states(args.state)
     rows = survey(discover(args.root), states)
     print(terminal_style.section("worktrees", color))
     print(render(rows, color), end="")

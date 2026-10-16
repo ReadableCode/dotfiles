@@ -20,8 +20,8 @@ python3 ~/GitHub/dotfiles/src/sweep_worktrees.py
 ```
 
 Changes nothing and prompts for nothing. Every worktree on disk is matched
-against T3's thread state (`~/.t3/userdata/state.sqlite`, opened read-only
-while the app is running) and gets one verdict:
+against T3's thread state (`~/.t3/userdata/statev2.sqlite` through
+`src/t3_state.py`, opened read-only while the app is running) and gets one verdict:
 
 | Verdict | Meaning | Swept? |
 |---------|---------|--------|

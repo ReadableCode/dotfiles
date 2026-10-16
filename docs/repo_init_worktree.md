@@ -155,11 +155,16 @@ that end without running it leave their directory behind, so
 `src/sweep_worktrees.py` (`/sweep_worktrees`) is the cleanup for those.
 
 It lists every directory under `~/.t3/worktrees` and matches each against T3's
-own thread state in `~/.t3/userdata/state.sqlite`, opened read-only through a
-`file:` URI so a running T3 is never disturbed. `projection_threads` carries
-`worktree_path`, `branch`, `settled_at`, `settled_override` and `deleted_at`;
-`projection_thread_sessions` carries the live `status`. That gives one verdict
-per worktree:
+own thread state in `~/.t3/userdata/statev2.sqlite`, read through
+`src/t3_state.py` (the one reader of T3's schema) and opened read-only through a
+`file:` URI so a running T3 is never disturbed.
+`orchestration_v2_projection_threads` carries `worktreePath`, `branch`,
+`settledAt` and `settledOverride` in its `payload_json`, and `deleted_at`;
+`orchestration_v2_projection_provider_sessions` carries the live `status`. T3
+moved to that file on 2026-10-16 (server 0.1.0); the old `state.sqlite`, and the
+`projection_threads` tables imported into the new one, stay frozen at the
+migration, so reading them would make every newer thread's worktree an
+`orphan`. That gives one verdict per worktree:
 
 | Verdict | Condition | Candidate? |
 |---------|-----------|------------|
