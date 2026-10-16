@@ -657,6 +657,39 @@ def test_add_comment_posts_body_file(monkeypatch, capsys, tmp_path):
     assert json.loads(out.strip().splitlines()[-1])["id"] == "5235601"
 
 
+def test_update_ticket_puts_only_the_summary(monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    sent = {}
+
+    def fake_http(method, url, headers, payload=None, **kwargs):
+        sent.update(method=method, url=url, payload=payload)
+        return {}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    ticket_pr.main(["update-ticket", "--key", "ACME-401", "--summary", " Docs site: fix broken links "])
+    out = capsys.readouterr().out
+    assert sent == {
+        "method": "PUT",
+        "url": "https://example.atlassian.net/rest/api/2/issue/ACME-401",
+        "payload": {"fields": {"summary": "Docs site: fix broken links"}},
+    }
+    assert json.loads(out.strip().splitlines()[-1]) == {
+        "key": "ACME-401",
+        "summary": "Docs site: fix broken links",
+        "url": "https://example.atlassian.net/browse/ACME-401",
+    }
+
+
+def test_update_ticket_rejects_empty_summary(monkeypatch):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    with pytest.raises(SystemExit, match="empty summary"):
+        ticket_pr.main(["update-ticket", "--key", "ACME-401", "--summary", "  "])
+
+
 def test_add_comment_rejects_empty_body(monkeypatch):
     monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
     monkeypatch.setenv("JIRA_USER", "user@example.com")

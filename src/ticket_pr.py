@@ -8,7 +8,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
         --project ACME --type Task --summary "Do the thing"
 
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
-transition-ticket, rank-tickets, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
+transition-ticket, update-ticket, rank-tickets, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
 dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review,
 activity. get-ticket
 returns everything on the ticket in one call (fields, description, every
@@ -428,6 +428,23 @@ def cmd_add_comment(args):
     comment_id = response["id"] if response else "0"
     url = f"{base}/browse/{args.key}?focusedCommentId={comment_id}"
     emit(f"Commented on {args.key}: {url}", {"key": args.key, "id": comment_id, "url": url})
+
+
+def cmd_update_ticket(args):
+    """Rename a ticket: set its summary, leaving every other field as it is."""
+    base, headers = jira_base(), jira_headers()
+    summary = args.summary.strip()
+    if not summary:
+        raise SystemExit("empty summary: pass --summary")
+    http_json(
+        "PUT",
+        f"{base}/rest/api/2/issue/{args.key}",
+        headers,
+        payload={"fields": {"summary": summary}},
+        dry_run=args.dry_run,
+    )
+    url = f"{base}/browse/{args.key}"
+    emit(f"{args.key} renamed: {summary}", {"key": args.key, "summary": summary, "url": url})
 
 
 def cmd_rank_tickets(args):
@@ -2517,6 +2534,11 @@ def build_parser():
     transition.add_argument("--to", help="transition or target status name as Jira shows it, e.g. Done")
     transition.add_argument("--resolution", help="resolution name when the transition's screen requires one, e.g. Done")
     transition.set_defaults(func=cmd_transition_ticket)
+
+    update = sub.add_parser("update-ticket", help="rename a Jira ticket (set its summary)")
+    update.add_argument("--key", required=True, help="issue key, e.g. ACME-401")
+    update.add_argument("--summary", required=True, help="the new summary")
+    update.set_defaults(func=cmd_update_ticket)
 
     rank = sub.add_parser("rank-tickets", help="order Jira tickets on the board, first key on top")
     rank.add_argument("--keys", required=True, nargs="+", help="issue keys in the wanted order, e.g. ACME-7 ACME-3")
