@@ -1382,6 +1382,17 @@ def test_review_rollup_github_keeps_the_latest_real_vote_per_login():
     assert merged["state"] == "MERGED"
 
 
+def test_review_rollup_github_lists_a_requested_team_as_awaiting():
+    pull = {
+        "state": "open",
+        "requested_teams": [{"slug": "finops"}],
+        "base": {"repo": {"owner": {"login": "acme"}}},
+    }
+    review = ticket_pr.review_rollup_github(pull, [])
+    assert review["awaiting"] == ["@acme/finops"]
+    assert ticket_pr.review_line(review) == "review: awaiting @acme/finops"
+
+
 # ---------------------------------------------------------------- review
 
 
@@ -1483,33 +1494,54 @@ def test_review_queue_bitbucket_marks_what_waits_on_me(monkeypatch, capsys):
 
 
 def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
+    # A request to a team this account is on (a CODEOWNERS team) lands in
+    # requested_teams, not requested_reviewers, and still asks for its review.
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
 
-    def pull(number, author, requested=(), draft=False):
+    def pull(number, author, requested=(), draft=False, teams=()):
         return {
             "number": number,
             "title": f"PR {number}",
             "user": {"login": author},
             "draft": draft,
             "requested_reviewers": [{"login": login} for login in requested],
+            "requested_teams": [{"slug": slug} for slug in teams],
             "head": {"ref": f"b{number}"},
             "base": {"ref": "main"},
             "html_url": f"https://github.com/owner/name/pull/{number}",
         }
 
-    pulls = [pull(1, "sam", ["me"]), pull(2, "me"), pull(3, "sam"), pull(4, "sam", ["me"], draft=True)]
-    monkeypatch.setattr(
-        ticket_pr,
-        "http_json",
-        lambda m, url, h, **k: {"login": "me"} if url.endswith("/user") else [] if "/reviews?" in url else pulls,
-    )
+    pulls = [
+        pull(1, "sam", ["me"]),
+        pull(2, "me"),
+        pull(3, "sam"),
+        pull(4, "sam", ["me"], draft=True),
+        pull(5, "sam", teams=["finops"]),
+        pull(6, "sam", teams=["platform"]),
+    ]
+    my_teams = [
+        {"organization": {"login": "owner"}, "slug": "finops"},
+        {"organization": {"login": "other"}, "slug": "platform"},
+    ]
+
+    def fake(method, url, headers, **kwargs):
+        if url.endswith("/user"):
+            return {"login": "me"}
+        if "/user/teams?" in url:
+            return my_teams
+        return [] if "/reviews?" in url else pulls
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake)
     ticket_pr.main(["review-queue", "--repo", "github:owner/name"])
     result = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
-    assert {pr["pr"]: pr["skip"] for pr in result["prs"]} == {
-        1: None,
-        2: "own",
-        3: "not_requesting",
-        4: "draft",
+    assert {pr["pr"]: (pr["skip"], pr["requested_teams"]) for pr in result["prs"]} == {
+        1: (None, []),
+        2: ("own", []),
+        3: ("not_requesting", []),
+        4: ("draft", []),
+        5: (None, ["finops"]),
+        # same slug in another org is not this account's team
+        6: ("not_requesting", []),
     }
 
 
@@ -1554,6 +1586,8 @@ def test_review_queue_github_settles_a_reviewed_pr_until_a_commit_lands(monkeypa
     def fake(method, url, headers, **kwargs):
         if url.endswith("/user"):
             return {"login": "me"}
+        if "/user/teams?" in url:
+            return []
         match = re.search(r"/pulls/(\d+)/(reviews|commits)\?", url)
         if match:
             number, kind = int(match.group(1)), match.group(2)
@@ -1597,6 +1631,8 @@ def test_review_queue_requested_in_org_adds_prs_from_unlisted_repos(monkeypatch,
         calls.append(url)
         if url.endswith("/user"):
             return {"login": "me"}
+        if "/user/teams?" in url:
+            return []
         if "/reviews?" in url:
             return []
         if "/search/issues?" in url:

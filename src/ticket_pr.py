@@ -872,10 +872,12 @@ def review_rollup_github(pull, reviews):
     """
     A GitHub PR's review state: lifecycle (MERGED beats CLOSED), draft flag and
     the latest real vote per login. COMMENTED never replaces a vote and a
-    DISMISSED review clears one; a login still in requested_reviewers has no
-    vote yet.
+    DISMISSED review clears one; a login still in requested_reviewers, or a
+    team in requested_teams (as @org/slug), has no vote yet.
     """
     votes = {(u or {}).get("login"): None for u in pull.get("requested_reviewers", [])}
+    org = pull.get("base", {}).get("repo", {}).get("owner", {}).get("login")
+    votes.update({f"@{org}/{t['slug']}": None for t in pull.get("requested_teams", [])})
     for review in sorted(reviews, key=lambda r: r.get("submitted_at") or ""):
         login = (review.get("user") or {}).get("login")
         state = (review.get("state") or "").upper()
@@ -1413,14 +1415,23 @@ def github_my_review(repo, number, headers, me):
     return latest["state"].lower(), commits_after(commits, reviewed_at)
 
 
-def github_queue_entry(pull, repo, me, headers):
+def github_my_teams(headers):
+    """Every team this account belongs to, as org/slug."""
+    return {f"{t['organization']['login']}/{t['slug']}" for t in github_paginate(f"{GITHUB_API}/user/teams", headers)}
+
+
+def github_queue_entry(pull, repo, me, headers, teams):
     """
-    One queue row for a GitHub pull. Submitting a review drops the reviewer
-    from requested_reviewers, so a reviewed PR reads as not requesting; its
+    One queue row for a GitHub pull. A request to one of this account's
+    ``teams`` (org/slug) counts as a request to it; requested_teams names the
+    ones that matched. Submitting a review drops the reviewer from
+    requested_reviewers, so a reviewed PR reads as not requesting; its
     my_state and commits_since_my_review say whether anything landed since.
     """
     author = pull["user"]["login"]
-    requested = me in [user["login"] for user in pull.get("requested_reviewers", [])]
+    org = repo.split("/", 1)[0]
+    my_teams = sorted(t["slug"] for t in pull.get("requested_teams", []) if f"{org}/{t['slug']}" in teams)
+    requested = bool(my_teams) or me in [user["login"] for user in pull.get("requested_reviewers", [])]
     draft = bool(pull.get("draft"))
     state, since = (None, None) if author == me or draft else github_my_review(repo, pull["number"], headers, me)
     return {
@@ -1434,22 +1445,23 @@ def github_queue_entry(pull, repo, me, headers):
         "url": pull["html_url"],
         "draft": draft,
         "review_requested": requested,
+        "requested_teams": my_teams,
         "my_state": state,
         "commits_since_my_review": since,
         "skip": queue_skip(author == me, draft, requested, state, since),
     }
 
 
-def github_queue(repo, headers, me):
+def github_queue(repo, headers, me, teams):
     """Open PRs in a GitHub repo."""
     query = urllib.parse.urlencode({"state": "open", "per_page": 100})
     return [
-        github_queue_entry(pull, repo, me, headers)
+        github_queue_entry(pull, repo, me, headers, teams)
         for pull in http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls?{query}", headers)
     ]
 
 
-def github_requested_queue(org, headers, me, listed):
+def github_requested_queue(org, headers, me, teams, listed):
     """
     Open PRs anywhere in a GitHub org that request this account's review,
     skipping the repos already listed (their queue covers them). A search
@@ -1462,7 +1474,7 @@ def github_requested_queue(org, headers, me, listed):
         if repo in listed:
             continue
         pull = http_json("GET", f"{GITHUB_API}/repos/{repo}/pulls/{item['number']}", headers)
-        entries.append(github_queue_entry(pull, repo, me, headers))
+        entries.append(github_queue_entry(pull, repo, me, headers, teams))
     return entries
 
 
@@ -1509,6 +1521,11 @@ def bitbucket_queue(repo, headers, me):
     return entries
 
 
+def github_account(headers):
+    """(login, teams) for whoever the GitHub token belongs to."""
+    return http_json("GET", f"{GITHUB_API}/user", headers)["login"], github_my_teams(headers)
+
+
 def cmd_review_queue(args):
     """
     Every open PR across the given repos, plus any PR in a ``--requested-in``
@@ -1535,15 +1552,15 @@ def cmd_review_queue(args):
         else:
             headers = github_headers()
             if provider not in accounts:
-                accounts[provider] = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
-            prs += github_queue(repo, headers, accounts[provider])
+                accounts[provider] = github_account(headers)
+            prs += github_queue(repo, headers, *accounts[provider])
     if args.requested_in:
         headers = github_headers()
         if "github" not in accounts:
-            accounts["github"] = http_json("GET", f"{GITHUB_API}/user", headers)["login"]
+            accounts["github"] = github_account(headers)
         listed = {repo for provider, repo in specs if provider == "github"}
         for org in args.requested_in:
-            prs += github_requested_queue(org, headers, accounts["github"], listed)
+            prs += github_requested_queue(org, headers, *accounts["github"], listed)
     skipped = {}
     for pr in prs:
         if pr["skip"]:
