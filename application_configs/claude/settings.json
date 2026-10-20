@@ -76,6 +76,7 @@
   "enabledPlugins": {
     "swift-lsp@claude-plugins-official": true
   },
+  "outputStyle": "Concise",
   "feedbackSurveyRate": 0,
   "effortLevel": "high",
   "autoUpdatesChannel": "latest",
@@ -89,5 +90,5 @@
   "remoteControlAtStartup": true,
   "inputNeededNotifEnabled": true,
   "agentPushNotifEnabled": true,
-  "outputStyle": "Concise"
+  "switchModelsOnFlag": false
 }
