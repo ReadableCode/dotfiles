@@ -401,7 +401,7 @@ Current hotkeys defined in `application_configs/hammerspoon/init.lua`:
 | `Cmd+Shift+F` | Copy selection, open as Google Drive folder URL |
 | `Cmd+Shift+V` | Paste as plain text (strips formatting) |
 | `Ctrl+Shift+T` | Open front Finder window in Terminal |
-| `Ctrl+Shift+L` | Apply saved layouts to every desktop in sequence |
+| `Ctrl+Shift+L` | Re-pin All Desktops apps, then apply saved layouts to every desktop in sequence |
 | `Ctrl+Shift+H` | Show the hotkey cheatsheet |
 
 The open-by-ID keys use Cmd because they are a modified copy (`Cmd+C`), the Mac
@@ -577,15 +577,19 @@ background"): `/applyLayouts`, `/apply?space=N`, `/snapshot`, `/snapshotApp`,
 
 #### Enforcing assignments
 
-Two things go wrong. An app pinned to All Desktops still *shows* the checkmark in
+Three things go wrong. An app pinned to All Desktops still *shows* the checkmark in
 its Dock menu but stops following you between desktops (typically after a KVM
-flip); and an app that belongs on one desktop drifts onto another. Both are
-repaired from `"assign"`.
+flip); an app pinned to All Desktops stays on every desktop but its window is
+stuck above every single-desktop window, so clicking Mail or Calendar activates
+it without bringing it forward; and an app that belongs on one desktop drifts
+onto another. All are repaired from `"assign"`, which must name each app exactly
+as macOS does (`T3 Code (Beta)`, not an older channel's name) or it is skipped.
 
 Detection needs no menus: `hs.spaces.windowSpaces()` reports every space a window
 is on, and `wl.spaceIndex()` maps space IDs to desktop numbers, so "on every
 desktop" and "on exactly desktop N" are directly observable. A mismatch with
-`"assign"` is the bug.
+`"assign"` is the bug. The stuck-on-top case shows no mismatch, so nothing can
+detect it; only a forced re-pin clears it.
 
 The repairs drive the Dock's own right-click menu (Options → All Desktops / This
 Desktop / None), readable and pressable without ever being rendered:
@@ -593,7 +597,10 @@ Desktop / None), readable and pressable without ever being rendered:
 - **Fix drift** shoves misplaced windows onto their desktop and runs the
   un-assign / re-assign cycle on any stale All Desktops app. No desktop
   switching, so this is what runs automatically five seconds after a display
-  change and again before `Ctrl+Shift+L`.
+  change.
+- **`Ctrl+Shift+L`** runs the same repair but re-pins every All Desktops app,
+  broken-looking or not, before applying the layouts, so the morning or
+  post-KVM press also clears windows stuck on top.
 - **Enforce all** (`/fixAssign?force=1&dock=1`) also writes the numbered
   assignments. macOS resolves "This Desktop" against wherever you are standing,
   so this visits each desktop in turn and comes back. Every step is traced to the Hammerspoon console
