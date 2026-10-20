@@ -6,3 +6,6 @@
 # personal_credentials (claude/repo_notes/); a repo that tracks its own
 # CLAUDE.md is unaffected - ignore rules never touch tracked files
 **/CLAUDE.md
+# project skills deploy into checkouts as .claude/skills/<name>/SKILL.md links
+# from a context's dev overlay; a repo that tracks its own skills is unaffected
+**/.claude/skills/

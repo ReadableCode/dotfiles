@@ -92,6 +92,8 @@ import sys
 TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
 # Where deploy-managed links live in a checkout: the root, and .claude/ for settings.local.json.
 LINK_SCAN_DIRS = ("", ".claude")
+# Project skills deploy as one file link per skill, .claude/skills/<name>/SKILL.md; each <name> is scanned too.
+SKILLS_DIR = os.path.join(".claude", "skills")
 # Ignored files that are noise, not config: never worth a "not mirrored" line.
 REPORT_SKIP = {".DS_Store", "desktop.ini"}
 # `[tool.uv.sources]` entries that install a checkout by path: `name = { path = "../lib", ... }`.
@@ -369,12 +371,16 @@ def local_only_entries(main):
     Gitignored things in the main checkout worth knowing about, as
     (relpath, kind, target) with kind in {"link", "env", "other"}.
 
-    "link" is any ignored symlink in LINK_SCAN_DIRS (target = absolute), "env" is
-    a plain-file .env (target = its absolute path), "other" is every remaining
-    ignored top-level file - reported, never mirrored.
+    "link" is any ignored symlink in LINK_SCAN_DIRS or in a skill folder under
+    SKILLS_DIR (target = absolute), "env" is a plain-file .env (target = its
+    absolute path), "other" is every remaining ignored file in those
+    directories - reported, never mirrored.
     """
     entries = []
-    for scan_dir in LINK_SCAN_DIRS:
+    skills = os.path.join(main, SKILLS_DIR)
+    skill_names = sorted(os.listdir(skills)) if os.path.isdir(skills) else []
+    skill_dirs = [os.path.join(SKILLS_DIR, name) for name in skill_names]
+    for scan_dir in (*LINK_SCAN_DIRS, *skill_dirs):
         directory = os.path.join(main, scan_dir)
         if not os.path.isdir(directory):
             continue

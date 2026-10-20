@@ -130,6 +130,19 @@ def test_ignored_links_are_mirrored_with_absolute_targets_and_plain_files_are_no
     assert not os.path.exists(os.path.join(worktree, "token.json"))
 
 
+def test_a_linked_project_skill_is_mirrored_into_its_folder(repos):
+    repo_parent, main, worktree = repos
+    source = os.path.join(repo_parent, "acme_dev", "claude", "skills", "acme_thing", "SKILL.md")
+    write(source, "---\nname: acme_thing\n---\n")
+    skill = os.path.join(".claude", "skills", "acme_thing", "SKILL.md")
+    os.makedirs(os.path.dirname(os.path.join(main, skill)))
+    os.symlink(source, os.path.join(main, skill))
+    entry = [e for e in init_worktree.local_only_entries(main) if e[0] == skill][0]
+    assert entry == (skill, "link", os.path.realpath(source))
+    assert init_worktree.mirror_entry(entry, worktree) == "linked"
+    assert os.path.realpath(os.path.join(worktree, skill)) == os.path.realpath(source)
+
+
 def test_second_run_is_a_no_op(repos):
     _, main, worktree = repos
     entries = init_worktree.local_only_entries(main)
