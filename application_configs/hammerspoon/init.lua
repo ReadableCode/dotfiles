@@ -14,7 +14,7 @@ local hotkeyRef = {
     {"Cmd+Shift+F",   "Open selected ID as Google Drive folder"},
     {"Cmd+Shift+V",   "Paste as plain text (strips formatting)"},
     {"Ctrl+Shift+T",  "Open front Finder window in Terminal"},
-    {"Ctrl+Shift+L",  "Re-pin All Desktops apps, then apply layouts to every desktop"},
+    {"Ctrl+Shift+L",  "Apply saved layouts to every desktop in sequence"},
     -- {"Ctrl+Shift+A",  "Apply saved layout to THIS desktop only"},
     -- {"Ctrl+Shift+S",  "Recapture ALL windows on this desktop"},
     -- {"Ctrl+Shift+W",  "Recapture only the focused app's window(s)"},
@@ -664,11 +664,8 @@ end
 -- Assignments are repaired FIRST: a window that macOS thinks is on all
 -- desktops but has silently stopped following you would otherwise get placed
 -- on whichever desktop happens to still hold it, and skipped everywhere else.
--- force re-pins every All Desktops app, not just the detectably broken ones:
--- a stale pin can also leave the window on every desktop but stuck above
--- every normal window, which windowSpaces() cannot see.
 function wl.applyAll()
-    wl.fixAssign({ quiet = true, force = true, then_ = wl.applyAllNow })
+    wl.fixAssign({ quiet = true, then_ = wl.applyAllNow })
 end
 
 -- Visit every desktop in Mission Control order, run fn(i) while standing on it,
@@ -1011,10 +1008,12 @@ end
 --    you between desktops. The manual fix is to un-assign it and re-assign All
 --    Desktops. Automated below.
 -- 2. An app that is supposed to live on one desktop drifts onto another.
--- 3. A stale All Desktops pin is still on every desktop, but its window is
---    stuck above every single-desktop window: clicking another app activates
---    it without raising it. Invisible to the detection below, so only a
---    forced re-pin (which Ctrl+Shift+L does) repairs it.
+-- 3. (Not repaired here.) A macOS bug, usually on desktop 1 after a display
+--    reconnect: All Desktops windows get stuck above every single-desktop
+--    window, so clicking another app activates it without raising it.
+--    Invisible to the detection below; re-pinning frees one app at a time,
+--    while switching to another desktop and back clears it at once, which the
+--    Ctrl+Shift+L walk already does.
 --
 -- Detection is cheap and needs no menus: hs.spaces.windowSpaces(win) returns
 -- every space a window is on, and wl.spaceIndex() gives the space-ID -> desktop
