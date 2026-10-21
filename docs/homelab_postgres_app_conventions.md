@@ -120,7 +120,10 @@ App_Name/
 │   ├── store.py         # I2/I9: the ONLY module that talks to PostgREST
 │   ├── users.py         # I4: superuser reads of <schema>.users
 │   └── users_cli.py     # account management, run via docker compose exec
+├── compose.yaml         # self-contained: Postgres + PostgREST + the app
+├── compose.external.yaml # the app alone against an existing Postgres + PostgREST
 ├── deploy/
+│   ├── compose.elitedesk.yaml # the elitedesk definition (Docker repo include)
 │   ├── 02_schema.sql        # CREATE SCHEMA/TABLEs + GRANTs to <schema>_user
 │   ├── 03_secure_users.sql  # I4 revokes
 │   └── 04_rls.sql           # I5 policies
@@ -131,6 +134,15 @@ App_Name/
 
 `store.py` is the seam that matters. If application code anywhere else opens a
 database connection or builds a PostgREST URL, the refactor is incomplete.
+
+Every app also runs on its own for anyone who clones it: `compose.yaml` brings
+up `postgres:17`, a pinned PostgREST and the app, needing only three secrets
+in `.env` (`POSTGRES_PASSWORD`, `POSTGREST_DB_PASSWORD`,
+`POSTGREST_JWT_SECRET`). Postgres creates the two cluster roles on its first
+start from an inline `configs:` init script (the bundle's equivalent of the
+Docker repo's `postgres-cluster-roles` service); the app's bootstrap creates
+everything else, exactly as on elitedesk. Book-Bot's two compose files are the
+reference.
 
 ## 3. The `users` table shape
 
