@@ -151,24 +151,31 @@ CREATE TABLE IF NOT EXISTS <schema>.users (
 
 `password_changed_at` is load-bearing: sessions issued before it are rejected,
 so a password change, a disable, and a re-enable each revoke every live session
-without any server-side session store. postgrest-auth requires this shape for
-every schema it serves, so `role`, `display_name`, `disabled` and
-`password_changed_at` are not optional.
+without any server-side session store. The postgrest-auth library's `login()`
+reads `role` and `disabled`, the session validators read
+`password_changed_at`, and every app shares the shape, so `role`,
+`display_name`, `disabled` and `password_changed_at` are not optional.
 
 `password_hash` is an **opaque string**. It is never parsed, reformatted, or
 re-encoded by any migration. Algorithms are self-identifying by prefix
 (`$2b$` bcrypt, `$argon2id$` argon2id), which is what makes a future unified
 verifier possible without touching stored data.
 
-## 4. Auth: the shared service is the standard
+## 4. Auth: the shared library is the standard
 
-**Password verification is central, via postgrest-auth.** Accounts stay
-per-app, and are per-app by construction: `POST /token` takes a `schema` and
-looks up `<schema>.users`. Authelia cannot share that table either, since its
-backends are file and LDAP only. The constraints the arrangement meets:
+**Password verification is shared code, run inside each app.** Every app
+imports the [postgrest-auth](https://github.com/ReadableCode/postgrest-auth)
+library (a uv git dependency pinned to a tag, like readable-utils) and calls
+`postgrest_auth.login(connect, schema, username, password, jwt_secret=...)`
+over its own superuser connection (I2 exception 2). Accounts stay per-app,
+and are per-app by construction: `login()` takes a `schema` and looks up
+`<schema>.users`. Authelia cannot share that table either, since its
+backends are file and LDAP only. No app depends on another running service
+for login: each needs only Postgres and PostgREST, so each repo stands on its
+own. The constraints the arrangement meets:
 
 - **C1. No user-visible change to how anyone logs in, and no password
-  resets.** Met by prefix dispatch: the service verifies `$argon2id$` and
+  resets.** Met by prefix dispatch: the library verifies `$argon2id$` and
   legacy `$2b$` hashes alike and transparently rehashes bcrypt to argon2id on
   the next successful login.
 - **C3. Access to the *site* is still gated**, by each app's own login page
@@ -179,30 +186,32 @@ backends are file and LDAP only. The constraints the arrangement meets:
 
 The division of labor:
 
-- **Verification is central** (postgrest-auth): argon2id KDF policy,
-  per-username+per-IP lockout, dummy-hash timing defense, `disabled`
-  rejected identically to a bad password. Tokens carry
-  `role`/`user_id`/`username`/`app_role`/`iat`/`exp`, with an optional
-  per-app `ttl_hours` (≤ 720 h) so each app keeps its session policy.
+- **Verification is shared code** (the postgrest-auth library): argon2id KDF
+  policy, per-username+per-IP lockout (in-memory, per app process),
+  dummy-hash timing defense, `disabled` rejected identically to a bad
+  password. Tokens carry `role`/`user_id`/`username`/`app_role`/`iat`/`exp`,
+  with an optional per-app `ttl_hours` (≤ 720 h) so each app keeps its
+  session policy. An app whose image runs `uv sync` installs `git` so uv can
+  fetch the library.
 - **Session validation is app-side**: decode the JWT with the shared secret
   and compare `iat` against `password_changed_at` (30 s cached direct-DB
   read). Solitaire's `app/auth.py` is the reference; Book-Bot mirrors it.
   load-log holds the token opaquely and relies on PostgREST's `exp` check
   only (single-user, RLS deferred — documented in its plan).
 - **Account management stays app-side**: each app's CLI/signup creates
-  argon2id hashes and bumps `password_changed_at` on password change,
-  disable, and re-enable.
+  argon2id hashes with the library's `hash_password` and bumps
+  `password_changed_at` on password change, disable, and re-enable.
 
 ## 5. Current auth flows
 
 | Flow | Mechanism | Used by |
 |---|---|---|
 | **A. Authelia forward-auth** | SSO cookie on `tinkernet.me`, argon2 hashes in `users_database.yml` (file backend, on-server only, not in git), groups `admins`/`friends`, `password_reset: disable`, regulation 4 tries / 2 min → 10 min ban, sessions in `/config/db.sqlite3` | Self-built: `assistant`, `herdstone` and one client-facing app. Third-party: `sonarr`(+elite), `radarr`(+elite,4k), `readarr`, `readarraudio`, `lazylibrarian`, `bazarr`, `nzbget`(+elite), `deluge`, `calibre` |
-| **B. postgrest-auth service** (the standard) | `POST https://auth.tinkernet.me/token {schema,username,password,ttl_hours?}`, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire`, `syncplex` |
-| **C. In-app verify, self-minted JWT** | **argon2id**, app's own auth code, session cookie holds the token | None |
+| **B. postgrest-auth library** (the standard) | In-process `postgrest_auth.login(connect, schema, username, password, jwt_secret, ttl_hours?)` over the app's superuser connection, **argon2id** in `<schema>.users` (legacy bcrypt verified by prefix, rehashed on login), mints HS256 JWT with `role`/`user_id`/`username`/`app_role`/`iat` | `book_bot`, `load_log`, `solitaire`, `syncplex` |
+| **C. In-app verify with the app's own code** | **argon2id**, hand-written verify and token minting instead of the library | None |
 | **D. nginx basic auth** | `.htpasswd` at the proxy | None; every occurrence is commented out |
 | **E. App's own internal auth** | Out of scope | `jellyfin`, `nextcloud`, `grafana`, `bitwarden`, `homeassistant` |
-| **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `minecraft*`, `minio`, `ntfy`, `auth`†, `pgrest`† |
+| **F. Genuinely open** | No gate at all | `bookbot`*, `loadlog`*, `solitaire`*, `syncplex`*, `website_site`, `charlie_website_*`, `minecraft*`, `minio`, `ntfy`, `pgrest`† |
 
 \* Open **at the proxy** by design — the app itself requires a login (flow B).
 Authelia's config comments this explicitly for the whole group.
@@ -211,8 +220,8 @@ Authelia's config comments this explicitly for the whole group.
 remnants are gone, but its **Authelia rule, SWAG proxy-conf, and Cloudflare DNS
 record live on the server only** and still need removing there.
 
-† `auth` and `pgrest` are correctly ungated at nginx: each authenticates its
-own requests, and the proxy-confs say so in comments.
+† `pgrest` is correctly ungated at nginx: it authenticates its own requests,
+and the proxy-conf says so in comments.
 
 ---
 
@@ -227,7 +236,7 @@ exception.
 | `Sync_Plex` | Conforms. Accounts and the request queue live in the `syncplex` schema: `syncplex_user` is `NOLOGIN`, `users` is revoked from it and from `web_anon`, `requests` has RLS with `WITH CHECK` on both policies, bootstrap is version-gated and additive and runs from the web startup path, every PostgREST call carries `Accept-Profile`/`Content-Profile`, there is no fallback store, and the one-shot `scripts/import_json_stores.py` is the only JSON reader left. For I10, `test_postgrest_real.py` does a read-only `GET /requests` through `store.py` as a throwaway user, so a PostgREST without the schema exposed fails the suite, and RLS itself is proven straight against Postgres in `test_db_real.py`. The TUI signs in nobody: `engine/media/tui/operator.py` mints the admin JWT itself from `POSTGREST_JWT_SECRET` in personal.env, with the claims flow B issues (`role`, `username`, `app_role=admin`, `iat`, `exp`, no `user_id`), so the same RLS admits it; `test_postgrest_real.py` reads the queue with that token against the real PostgREST. |
 | `Cash_Flow_Commander` | **Sanctioned exception, see §7.** Stays on SQLAlchemy: I2, I3, I5 and I11 do not apply, and I8 applies in the amended form. I6 is met (`src/bootstrap.py`). |
 | `Terminal_To_Do` | SQLite file round-tripped through S3. Violates I1, I2, I5, I6, I8. |
-| `Book-Bot` | Conforms. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). Its `test_postgrest_real.py` stays red until `postgrest-auth` is redeployed — deploy the service **before** Book-Bot's app code, or every user locks out. |
+| `Book-Bot` | Conforms. The SQLite dev mode is deleted (I8: a missing `POSTGREST_URL` raises at import), the users table has the canonical shape, revocation is enforced per request, and the suite moved off SQLite onto the real stack (I10). |
 | `load-log` | Conforms. The schema converges from `deploy/*.sql` + `src/bootstrap.py` called from the Streamlit and TUI startup paths, and `users` is at the §3 shape. One open backlog item is fleet-level, not load-log's own conformance: its historic migration set `search_path` on the whole shared `apps` database (`load-log/backlog/shared-apps-search-path.md`). |
 | `Solitaire_Associations` | Conforms, on flow B. |
 | `personal_dev` | Not a web app: a repo of scripts that owns the `personal_dev` schema for data devices push in (the phone's notification log). No `users` table and no login flow; senders hold a non-expiring JWT for `personal_dev_user` whose `jti` names a row in `personal_dev.ingest_keys`, and RLS admits an insert only while that row is unrevoked, so revoking a row stops one sender (I4/I5 in that form). Reads use a five-minute `admin` token the script signs from `POSTGREST_JWT_SECRET`, as Sync_Plex's TUI does. I6 is met from `src/personal_db.py` at the start of every command that uses the schema. |
