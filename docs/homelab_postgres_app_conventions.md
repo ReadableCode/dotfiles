@@ -41,6 +41,10 @@ point rather than a suggestion.
 PostgREST `SET ROLE`s into it from the JWT's `role` claim. A `LOGIN` role with a
 password handed to the app is the anti-pattern: it makes the app the security
 boundary instead of the database, and the password then has to live somewhere.
+The cluster-wide roles `postgrest_authenticator` and `web_anon` are not the
+app's: the `postgres-cluster-roles` one-shot service in the Docker repo creates
+them from `Docker/postgres/cluster_roles.sql` on every deploy. Bootstrap asserts
+they exist and fails naming that service if not; it never creates them.
 
 **I4 — Credentials are unreachable through PostgREST.**
 `REVOKE ALL ON <schema>.users FROM <schema>_user, web_anon;` in
