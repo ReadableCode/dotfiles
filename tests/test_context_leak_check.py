@@ -171,3 +171,46 @@ def test_main_exit_codes(constellation, capsys):
     subprocess.run(["git", "-C", os.path.join(constellation, "dotfiles"), "add", "-A"], check=True)
     assert leak.main(["--parent", constellation]) == 0
     assert "context-leak: clean" in capsys.readouterr().out
+
+
+def test_a_bang_line_drops_a_derived_name_that_is_an_ordinary_word(constellation):
+    write(
+        os.path.join(constellation, "bravo_credentials", "bravo_identifiers.txt"),
+        "# bravo is also an ordinary word\n!Bravo\n",
+    )
+    contexts = leak.derive_contexts(constellation)
+    assert "bravo" not in contexts["bravo"]["identifiers"]
+    assert "bravo_credentials" in contexts["bravo"]["identifiers"]  # only the exact name goes
+    assert "!Bravo" not in contexts["bravo"]["identifiers"]
+
+
+def test_message_mode_scans_the_commit_message_without_its_comments(constellation, tmp_path, capsys):
+    message = write(
+        str(tmp_path / "COMMIT_EDITMSG"),
+        "fix the report\n\n# acme in a comment is not recorded\n"
+        "# ------------------------ >8 ------------------------\nacme below the scissors\n",
+    )
+    dotfiles = os.path.join(constellation, "dotfiles")
+    assert leak.main(["--parent", constellation, "--repo", dotfiles, "--message", message]) == 0
+    write(message, "fix the Acme Widgets report\n")
+    assert leak.main(["--parent", constellation, "--repo", dotfiles, "--message", message]) == 1
+    assert "commit message:1: [acme] 'Acme Widgets'" in capsys.readouterr().out
+    owner = os.path.join(constellation, "acme_dev")
+    assert leak.main(["--parent", constellation, "--repo", owner, "--message", message]) == 0
+
+
+def test_message_mode_needs_a_repo(constellation, tmp_path):
+    message = write(str(tmp_path / "COMMIT_EDITMSG"), "anything\n")
+    with pytest.raises(SystemExit):
+        leak.main(["--parent", constellation, "--message", message])
+
+
+def test_binary_files_are_skipped_in_both_modes(constellation):
+    contexts = leak.derive_contexts(constellation)
+    repo = os.path.join(constellation, "dotfiles")
+    with open(os.path.join(repo, "logo.png"), "wb") as handle:
+        handle.write(b"\x89PNG\r\n\x1a\n\0\0\0acme\n")
+    write(os.path.join(repo, "docs/x.md"), "clean\n")
+    subprocess.run(["git", "-C", repo, "add", "-A"], check=True)
+    assert leak.scan_repo(repo, contexts, staged=True) == []
+    assert leak.scan_repo(repo, contexts, staged=False) == []

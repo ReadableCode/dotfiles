@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+# commit-msg: refuse a commit whose message names another context's identifiers.
+# The pre-commit hook scans only staged files, and a client abbreviation once
+# reached a public repo through a commit message alone. Deployed into
+# <repo>/.git/hooks/commit-msg by the same overlay entries that deploy the
+# pre-commit hook (see dotfiles/docs/repo_context_credentials.md, "Context
+# leak check"); the dotfiles sibling is two levels up from this file, and the
+# interpreter is dotfiles' own venv for the reasons pre-commit.context-leak
+# gives. Fails closed: no checker, no commit.
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"
+DOTFILES="$(cd "$HOOK_DIR/../.." && pwd)/../dotfiles"
+CHECK="$DOTFILES/src/context_leak_check.py"
+if [ ! -f "$CHECK" ]; then
+    echo "commit-msg: context leak checker not found at $CHECK (dotfiles must be cloned beside this repo)" >&2
+    exit 1
+fi
+PY=""
+for CANDIDATE in "$DOTFILES/.venv/bin/python" "$DOTFILES/.venv/Scripts/python.exe"; do
+    if [ -x "$CANDIDATE" ]; then PY="$CANDIDATE"; break; fi
+done
+if [ -z "$PY" ]; then
+    echo "commit-msg: no python in $DOTFILES/.venv; run 'uv sync' in dotfiles so the context leak check can run" >&2
+    exit 1
+fi
+TOP="$(git rev-parse --show-toplevel)"
+exec "$PY" "$CHECK" --repo "$TOP" --message "$1"

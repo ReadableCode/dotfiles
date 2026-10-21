@@ -71,12 +71,13 @@ safe.
 
 ## Git hooks in this repo
 
-Two hooks, deployed by the personal_dev overlay as symlinks into `.git/hooks/`
+Three hooks, deployed by the personal_dev overlay as symlinks into `.git/hooks/`
 (hooks are untracked, so they need a manifest entry):
 
 | Hook | Payload | Runs |
 | --- | --- | --- |
 | `pre-commit` | `application_configs/git/hooks/pre-commit.context-leak` | `src/context_leak_check.py --staged` |
+| `commit-msg` | `application_configs/git/hooks/commit-msg.context-leak` | `src/context_leak_check.py --message` |
 | `pre-push` | `application_configs/git/hooks/pre-push.dotfiles-checks` | `ruff format --check .`, `ruff check .`, `mypy .`, `pytest -q` |
 
 The split is deliberate. A leaked client identifier must never enter history at

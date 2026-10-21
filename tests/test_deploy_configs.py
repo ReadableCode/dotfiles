@@ -1558,6 +1558,7 @@ MANIFEST_FREE_PAYLOADS = {
 # entry really covers the file, so a stale line here fails on Jason's machines.
 OVERLAY_OWNED_PAYLOADS = {
     "autostart/start_x0vncserver.desktop": "personal_credentials",
+    "git/hooks/commit-msg.context-leak": "personal_dev",
     "git/hooks/pre-commit.context-leak": "personal_dev",
     "git/hooks/pre-push.dotfiles-checks": "personal_dev",
     "claude/commands/init_worktree.md": "personal_dev",

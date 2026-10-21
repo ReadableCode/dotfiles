@@ -206,6 +206,8 @@ the dev repo whose manifest targets it, and an optional
 shorter than four characters are dropped as noise; a short name listed by hand
 is kept and matched case-sensitively, so a two-letter abbreviation catches the
 abbreviation and not a lowercase variable that happens to share its letters.
+A `!name` line in the same file drops a derived name instead, for a context
+token that is also an ordinary word and would flag unrelated text everywhere.
 Then:
 
 - the personal context's own repos (`personal_credentials`, LAN-hosted, and
@@ -221,9 +223,16 @@ Run `uv run python src/context_leak_check.py` for the default sweep (dotfiles
 plus every credentials and dev repo), `--all` to also report on every other
 sibling, `--list` to see what it derived. The same script is the
 **pre-commit hook** `application_configs/git/hooks/pre-commit.context-leak`,
-deployed by the overlays into dotfiles and into every checkout of each
-work context, that context's own repos included (`.git/hooks/pre-commit`,
-untracked by git). It scans only the staged content and fails closed, then
+deployed by the overlays into dotfiles, every public personal checkout, and
+every checkout of each work context, that context's own repos included
+(`.git/hooks/pre-commit`, untracked by git). The personal overlay hooks every
+checkout its repos files declare except a listed set of private and
+third-party repos, so a new repo is hooked by default. Beside it, the
+**commit-msg hook** `application_configs/git/hooks/commit-msg.context-leak`
+runs `--message` on the message being recorded (comment lines and anything
+below the scissors line ignored), deployed to the same checkouts: a client
+abbreviation once reached a public repo through a commit message alone. The
+pre-commit hook scans only the staged content, skipping binary files, and fails closed, then
 runs the repo's own pre-commit framework checks when it has a
 `.pre-commit-config.yaml`, so replacing the hook `pre-commit install` wrote
 loses nothing. The checker runs on the interpreter in dotfiles' own `.venv`

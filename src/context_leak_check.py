@@ -18,7 +18,9 @@ sibling ``<context>_credentials`` repo, so this public file names no client:
   the context with ``per_context_repo``
 - one identifier per line from an optional ``<context>_identifiers.txt``
   (display names, abbreviations, anything not derivable); these skip the
-  length minimum, and a short one matches case-sensitively
+  length minimum, and a short one matches case-sensitively. A ``!name``
+  line drops a derived name instead (a context token that is an ordinary
+  word), matched case-insensitively
 
 Rules, by the repo being scanned. The line is VISIBILITY, not convenience:
 
@@ -41,6 +43,7 @@ Usage:
   context_leak_check.py                   scan dotfiles + every credentials/dev repo (tracked files)
   context_leak_check.py --repo <path>     scan one repo's tracked files
   context_leak_check.py --repo <path> --staged   scan only what is staged (the pre-commit hook)
+  context_leak_check.py --repo <path> --message <file>   scan a commit message (the commit-msg hook)
   context_leak_check.py --all             also scan every other sibling repo (report only)
   context_leak_check.py --list            print the derived identifiers per context
 
@@ -197,10 +200,14 @@ def _read_ticket_prefixes(credentials_dir):
 
 
 def _read_identifier_file(path):
+    """(added, dropped): plain lines add an identifier, ``!name`` lines drop a derived one."""
     if not os.path.exists(path):
-        return []
+        return [], []
     with open(path, "r", encoding="utf-8") as handle:
-        return [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+        lines = [line.strip() for line in handle if line.strip() and not line.startswith("#")]
+    added = [line for line in lines if not line.startswith("!")]
+    dropped = [line[1:].strip() for line in lines if line.startswith("!") and line[1:].strip()]
+    return added, dropped
 
 
 def _dev_repos_for(context, parent):
@@ -259,8 +266,12 @@ def derive_contexts(parent=None):
         for dev in dev_repos:
             identifiers |= token_variants(dev)
         identifiers = {i for i in identifiers if len(i) >= MIN_IDENTIFIER_LEN}
+        added, dropped = _read_identifier_file(os.path.join(cdir, f"{context}_identifiers.txt"))
         # Listed by hand, so short ones (a two-letter abbreviation) are meant: no minimum.
-        identifiers |= set(_read_identifier_file(os.path.join(cdir, f"{context}_identifiers.txt")))
+        identifiers |= set(added)
+        # A derived name that is an ordinary word would flag unrelated text everywhere.
+        dropped_lower = {name.lower() for name in dropped}
+        identifiers = {i for i in identifiers if i.lower() not in dropped_lower}
         # "repos": the context's own two-or-more repos, scanned by default.
         # "owned": every checkout the context's repos file declares as well -
         # the client's own repositories, which naturally carry their own
@@ -326,10 +337,19 @@ def staged_files(repo_dir):
     return [p for p in result.stdout.split("\0") if p] if result.returncode == 0 else []
 
 
+def _text_or_empty(raw):
+    """Decoded text, or "" for a binary blob (a NUL in its first 4 KiB) or one past the size cap."""
+    if len(raw) > MAX_FILE_BYTES or b"\0" in raw[:4096]:
+        return ""
+    return raw.decode("utf-8", errors="replace")
+
+
 def read_content(repo_dir, path, staged):
+    """A file's text, from the index when staged; binary files and symlinks read as empty, so they are skipped."""
     if staged:
-        result = _git(repo_dir, "show", f":{path}")
-        return result.stdout if result.returncode == 0 else ""
+        # Raw bytes, not _git's text mode: decoding first would hide the NUL that marks a binary blob.
+        result = subprocess.run(["git", "-C", repo_dir, "show", f":{path}"], capture_output=True)
+        return _text_or_empty(result.stdout) if result.returncode == 0 else ""
     full = os.path.join(repo_dir, path)
     try:
         if os.path.getsize(full) > MAX_FILE_BYTES or os.path.islink(full):
@@ -338,9 +358,7 @@ def read_content(repo_dir, path, staged):
             raw = handle.read()
     except OSError:
         return ""
-    if b"\0" in raw[:4096]:
-        return ""
-    return raw.decode("utf-8", errors="replace")
+    return _text_or_empty(raw)
 
 
 def scan_repo(repo_dir, contexts, staged=False):
@@ -360,6 +378,33 @@ def scan_repo(repo_dir, contexts, staged=False):
             for context, ident, pattern in patterns:
                 if pattern.search(line):
                     hits.append((path, line_no, context, ident, line.strip()[:120]))
+    return hits
+
+
+def commit_message_text(path):
+    """The message git will record: comment lines and everything below the scissors line dropped."""
+    with open(path, "r", encoding="utf-8", errors="replace") as handle:
+        lines = handle.read().split("\n")
+    kept = []
+    for line in lines:
+        if line.startswith("# ------------------------ >8 ------------------------"):
+            break
+        if not line.startswith("#"):
+            kept.append(line)
+    return "\n".join(kept)
+
+
+def scan_message(repo_dir, contexts, message_path):
+    """[(label, line_no, context, identifier, line_text)] for every forbidden hit in a commit message."""
+    rules = forbidden_for(repo_dir, contexts)
+    if not rules:
+        return []
+    hits = []
+    for line_no, line in enumerate(commit_message_text(message_path).split("\n"), 1):
+        for context, info in rules.items():
+            for ident in sorted(info["identifiers"]):
+                if _pattern(ident).search(line):
+                    hits.append(("commit message", line_no, context, ident, line.strip()[:120]))
     return hits
 
 
@@ -388,10 +433,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--repo", help="scan this repo only (default: dotfiles + every credentials/dev repo)")
     parser.add_argument("--staged", action="store_true", help="scan the staged content of --repo (pre-commit)")
+    parser.add_argument("--message", help="scan this commit message file for --repo (commit-msg)")
     parser.add_argument("--all", action="store_true", help="also report on every other sibling repo")
     parser.add_argument("--list", action="store_true", help="print the derived identifiers per context and exit")
     parser.add_argument("--parent", help="the directory holding the sibling repos (default: dotfiles' parent)")
     args = parser.parse_args(argv)
+    if args.message and not args.repo:
+        parser.error("--message needs --repo: the rules depend on which repo the commit is in")
     parent = os.path.abspath(args.parent) if args.parent else repo_parent()
     contexts = derive_contexts(parent)
     if args.list:
@@ -406,7 +454,10 @@ def main(argv=None):
     failed = False
     if args.repo:
         repo = os.path.abspath(args.repo)
-        hits = scan_repo(repo, contexts, staged=args.staged)
+        if args.message:
+            hits = scan_message(repo, contexts, args.message)
+        else:
+            hits = scan_repo(repo, contexts, staged=args.staged)
         report(hits, repo)
         if hits:
             print(
