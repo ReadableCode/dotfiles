@@ -10,7 +10,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
 transition-ticket, update-ticket, rank-tickets, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
 dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review,
-delete-branch-on-merge, activity. get-ticket
+delete-branch-on-merge, archive-repo, repo-visibility, activity. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
 never has to go to the Jira API on its own; search-tickets runs a JQL query
@@ -2524,6 +2524,24 @@ def cmd_archive_repo(args):
     )
 
 
+def cmd_repo_visibility(args):
+    """
+    Make a GitHub repo private or public. Like archive-repo the repo is always
+    named outright, never taken from the checkout this runs in. Set it before
+    archiving: an archived repo takes no settings changes.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("repo-visibility is GitHub-only")
+    payload = {"private": args.visibility == "private"}
+    result = http_json("PATCH", f"{GITHUB_API}/repos/{repo}", github_headers(), payload, dry_run=args.dry_run)
+    if args.dry_run:
+        emit("dry run", {"repo": repo, "visibility": args.visibility})
+        return
+    visibility = "private" if result.get("private") else "public"
+    emit(f"{repo} is {visibility}", {"repo": result["full_name"], "url": result["html_url"], "visibility": visibility})
+
+
 def cmd_delete_branch_on_merge(args):
     """
     Turn on GitHub's "Automatically delete head branches" for a repo, so a
@@ -2709,6 +2727,11 @@ def build_parser():
     archive.add_argument("--repo", required=True, help="owner/name; always explicit, never taken from the checkout")
     archive.add_argument("--unarchive", action="store_true", help="make an archived repo writable again")
     archive.set_defaults(func=cmd_archive_repo)
+
+    visibility = sub.add_parser("repo-visibility", help="make a GitHub repo private or public")
+    visibility.add_argument("--repo", required=True, help="owner/name; always explicit, never taken from the checkout")
+    visibility.add_argument("visibility", choices=["private", "public"])
+    visibility.set_defaults(func=cmd_repo_visibility)
 
     delete_on_merge = sub.add_parser(
         "delete-branch-on-merge", help="make GitHub delete a PR's head branch when it merges, or stop it"

@@ -1238,6 +1238,41 @@ def test_archive_repo_needs_the_repo_named_and_is_github_only(monkeypatch, capsy
         _run_cli(["archive-repo", "--repo", "bitbucket:ws/slug"], monkeypatch, capsys)
 
 
+def test_repo_visibility_dry_run_patches_the_repo(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(["--dry-run", "repo-visibility", "--repo", "acme/widgets", "private"], monkeypatch, capsys)
+    assert "[dry-run] PATCH https://api.github.com/repos/acme/widgets" in out
+    assert json.loads(out.strip().splitlines()[-1]) == {"repo": "acme/widgets", "visibility": "private"}
+
+
+def test_repo_visibility_sets_private_and_public(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    calls = []
+
+    def fake_http_json(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        return {"full_name": "acme/widgets", "html_url": "https://github.com/acme/widgets", **payload}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
+    out = _run_cli(["repo-visibility", "--repo", "acme/widgets", "private"], monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["visibility"] == "private"
+    out = _run_cli(["repo-visibility", "--repo", "acme/widgets", "public"], monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["visibility"] == "public"
+    assert calls == [
+        ("PATCH", "https://api.github.com/repos/acme/widgets", {"private": True}),
+        ("PATCH", "https://api.github.com/repos/acme/widgets", {"private": False}),
+    ]
+
+
+def test_repo_visibility_needs_the_repo_named_and_is_github_only(monkeypatch, capsys):
+    with pytest.raises(SystemExit):
+        _run_cli(["repo-visibility", "private"], monkeypatch, capsys)
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    with pytest.raises(SystemExit, match="GitHub-only"):
+        _run_cli(["repo-visibility", "--repo", "bitbucket:ws/slug", "private"], monkeypatch, capsys)
+
+
 def test_job_log_dry_run_hits_the_job_logs_endpoint(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(

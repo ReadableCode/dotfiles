@@ -119,7 +119,7 @@ Why each one goes:
 | gitlens | Heavy background git work; replaced by built-in blame settings (`git.blame.*`) + the built-in Source Control Graph view |
 | vsliveshare | Broken against current VS Code API, unused |
 | shell-format | Broken install (missing wasm), removed rather than reinstalled |
-| rust-analyzer | Heavy, activates at startup via `workspaceContains:Cargo.toml`. **Conditional** — remove where no Rust project exists. Removed on RyzenWhite even though `Data_Tool_Pack_RS` / `Rust_Tutorial` are present: both dormant 10+ months and neither is in the workspace, so a reinstall on demand is cheaper than the startup cost |
+| rust-analyzer | Heavy, activates at startup via `workspaceContains:Cargo.toml`. **Conditional** — remove where no Rust project exists. Removed on RyzenWhite even though `Rust_Tutorial` is present: dormant 10+ months and not in the workspace, so a reinstall on demand is cheaper than the startup cost |
 | azure-repos / remotehub / remote-repositories | Remote-repository browsing, unused |
 | npm-intellisense / node-module-intellisense | Barely any JS/TS work |
 | gather | Abandoned by Microsoft |
