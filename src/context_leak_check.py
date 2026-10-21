@@ -281,6 +281,8 @@ def derive_contexts(parent=None):
             "identifiers": identifiers,
             "repos": [entry] + dev_repos,
             "owned": owned | {entry} | set(dev_repos),
+            # The context's own provider orgs: a repo under one belongs to it even when no checkout declares it.
+            "orgs": {o.lower() for o in orgs if o.lower() not in personal_orgs},
         }
     return contexts
 
@@ -318,13 +320,64 @@ def checkout_name(repo_dir):
     return os.path.basename(os.path.normpath(repo_dir))
 
 
-def forbidden_for(repo_dir, contexts):
-    """Which contexts' identifiers may not appear in this repo (None = no rule)."""
-    name = checkout_name(repo_dir)
+def forbidden_for_name(name, contexts, org=None):
+    """Which contexts' identifiers may not appear in the repo checked out (or hosted) as ``name``."""
     if name == PERSONAL_CONTEXT or name.startswith(PERSONAL_CONTEXT + "_"):
         return {}
     owner = next((c for c, info in contexts.items() if name in info["owned"]), None)
+    if owner is None and org:
+        owner = next((c for c, info in contexts.items() if org.lower() in info.get("orgs", ())), None)
     return {c: info for c, info in contexts.items() if c != owner}
+
+
+def forbidden_for(repo_dir, contexts):
+    """Which contexts' identifiers may not appear in this repo (None = no rule)."""
+    return forbidden_for_name(checkout_name(repo_dir), contexts)
+
+
+def forbidden_for_ticket(key, contexts):
+    """
+    Which contexts may not be named on a Jira ticket or project: every context
+    but the one whose ticket prefix it carries (``ACM-12`` or project ``ACM``).
+    A key no context claims forbids them all, so an unknown site fails closed.
+    """
+    prefix = key.upper().split("-", 1)[0] + "-"
+    owner = next((c for c, info in contexts.items() if prefix in info["identifiers"]), None)
+    return {c: info for c, info in contexts.items() if c != owner}
+
+
+def text_hits(text, rules, label):
+    """[(label, line_no, context, identifier, line_text)] for every forbidden identifier in text."""
+    patterns = [
+        (context, ident, _pattern(ident)) for context, info in rules.items() for ident in sorted(info["identifiers"])
+    ]
+    hits = []
+    for line_no, line in enumerate((text or "").split("\n"), 1):
+        for context, ident, pattern in patterns:
+            if pattern.search(line):
+                hits.append((label, line_no, context, ident, line.strip()[:120]))
+    return hits
+
+
+def outgoing_hits(fields, repo=None, ticket=None, parent=None):
+    """
+    Hits in text about to leave this machine through an API (a PR title, a
+    review, a ticket comment) - text no git hook ever sees. ``fields`` maps a
+    label to its text; ``repo`` is the target ``owner/name``, ``ticket`` a Jira
+    key or project. Same rules as a commit in that repo.
+    """
+    contexts = derive_contexts(parent)
+    if not contexts:
+        return []
+    if repo:
+        org, _, name = repo.rpartition("/")
+        rules = forbidden_for_name(name, contexts, org=org)
+    else:
+        rules = forbidden_for_ticket(ticket or "", contexts)
+    hits = []
+    for label, text in fields.items():
+        hits.extend(text_hits(text, rules, label))
+    return hits
 
 
 def tracked_files(repo_dir):
@@ -396,16 +449,7 @@ def commit_message_text(path):
 
 def scan_message(repo_dir, contexts, message_path):
     """[(label, line_no, context, identifier, line_text)] for every forbidden hit in a commit message."""
-    rules = forbidden_for(repo_dir, contexts)
-    if not rules:
-        return []
-    hits = []
-    for line_no, line in enumerate(commit_message_text(message_path).split("\n"), 1):
-        for context, info in rules.items():
-            for ident in sorted(info["identifiers"]):
-                if _pattern(ident).search(line):
-                    hits.append(("commit message", line_no, context, ident, line.strip()[:120]))
-    return hits
+    return text_hits(commit_message_text(message_path), forbidden_for(repo_dir, contexts), "commit message")
 
 
 def default_scan_set(parent, contexts):

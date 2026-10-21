@@ -231,7 +231,14 @@ third-party repos, so a new repo is hooked by default. Beside it, the
 **commit-msg hook** `application_configs/git/hooks/commit-msg.context-leak`
 runs `--message` on the message being recorded (comment lines and anything
 below the scissors line ignored), deployed to the same checkouts: a client
-abbreviation once reached a public repo through a commit message alone. The
+abbreviation once reached a public repo through a commit message alone.
+Text that leaves through an API never meets a git hook, so `src/ticket_pr.py`
+runs the same rules on every title, description, comment, review and ticket
+summary before it sends one (`--dry-run` included): a PR or comment follows
+the target repo's rules (its owner is the context that declares the repo or
+its org), a Jira ticket the rules of the context whose ticket prefix it
+carries, and an unclaimed key fails closed. A squash merge makes the PR title
+a commit on the default branch, which is why the title is checked. The
 pre-commit hook scans only the staged content, skipping binary files, and fails closed, then
 runs the repo's own pre-commit framework checks when it has a
 `.pre-commit-config.yaml`, so replacing the hook `pre-commit install` wrote

@@ -214,3 +214,12 @@ def test_binary_files_are_skipped_in_both_modes(constellation):
     subprocess.run(["git", "-C", repo, "add", "-A"], check=True)
     assert leak.scan_repo(repo, contexts, staged=True) == []
     assert leak.scan_repo(repo, contexts, staged=False) == []
+
+
+def test_outgoing_text_follows_the_target_repo_s_rules(constellation):
+    fields = {"title": "port the Acme Widgets report"}
+    assert leak.outgoing_hits(fields, repo="mine/blog", parent=constellation)
+    assert leak.outgoing_hits(fields, repo="acmeorg/acme-app", parent=constellation) == []
+    assert leak.outgoing_hits(fields, repo="acmeorg/undeclared", parent=constellation) == []  # the context's own org
+    assert leak.outgoing_hits(fields, ticket="ACM-12", parent=constellation) == []  # its own ticket prefix
+    assert leak.outgoing_hits(fields, ticket="ZZZ-12", parent=constellation)  # an unclaimed key fails closed

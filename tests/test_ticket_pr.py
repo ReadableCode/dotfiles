@@ -6,7 +6,15 @@ import urllib.parse
 
 import pytest
 
-from src import ticket_pr
+from src import context_leak_check, ticket_pr
+
+
+@pytest.fixture(autouse=True)
+def no_sibling_contexts(monkeypatch):
+    """The outgoing leak check reads the sibling credentials repos; tests never see this machine's."""
+    monkeypatch.setattr(ticket_pr, "leak_checker", lambda: context_leak_check)
+    monkeypatch.setattr(context_leak_check, "derive_contexts", lambda parent=None: {})
+
 
 # ---------------------------------------------------------------- env files
 
@@ -2606,3 +2614,63 @@ def test_search_queries_split_to_stay_under_the_cap():
     assert all(len(q) <= ticket_pr.SEARCH_QUERY_LIMIT for q in queries)
     assert all(q.startswith("is:pr involves:me") for q in queries)
     assert sorted(re.findall(r"repo:(\S+)", " ".join(queries))) == sorted(repos)
+
+
+# ---------------------------------------------------------------- outgoing leak check
+
+
+@pytest.fixture
+def acme_context(monkeypatch):
+    contexts = {
+        "acme": {
+            "identifiers": {"Acme Widgets", "AW", "ACM-"},
+            "repos": ["acme_credentials"],
+            "owned": {"acme-app", "acme_credentials"},
+            "orgs": {"acmeorg"},
+        }
+    }
+    monkeypatch.setattr(context_leak_check, "derive_contexts", lambda parent=None: contexts)
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "some-branch")
+
+
+def test_create_pr_refuses_another_context_in_title_or_body(acme_context, monkeypatch, capsys):
+    for extra in (["--title", "port the AW report"], ["--title", "port", "--body", "as Acme Widgets does"]):
+        with pytest.raises(SystemExit) as raised:
+            ticket_pr.main(["--dry-run", "create-pr", "--repo", "mine/public-repo"] + extra)
+        assert "context-leak: refusing to send to mine/public-repo" in str(raised.value)
+        assert "[dry-run]" not in capsys.readouterr().out
+
+
+def test_the_owning_context_may_name_itself(acme_context, monkeypatch, capsys):
+    out = _run_cli(
+        ["--dry-run", "create-pr", "--repo", "acmeorg/acme-app", "--title", "AW report"], monkeypatch, capsys
+    )
+    assert "[dry-run] POST https://api.github.com/repos/acmeorg/acme-app/pulls" in out
+    # an undeclared repo under the context's own org belongs to it too
+    out = _run_cli(
+        ["--dry-run", "pr-comment", "--repo", "acmeorg/other", "--pr", "1", "--body", "AW"], monkeypatch, capsys
+    )
+    assert "[dry-run] POST" in out
+
+
+def test_comments_reviews_and_pr_edits_are_checked(acme_context, monkeypatch):
+    for argv in (
+        ["pr-comment", "--repo", "mine/x", "--pr", "1", "--body", "like Acme Widgets"],
+        ["pr-review", "--repo", "mine/x", "--pr", "1", "--action", "comment", "--body", "AW numbers"],
+        ["update-pr", "--repo", "mine/x", "--pr", "1", "--title", "AW numbers"],
+    ):
+        with pytest.raises(SystemExit, match="context-leak"):
+            ticket_pr.main(["--dry-run"] + argv)
+
+
+def test_jira_text_is_checked_against_every_context_but_the_ticket_s_own(acme_context, monkeypatch, capsys):
+    monkeypatch.setenv("JIRA_SERVER", "example.atlassian.net")
+    monkeypatch.setenv("JIRA_USER", "user@example.com")
+    monkeypatch.setenv("JIRA_TOKEN", "token")
+    out = _run_cli(["--dry-run", "add-comment", "--key", "ACM-7", "--body", "AW sheet built"], monkeypatch, capsys)
+    assert "[dry-run] POST" in out
+    with pytest.raises(SystemExit, match="context-leak"):
+        ticket_pr.main(["--dry-run", "add-comment", "--key", "OTHER-7", "--body", "AW sheet built"])
+    with pytest.raises(SystemExit, match="context-leak"):
+        ticket_pr.main(["--dry-run", "update-ticket", "--key", "OTHER-7", "--summary", "Acme Widgets sheet"])

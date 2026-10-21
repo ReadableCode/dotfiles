@@ -30,6 +30,11 @@ flag, which prints the HTTP request(s) it would make and returns canned
 identifiers instead of touching the network - use it to exercise calling
 workflows without creating real tickets/PRs.
 
+Every write that carries text (create-pr, update-pr, pr-comment, pr-review,
+create-ticket, update-ticket, add-comment) first runs it through the sibling
+context_leak_check rules for its target and refuses on a hit, since text sent
+through an API never meets a git hook.
+
 Env keys used (values win in the order: real environment, then --env-file files):
 
     Jira:   JIRA_SERVER (host or URL), JIRA_USER (email), JIRA_TOKEN,
@@ -174,6 +179,37 @@ def body_text(args):
     return args.body or ""
 
 
+def leak_checker():
+    """The sibling context_leak_check module (stdlib-only too), imported on first use."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import context_leak_check
+
+    return context_leak_check
+
+
+def refuse_leaks(fields, repo=None, ticket=None):
+    """
+    Refuse to send text that names another context. A PR title, review or
+    ticket comment goes straight to an API, so no git hook ever sees it - and
+    a squash merge turns the PR title into a commit on the default branch.
+    Same rules as a commit in the target repo (context_leak_check derives
+    them from the sibling credentials repos); runs under --dry-run too.
+    """
+    hits = leak_checker().outgoing_hits(
+        {label: text for label, text in fields.items() if text}, repo=repo, ticket=ticket
+    )
+    if hits:
+        for label, line_no, context, ident, text in hits:
+            print(f"{label}:{line_no}: [{context}] {ident!r}: {text}", file=sys.stderr)
+        target = repo or ticket
+        raise SystemExit(
+            f"context-leak: refusing to send to {target} - another context's identifier must not appear "
+            f"there; describe the pattern generically instead"
+        )
+
+
 def emit(human, result):
     """Print a human-readable line, then the machine-readable JSON result last."""
     print(human)
@@ -218,6 +254,7 @@ def cmd_create_ticket(args):
     project = args.project or os.environ.get("JIRA_PROJECT", "")
     if not project:
         raise SystemExit("no Jira project: pass --project or set JIRA_PROJECT")
+    refuse_leaks({"summary": args.summary, "description": args.description}, ticket=project)
     fields = {
         "project": {"key": project},
         "issuetype": {"name": args.type},
@@ -422,6 +459,7 @@ def cmd_add_comment(args):
     body = body_text(args)
     if not body.strip():
         raise SystemExit("empty comment: pass --body or --body-file")
+    refuse_leaks({"comment": body}, ticket=args.key)
     response = http_json(
         "POST", f"{base}/rest/api/2/issue/{args.key}/comment", headers, payload={"body": body}, dry_run=args.dry_run
     )
@@ -436,6 +474,7 @@ def cmd_update_ticket(args):
     summary = args.summary.strip()
     if not summary:
         raise SystemExit("empty summary: pass --summary")
+    refuse_leaks({"summary": summary}, ticket=args.key)
     http_json(
         "PUT",
         f"{base}/rest/api/2/issue/{args.key}",
@@ -668,6 +707,7 @@ def cmd_create_pr(args):
     repo = resolve_repo(args.repo)
     head = args.head or git_output("rev-parse", "--abbrev-ref", "HEAD")
     body = body_text(args)
+    refuse_leaks({"title": args.title, "body": body}, repo=repo)
 
     if resolve_provider(args.repo) == "bitbucket":
         if args.label:
@@ -2156,6 +2196,7 @@ def cmd_pr_review(args):
     body = body_text(args).strip()
     if not body and (args.action == "comment" or (provider == "github" and args.action == "request-changes")):
         raise SystemExit(f"empty review body: {args.action} needs --body or --body-file")
+    refuse_leaks({"review": body}, repo=repo)
     if provider == "bitbucket":
         headers = bitbucket_headers()
         base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests/{args.pr}"
@@ -2199,6 +2240,7 @@ def cmd_pr_comment(args):
     body = body_text(args).strip()
     if not body:
         raise SystemExit("empty comment: pr-comment needs --body or --body-file")
+    refuse_leaks({"comment": body}, repo=repo)
     if provider == "bitbucket":
         response = bb_post_comment(repo, args.pr, body, bitbucket_headers(), args.dry_run)
         comment_id = response["id"] if response else 0
@@ -2423,6 +2465,7 @@ def cmd_update_pr(args):
     body = body_text(args) if (args.body or args.body_file) else None
     if args.title is None and body is None and args.state is None and not args.ready:
         raise SystemExit("update-pr needs --title, --body/--body-file, --state and/or --ready")
+    refuse_leaks({"title": args.title, "body": body}, repo=repo)
     if provider == "bitbucket":
         _update_pr_bitbucket(args, repo, body)
         return
