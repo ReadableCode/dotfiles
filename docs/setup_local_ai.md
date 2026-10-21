@@ -205,7 +205,7 @@ use Forge Neo on RyzenWhite instead (see
   `docker compose down -v` does NOT clear. To reset:
   ```bash
   docker compose down
-  sudo rm -rf ./data        # wipes admin + app state (and the HF model cache)
+  sudo rm -rf ./data        # wipes admin + app state (and the Hugging Face model cache)
   docker compose up -d
   docker logs -f odysseus-odysseus-1 2>&1 | grep -iE 'creating initial admin|admin'
   ```

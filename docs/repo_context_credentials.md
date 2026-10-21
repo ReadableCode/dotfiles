@@ -202,7 +202,11 @@ its own credentials repo (the context token and its spellings, every repo and
 org in `<context>_repos.yaml`, every host name and address in
 `<context>_hosts.json`, `JIRA_PROJECT=` ticket prefixes from its env files,
 the dev repo whose manifest targets it, and an optional
-`<context>_identifiers.txt` for display names). Then:
+`<context>_identifiers.txt` for display names and abbreviations). Derived names
+shorter than four characters are dropped as noise; a short name listed by hand
+is kept and matched case-sensitively, so a two-letter abbreviation catches the
+abbreviation and not a lowercase variable that happens to share its letters.
+Then:
 
 - the personal context's own repos (`personal_credentials`, LAN-hosted, and
   `personal_dev`, GitHub-private) may name anything — the exemption is

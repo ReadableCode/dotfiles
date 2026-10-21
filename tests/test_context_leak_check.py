@@ -89,6 +89,23 @@ def test_identifiers_come_from_each_context_s_own_repo(constellation):
     assert {"acme-app", "shared-tool", "acme_credentials", "acme_dev"} <= contexts["acme"]["owned"]
 
 
+def test_a_short_identifier_counts_only_when_listed_by_hand(constellation):
+    write(os.path.join(constellation, "acme_credentials", "acme_identifiers.txt"), "Acme Widgets\nAW\n")
+    write(
+        os.path.join(constellation, "bravo_credentials", "bravo_repos.yaml"),
+        "repos:\n  - name: bravo-site\n  - name: bv\n",
+    )
+    contexts = leak.derive_contexts(constellation)
+    assert "AW" in contexts["acme"]["identifiers"]  # a hand-listed abbreviation is meant
+    assert "bv" not in contexts["bravo"]["identifiers"]  # a short derived name is too noisy to match on
+    dotfiles = git_repo(
+        os.path.join(constellation, "dotfiles"),
+        {"notes.md": "the AW numbers\n", "ok.md": "a bv raw value, aw_points = []\n"},
+    )
+    hits = leak.scan_repo(dotfiles, contexts)
+    assert [(h[0], h[3]) for h in hits if h[0] in ("notes.md", "ok.md")] == [("notes.md", "AW")]
+
+
 def test_rules_depend_on_which_repo_is_scanned(constellation):
     contexts = leak.derive_contexts(constellation)
     assert leak.forbidden_for(os.path.join(constellation, "personal_credentials"), contexts) == {}

@@ -17,7 +17,8 @@ sibling ``<context>_credentials`` repo, so this public file names no client:
 - the name of any sibling dev repo whose ``<dirname>_manifest.yaml`` targets
   the context with ``per_context_repo``
 - one identifier per line from an optional ``<context>_identifiers.txt``
-  (display names, anything not derivable)
+  (display names, abbreviations, anything not derivable); these skip the
+  length minimum, and a short one matches case-sensitively
 
 Rules, by the repo being scanned. The line is VISIBILITY, not convenience:
 
@@ -254,11 +255,12 @@ def derive_contexts(parent=None):
         identifiers |= set(_read_ticket_prefixes(cdir))
         identifiers |= set(_read_ssh_hosts(cdir))
         identifiers |= set(_read_env_url_hosts(cdir))
-        identifiers |= set(_read_identifier_file(os.path.join(cdir, f"{context}_identifiers.txt")))
         dev_repos = _dev_repos_for(context, parent)
         for dev in dev_repos:
             identifiers |= token_variants(dev)
         identifiers = {i for i in identifiers if len(i) >= MIN_IDENTIFIER_LEN}
+        # Listed by hand, so short ones (a two-letter abbreviation) are meant: no minimum.
+        identifiers |= set(_read_identifier_file(os.path.join(cdir, f"{context}_identifiers.txt")))
         # "repos": the context's own two-or-more repos, scanned by default.
         # "owned": every checkout the context's repos file declares as well -
         # the client's own repositories, which naturally carry their own
@@ -278,9 +280,11 @@ def derive_contexts(parent=None):
 
 def _pattern(identifier):
     escaped = re.escape(identifier)
+    # A short hand-listed name is an abbreviation; matching it in any case would hit ordinary code like ab_points.
+    flags = re.IGNORECASE if len(identifier) >= MIN_IDENTIFIER_LEN else 0
     if identifier.endswith("-"):
-        return re.compile(r"(?<![A-Za-z0-9])" + escaped + r"(?=[0-9])", re.IGNORECASE)
-    return re.compile(r"(?<![A-Za-z0-9])" + escaped + r"(?![A-Za-z0-9])", re.IGNORECASE)
+        return re.compile(r"(?<![A-Za-z0-9])" + escaped + r"(?=[0-9])", flags)
+    return re.compile(r"(?<![A-Za-z0-9])" + escaped + r"(?![A-Za-z0-9])", flags)
 
 
 def _git(repo_dir, *args):
