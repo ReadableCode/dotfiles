@@ -10,7 +10,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
 transition-ticket, update-ticket, rank-tickets, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
 dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review,
-activity. get-ticket
+delete-branch-on-merge, activity. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
 never has to go to the Jira API on its own; search-tickets runs a JQL query
@@ -2524,6 +2524,27 @@ def cmd_archive_repo(args):
     )
 
 
+def cmd_delete_branch_on_merge(args):
+    """
+    Turn on GitHub's "Automatically delete head branches" for a repo, so a
+    merged PR's branch is removed by GitHub itself, whichever way the PR was
+    merged. --off turns it back off.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("delete-branch-on-merge is GitHub-only")
+    enabled = not args.off
+    payload = {"delete_branch_on_merge": enabled}
+    result = http_json("PATCH", f"{GITHUB_API}/repos/{repo}", github_headers(), payload, dry_run=args.dry_run)
+    if args.dry_run:
+        emit("dry run", {"repo": repo, "delete_branch_on_merge": enabled})
+        return
+    emit(
+        f"{repo} delete branch on merge {'on' if result.get('delete_branch_on_merge') else 'off'}",
+        {"repo": result["full_name"], "delete_branch_on_merge": result.get("delete_branch_on_merge")},
+    )
+
+
 def cmd_job_log(args):
     """
     Save one GitHub Actions job's log to disk (the job id is the number at the
@@ -2688,6 +2709,13 @@ def build_parser():
     archive.add_argument("--repo", required=True, help="owner/name; always explicit, never taken from the checkout")
     archive.add_argument("--unarchive", action="store_true", help="make an archived repo writable again")
     archive.set_defaults(func=cmd_archive_repo)
+
+    delete_on_merge = sub.add_parser(
+        "delete-branch-on-merge", help="make GitHub delete a PR's head branch when it merges, or stop it"
+    )
+    delete_on_merge.add_argument("--repo", help="owner/name (default: parsed from origin remote)")
+    delete_on_merge.add_argument("--off", action="store_true", help="stop deleting head branches on merge")
+    delete_on_merge.set_defaults(func=cmd_delete_branch_on_merge)
 
     job_log = sub.add_parser(
         "job-log", help="save one GitHub Actions job's log to disk, print the lines matching --grep"

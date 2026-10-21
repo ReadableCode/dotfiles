@@ -1203,6 +1203,32 @@ def test_archive_repo_archives_and_unarchives(monkeypatch, capsys):
     ]
 
 
+def test_delete_branch_on_merge_dry_run_patches_the_repo(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(["--dry-run", "delete-branch-on-merge", "--repo", "acme/widgets"], monkeypatch, capsys)
+    assert "[dry-run] PATCH https://api.github.com/repos/acme/widgets" in out
+    assert json.loads(out.strip().splitlines()[-1]) == {"repo": "acme/widgets", "delete_branch_on_merge": True}
+
+
+def test_delete_branch_on_merge_turns_on_and_off(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    calls = []
+
+    def fake_http_json(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        return {"full_name": "acme/widgets", **payload}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
+    out = _run_cli(["delete-branch-on-merge", "--repo", "acme/widgets"], monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["delete_branch_on_merge"] is True
+    out = _run_cli(["delete-branch-on-merge", "--repo", "acme/widgets", "--off"], monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["delete_branch_on_merge"] is False
+    assert calls == [
+        ("PATCH", "https://api.github.com/repos/acme/widgets", {"delete_branch_on_merge": True}),
+        ("PATCH", "https://api.github.com/repos/acme/widgets", {"delete_branch_on_merge": False}),
+    ]
+
+
 def test_archive_repo_needs_the_repo_named_and_is_github_only(monkeypatch, capsys):
     with pytest.raises(SystemExit):
         _run_cli(["archive-repo"], monkeypatch, capsys)
@@ -1385,12 +1411,12 @@ def test_review_rollup_github_keeps_the_latest_real_vote_per_login():
 def test_review_rollup_github_lists_a_requested_team_as_awaiting():
     pull = {
         "state": "open",
-        "requested_teams": [{"slug": "finops"}],
+        "requested_teams": [{"slug": "gadgets"}],
         "base": {"repo": {"owner": {"login": "acme"}}},
     }
     review = ticket_pr.review_rollup_github(pull, [])
-    assert review["awaiting"] == ["@acme/finops"]
-    assert ticket_pr.review_line(review) == "review: awaiting @acme/finops"
+    assert review["awaiting"] == ["@acme/gadgets"]
+    assert ticket_pr.review_line(review) == "review: awaiting @acme/gadgets"
 
 
 # ---------------------------------------------------------------- review
@@ -1516,11 +1542,11 @@ def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
         pull(2, "me"),
         pull(3, "sam"),
         pull(4, "sam", ["me"], draft=True),
-        pull(5, "sam", teams=["finops"]),
+        pull(5, "sam", teams=["gadgets"]),
         pull(6, "sam", teams=["platform"]),
     ]
     my_teams = [
-        {"organization": {"login": "owner"}, "slug": "finops"},
+        {"organization": {"login": "owner"}, "slug": "gadgets"},
         {"organization": {"login": "other"}, "slug": "platform"},
     ]
 
@@ -1539,7 +1565,7 @@ def test_review_queue_github_needs_a_review_request(monkeypatch, capsys):
         2: ("own", []),
         3: ("not_requesting", []),
         4: ("draft", []),
-        5: (None, ["finops"]),
+        5: (None, ["gadgets"]),
         # same slug in another org is not this account's team
         6: ("not_requesting", []),
     }
