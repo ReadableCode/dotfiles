@@ -29,3 +29,4 @@ system on the day they were written, and infrastructure moves on its own.
 | [zephyrus: the agent server stops being reachable when its lid closes or it reboots](zephyrus-agent-server-unattended.md) | 2026-10-02 | open |
 | [ssh: the desktops still accept password logins](ssh-desktops-accept-password-logins.md) | 2026-10-15 | open |
 | [nukbuntu: the dotfiles checkout is never pulled, so its tools and configs are months old](nukbuntu-dotfiles-never-pulled.md) | 2026-10-22 | open |
+| [raspberrypi4a: offline since 2026-09-20, powered off or not booting](pi4a-offline-since-2026-09-20.md) | 2026-10-22 | open |
