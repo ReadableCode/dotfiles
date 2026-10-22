@@ -98,7 +98,7 @@ context's own user-level CLAUDE.md.
   repo that owns the fix (the repo-backlog skill), never chat-only notes;
   closed entries are deleted in the same commit as the fix.
 - A "map" of a codebase means one self-contained interactive HTML plus a
-  diffable JSON, never a pile of cross-referenced markdown.
+  diffable text file, never a pile of cross-referenced markdown.
 - Public-facing writing is plain and terse: no em-dashes, no emojis, no
   marketing phrases.
 

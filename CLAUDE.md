@@ -63,8 +63,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   elitedesk hosting a client's git hub, deploys nothing. Doc:
   `docs/repo_deploy_configs.md`.
 - **`deploy_map.py`** — redraws the fleet-wide deployment map (every entry x
-  every machine, interactive page plus diffable JSON) from those same plans on
-  every deploy, into `generated/deploy_map.{html,json}` in the personal
+  every machine, interactive page plus the same facts as diffable text) from
+  those same plans on every deploy, into `generated/deploy_map.{html,txt}` in the personal
   credentials repo - only on host `envy` (`MAP_HOST`, which is
   `deploy_configs.WORKTREE_HOST`, the one machine a deploy may leave with a
   dirty checkout; `on_drift: adopt` acts there only for the same reason - any

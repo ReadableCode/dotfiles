@@ -31,7 +31,7 @@ REPO_ROOT = parent_dir
 OUTPUT_REPO = f"personal{CREDENTIALS_SUFFIX}"
 # Only one machine may regenerate the map: every other clone of the personal
 # credentials repo writing these files leaves that checkout dirty, and the next
-# gitpullall aborts on the uncommitted deploy_map.{html,json}. It is the same
+# gitpullall aborts on the uncommitted deploy_map.{html,txt}. It is the same
 # machine whose worktree on_drift: adopt may dirty, for the same reason.
 MAP_HOST = WORKTREE_HOST
 OUTPUT_BASENAME = "deploy_map"
@@ -649,13 +649,12 @@ def _build_path_tree(entries, hosts, matrix, repo_parent):
 
 def format_json(value, level=0):
     """
-    Serialize the dataset so one change to the fleet is a few lines of git diff.
+    Serialize the dataset the page embeds with no line too long for an editor.
 
     Compact JSON is a single line, and ``indent=1`` gives every scalar its own
-    line (70k+ lines for the real fleet); either way a diff is unreadable. Here
-    a container whose compact form fits in JSON_LINE_WIDTH stays on one line (a
-    repo record, a matrix cell, a short host list) and a longer one opens up
-    with one child per line.
+    line (70k+ lines for the real fleet). Here a container whose compact form
+    fits in JSON_LINE_WIDTH stays on one line (a repo record, a matrix cell, a
+    short host list) and a longer one opens up with one child per line.
     """
     flat = json.dumps(value, separators=(", ", ": "))
     if not isinstance(value, (dict, list)) or not value or level + len(flat) <= JSON_LINE_WIDTH:
@@ -668,6 +667,128 @@ def format_json(value, level=0):
     return "[\n" + ",\n".join(lines) + "\n" + " " * level + "]"
 
 
+def _names(hosts):
+    return " ".join(sorted(hosts, key=str.lower))
+
+
+def _host_lines(by_key, prefix):
+    """One ``<prefix><key>: <hosts>`` line per key, keys in sorted order."""
+    return [f"{prefix}{key}: {_names(hosts)}" for key, hosts in sorted(by_key.items())]
+
+
+def _text_header(data):
+    meta = data["meta"]
+    lines = [
+        f"deploy map: {meta['entryCount']} entries, {meta['hostCount']} machines, {meta['linkCount']} links, "
+        f"{meta['destCount']} destinations, {meta['repoCount']} repos",
+        f"repo parent: {meta['repoParent']}",
+        "manifests:",
+        *[f"  {path}" for path in meta["manifests"]],
+        "contexts:",
+    ]
+    for context in data["contexts"]:
+        lines.append(f"  {context['key']}  {context['label']}  {context['color']}  {context['sub']}")
+        lines.append(f"    repos: {' '.join(context['repos'])}")
+    lines.append("repo states:")
+    lines += [f"  {state}: {meaning}" for state, meaning in meta["repoStates"].items()]
+    return lines
+
+
+def _text_machines(data):
+    lines = ["", "// machines"]
+    for host in data["hosts"]:
+        lines.append(f"{host['id']}  {host['os']}  {host['inventory']}")
+        if host["groups"]:
+            lines.append(f"  groups: {' '.join(host['groups'])}")
+        lines.append(f"  contexts: {' '.join(host['contexts'])}")
+        for entry_id, absent in sorted(host["reqMissing"].items()):
+            lines.append(f"  missing checkout for {entry_id}: {' '.join(absent)}")
+    lines += ["", "// not deployed to"]
+    lines += [f"{device['name']}  {device['os']}  {device['inventory']}" for device in data["meta"]["nonTargets"]]
+    return lines
+
+
+def _text_repos(data):
+    states: dict = {}
+    for host in data["hosts"]:
+        for repo in host["repos"]:
+            states.setdefault((repo["ctx"], repo["name"]), {}).setdefault(repo["state"], []).append(host["id"])
+    lines = ["", "// repos"]
+    for repo in data["repos"]:
+        fields = [repo["name"], repo["ctx"]]
+        if repo["dir"] != repo["name"]:
+            fields.append(f"dir {repo['dir']}")
+        fields += [value for value in (repo["provider"], repo["org"]) if value]
+        if repo["implicit"]:
+            fields.append("implicit")
+        lines.append("  ".join(fields))
+        if repo["hosts"]:
+            lines.append(f"  hosts: {_names(repo['hosts'])}")
+        if repo["excludeHosts"]:
+            lines.append(f"  exclude hosts: {_names(repo['excludeHosts'])}")
+        by_state = states.get((repo["ctx"], repo["name"]), {})
+        lines += [f"  {state}: {_names(by_state[state])}" for state in REPO_STATES if state in by_state]
+    return lines
+
+
+def _text_entries(data):
+    host_ids = [host["id"] for host in data["hosts"]]
+    lines = ["", "// entries"]
+    for index, entry in enumerate(data["entries"]):
+        lines.append(f"{entry['id']}  {entry['ctx']}  {entry['method']}  {entry['cat']}")
+        lines.append(f"  manifest: {entry['manifest']}")
+        lines.append(f"  source: {entry['srcPath']}" + ("/" if entry["isDir"] else ""))
+        if entry["note"]:
+            lines.append(f"  note: {entry['note']}")
+        lines.append(f"  platforms: {' '.join(entry['platforms'])}")
+        if entry["hostsFilter"]:
+            lines.append(f"  hosts filter: {_names(entry['hostsFilter'])}")
+        if entry["requires"]:
+            requires = entry["requires"]
+            lines.append(f"  requires: {requires if isinstance(requires, str) else ' '.join(requires)}")
+        if entry["variantsUsed"] and entry["variantsUsed"] != [os.path.basename(entry["srcPath"])]:
+            lines.append(f"  variants: {' '.join(entry['variantsUsed'])}")
+        for dest in entry["diskDests"]:
+            lines.append(f"  dest {' '.join(dest['platforms'])}: {dest['path']}  ({dest['area']})")
+        if entry["isDir"]:
+            more = " ..." if entry["contentsTruncated"] else ""
+            lines.append(f"  contents: {' '.join(entry['contents'])}{more}")
+        cells: dict = {}
+        for column, (code, path) in enumerate(data["matrix"][index]):
+            action = ACTIONS[code]
+            key = f"{action} {path}" if action in ("apply", "none") and path else action
+            cells.setdefault(key, []).append(host_ids[column])
+        lines += _host_lines(cells, "  ")
+    return lines
+
+
+def _text_prune(data):
+    candidates: dict = {}
+    for host in data["hosts"]:
+        for path in host["prune"]:
+            candidates.setdefault(path, []).append(host["id"])
+    return ["", "// prune candidates", *_host_lines(candidates, "")]
+
+
+def format_text(data):
+    """
+    The map as plain text, for reading in a diff.
+
+    The JSON the page embeds holds each link several times over (per entry, per
+    machine, per zone, in the path tree), so one new link touched dozens of
+    hunks with no context. Here every fact is written once, on a line that
+    names what it is about: an entry's matrix row is one line per action and
+    destination listing its machines, a repo's clone states one line per state,
+    a prune candidate one line with every machine that would prune it. The
+    page's Disk, Destinations and Machine views and each machine's counts are
+    regroupings of these same facts, so nothing the page shows is missing here;
+    the totals are left out because every new link would change a line for
+    every machine it lands on.
+    """
+    sections = [_text_header, _text_machines, _text_repos, _text_entries, _text_prune]
+    return "\n".join(line for section in sections for line in section(data)) + "\n"
+
+
 def render_map_html(data, template_path=None):
     """Inline the dataset into the template, producing one self-contained page."""
     template_path = template_path or TEMPLATE_PATH
@@ -675,7 +796,7 @@ def render_map_html(data, template_path=None):
         template = file_handle.read()
     if DATA_PLACEHOLDER not in template:
         raise ValueError(f"Template {template_path} has no {DATA_PLACEHOLDER} placeholder")
-    # the same text as deploy_map.json, so the page never holds one huge line;
+    # one record per line, so the page never holds one huge line;
     # </ inside a <script> block would close it early; \/ is the same string to JSON
     payload = format_json(data).replace("</", "<\\/")
     return template.replace(DATA_PLACEHOLDER, payload)
@@ -692,8 +813,9 @@ def find_output_dir(credentials_root=None):
 
 def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, template_path=None, hostname=None):
     """
-    Write ``deploy_map.html`` (self-contained page) and ``deploy_map.json`` (the
-    same data, diffable) into the personal credentials repo's generated/ folder.
+    Write ``deploy_map.html`` (self-contained page) and ``deploy_map.txt`` (the
+    same facts as text, for the diff) into the personal credentials repo's
+    generated/ folder.
 
     Returns the paths written; ``None`` when this machine is not ``MAP_HOST``
     (only that machine may dirty the personal credentials checkout), or an
@@ -713,13 +835,13 @@ def write_map(entries, output_dir=None, repo_root=None, credentials_root=None, t
     output_dir = os.path.join(output_dir, OUTPUT_SUBDIR)
     os.makedirs(output_dir, exist_ok=True)
     data = build_map_data(entries, repo_root=repo_root, credentials_root=credentials_root)
-    json_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.json")
     html_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.html")
-    with open(json_path, "w", encoding="utf-8") as file_handle:
-        file_handle.write(format_json(data) + "\n")
+    text_path = os.path.join(output_dir, f"{OUTPUT_BASENAME}.txt")
     with open(html_path, "w", encoding="utf-8") as file_handle:
         file_handle.write(render_map_html(data, template_path))
-    return [html_path, json_path]
+    with open(text_path, "w", encoding="utf-8") as file_handle:
+        file_handle.write(format_text(data))
+    return [html_path, text_path]
 
 
 def report_map(paths, quiet=False):

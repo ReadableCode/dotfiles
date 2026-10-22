@@ -475,7 +475,7 @@ Two files are written, side by side:
 | File | What it is |
 | --- | --- |
 | `deploy_map.html` | One self-contained page (no network, no build step), four views: **Disk** (default), **Fleet**, **Matrix** and **Destinations** — see below. Open it straight from the repo. |
-| `deploy_map.json` | The same dataset, one record per line (`format_json`): the diffable half, so a pull request shows *which* link changed rather than one huge blob. The page embeds this exact text, so it has no giant line either. |
+| `deploy_map.txt` | The same facts as plain text (`format_text`), the half you read in `git diff`. Each entry is a block: its manifest, source, note, filters, destinations, then one line per matrix action listing the machines (`apply ~/.zshrc: Envy Pi`, `skip_platform: Tower`). Then each machine's contexts and missing checkouts, each repo's clone state per machine, and each prune candidate with its machines. A new link is a couple of added lines in one place. |
 
 The map also applies the **clone gate**: an entry from an overlay manifest
 counts on a machine only if that overlay's repo would be cloned there, so a
@@ -518,7 +518,7 @@ Both files land in the **personal credentials repo**, and only when the deploy
 runs on **envy** (`MAP_HOST` in `src/deploy_map.py`) with that repo cloned:
 
 ```
-~/GitHub/personal_credentials/generated/deploy_map.{html,json}
+~/GitHub/personal_credentials/generated/deploy_map.{html,txt}
 ```
 
 Both gates are the point. The map names every machine and every context at
@@ -546,12 +546,17 @@ means the fleet actually changed:
 - Nothing is keyed by position. A matrix cell holds its destination path, not
   an index into `dests` (an index renumbered every later cell when one path
   was added), and per-host `counts` follow the `ACTIONS` order.
-- A container stays on one line up to `JSON_LINE_WIDTH` characters and opens
-  up one child per line past that, so one new link is a handful of lines
-  rather than thousands (`indent=1` gave every number its own line).
+- The text file writes every fact once, on a line that names what it is
+  about. The page's JSON holds each link several times (per entry, per
+  machine, per zone, in the path tree), so a diff of it was dozens of hunks
+  with no context; that is why there is no `deploy_map.json` any more. The
+  per-machine totals the page shows are left out of the text, since every new
+  link would change one line per machine it lands on.
+- The JSON the page embeds keeps a container on one line up to
+  `JSON_LINE_WIDTH` characters and opens up one child per line past that, so
+  the page has no giant line.
 - The personal credentials repo's `.gitattributes` marks `deploy_map.html` as
-  `-diff`: its data block is the JSON again, so `git diff` shows the change
-  once, in the JSON.
+  `-diff`, so `git diff` shows the change once, in the text file.
 
 Colours and clusters come from the data, not from a hardcoded list: the
 dotfiles manifest is always the first (shared) cluster, and every other context

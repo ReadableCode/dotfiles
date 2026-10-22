@@ -307,7 +307,29 @@ def test_find_output_dir_requires_the_personal_credentials_repo(fleet, tmp_path)
     assert deploy_map.find_output_dir(str(empty)) is None
 
 
-def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
+def test_format_text_writes_each_matrix_row_as_one_line_per_action(fleet):
+    lines = deploy_map.format_text(build(fleet)).splitlines()
+
+    def block(entry_id):
+        start = next(i for i, line in enumerate(lines) if line.startswith(f"{entry_id}  "))
+        end = next(i for i in range(start + 1, len(lines)) if not lines[i].startswith("  "))
+        return lines[start + 1 : end]
+
+    assert "  apply ~/.conf: Envy Pi" in block("shared_conf")
+    assert "  skip_platform: Pi Tower" in block("mac_only_conf")
+    # the manual entry still names the machines it is due on
+    assert any(re.match(r"  none.*: .*Envy", line) for line in block("by_hand"))
+    assert "// machines" in lines and "// repos" in lines and "// prune candidates" in lines
+
+
+def test_format_text_has_no_per_machine_totals(fleet):
+    """A total moves on every new link; the entry lines already carry it."""
+    text = deploy_map.format_text(build(fleet))
+    assert "counts" not in text
+    assert text == deploy_map.format_text(build(fleet))
+
+
+def test_write_map_emits_a_self_contained_page_and_diffable_text(fleet):
     template = touch(
         str(fleet / "dotfiles" / "templates" / "deploy_map.html"),
         '<script id="data" type="application/json">__DATA__</script>',
@@ -320,7 +342,7 @@ def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
         template_path=template,
         hostname="ENVY.LOCAL",
     )
-    assert [os.path.basename(path) for path in paths] == ["deploy_map.html", "deploy_map.json"]
+    assert [os.path.basename(path) for path in paths] == ["deploy_map.html", "deploy_map.txt"]
     assert all(os.path.dirname(path).endswith(os.path.join("personal_credentials", "generated")) for path in paths)
 
     with open(paths[0], "r", encoding="utf-8") as file_handle:
@@ -328,12 +350,12 @@ def test_write_map_emits_a_self_contained_page_and_diffable_json(fleet):
     assert deploy_map.DATA_PLACEHOLDER not in page
     payload = page.split('type="application/json">')[1].split("</script>")[0]
     assert "</script>" not in payload
+    assert json.loads(payload.replace("<\\/", "</"))["meta"]["hostCount"] == 3
+    # the page carries the line-per-record JSON, never one huge line
+    assert max(len(line) for line in payload.splitlines()) < 1000
     with open(paths[1], "r", encoding="utf-8") as file_handle:
         text = file_handle.read()
-    assert json.loads(text)["meta"]["hostCount"] == 3
-    # the page carries the JSON file's own line-per-record text, never one huge line
-    assert payload == text.rstrip("\n").replace("</", "<\\/")
-    assert max(len(line) for line in text.splitlines()) < 1000
+    assert text.startswith("deploy map: 6 entries, 3 machines")
 
 
 def test_write_map_skips_machines_without_the_personal_repo(fleet):
