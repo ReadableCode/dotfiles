@@ -15,7 +15,7 @@ in the one that owns it and link from the other, rather than repeating it.
 |------|----|-------------|------|
 | elitedesk | 192.168.86.179 | Ubuntu, `ssh jason@` (jason is in the docker group) | Main docker app server (~25 containers) |
 | behemoth | 192.168.86.31 | unraid, `ssh root@` | Primary media stack + storage (docker managed via unraid UI, not the Docker repo) |
-| nukbuntu | — | Ubuntu | Has a compose file with plex/sonarr/radarr but does **not** currently run media services |
+| nukbuntu | 192.168.86.139 | Ubuntu, `ssh jason@` (jason is in the docker group) | Observability node: loki, alloy, syslog-ng, prometheus, uptime-kuma, the `backups` Samba share |
 | raspberrypi4 | — | Raspbian | Compose file has plex/jellyfin; not part of the active media stack |
 
 Media services actually running (2026-07):
@@ -129,7 +129,12 @@ on change. Do not add it here.
   `refresh_machine.py` as pi: pull, clone, sync envs, deploy, prune. The
   deploy installs the unit that runs it, so the loop is self-carrying the
   same way elitedesk's cron line is. Logs: `journalctl -u gitpullall`.
-- **Envy, macmini14, nukbuntu, the other three pis** — no user or root crontab
+- **nukbuntu** — jason's crontab only (docker runs as jason there), declared
+  in `server_configs/system_configs/nukbuntu/cron/jason.cron` and reinstalled
+  by `Docker/scripts/git_pull_nukbuntu.sh` on every `*/5` tick. The same file
+  runs the nightly `git_pull_nukbuntu.sh --update-images` (04:47) and the
+  dotfiles pull, clone and deploy every 15 minutes.
+- **Envy, macmini14, the other three pis** — no user or root crontab
   at all. Macs would use launchd if they ever need one.
 - **Windows machines** — Task Scheduler, no cron.
 
