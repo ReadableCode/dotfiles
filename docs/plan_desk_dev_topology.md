@@ -93,8 +93,7 @@ actually needed.
 
 - EliteDesk: production server, weak CPU, disk nearly full.
 - Yoga7i: must stay Windows for a finicky scanner.
-- nukbuntu / Pavilioni5: too old to be the primary target (Pavilion may be
-  revived as a low-stakes sidecar).
+- nukbuntu: too old to be the primary target.
 - RyzenWhite (Windows desktop, 64 GB): Windows Update reboots and shutdowns
   keep taking it down, which an always-on dev target cannot absorb.
 - Replacing Envy: declined; it is adequate once dev moves off.
