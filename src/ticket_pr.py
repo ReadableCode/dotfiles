@@ -10,7 +10,7 @@ installed CLIs required. Credentials come from the calling repo's env file:
 Subcommands: create-ticket, get-ticket, search-tickets, add-comment,
 transition-ticket, update-ticket, rank-tickets, create-pr, update-pr, pr-comment, pr-status, rerun-job, job-log,
 dispatch-workflow, workflow-runs, update-branch, request-review, merge-pr, review-queue, pr-diff, pr-review,
-delete-branch-on-merge, archive-repo, repo-visibility, activity. get-ticket
+delete-branch-on-merge, archive-repo, repo-visibility, repo-description, activity. get-ticket
 returns everything on the ticket in one call (fields, description, every
 comment, every attachment downloaded to disk), so a caller
 never has to go to the Jira API on its own; search-tickets runs a JQL query
@@ -2606,6 +2606,35 @@ def cmd_delete_branch_on_merge(args):
     )
 
 
+def cmd_repo_description(args):
+    """
+    Show a GitHub repo's one-line description, or set it when a new one is
+    given. Like archive-repo the repo is always named outright, never taken
+    from the checkout this runs in.
+    """
+    provider, repo = repo_spec(args.repo)
+    if provider != "github":
+        raise SystemExit("repo-description is GitHub-only")
+    if args.description is None:
+        result = http_json("GET", f"{GITHUB_API}/repos/{repo}", github_headers(), dry_run=args.dry_run)
+        if args.dry_run:
+            emit("dry run", {"repo": repo, "description": None})
+            return
+        emit(
+            f"{repo}: {result.get('description') or '(no description)'}",
+            {"repo": result["full_name"], "description": result.get("description")},
+        )
+        return
+    payload = {"description": args.description}
+    result = http_json("PATCH", f"{GITHUB_API}/repos/{repo}", github_headers(), payload, dry_run=args.dry_run)
+    if args.dry_run:
+        emit("dry run", {"repo": repo, "description": args.description})
+        return
+    emit(
+        f"{repo}: {result.get('description')}", {"repo": result["full_name"], "description": result.get("description")}
+    )
+
+
 def cmd_job_log(args):
     """
     Save one GitHub Actions job's log to disk (the job id is the number at the
@@ -2775,6 +2804,13 @@ def build_parser():
     visibility.add_argument("--repo", required=True, help="owner/name; always explicit, never taken from the checkout")
     visibility.add_argument("visibility", choices=["private", "public"])
     visibility.set_defaults(func=cmd_repo_visibility)
+
+    description = sub.add_parser("repo-description", help="show a GitHub repo's description, or set a new one")
+    description.add_argument("--repo", required=True, help="owner/name; always explicit, never taken from the checkout")
+    description.add_argument(
+        "description", nargs="?", help="the new one-line description (omit to show the current one)"
+    )
+    description.set_defaults(func=cmd_repo_description)
 
     delete_on_merge = sub.add_parser(
         "delete-branch-on-merge", help="make GitHub delete a PR's head branch when it merges, or stop it"

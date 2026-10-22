@@ -1246,6 +1246,45 @@ def test_archive_repo_needs_the_repo_named_and_is_github_only(monkeypatch, capsy
         _run_cli(["archive-repo", "--repo", "bitbucket:ws/slug"], monkeypatch, capsys)
 
 
+def test_repo_description_dry_run_patches_the_repo(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        ["--dry-run", "repo-description", "--repo", "acme/widgets", "A widget library."], monkeypatch, capsys
+    )
+    assert "[dry-run] PATCH https://api.github.com/repos/acme/widgets" in out
+    assert json.loads(out.strip().splitlines()[-1]) == {"repo": "acme/widgets", "description": "A widget library."}
+
+
+def test_repo_description_shows_and_sets(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    calls = []
+
+    def fake_http_json(method, url, headers, payload=None, **kwargs):
+        calls.append((method, url, payload))
+        if method == "GET":
+            return {"full_name": "acme/widgets", "description": "Old words."}
+        return {"full_name": "acme/widgets", **payload}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http_json)
+    out = _run_cli(["repo-description", "--repo", "acme/widgets"], monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["description"] == "Old words."
+    out = _run_cli(["repo-description", "--repo", "acme/widgets", "New words."], monkeypatch, capsys)
+    assert json.loads(out.strip().splitlines()[-1])["description"] == "New words."
+    assert calls == [
+        ("GET", "https://api.github.com/repos/acme/widgets", None),
+        ("PATCH", "https://api.github.com/repos/acme/widgets", {"description": "New words."}),
+    ]
+
+
+def test_repo_description_needs_the_repo_named_and_is_github_only(monkeypatch, capsys):
+    with pytest.raises(SystemExit):
+        _run_cli(["repo-description", "New words."], monkeypatch, capsys)
+    monkeypatch.setenv("BITBUCKET_USER", "me@example.com")
+    monkeypatch.setenv("BITBUCKET_TOKEN", "tok")
+    with pytest.raises(SystemExit, match="GitHub-only"):
+        _run_cli(["repo-description", "--repo", "bitbucket:ws/slug", "New words."], monkeypatch, capsys)
+
+
 def test_repo_visibility_dry_run_patches_the_repo(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     out = _run_cli(["--dry-run", "repo-visibility", "--repo", "acme/widgets", "private"], monkeypatch, capsys)
