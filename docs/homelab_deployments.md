@@ -13,7 +13,7 @@ in the one that owns it and link from the other, rather than repeating it.
 
 | Host | IP | OS / access | Role |
 |------|----|-------------|------|
-| elitedesk | 192.168.86.179 | Ubuntu, `ssh jason@` (docker needs sudo) | Main docker app server (~25 containers) |
+| elitedesk | 192.168.86.179 | Ubuntu, `ssh jason@` (jason is in the docker group) | Main docker app server (~25 containers) |
 | behemoth | 192.168.86.31 | unraid, `ssh root@` | Primary media stack + storage (docker managed via unraid UI, not the Docker repo) |
 | nukbuntu | — | Ubuntu | Has a compose file with plex/sonarr/radarr but does **not** currently run media services |
 | raspberrypi4 | — | Raspbian | Compose file has plex/jellyfin; not part of the active media stack |
@@ -135,8 +135,9 @@ on change. Do not add it here.
 
 ## Compose conventions (`Docker/docker_compose_projects.yaml`)
 
-- elitedesk uses **legacy `docker-compose` v1** (hyphen) — the `docker compose`
-  plugin is not installed; always `sudo`.
+- elitedesk uses the **`docker compose` v2 plugin**. The legacy `docker-compose`
+  v1 is also installed but cannot parse the file's `include`. jason is in the
+  docker group, so no `sudo`.
 - Service pattern: `image: <name>_image`, `container_name` snake_case,
   `build.context: ../<repo>[/subdir]`, `TZ: America/Chicago`,
   `restart: unless-stopped`, quoted ports.

@@ -25,7 +25,6 @@ prefixes; nothing lives unprefixed.
 - [setup_github_cli.md](setup_github_cli.md) - GitHub CLI
 - [setup_go.md](setup_go.md) - Setup Go
 - [setup_google_mcp.md](setup_google_mcp.md) - Google MCP — your own Calendar and Gmail in Claude Code
-- [setup_kubernetes_k3s.md](setup_kubernetes_k3s.md) - Kubernetes K3S Mixed Cluster
 - [setup_libreoffice.md](setup_libreoffice.md) - setup_libreoffice
 - [setup_linux_workstation.md](setup_linux_workstation.md) - Setup Linux Workstation
 - [setup_local_ai.md](setup_local_ai.md) - Setting Up Local AI
@@ -65,7 +64,6 @@ prefixes; nothing lives unprefixed.
 ## `homelab_*` - Homelab infrastructure
 
 - [homelab_deployments.md](homelab_deployments.md) - Homelab Deployments
-- [homelab_docker_registry.md](homelab_docker_registry.md) - Using a Local Docker Registry
 - [homelab_hosts_access.md](homelab_hosts_access.md) - Homelab hosts: access facts an agent needs
 - [homelab_postgres_app_conventions.md](homelab_postgres_app_conventions.md) - Shared Postgres / PostgREST App Conventions
 - [homelab_unraid_drives.md](homelab_unraid_drives.md) - homelab_unraid_drives

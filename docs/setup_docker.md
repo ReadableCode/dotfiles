@@ -77,11 +77,17 @@
   sudo apt update
   ```
 
-- Install Docker Engine:
+- Install Docker Engine with the Compose v2 plugin (`docker compose`):
 
   ```bash
-  sudo apt install docker-ce docker-ce-cli containerd.io
+  sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   ```
+
+  Compose comes with the engine, not from `app_lists/linux_apps.txt`: the
+  plugin package must match the engine's repo (`docker-compose-plugin` with
+  Docker's `docker-ce`, `docker-compose-v2` with Ubuntu's `docker.io`), and
+  the two conflict. The legacy Python `docker-compose` v1 is retired in
+  `app_removals.yaml`; it cannot read a compose file that uses `include:`.
 
 - Verify Docker Installation:
 
@@ -105,16 +111,6 @@
     ```bash
     su - ${USER}
     ```
-
-- Install docker-compose
-
-  - Docker Compose is a tool for defining and running multi-container Docker applications. To install it, run the following command:
-
-    ```bash
-    sudo apt install docker-compose
-    ```
-
-> **Note:** The above installs the legacy Docker Compose v1 (`docker-compose`). For a fresh Ubuntu install, prefer the convenience script method (see Raspberry Pi section below) which includes the v2 Compose plugin (`docker compose`).
 
 ## Installing Docker on Raspberry Pi
 

@@ -197,3 +197,23 @@
     removes the tvnserver service and its inbound firewall rule with it. Ran
     on UltraPocket the same day; the line stays as the guard, so a copy put
     back by hand is offered for removal again on the next myupdater.
+
+# --- docker-compose v1, retired 2026-10-22 ---
+#
+# The Python docker-compose 1.29 cannot parse a compose file that uses
+# include:, which the elitedesk stack does. The v2 plugin (`docker compose`)
+# comes with the docker engine (docs/setup_docker.md), under a different
+# package name per engine, so there are two lines: each is offered only where
+# its v2 package is installed, so no host is left without compose.
+
+- name: docker_compose_v1_apt
+  manager: apt
+  package: docker-compose
+  replaced_by: apt:docker-compose-v2
+  note: Dropped from app_lists/linux_apps.txt. Ubuntu's docker.io engine (elitedesk).
+
+- name: docker_compose_v1_apt_docker_ce
+  manager: apt
+  package: docker-compose
+  replaced_by: apt:docker-compose-plugin
+  note: Dropped from app_lists/linux_apps.txt. Docker's docker-ce engine (nukbuntu, the pis).
