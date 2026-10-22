@@ -1,5 +1,12 @@
 {
   "cleanupPeriodDays": 730,
+  "permissions": {
+    "allow": [
+      "Bash(python3 ../dotfiles/src/ticket_pr.py *)",
+      "Bash(python3 /Users/jason/GitHub/dotfiles/src/ticket_pr.py *)",
+      "Bash(python3 /home/jason/GitHub/dotfiles/src/ticket_pr.py *)"
+    ]
+  },
   "attribution": {
     "commit": "",
     "pr": "",
