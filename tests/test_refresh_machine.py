@@ -217,6 +217,26 @@ def test_pull_log_records_one_line_per_repo_from_git_pullers_stream():
     assert len(recorded) == 6
 
 
+def test_pull_log_keeps_windows_repos_apart_past_the_drive_colon():
+    recorded = []
+    log = refresh_machine.PullLog(commits=lambda *a: 0)
+    for line in [
+        "[DIRTY] C:\\Users\\me\\GitHub\\dotfiles (1 uncommitted):\n",
+        "[NO CHANGES] C:\\Users\\me\\GitHub\\dotfiles\n",
+        "[UPDATED] C:\\Users\\me\\GitHub\\web_app:\n",
+        "[PULLED] C:\\Users\\me\\GitHub\\web_app\n",
+        "[FAILED] C:\\Users\\me\\GitHub\\game: fatal: no such ref was fetched\n",
+    ]:
+        log.feed(line)
+    log.record(record=lambda *cells: recorded.append(cells))
+    assert sorted(recorded) == [
+        ("pull.current", "dotfiles", ""),
+        ("pull.dirty", "dotfiles", "1 uncommitted"),
+        ("pull.failed", "game", "fatal: no such ref was fetched"),
+        ("pull.pulled", "web_app", ""),
+    ]
+
+
 def test_pull_log_without_a_fast_forward_line_still_reports_the_pull():
     recorded = []
     log = refresh_machine.PullLog(commits=lambda *a: 0)

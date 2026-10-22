@@ -113,8 +113,12 @@ HELP_PAGE = """# refresh_machine
 """
 
 UNPULLED = re.compile(r"^\[(WIP PROTECTED|FAILED|AUTH REQUIRED)\]")
-# git_puller's per-repo tags, each followed by the repo's absolute path
-PULL_TAG = re.compile(r"^\[(PULLED|NO CHANGES|UPDATED|WIP PROTECTED|FAILED|AUTH REQUIRED|DIRTY)\] (.*?)(?::| \(|$)")
+# git_puller's per-repo tags, each followed by the repo's absolute path; the path ends at a colon
+# closing the line or followed by a space, never at the drive colon of C:\
+PULL_TAG = re.compile(
+    r"^\[(PULLED|NO CHANGES|UPDATED|WIP PROTECTED|FAILED|AUTH REQUIRED|DIRTY)\] (.*?)(?::(?: |$)| \(|$)"
+)
+PATH_PARTS = re.compile(r"[\\/]")
 FAST_FORWARD = re.compile(r"^Updating ([0-9a-f]+)\.\.([0-9a-f]+)")
 FILES_CHANGED = re.compile(r"^\s*(\d+) files? changed")
 DIRTY_COUNT = re.compile(r"\((\d+) uncommitted\)")
@@ -580,7 +584,7 @@ class PullLog:
         record = refresh_report.record if record is None else record
         for path in sorted(self.repos):
             repo = self.repos[path]
-            name = os.path.basename(path.rstrip("/\\")) or path
+            name = PATH_PARTS.split(path.rstrip("/\\"))[-1] or path
             status = repo.get("status")
             if "dirty" in repo:
                 record("pull.dirty", name, f"{repo['dirty']} uncommitted")
