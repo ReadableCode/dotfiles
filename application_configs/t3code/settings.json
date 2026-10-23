@@ -39,6 +39,8 @@
   "projectSettingsFolded": true,
   "deviceOnboardingCompleted": true,
   "sidebarAutoSettleAfterDays": null,
+  "idleCompaction": "off",
+  "autoResumeLimitedThreads": true,
   "sidebarAutoSettleOnMerge": false,
   "textGenerationModelSelection": {
     "instanceId": "claudeAgent",
