@@ -12,6 +12,10 @@ context's own user-level CLAUDE.md.
   batch needs its own instruction. Urgency is not an exception; ask.
 - When told to push, run plain `git push`. Every repo has its upstream set;
   naming a remote or branch only guesses wrong.
+- Never force push, in any repo, on any branch: no `--force`,
+  `--force-with-lease` or `+refspec`. Never amend, rebase, squash or reset a
+  commit that has been pushed, and never offer that as an option. A mistake
+  in a pushed commit is fixed by a new commit on top.
 - Commit messages are plain lowercase descriptions matching the repo's log.
   No scope or tool-name prefixes, no attribution trailers, no session links.
 - Ticket, PR and commit text: my wording is the spec. No extra sentences, no
