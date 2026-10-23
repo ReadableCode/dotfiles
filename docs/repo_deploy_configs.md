@@ -45,7 +45,7 @@ disable colors).
     windows: ~/AppData/...                # only if the app is deployed on Windows
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
                                           # (overlay manifests only, see below)
-  method: symlink | none | system         # default symlink; system = root-owned copy,
+  method: symlink | none | system | copy  # default symlink; system = root-owned copy,
   owner: root:nut                         #   see "Root-owned system files" below
   mode: "0640"                            #   (quoted octal, required for system)
   reload: systemctl restart nut-monitor   #   optional, run through sudo -n after a change
@@ -131,8 +131,23 @@ failed sudo). `system` entries take no `on_drift`, `refresh` or `windows`
 dest, and prune never removes them: a dropped entry leaves its file for
 someone to delete by hand, since the file is not a link back into a checkout.
 
-Copies are otherwise still refused: a plain copy nothing hashes is how a
-config drifts silently, and the symlink method never falls back to one.
+### User-owned copies (`method: copy`)
+
+A few readers resolve links and refuse a target outside their own tree. T3
+Code's project icon is the case: its asset server realpaths the icon file and
+serves nothing that resolves outside the workspace, so an icon linked in from
+another repo shows nothing (`apps/server/src/assets/AssetAccess.ts`,
+`resolveCanonicalWorkspaceFile`). A `copy` entry places a plain file owned by
+the current user, with no sudo and no owner or mode. `status` compares content
+hashes and reports `DIVERGED` on any difference (or a link or other non-file at
+the destination); deploy backs up a diverging regular file to
+`data/config_backups`, removes a link, and copies the repo file over it, so a
+pulled change reaches the copy on the next deploy. A directory in the way is
+reported and left alone. `copy` entries take no `on_drift` or `refresh`, and
+like `system` copies prune never removes them.
+
+Any other copy is still refused: a plain copy nothing hashes is how a config
+drifts silently, and the symlink method never falls back to one.
 
 ## Overlay manifests from sibling repos
 

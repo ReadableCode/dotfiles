@@ -9,3 +9,8 @@
 # project skills deploy into checkouts as .claude/skills/<name>/SKILL.md links
 # from a context's dev overlay; a repo that tracks its own skills is unaffected
 **/.claude/skills/
+# T3 Code project file and the sidebar icon it names, linked into the root of
+# every checkout by each context's dev overlay (root-anchored so the payloads
+# in the dev repos stay visible); a tracked t3.json is unaffected
+/t3.json
+/.t3icon.svg

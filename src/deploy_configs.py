@@ -685,6 +685,62 @@ def deploy_system_file(repo_path, system_path, owner, mode, reload=None, backup_
 
 
 # %%
+# Copied files #
+
+# A method: copy entry is a plain file owned by the current user, kept equal to
+# the repo file by content hash, for a reader that resolves links and refuses a
+# target outside its own tree. T3 Code's project icon is the case that named
+# it: the asset server realpaths the icon and serves nothing that resolves
+# outside the workspace, so a link into another repo shows no icon. No sudo,
+# no owner or mode; drift is a content difference, and deploy backs up a
+# diverging regular file before copying the repo file over it.
+
+
+def classify_copy_entry(repo_path, dest):
+    """Health of one user-owned copy. Returns (status, detail) like classify_entry."""
+    if not os.path.exists(repo_path):
+        return "REPO_MISSING", f"repo file {repo_path} does not exist"
+    if not os.path.lexists(dest):
+        return "NOT_DEPLOYED", "destination missing"
+    if os.path.islink(dest):
+        return "DIVERGED", f"destination is a link -> {os.readlink(dest)}; a copy entry must be a real file"
+    if not os.path.isfile(dest):
+        return "DIVERGED", "destination is not a regular file"
+    if _file_hash(dest) != _file_hash(repo_path):
+        return "DIVERGED", "content differs from the repo file"
+    return "OK", "copy matches the repo file"
+
+
+def deploy_copy_file(repo_path, dest, backup_root=None, repo_root=None):
+    """
+    Copy repo_path to dest. A diverging regular file is backed up first, a link
+    is replaced, and a directory in the way is reported and left alone.
+    Idempotent: a matching copy is a no-op.
+    """
+    repo_path = os.path.abspath(os.path.expanduser(repo_path))
+    dest = os.path.abspath(os.path.expanduser(dest))
+    status, detail = classify_copy_entry(repo_path, dest)
+    if status == "OK":
+        print(f"  already deployed: {dest}")
+        return "noop"
+    if status == "REPO_MISSING":
+        print(f"  nothing to deploy: {detail}")
+        return "missing"
+    if os.path.isdir(dest) and not os.path.islink(dest):
+        print(f"  skipped: {dest} is a directory; remove it by hand if the copy belongs there")
+        return "skipped"
+    if os.path.islink(dest):
+        os.remove(dest)
+    elif os.path.lexists(dest):
+        backup_path = backup_system_file(dest, repo_path, backup_root, repo_root)
+        print(f"  backed up {dest}\n         -> {backup_path}")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    shutil.copyfile(repo_path, dest)
+    print(f"  copied {dest}\n         <- {repo_path}")
+    return "copied"
+
+
+# %%
 # Manifest #
 
 
@@ -816,9 +872,15 @@ def _parse_manifest_file(manifest_path):
         if not isinstance(entry, dict) or "name" not in entry or "repo" not in entry:
             raise ValueError(f"Manifest entry must be a mapping with 'name' and 'repo' keys: {entry}")
         method = entry.get("method", "symlink")
-        if method not in ("symlink", "none", "system"):
+        if method not in ("symlink", "none", "system", "copy"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
         _validate_system_keys(entry)
+        if method == "copy" and (
+            entry.get("on_drift", "replace") != "replace" or entry.get("refresh", "none") != "none"
+        ):
+            raise ValueError(
+                f"Manifest entry {entry['name']} is method: copy, which takes neither on_drift nor refresh"
+            )
         on_drift = entry.get("on_drift", "replace")
         if on_drift not in ("replace", "adopt"):
             raise ValueError(
@@ -1249,9 +1311,11 @@ def classify_entry(repo_path, system_path, refresh="none"):
 
 
 def classify_row(row):
-    """classify_entry or classify_system_entry, whichever the row's method needs."""
+    """classify_entry, classify_system_entry or classify_copy_entry, whichever the row's method needs."""
     if row["method"] == "system":
         return classify_system_entry(row["repo"], row["dest"], row["owner"], row["mode"])
+    if row["method"] == "copy":
+        return classify_copy_entry(row["repo"], row["dest"])
     return classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))
 
 
@@ -1265,6 +1329,14 @@ def planned_action(status, on_drift="replace", method="symlink"):
             "(sudo -n) and run the reload",
             "WRONG_MODE": "deploy would chown/chmod the copy to the entry's owner and mode (sudo -n), no reload",
             "NEEDS_SUDO": "nothing: passwordless sudo is not available here, so the entry is left alone",
+            "REPO_MISSING": "nothing to deploy (repo file missing)",
+        }.get(status, "unknown")
+    if method == "copy":
+        return {
+            "OK": "no action needed",
+            "NOT_DEPLOYED": "deploy would copy the repo file to the destination",
+            "DIVERGED": "deploy would back up a diverging file to data/config_backups (a link is just removed), "
+            "then copy the repo file over it",
             "REPO_MISSING": "nothing to deploy (repo file missing)",
         }.get(status, "unknown")
     if status == "NOT_A_LINK" and on_drift == "adopt":
@@ -1382,6 +1454,8 @@ def run_deploy(plan):
             print("  " + paint(row["name"], "bold"))
             if row["method"] == "system":
                 result = deploy_system_file(row["repo"], row["dest"], row["owner"], row["mode"], reload=row["reload"])
+            elif row["method"] == "copy":
+                result = deploy_copy_file(row["repo"], row["dest"])
             else:
                 result = deploy_config(
                     row["repo"],

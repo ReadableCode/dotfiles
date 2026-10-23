@@ -88,9 +88,10 @@ def test_load_manifest_rejects_bad_on_drift(tmp_path):
         deploy_configs.load_manifest(manifest_path)
 
 
-def test_load_manifest_rejects_copy_method(tmp_path):
-    # copies silently drift - there is deliberately no copy method
-    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "method": "copy"}])
+def test_load_manifest_rejects_unknown_method(tmp_path):
+    # an unhashed copy silently drifts: the only copies are method: system and
+    # method: copy, both checked by content hash; nothing else is accepted
+    manifest_path = write_manifest(tmp_path, [{"name": "x", "repo": "y", "method": "hardlink"}])
     with pytest.raises(ValueError):
         deploy_configs.load_manifest(manifest_path)
 
@@ -2050,3 +2051,83 @@ def test_status_planned_action_for_system_rows_mentions_sudo():
     for status in ("NOT_DEPLOYED", "DIVERGED", "WRONG_MODE"):
         assert "sudo -n" in deploy_configs.planned_action(status, method="system")
     assert "left alone" in deploy_configs.planned_action("NEEDS_SUDO", method="system")
+
+
+# %%
+# Copied files (method: copy) #
+
+
+def test_load_manifest_accepts_copy_entries_and_rejects_drift_keys(tmp_path):
+    entry = {"name": "icon", "repo": "a/icon.svg", "dest": {"darwin": "~/x/icon.svg"}, "method": "copy"}
+    assert deploy_configs.load_manifest(write_manifest(tmp_path, [entry]))[0]["method"] == "copy"
+    for extra in ({"on_drift": "adopt"}, {"refresh": "relink"}):
+        with pytest.raises(ValueError, match="neither on_drift nor refresh"):
+            deploy_configs.load_manifest(write_manifest(tmp_path, [{**entry, **extra}]))
+    with pytest.raises(ValueError, match="only method: system"):
+        deploy_configs.load_manifest(write_manifest(tmp_path, [{**entry, "mode": "0644"}]))
+
+
+def test_classify_copy_entry_states(tmp_path):
+    repo_file = write_file(str(tmp_path / "repo" / "icon.svg"), "<svg/>")
+    dest = str(tmp_path / "checkout" / "icon.svg")
+    assert deploy_configs.classify_copy_entry(str(tmp_path / "missing"), dest)[0] == "REPO_MISSING"
+    assert deploy_configs.classify_copy_entry(repo_file, dest)[0] == "NOT_DEPLOYED"
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(repo_file, dest)
+    assert deploy_configs.classify_copy_entry(repo_file, dest)[0] == "DIVERGED"
+    os.remove(dest)
+    write_file(dest, "<svg>old</svg>")
+    assert deploy_configs.classify_copy_entry(repo_file, dest) == ("DIVERGED", "content differs from the repo file")
+    write_file(dest, "<svg/>")
+    assert deploy_configs.classify_copy_entry(repo_file, dest)[0] == "OK"
+
+
+def test_deploy_copy_file_copies_and_is_idempotent(tmp_path, capsys):
+    repo_file = write_file(str(tmp_path / "repo" / "icon.svg"), "<svg/>")
+    dest = str(tmp_path / "checkout" / "icon.svg")
+    assert deploy_configs.deploy_copy_file(repo_file, dest) == "copied"
+    assert not os.path.islink(dest) and open(dest).read() == "<svg/>"
+    assert deploy_configs.deploy_copy_file(repo_file, dest) == "noop"
+    assert "already deployed" in capsys.readouterr().out
+
+
+def test_deploy_copy_file_replaces_a_link_and_backs_up_a_diverging_file(tmp_path):
+    repo_file = write_file(str(tmp_path / "repo" / "icon.svg"), "<svg/>")
+    dest = str(tmp_path / "checkout" / "icon.svg")
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(repo_file, dest)
+    assert deploy_configs.deploy_copy_file(repo_file, dest) == "copied"
+    assert not os.path.islink(dest) and open(dest).read() == "<svg/>"
+    assert open(repo_file).read() == "<svg/>"
+    write_file(dest, "<svg>edited</svg>")
+    backup_root = str(tmp_path / "backups")
+    assert (
+        deploy_configs.deploy_copy_file(repo_file, dest, backup_root=backup_root, repo_root=str(tmp_path)) == "copied"
+    )
+    assert open(dest).read() == "<svg/>"
+    backups = glob.glob(os.path.join(backup_root, "repo", "icon.svg.*"))
+    assert len(backups) == 1 and open(backups[0]).read() == "<svg>edited</svg>"
+
+
+def test_deploy_copy_file_leaves_a_directory_alone(tmp_path):
+    repo_file = write_file(str(tmp_path / "repo" / "icon.svg"), "<svg/>")
+    dest = tmp_path / "checkout" / "icon.svg"
+    dest.mkdir(parents=True)
+    assert deploy_configs.deploy_copy_file(repo_file, str(dest)) == "skipped"
+    assert dest.is_dir()
+
+
+def test_run_deploy_routes_copy_rows_to_the_copy_path(tmp_path, capsys):
+    write_file(str(tmp_path / "repo" / "icon.svg"), "<svg/>")
+    dest = str(tmp_path / "checkout" / "icon.svg")
+    plan = deploy_configs.build_plan(
+        [{"name": "icon", "repo": "repo/icon.svg", "dest": {"linux": dest}, "method": "copy"}],
+        "linux",
+        "HOST",
+        repo_root=str(tmp_path),
+    )
+    deploy_configs.run_deploy(plan)
+    assert not os.path.islink(dest) and open(dest).read() == "<svg/>"
+    assert "1 changed" in capsys.readouterr().out
+    assert deploy_configs.classify_row(plan[0])[0] == "OK"
+    assert "copy the repo file" in deploy_configs.planned_action("NOT_DEPLOYED", method="copy")

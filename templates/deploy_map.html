@@ -767,7 +767,7 @@ function fleetCard(node){
       row('source', esc(e.repo)) +
       row('file', esc(e.src.split('/').slice(-2).join('/'))) +
       row('manifest', esc(e.manifest.split('/').pop())) +
-      row('method', e.method === 'none' ? 'none (by design)' : 'symlink') +
+      row('method', e.method === 'none' ? 'none (by design)' : e.method) +
       row('platforms', e.platforms.length ? e.platforms.join(' · ') : '—') +
       row('host filter', e.hostsFilter.length ? e.hostsFilter.length + ' machines' : 'any host') +
       row('reaches', `<b style="color:${color}">${e.hosts.length}</b> / ${hosts.length} machines`) +
