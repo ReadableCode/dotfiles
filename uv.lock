@@ -414,7 +414,6 @@ dependencies = [
     { name = "jupyterlab" },
     { name = "mcp" },
     { name = "pandas" },
-    { name = "paramiko" },
     { name = "psycopg2-binary" },
     { name = "python-dateutil" },
     { name = "python-dotenv" },
@@ -425,7 +424,6 @@ dependencies = [
     { name = "speedtest-cli" },
     { name = "tabulate" },
     { name = "textual" },
-    { name = "types-paramiko" },
 ]
 
 [package.dev-dependencies]
@@ -441,7 +439,6 @@ requires-dist = [
     { name = "jupyterlab", specifier = ">=4.3.4" },
     { name = "mcp", specifier = ">=2.1.1" },
     { name = "pandas", specifier = ">=2.2.3" },
-    { name = "paramiko", specifier = ">=3.5.0" },
     { name = "psycopg2-binary", specifier = ">=2.9.10" },
     { name = "python-dateutil", specifier = ">=2.9.0" },
     { name = "python-dotenv", specifier = ">=1.0.1" },
@@ -452,7 +449,6 @@ requires-dist = [
     { name = "speedtest-cli", specifier = ">=2.1.3" },
     { name = "tabulate", specifier = ">=0.9.0" },
     { name = "textual", specifier = ">=1.0.0" },
-    { name = "types-paramiko", specifier = ">=4.0.0.20250822" },
 ]
 
 [package.metadata.requires-dev]
@@ -1951,18 +1947,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/a3/1585216310e344e8102c22482f6060c7a6ea0322b63e026372e6dcefcfd6/truststore-0.10.4.tar.gz", hash = "sha256:9d91bd436463ad5e4ee4aba766628dd6cd7010cf3e2461756b3303710eebc301", size = 26169, upload-time = "2025-08-12T18:49:02.73Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/19/97/56608b2249fe206a67cd573bc93cd9896e1efb9e98bce9c163bcdc704b88/truststore-0.10.4-py3-none-any.whl", hash = "sha256:adaeaecf1cbb5f4de3b1959b42d41f6fab57b2b1666adb59e89cb0b53361d981", size = 18660, upload-time = "2025-08-12T18:49:01.46Z" },
-]
-
-[[package]]
-name = "types-paramiko"
-version = "5.0.0.20260724"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cryptography" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/66/c2/445549ed6f0944352f2b91d88d16bbdc3993a4d6dbbedb81c557b3cad85a/types_paramiko-5.0.0.20260724.tar.gz", hash = "sha256:37e7f3f2196cf187c89649ad836621c675bc318369d80fa78051507a4ae770c9", size = 28548, upload-time = "2026-07-24T04:59:59.889Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/4c/16/fca52784f979821e2205ff514322d0e83452536acc4807a79ddb2085bbb2/types_paramiko-5.0.0.20260724-py3-none-any.whl", hash = "sha256:40c7083803a5a28ab7a8d2fe4cd9b7746d0a03538598582ce68f60967a2ad272", size = 37125, upload-time = "2026-07-24T04:59:58.955Z" },
 ]
 
 [[package]]

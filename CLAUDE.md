@@ -252,7 +252,6 @@ is the one-paragraph orientation so an agent knows which file to open.
   re-import through the Bookmark Manager and a dateless outline to read and diff, collapsing the duplicate folders
   Chrome Sync leaves when a device reconnects. Doc:
   `docs/repo_chrome_bookmarks.md`.
-- **`ssh_devices.py`** — pulls configs from devices over ssh.
 - **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,
   `secret_tools`, `calendarboard_tools`, `google_oauth_tools`,
   `googlemcp_tools`, `mcpservers_tools`, `taskbar_tools`. Shared helpers come from the
