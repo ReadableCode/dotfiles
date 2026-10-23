@@ -331,7 +331,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description=(
             "Save Chrome bookmarks to that context's credentials repo, collapsing the "
-            "duplicate folders Chrome Sync creates when a device reconnects. Writes "
+            "duplicate folders a second bookmark sync tool creates. Writes "
             f"{BASE_NAME}.json (the editable copy), {BASE_NAME}.html (for re-import "
             f"through the Bookmark Manager) and {BASE_NAME}.txt (the outline to read "
             "and diff). --check writes nothing and only reports "

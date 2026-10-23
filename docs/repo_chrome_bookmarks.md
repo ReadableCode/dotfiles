@@ -6,11 +6,24 @@ creates. The repo copy is the source of truth; Chrome is rebuilt from it.
 
 ## Why this exists
 
-When a machine reconnects to Chrome Sync after being offline for long enough,
-Sync reconciles the server tree against the local one and keeps both: every
-top-level folder appears twice, and from then on new bookmarks land in one
-copy or the other. It happened 2026-08 and again 2026-09. Fixing it by hand
-means reading two trees side by side; the script does it in one pass.
+Every top-level folder appeared twice, and from then on new bookmarks landed
+in one copy or the other. It happened 2026-08, 2026-09 and twice in 2026-10.
+Fixing it by hand means reading two trees side by side; the script does it in
+one pass.
+
+The cause was Apple's iCloud Bookmarks Chrome extension, not Chrome Sync. It
+keeps its own copy of the tree in iCloud, shared with Safari, and writes that
+copy back into Chrome as brand-new bookmarks: the whole tree in a few seconds,
+every node with the same fresh `date_added`. Chrome Sync then carries the
+copy to every device. A delete in Chrome only made it worse: Sync spread the
+delete, and iCloud wrote its stale copy back on every machine running the
+extension. Removing the extension, and turning off Chrome bookmarks in iCloud
+for Windows, stopped it.
+
+If the doubling comes back, look for that signature first: a large batch of
+bookmarks all created within the same few seconds, holding an older tree.
+Then list every extension with the `bookmarks` permission in the profile's
+`Extensions/*/*/manifest.json`. Any second bookmark sync tool will do this.
 
 ## Where things live
 
@@ -61,7 +74,7 @@ through these steps; the Chrome import in step 4 stays manual.
    which is why dates alone are never drift.
 
 2. Edit `personal_bookmarks.json` if anything needs deciding: stale items that
-   a reconnecting device brought back, a url bookmarked loose on the bar that
+   a second sync tool brought back, a url bookmarked loose on the bar that
    already lives in a folder. Then regenerate the HTML and the outline from the
    edited copy:
 
