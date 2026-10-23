@@ -7,6 +7,12 @@
       "Bash(python3 /home/jason/GitHub/dotfiles/src/ticket_pr.py *)"
     ]
   },
+  "autoMode": {
+    "allow": [
+      "$defaults",
+      "Merging a pull request with the dotfiles ticket_pr.py merge-pr subcommand is allowed when the user asked for the merge in this conversation. ticket_pr.py is the user's own harness, and GitHub still refuses the merge when the branch protection's required approvals or checks are missing."
+    ]
+  },
   "attribution": {
     "commit": "",
     "pr": "",
