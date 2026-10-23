@@ -44,6 +44,11 @@ fi
 
 cd "$TOP"
 
+# Run the checks with the environment a terminal gives them. From a linked
+# worktree git hands this hook an absolute GIT_DIR, and every git command a
+# check starts would act on that repo whatever its own cwd says.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_PREFIX
+
 # The same commands as CLAUDE.md's "Python environment & tooling" and "Tests",
 # cheapest first so a formatting slip fails before the suite runs. ruff check
 # covers what flake8 and isort used to, in one pass.

@@ -1563,16 +1563,20 @@ OVERLAY_OWNED_PAYLOADS = {
     "git/hooks/pre-commit.context-leak": "personal_dev",
     "git/hooks/pre-push.dotfiles-checks": "personal_dev",
     "claude/commands/init_worktree.md": "personal_dev",
+    "claude/commands/remove_worktree.md": "personal_dev",
+    "claude/commands/sweep_worktrees.md": "personal_dev",
     "claude/rules/working_rules.md": "personal_dev",
     "claude/settings.json": "personal_dev",
     "claude/statusline.sh": "personal_dev",
     "claude/themes/dark-high-contrast.json": "personal_dev",
     "ssh/config": "personal_credentials",
     "ssh/config.mac": "personal_credentials",
+    "systemd/vncserver@.service": "personal_credentials",
     "t3code/service.d/10-path.jasonzephyrus.conf": "personal_dev",
     "t3code/service.d/20-tailscale-serve.jasonzephyrus.conf": "personal_dev",
     "t3code/service.d/30-tunnel-http2.jasonzephyrus.conf": "personal_dev",
     "t3code/settings.json": "personal_dev",
+    "vnc/xstartup": "personal_credentials",
 }
 
 APPLICATION_CONFIGS_DIR = os.path.join(deploy_configs.REPO_ROOT, "application_configs")
