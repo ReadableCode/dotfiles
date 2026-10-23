@@ -30,3 +30,4 @@ system on the day they were written, and infrastructure moves on its own.
 | [ssh: the desktops still accept password logins](ssh-desktops-accept-password-logins.md) | 2026-10-15 | open |
 | [raspberrypi4a: offline since 2026-09-20, powered off or not booting](pi4a-offline-since-2026-09-20.md) | 2026-10-22 | open |
 | [nukbuntu: 85 OS packages behind and a reboot pending](nukbuntu-os-packages-behind.md) | 2026-10-22 | open |
+| [setup_t3_code: the "repo commands never show in the / menu" note may be stale on T3 0.1.2](t3-repo-commands-in-slash-menu.md) | 2026-10-23 | open |
