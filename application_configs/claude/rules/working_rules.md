@@ -98,9 +98,10 @@ context's own user-level CLAUDE.md.
   or deployed files, and never in an example. Describe a mirrored pattern
   generically. Before finishing, grep every edited file for every other
   context's identifiers.
-- Findings outside the current task become tracked backlog entries in the
-  repo that owns the fix (the repo-backlog skill), never chat-only notes;
-  closed entries are deleted in the same commit as the fix.
+- Findings outside the current task become tracked items where that context
+  tracks its work (the repo-backlog skill for my repos, a client's ticket
+  commands for theirs), never chat-only notes; an item closes when its fix
+  lands.
 - A "map" of a codebase means one self-contained interactive HTML plus a
   diffable text file, never a pile of cross-referenced markdown.
 - Public-facing writing is plain and terse: no em-dashes, no emojis, no
