@@ -399,23 +399,11 @@ def test_hosts_validation_skipped_when_no_inventory_exists(overlay_tree):
     assert entries[-1]["hosts"] == ["GHOSTBOX"]
 
 
-def test_real_manifest_hosts_all_exist_in_union_inventory():
-    # host targeting must use inventory names - load_manifests enforces it
-    # against the union of every *_credentials repo's inventory
-    known_hosts, inventory_paths = load_union_inventory_hostnames(deploy_configs.grandparent_dir)
-    if not inventory_paths:
-        pytest.skip("no *_credentials host inventory present on this machine")
-    entries, _ = deploy_configs.load_manifests()
-    for entry in entries:
-        for host in entry.get("hosts") or []:
-            assert str(host).split(".")[0].upper() in known_hosts, f"{entry['name']} targets unknown host {host}"
-
-
-def test_real_manifests_are_valid_and_repo_paths_exist():
-    # loads the real deploy_manifest.yaml plus any overlay manifests present;
-    # load_manifests itself enforces name uniqueness across all of them
+def test_own_manifest_is_valid_and_repo_paths_exist():
+    # this repo's deploy_manifest.yaml alone; an overlay manifest is its own repo's
+    # data, and the deploy that loads it enforces hosts and name uniqueness
     entries, manifest_paths = deploy_configs.load_manifests()
-    assert manifest_paths[0] == os.path.join(deploy_configs.REPO_ROOT, "deploy_manifest.yaml")
+    assert manifest_paths == [os.path.join(deploy_configs.REPO_ROOT, "deploy_manifest.yaml")]
     for entry in entries:
         repo_path = os.path.join(entry["_base_dir"], entry["repo"])
         # a repo path may exist as-is, or only as <base>.<host-or-platform>.<ext> variants;
@@ -1514,8 +1502,8 @@ def test_load_removals_rejects_entry_without_dest(tmp_path, monkeypatch):
         deploy_configs.load_removals()
 
 
-def test_real_removals_files_parse_and_name_no_still_wanted_dest():
-    """The committed seed must stay loadable, and must never target a live entry."""
+def test_own_removals_parse_and_name_no_still_wanted_dest():
+    """This repo's committed removals must stay loadable, and must never target one of its live entries."""
     removals = deploy_configs.load_removals()
     for entry in removals:
         assert entry.get("name") and entry.get("dest"), entry
@@ -1553,10 +1541,9 @@ MANIFEST_FREE_PAYLOADS = {
 }
 
 # Payloads whose entry lives in an overlay manifest, by the overlay repo that
-# owns it. They need a hosts filter, and those are overlay-only - so a machine
-# that has not cloned that repo genuinely cannot see the entry and the payload
-# is exempt there. When the overlay IS cloned the second test below insists the
-# entry really covers the file, so a stale line here fails on Jason's machines.
+# owns it. They need a hosts filter, and those are overlay-only, so this
+# repo's own manifest never covers them. Whether the overlay's entry still
+# does is that repo's data, which these tests do not read.
 OVERLAY_OWNED_PAYLOADS = {
     "autostart/start_x0vncserver.desktop": "personal_credentials",
     "git/hooks/commit-msg.context-leak": "personal_dev",
@@ -1592,34 +1579,19 @@ def _application_config_payloads():
     return {path[len("application_configs/") :] for path in tracked if path.strip()}
 
 
-def _allowed_variant_tokens():
-    """
-    Tokens a repo path may auto-resolve to: the platform tokens plus every
-    hostname in the union inventory. Returns (tokens, inventory_present) -
-    without an inventory the caller can only accept any token, since this
-    machine cannot tell a hostname from a context tag (settings.acme.json,
-    which the resolver never picks up, so it is NOT coverage).
-    """
-    tokens = {token for tokens in deploy_configs.PLATFORM_FILE_TOKENS.values() for token in tokens}
-    hostnames, inventory_paths = load_union_inventory_hostnames(deploy_configs.grandparent_dir)
-    return tokens | {name.lower() for name in hostnames}, bool(inventory_paths)
-
-
 def _covered_payloads(entries):
-    """Files under application_configs/ reachable from these entries, same folder-relative form."""
-    allowed_tokens, has_inventory = _allowed_variant_tokens()
+    """
+    Files under application_configs/ reachable from these entries, same folder-relative form.
+    Every <base>.<token><ext> variant counts: in this repo a token is a host or a platform,
+    since context-tagged variants live in that context's own repo.
+    """
     covered = set()
     for entry in entries:
         repo_path = os.path.normpath(os.path.join(entry["_base_dir"], entry["repo"]))
         directory, filename = os.path.split(repo_path)
         base, ext = os.path.splitext(filename)
         candidates = [repo_path]
-        for variant in glob.glob(os.path.join(glob.escape(directory), f"{glob.escape(base)}.*{ext}")):
-            name = os.path.basename(variant)
-            token = name[len(base) + 1 : len(name) - len(ext) or None]
-            if has_inventory and token.lower() not in allowed_tokens:
-                continue  # a context tag, which the resolver never picks up
-            candidates.append(variant)
+        candidates += glob.glob(os.path.join(glob.escape(directory), f"{glob.escape(base)}.*{ext}"))
         for candidate in candidates:
             if os.path.isdir(candidate):  # folder link: everything inside rides along
                 found = [os.path.join(where, name) for where, _, names in os.walk(candidate) for name in names]
@@ -1642,18 +1614,6 @@ def test_every_application_config_is_reachable_from_a_manifest_entry():
         + " - add an entry (method: none counts, with a note saying how it really gets there), "
         "delete the file, or list it in MANIFEST_FREE_PAYLOADS / OVERLAY_OWNED_PAYLOADS with a reason"
     )
-
-
-def test_overlay_owned_payloads_are_covered_wherever_their_overlay_is_cloned():
-    entries, _ = deploy_configs.load_manifests()
-    covered = _covered_payloads(entries)
-    for payload, overlay_repo in sorted(OVERLAY_OWNED_PAYLOADS.items()):
-        if not os.path.isdir(os.path.join(deploy_configs.grandparent_dir, overlay_repo)):
-            continue  # that overlay is not on this machine, so its entries cannot be checked
-        assert payload in covered, (
-            f"{payload} is listed as owned by {overlay_repo}, which IS cloned here, but no loaded "
-            "manifest entry resolves to it - the entry was renamed, retargeted or dropped"
-        )
 
 
 def test_regenerate_mcp_reports_a_failure_loudly_instead_of_aborting_the_deploy(monkeypatch, capsys):

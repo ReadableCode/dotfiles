@@ -148,17 +148,3 @@ def test_repos_of_a_context_the_host_record_is_not_in_are_not_offered(git_dir, m
         file_handle.write('{"hosts": [{"name": "HUB", "contexts": ["acme"]}]}')
     assert clone_repos.run(list_only=True) == 0
     assert "acme-app" in capsys.readouterr().out
-
-
-def test_real_repo_configs_load_and_keep_client_repos_off_the_origin_host():
-    """Whatever the client configs say, elitedesk must never be offered their repos."""
-    entries = clone_repos.load_repo_entries()
-    if not entries:
-        pytest.skip("no <context>_repos.yaml present on this machine")
-    for entry in entries:
-        if entry["_context"] in ("dotfiles", "personal"):
-            continue
-        assert not clone_repos.entry_matches_host(entry, "ELITEDESK"), (
-            f"{entry['_context']} repo {entry['name']} would be offered on elitedesk, which holds git "
-            "origins under ~/GitHub and must never hold client working repos"
-        )
