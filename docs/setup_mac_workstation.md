@@ -147,6 +147,19 @@ System Settings → Menu Bar → Weather
 2. Click on the Weather item in Menu Bar
 3. Click open weather to select your preferred city and settings
 
+## Lid (laptop workstations)
+
+A Mac laptop set up as a workstation never sleeps when its lid closes, on
+power or on battery. macOS has no lid action to change: a closed MacBook
+sleeps unless it is in clamshell mode (on power with an external display).
+The one switch that keeps it up is `disablesleep`, which turns system sleep
+off entirely, idle sleep included:
+
+```bash
+sudo pmset -a disablesleep 1
+pmset -g | grep SleepDisabled   # 1
+```
+
 ## Thunderbolt dock (Corsair TBT100)
 
 The dock's HDMI ports sit behind an ITE DisplayPort-to-HDMI bridge. When the

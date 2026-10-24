@@ -556,3 +556,19 @@ powercfg /devicedisablewake "Intel(R) Wi-Fi 6E AX211 160MHz"
 powercfg /devicedisablewake "USB4 Root Router (1.0)"
 powercfg /devicedisablewake "USB4 Root Router (1.0) (001)"
 ```
+
+### Lid (laptop workstations)
+
+A laptop set up as a workstation does nothing when its lid closes, on power
+or on battery. From an elevated shell:
+
+```powershell
+powercfg /setacvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+powercfg /setdcvalueindex SCHEME_CURRENT SUB_BUTTONS LIDACTION 0
+powercfg /setactive SCHEME_CURRENT
+powercfg /query SCHEME_CURRENT SUB_BUTTONS LIDACTION
+```
+
+0 is "Do nothing", and the query shows both the AC and the DC index as
+`0x00000000`. It is set on the active power plan only, so switching plans
+needs it again.

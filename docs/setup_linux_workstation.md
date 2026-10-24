@@ -99,6 +99,32 @@ echo 'export EDITOR=nvim' >> ~/.bashrc
 * Not applicable for headless setups
 * For desktop: Raspberry Pi Configuration -> Display -> Screen Blanking
 
+### Lid (laptop workstations)
+
+A laptop set up as a workstation never sleeps when its lid closes, on power
+or on battery. logind's default suspends it, and an empty
+`HandleLidSwitchExternalPower` falls back to that. The setting is a logind
+drop-in, `/etc/systemd/logind.conf.d/lid.conf`:
+
+```ini
+[Login]
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+```
+
+It is a `method: system` entry in the host's context manifest, with
+`reload: systemctl reload systemd-logind` and the payload in
+`server_configs/system_configs/<host>/logind.conf.d/lid.conf`, never a file
+placed by hand. JasonZephyrus's entry, `zephyrus_logind_lid_ignore` in
+personal_manifest.yaml, is the one to copy. Read it back with:
+
+```bash
+busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
+  org.freedesktop.login1.Manager HandleLidSwitch HandleLidSwitchExternalPower
+```
+
+Both say `s "ignore"`.
+
 ## Screen Sharing (Fedora GNOME)
 
 A Fedora workstation on GNOME/Wayland shares its own session over VNC through
@@ -119,8 +145,8 @@ sharing". JasonZephyrus has them as of 2026-10-02:
 
 Check a machine with `grdctl status` and
 `gsettings list-recursively org.gnome.desktop.remote-desktop.vnc`. It shares
-only a logged-in session, and closing a laptop lid suspends it; both gaps are
-`backlog/zephyrus-agent-server-unattended.md`.
+only a logged-in session, so after a reboot VNC shows nothing until someone
+signs in at the machine.
 
 ## OpenSSH Server
 

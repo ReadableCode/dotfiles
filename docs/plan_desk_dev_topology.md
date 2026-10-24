@@ -136,9 +136,9 @@ actually needed.
   chat.
 - The three T3 Connect slots go to Envy, the work laptop and JasonZephyrus.
   RyzenWhite and the MacBook are clients only (switched 2026-10-02).
-  Reasoning in `docs/setup_t3_code.md`, Slot policy. What still keeps
-  JasonZephyrus from being unattended is
-  `backlog/zephyrus-agent-server-unattended.md`.
+  Reasoning in `docs/setup_t3_code.md`, Slot policy. Closing its lid does
+  not suspend it (`docs/setup_linux_workstation.md`, "Lid (laptop
+  workstations)").
 
 ## Provisioning checklist (when a target is chosen)
 
