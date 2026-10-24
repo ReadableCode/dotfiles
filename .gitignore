@@ -1,4 +1,8 @@
 __pycache__/
+# mypy writes its own catch-all .gitignore only when a run finishes, so a first run in a fresh worktree shows the whole cache as untracked
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
 archive/
 data/
 google_drive_folders/
