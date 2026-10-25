@@ -16,7 +16,9 @@ the things that silently fail a plausible remote workflow.
   sudo, and every failed attempt emails me a security alert (mail_badpass +
   ssmtp root forward, kept on deliberately). Read what is
   readable as jason; the backup jobs avoid sudo through the docker group.
-- Docker needs root; automation runs from root's crontab by design. See
+- jason is in the docker group, so `docker` and `docker compose` need no sudo;
+  the automation still runs from root's crontab by design. Each pull and
+  redeploy of the deploy loop is logged to `~/logs/git_pull_redeploy.log`. See
   `homelab_deployments.md`.
 
 ## nukbuntu (192.168.86.139)
@@ -65,6 +67,17 @@ the things that silently fail a plausible remote workflow.
   weekly flash zip from the appdata.backup plugin is copied to nukbuntu's
   `backups` Samba share (`docker_app_data/backups/behemoth_flash/`, newest
   eight kept); procedure in `server_configs/system_configs/behemoth/README.md`.
+- Never reboot it, and never change its network live by hand. Off `.31`, run
+  `server_configs/scripts/recover_behemoth_ip.sh` (`--dry-run` first): it
+  handles Tailscale DNS around the renew and checks DNS end to end.
+- With a disk disabled the path is a parity rebuild. Never propose New Config,
+  a disk clone, copying files onto an array disk by hand, or putting a pulled
+  disk back.
+- A parity check reads every disk at once; bulk reads alongside it are
+  normal. Throttle a heavy job with `nice` and `ionice`, never by drive
+  temperature.
+- Which bay holds which disk: `homelab_unraid_drives.md`. A slot number, port
+  or device name never tells you the bay.
 - UPS: CyberPower PR1500LCDRT2U on USB, monitored by the desertwitch NUT
   plugin (`nut-dw`), not apcupsd. CyberPower's USB interrupt pipe goes silent
   and usbhid-ups marks data stale; the fix is `pollonly` on line 9 of
@@ -104,6 +117,10 @@ the things that silently fail a plausible remote workflow.
   `server_configs/scripts/deploy_homeassistant_dashboards.py` (`--dry-run`
   prints the diff). The REST history endpoint silently returns nothing when
   the flag params are sent; use the websocket `history/history_during_period`.
+- The VM runs on behemoth (libvirt domain `Home Assistant`). Reads there are
+  fine (`virsh dumpxml`, `lsusb`); auto mode blocks `virsh attach-device` and
+  `detach-device`, so re-attaching a USB stick is my step.
+- The Plex integration is set to ignore new shared users.
 
 ## The desk
 

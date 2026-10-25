@@ -33,7 +33,7 @@ that same `<context>_dev` repo. See
 | `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux): what every machine of a platform gets. A context's own apps live in its `<context>_app_lists.yaml` (see `app_lists.py`). |
 | `go_apps/` | Small Go tools: `git_puller` and the syncthing cleanup, both committing prebuilt binaries. |
 | `docs/` | Setup/how-to docs (one per topic), indexed in `docs/README.md`. |
-| `tests/` | pytest suite (`tests/test_utils/`). |
+| `tests/` | pytest suite: one `tests/test_<tool>.py` per tool; `tests/test_utils/` holds shared helpers. |
 | `pythonista/` | iOS Pythonista scripts. |
 
 ## Tool index (`src/`)
@@ -230,7 +230,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   terminal and runs unchanged on its own. Stdlib-only; its step headers and tldr-style help page come from
   **`terminal_style.py`**, whose terminal-navy tokens copy
   `readable_utils.design_tokens` (a test keeps them equal). A help page lives
-  in the tool that does the work, never in a shell alias.
+  in the tool that does the work, never in a shell alias. To apply pushed
+  changes on another Linux or Mac machine, run
+  `ssh <host> 'python3 ~/GitHub/dotfiles/src/refresh_machine.py </dev/null'`:
+  with no terminal it skips every prompt. Never run its steps there one by one.
 - **`vnc_connect.py`** — what the `vnc<host>` aliases actually run. Launches
   TigerVNC at `host::port` (the doubled colon matters: TigerVNC reads a single
   one as a display number) and, when the viewer is missing, offers to install
@@ -329,7 +332,17 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
   theme from `readable_utils.design_tokens`; the stdlib-only tools in `src/`
   take them from `src/terminal_style.py`. Never a terminal-palette colour
   number: those are
-  whatever the user's terminal profile says.
+  whatever the user's terminal profile says. Printable documents (notes,
+  forms, anything meant for paper) are the exception: light background, dark
+  text.
+- A manifest or payload change takes effect only after
+  `deploy_configs.py deploy`. When I ask for a change to work on this machine,
+  that deploy is part of it; "no commits yet" never means no deploy is needed.
+- `<context>_hosts.json` is `{"hosts": [...]}`, a list of records keyed by
+  `name` (with `hostname`, `user`, `aliases`, `contexts`). Read one with
+  `jq '.hosts[] | select(.name=="X")'`.
+- Drive the running Hammerspoon with `hs -c '...' </dev/null` or
+  `hs -s <<'EOF'`; with stdin left open the call never returns.
 - New docs: add a `docs/<prefix>_<topic>.md`, one topic per file, using one
   of the existing prefix families (`repo_`, `setup_`, `homelab_`, `howto_`,
   `plan_`) and add it to `docs/README.md`.

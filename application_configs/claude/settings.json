@@ -10,7 +10,10 @@
   "autoMode": {
     "allow": [
       "$defaults",
-      "Merging a pull request with the dotfiles ticket_pr.py merge-pr subcommand is allowed when the user asked for the merge in this conversation. ticket_pr.py is the user's own harness, and GitHub still refuses the merge when the branch protection's required approvals or checks are missing."
+      "Merging a pull request with the dotfiles ticket_pr.py merge-pr subcommand is allowed when the user asked for the merge in this conversation. ticket_pr.py is the user's own harness, and GitHub still refuses the merge when the branch protection's required approvals or checks are missing.",
+      "Running a repo's own formatter, linter, type checker and tests through uv run (ruff, black, isort, flake8, mypy, pytest) is allowed, including several of them chained in one command. They read the working tree; a formatter rewrites only that repo's own files.",
+      "Pushing one of the user's own repos to its configured origin with plain git push is allowed when the user asked for the push in this conversation.",
+      "Running JavaScript through osascript in the user's own signed-in browser tab to fetch the user's own bills, statements or transactions is allowed when a slash command or the user asked for that fetch."
     ]
   },
   "attribution": {
