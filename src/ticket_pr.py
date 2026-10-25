@@ -1254,9 +1254,10 @@ def cmd_merge_pr(args):
     pull = resolve_pr(repo, headers, args.pr)
     number = pull["number"]
     pull_url = f"{GITHUB_API}/repos/{repo}/pulls/{number}"
-    # GitHub computes mergeability in the background; null means not yet.
+    # GitHub computes mergeability in the background: a null mergeable, or an
+    # "unknown" state right after a push, means not yet.
     for _ in range(10):
-        if pull.get("mergeable") is not None:
+        if pull.get("mergeable") is not None and pull.get("mergeable_state") != "unknown":
             break
         time.sleep(3)
         pull = http_json("GET", pull_url, headers)

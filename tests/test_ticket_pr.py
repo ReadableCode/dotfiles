@@ -2202,6 +2202,23 @@ def test_merge_pr_merges_a_clean_pr_pinned_to_its_head(monkeypatch, capsys):
     assert result["merged"] is True and result["sha"] == "def456"
 
 
+def test_merge_pr_waits_out_an_unknown_state_after_a_push(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setattr(ticket_pr.time, "sleep", lambda seconds: None)
+    calls = _record_http(
+        monkeypatch,
+        {"/merge": {"sha": "def456", "merged": True}, "/pulls/12": [_github_pull("unknown"), _github_pull("clean")]},
+    )
+    ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12"])
+    base = "https://api.github.com/repos/owner/name/pulls/12"
+    assert calls == [
+        ("GET", base, None),
+        ("GET", base, None),
+        ("PUT", f"{base}/merge", {"merge_method": "squash", "sha": "abc123"}),
+    ]
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["merged"] is True
+
+
 def test_merge_pr_enables_auto_merge_while_blocked(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     calls = _record_http(
