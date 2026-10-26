@@ -124,7 +124,7 @@ def require_macos():
     if sys.platform != "darwin":
         raise RuntimeError(
             "the mac server reads Mail.app, Calendar.app and Messages stores and only runs on macOS "
-            "(Windows and Linux are tracked in backlog/mac-mcp-windows-linux.md)"
+            "(Windows and Linux are tracked in personal_credentials/backlog/dotfiles/mac-mcp-windows-linux.md)"
         )
 
 

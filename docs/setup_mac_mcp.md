@@ -147,7 +147,7 @@ calendar: `calendar_list_calendars`, `calendar_agenda`, `calendar_search_events`
 ## Limits
 
 - macOS only. Windows and Linux are tracked in
-  `backlog/mac-mcp-windows-linux.md`.
+  `personal_credentials/backlog/dotfiles/mac-mcp-windows-linux.md`.
 - The stores are private formats. Mail's `V<n>` folder, the Messages archive,
   the Notes protobuf and the Calendar schema are what macOS 27 writes; a macOS upgrade that changes
   them shows up as a failing read, and the fix is in `src/utils/macmcp_tools.py`.

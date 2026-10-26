@@ -233,7 +233,8 @@ def ticket_branch_note(main, branch):
     merge the PR deletes it, so the local branch has nothing left to follow and will sit there
     forever unless it is deleted by hand - which is safe, because the work is on the default
     branch. Saying so is the difference between a branch someone is waiting on and one they can
-    drop; see backlog/stale-local-branches-after-squash-merge.md for sweeping them in bulk.
+    drop; see personal_credentials/backlog/dotfiles/stale-local-branches-after-squash-merge.md for
+    sweeping them in bulk.
     """
     if has_upstream(main, branch):
         return "left in place (pushed; it goes when its remote does)"
