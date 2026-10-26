@@ -58,8 +58,8 @@ whole desktop at once.
 
 Which hosts can take Screen Sharing is declared per host with
 `vnc_screen_sharing: true` in the inventory, because it is a property of the
-server rather than the OS. macOS targets are implicitly true. Probed
-2026-09-21:
+server rather than the OS. macOS targets are implicitly true. What each
+server offers:
 
 | Server | Offers | Screen Sharing |
 | --- | --- | --- |
@@ -67,14 +67,13 @@ server rather than the OS. macOS targets are implicitly true. Probed
 | x0vncserver / Xtigervnc | VeNCrypt, VNC Auth | yes |
 | wayvnc (the Pis) | VeNCrypt, RSA-AES, RA2 | **no** |
 
-The portables run no screen server at all. VNC Auth is a password-only
-protocol (an 8-byte DES challenge, no encryption, no username), and a laptop
-offers it on 5900 to whatever network it joins; the same day their ssh went
-key-only (2026-10-15) UltraPocket's TightVNC was retired through
-`app_removals.yaml` and MacBookProM5's Screen Sharing was left off. Each
-carries `"vnc_server": false` in the inventory so `ssh_aliases.py` derives no
-`vnc<stem>` alias for it; screen access to a portable is `ssh<stem>` or the
-lid.
+The portables (UltraPocket, MacBookProM5) run no screen server at all. VNC
+Auth is a password-only protocol (an 8-byte DES challenge, no encryption, no
+username), and a laptop offers it on 5900 to whatever network it joins, so a
+portable's screen server is retired through `app_removals.yaml` and a portable
+Mac keeps Screen Sharing off. Each carries `"vnc_server": false` in the
+inventory so `ssh_aliases.py` derives no `vnc<stem>` alias for it; screen
+access to a portable is `ssh<stem>` or the lid.
 
 Read any host's list yourself - it arrives before authentication:
 
@@ -109,7 +108,7 @@ The VNC password is **not** the machine's login password. VNC Auth carries no
 username at all - only a password - so there is no username field to hint that
 an account password is the wrong thing to type. TightVNC keeps its own password
 in `HKLM\SOFTWARE\TightVNC\Server`, set from its tray icon, and it is
-unrelated to the Windows account. This cost an afternoon on 2026-09-21.
+unrelated to the Windows account.
 
 Two more things worth knowing before blaming the client:
 
@@ -134,8 +133,8 @@ client never sends 16 bytes, the problem really is the negotiation.
 
 Check the transport separately, and do not trust the dialog for it: `lsof -nP
 -i TCP@<host>` while connecting shows whether the socket reaches ESTABLISHED.
-It did here, which ruled out the firewall and macOS Local Network permission
-(`docs/setup_mac_workstation.md`) before any of them were touched.
+If it does, the firewall and macOS Local Network permission
+(`docs/setup_mac_workstation.md`) are not the problem.
 
 The first connection to each Pi warns that the certificate is untrusted and
 that `CN=raspberrypi` does not match the hostname. That is wayvnc's self-signed
@@ -144,8 +143,7 @@ pins that key for the host, so it only asks once.
 
 **macOS Screen Sharing cannot reach the Pis.** wayvnc offers only VeNCrypt (19),
 RSA-AES (129) and RA2 (5); Screen Sharing speaks only VNC Auth (2) and Apple ARD
-(30), so it fails at negotiation before asking for a password. This was found
-the hard way on 2026-09-20 - the built-in client had been assumed sufficient.
+(30), so it fails at negotiation before asking for a password.
 TigerVNC speaks all of them, which is why the Pis - and only the Pis - launch
 `vncviewer` from a Mac rather than `open vnc://`.
 
@@ -155,7 +153,7 @@ instead, which is GPL-3.0 and free on every platform. That covers RyzenWhite,
 which already runs Sunshine. It does not cover the Pis or a login screen, which
 is what this doc is for.
 
-RealVNC appears nowhere on the fleet. It moved direct IP connections to its
+Do not use RealVNC. It moved direct IP connections to its
 Enterprise tier, leaving the free and Home tiers able to connect only through
 RealVNC's own cloud.
 
@@ -374,9 +372,9 @@ first, or the settings land on a throwaway bus.
 - **Encryption is the setting that matters for a Mac.** The default
   `['tls-anon']` offers only security type 18, which macOS Screen Sharing
   cannot speak, so it fails with the "make sure Screen Sharing is enabled"
-  dialog. Adding `none` offers VNC Auth (type 2) as well (probed 2026-10-02:
-  `[2, 18]`), which is why the inventory sets `vnc_screen_sharing: true` and
-  the alias opens Screen Sharing on 5900.
+  dialog. Adding `none` offers VNC Auth (type 2) as well (the server then
+  offers `[2, 18]`), which is why the inventory sets `vnc_screen_sharing:
+  true` and the alias opens Screen Sharing on 5900.
 - **It shares only a logged-in session.** After a reboot nothing is served
   until someone signs in at the laptop.
 - The `RDP server certificate is invalid` lines `grdctl` prints come from the
@@ -385,7 +383,7 @@ first, or the settings land on a throwaway bus.
 ## Install TightVNC on Windows
 
 Desktops only. A portable Windows box runs no screen server (see the
-portables note above); UltraPocket's copy was retired 2026-10-15 through
+portables note above); retire an installed copy through
 `app_removals.yaml`. The package stays in the personal overlay's choco list
 scoped with `hosts:` to the desktops that serve a screen, so `myupdater`
 keeps installing and upgrading it there and never on a portable.
