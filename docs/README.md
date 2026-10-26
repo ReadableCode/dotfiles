@@ -44,6 +44,7 @@ prefixes; nothing lives unprefixed.
 - [setup_stable_diffusion.md](setup_stable_diffusion.md) - Stable Diffusion
 - [setup_syncthing.md](setup_syncthing.md) - Setup Syncthing
 - [setup_t3_code.md](setup_t3_code.md) - Setup T3 Code
+- [t3_issues.md](t3_issues.md) - T3 Code issues, the companion to its setup doc
 - [setup_tailscale.md](setup_tailscale.md) - Setup Tailscale
 - [setup_tiktok_scraper.md](setup_tiktok_scraper.md) - setup_tiktok_scraper
 - [setup_unison.md](setup_unison.md) - Unison
