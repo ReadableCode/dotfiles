@@ -97,7 +97,7 @@
     PubkeyAuthentication yes
     ```
 
-  * Key-only logins on portable machines (UltraPocket, 2026-10-15): once a
+  * Key-only logins on portable machines (UltraPocket): once a
     key login from another machine works, add these two lines ABOVE the
     `Match Group administrators` block (anything below a `Match` applies
     only inside it), validate with
