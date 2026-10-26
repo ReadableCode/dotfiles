@@ -480,7 +480,7 @@ def test_remove_settled_placeholder_worktree_and_deletes_its_branch(repos, tmp_p
     write(os.path.join(placeholder, "token.json"), "{}")  # gitignored, the kind of thing that accumulates
     assert init_worktree.main(["--worktree", placeholder, "--remove", "--hostname", "envy"]) == 0
     out = capsys.readouterr().out
-    assert "worktree:  removed" in out and "t3code/deadbeef deleted (placeholder, fully on master)" in out
+    assert "worktree:  removed" in out and "t3code/deadbeef deleted (merged into master, no remote branch)" in out
     assert not os.path.exists(placeholder)
     assert "t3code/deadbeef" not in subprocess.check_output(["git", "branch"], cwd=main, text=True)
     assert os.path.isdir(worktree)  # the other worktree is untouched
@@ -550,39 +550,124 @@ def test_squash_merged_worktree_can_then_be_removed(repos, tmp_path, capsys):
 
     assert init_worktree.main([f"--worktree={worktree}", "--remove", "--hostname=envy"]) == 0
     assert not os.path.exists(worktree)
+    assert "feature/ACME-2482-thing deleted (merged into master" in capsys.readouterr().out
+    assert "feature/ACME-2482-thing" not in subprocess.check_output(["git", "branch"], cwd=main, text=True)
 
 
-# ---------------------------------------------------------------- ticket branch messages
+# ---------------------------------------------------------------- the branch and the main checkout
 
 
-def test_ticket_branch_with_a_live_remote_says_it_goes_with_its_remote(repos, tmp_path):
+def with_origin_master(main, tmp_path):
+    """A bare origin holding master, with main's master tracking it and origin/HEAD set, as a clone has."""
+    bare = str(tmp_path / "origin.git")
+    git(["init", "-q", "--bare", bare], str(tmp_path))
+    git(["remote", "add", "origin", bare], main)
+    git(["push", "-q", "-u", "origin", "master"], main)
+    git(["remote", "set-head", "origin", "master"], main)
+
+
+def land_on_origin_master(worktree, relpath, content):
+    """Commit in the worktree and push straight to origin's master, the way a worktree lands a change."""
+    write(os.path.join(worktree, relpath), content)
+    git(["add", "--", relpath], worktree)
+    git(["commit", "-q", "-m", "landed from the worktree"], worktree)
+    git(["push", "-q", "origin", "HEAD:master"], worktree)
+
+
+def test_branch_with_a_live_remote_branch_is_left_to_go_with_it(repos, tmp_path):
     _, main, worktree = repos
     with_remote(main, worktree, tmp_path)
-    note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
-    assert note == "left in place (pushed; it goes when its remote does)"
+    note = init_worktree.retire_branch(main, "feature/ACME-2482-thing", dry_run=True)
+    assert note == "feature/ACME-2482-thing left in place (its remote branch still exists; it goes when that does)"
 
 
-def test_squash_merged_ticket_branch_says_its_remote_is_already_gone(repos, tmp_path):
-    """The real post-squash shape: no upstream left to follow, but the work is on master."""
+def test_squash_merged_branch_whose_remote_branch_is_gone_would_be_deleted(repos):
+    """The real post-squash shape: no remote branch left to follow, and the work is on master."""
     _, main, worktree = repos
     write(os.path.join(worktree, "feature.py"), "landed\n")
     git(["add", "--", "feature.py"], worktree)
     git(["commit", "-q", "-m", "ACME-2482: landed"], worktree)
     squash_onto_master(main, worktree, "feature.py", "landed\n")
 
-    note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
-    assert "remote branch already gone" in note and "safe to delete locally" in note
-    assert "goes when its remote does" not in note
+    note = init_worktree.retire_branch(main, "feature/ACME-2482-thing", dry_run=True)
+    assert note == "feature/ACME-2482-thing would be deleted (merged into master, no remote branch)"
 
 
-def test_ticket_branch_that_never_landed_is_not_called_safe(repos):
+def test_branch_that_never_landed_is_left_in_place(repos):
     _, main, worktree = repos
     write(os.path.join(worktree, "feature.py"), "only here\n")
     git(["add", "--", "feature.py"], worktree)
     git(["commit", "-q", "-m", "ACME-2482: never merged"], worktree)
 
-    note = init_worktree.ticket_branch_note(main, "feature/ACME-2482-thing")
-    assert "check it before deleting" in note and "safe to delete" not in note
+    note = init_worktree.retire_branch(main, "feature/ACME-2482-thing")
+    assert "left in place (no remote branch and not on master - check it)" in note
+    assert "feature/ACME-2482-thing" in subprocess.check_output(["git", "branch"], cwd=main, text=True)
+
+
+def test_the_default_branch_is_never_deleted(repos):
+    _, main, _ = repos
+    assert init_worktree.retire_branch(main, "master") == "master left in place (the default branch)"
+
+
+def test_remove_fast_forwards_main_and_deletes_the_branch_it_pushed_to_master(repos, tmp_path, capsys):
+    """The usual worktree flow: commit, push HEAD:master, tear down. Main catches up and the branch goes."""
+    _, main, worktree = repos
+    with_origin_master(main, tmp_path)
+    land_on_origin_master(worktree, "feature.py", "landed\n")
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--dry-run", "--hostname", "envy"]) == 0
+    out = capsys.readouterr().out
+    assert "would fast-forward master by 1 commit(s) to origin/master" in out
+    assert "feature/ACME-2482-thing would be deleted (merged into origin/master, no remote branch)" in out
+
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 0
+    out = capsys.readouterr().out
+    assert "main:      fast-forwarded master by 1 commit(s)" in out
+    assert "branch:    feature/ACME-2482-thing deleted (merged into origin/master, no remote branch)" in out
+    assert os.path.isfile(os.path.join(main, "feature.py"))
+    assert "feature/ACME-2482-thing" not in subprocess.check_output(["git", "branch"], cwd=main, text=True)
+
+
+def test_remove_sees_a_merge_made_elsewhere_because_it_fetches_first(repos, tmp_path, capsys):
+    """A push from another clone is invisible until fetched; teardown fetches before deciding anything."""
+    _, main, worktree = repos
+    with_origin_master(main, tmp_path)
+    other = str(tmp_path / "elsewhere")
+    git(["clone", "-q", str(tmp_path / "origin.git"), other], str(tmp_path))
+    write(os.path.join(other, "theirs.py"), "x\n")
+    git(["add", "theirs.py"], other)
+    git(["commit", "-q", "-m", "someone else's change"], other)
+    git(["push", "-q", "origin", "master"], other)
+
+    assert init_worktree.main(["--worktree", worktree, "--remove", "--hostname", "envy"]) == 0
+    assert "main:      fast-forwarded master by 1 commit(s)" in capsys.readouterr().out
+    assert os.path.isfile(os.path.join(main, "theirs.py"))
+
+
+def test_main_checkout_is_left_as_is_off_the_default_branch_or_ahead_of_it(repos, tmp_path):
+    _, main, worktree = repos
+    with_origin_master(main, tmp_path)
+    land_on_origin_master(worktree, "feature.py", "landed\n")
+    git(["fetch", "-q", "origin"], main)
+    git(["checkout", "-q", "-b", "elsewhere"], main)
+    assert init_worktree.update_main_checkout(main) == "left as is (on elsewhere, not master)"
+    git(["checkout", "-q", "master"], main)
+    write(os.path.join(main, "mine.py"), "x\n")
+    git(["add", "mine.py"], main)
+    git(["commit", "-q", "-m", "a commit of main's own"], main)
+    assert init_worktree.update_main_checkout(main) == "left as is (master has 1 commit(s) origin/master does not)"
+
+
+def test_main_checkout_with_a_clashing_uncommitted_edit_is_reported_not_forced(repos, tmp_path):
+    """Other threads leave edits in the main checkout; one the update would overwrite stops it."""
+    _, main, worktree = repos
+    with_origin_master(main, tmp_path)
+    land_on_origin_master(worktree, "uv.lock", "from the worktree\n")
+    git(["fetch", "-q", "origin"], main)
+    write(os.path.join(main, "uv.lock"), "another thread's edit\n")
+    status = init_worktree.update_main_checkout(main)
+    assert status.startswith("not fast-forwarded (") and "uv.lock" in status
+    with open(os.path.join(main, "uv.lock"), encoding="utf-8") as file_handle:
+        assert file_handle.read() == "another thread's edit\n"
 
 
 def test_remove_drops_the_sibling_link_only_with_the_last_worktree_beside_it(repos, tmp_path, capsys):

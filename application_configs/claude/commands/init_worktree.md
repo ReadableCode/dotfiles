@@ -109,6 +109,7 @@ checkout is in no workspace on this host; add it by hand first.
   entry is meant to be dropped again when the worktree goes.
 - Teardown is its own command: **`/remove_worktree`**, run from inside the
   worktree as the last tool call of the turn. It drops the workspace entry
-  again, removes the worktree, and retires a spent `t3code/` placeholder
-  branch, refusing whenever the worktree holds work that exists nowhere else.
+  again, removes the worktree, fast-forwards the main checkout and deletes
+  the branch once its work is on the default branch and its remote branch is
+  gone, refusing whenever the worktree holds work that exists nowhere else.
   Do not tear a worktree down by hand here.

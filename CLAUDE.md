@@ -134,9 +134,11 @@ is the one-paragraph orientation so an agent knows which file to open.
   absolute targets, adds a folder entry to each of this host's workspace files
   (`<host>.code-workspace` and every one-context `<host>-<name>.code-workspace`)
   that lists the repo, so a worktree lands only in its own context's window,
-  runs `uv sync`. `--remove` is the teardown twin: it drops the workspace
-  entry, removes that one worktree and retires a spent `t3code/` placeholder
-  branch, refusing whenever the worktree holds work that exists nowhere else.
+  runs `uv sync`. `--remove` is the teardown twin: it fetches, drops the
+  workspace entry, removes that one worktree, fast-forwards the main
+  checkout's default branch and deletes the branch once its work is on the
+  default branch and its remote branch is gone, refusing whenever the
+  worktree holds work that exists nowhere else.
   Wrapped by `/init_worktree` and `/remove_worktree`
   (`application_configs/claude/commands/`, deployed by the personal and dev
   overlays like every other user-level Claude file, so a client machine that

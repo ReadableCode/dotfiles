@@ -1,5 +1,5 @@
 ---
-description: Tear down the git worktree this thread is working in (T3 Code makes one per thread) — drop its VS Code workspace entry, remove the worktree, retire a spent t3code/ placeholder branch. Refuses when the worktree holds work that exists nowhere else.
+description: Tear down the git worktree this thread is working in (T3 Code makes one per thread) — drop its VS Code workspace entry, remove the worktree, fast-forward the main checkout, delete the branch once its work is on the default branch. Refuses when the worktree holds work that exists nowhere else.
 argument-hint: [path — optional; a leftover worktree to remove instead of this one]
 ---
 
@@ -31,7 +31,9 @@ MAIN=$(git worktree list --porcelain | head -1 | cut -d' ' -f2-)
 python3 "$(dirname "$MAIN")/dotfiles/src/init_worktree.py" --remove --dry-run
 ```
 
-Read the plan back before doing it. Three lines matter:
+Read the plan back before doing it. A dry run does not fetch, so its main and
+branch lines use the refs as last fetched; the real run fetches every remote
+with `--prune` first. Four lines matter:
 
 - **workspace** — the folder entry `/init_worktree` added to this host's
   `<host>.code-workspace` (and to any narrower `<host>-<name>.code-workspace`,
@@ -39,10 +41,16 @@ Read the plan back before doing it. Three lines matter:
   repo to clean. `absent` is fine (the entry was never added, or already gone).
 - **worktree** — the directory and everything in it (`.venv`, the mirrored
   links, caches, anything placed by hand) goes.
-- **branch** — a `t3code/` placeholder whose tip is already on the default
-  branch is deleted with the worktree; the name is throwaway and must never be
-  pushed. A ticket branch is **left in place** — it is pushed, and it goes when
-  its remote does.
+- **main** — the main checkout's default branch is fast-forwarded to its
+  upstream, so it holds what this thread pushed. Only when it has the default
+  branch checked out and no commits of its own; otherwise it is `left as is`
+  with the reason. An uncommitted edit another thread left there that the
+  update would overwrite stops it (`not fast-forwarded`), and is never forced.
+- **branch** — deleted when its work is on the default branch and no remote
+  branch is left for it: a spent `t3code/` placeholder, or a ticket branch
+  whose PR merged and took its remote branch with it. **Left in place** while
+  its remote branch still exists (it goes when that does), and when its work
+  is not on the default branch.
 
 ## Step 3 — run it, as the LAST tool call of the turn
 
@@ -55,9 +63,11 @@ when it returns. **Run nothing after it in that turn.** Report the result in
 the message, not with another command.
 
 If T3 Code starts a new turn in this thread later, it re-creates the worktree
-as a fresh, empty checkout of the same branch — so run `/init_worktree` again
-at the start of that turn and this command again at the end. Nothing
-accumulates in between.
+with `git worktree add <path> <branch>`, which works only while the branch
+exists. With the branch kept, run `/init_worktree` again at the start of that
+turn and this command again at the end. With the branch deleted, the re-create
+fails (T3 only logs it) and the turn starts in a folder that is not there: say
+so, and carry on from the main checkout or a new thread.
 
 ## Step 4 — a leftover from a thread that never cleaned up
 

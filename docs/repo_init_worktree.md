@@ -105,10 +105,27 @@ place a worktree accumulates anything, and the directory goes. The one
 exception, a sibling source link beside it (step 3 above), goes with the last
 worktree of that repo that names it.
 
-A `t3code/` placeholder branch whose tip is already on the default branch is
-deleted with its worktree, since the name is throwaway and must never be
-pushed. A ticket branch is left alone: it is pushed, and it goes when its
-remote does.
+Before anything else it runs `git fetch --all --prune` in the main checkout,
+so a merge made on the host and a remote branch deleted with its PR are both
+visible to the decisions below (a dry run skips the fetch). After the
+worktree is gone it fast-forwards the main checkout's default branch to its
+upstream, so the main checkout holds what the thread pushed. That happens
+only when the default branch is checked out there and has no commits of its
+own; otherwise the `main:` line says `left as is` and why. Other threads
+leave uncommitted edits in the main checkout: `git merge --ff-only` carries
+them across, and when the update would overwrite one it stops and reports
+`not fast-forwarded` rather than forcing.
+
+Then the branch goes when its work is on the default branch (an ancestor, or
+landed as one squashed commit) and no remote branch is left for it to
+follow: a spent `t3code/` placeholder, or a ticket branch whose PR merged and
+took its remote branch with it. A branch whose remote branch still exists
+(an open PR, or a merge that kept its branch) is left; it goes when that
+does. A branch whose work is not on the default branch is left, and the
+default branch itself never goes. The main checkout is brought up to date
+first because a default branch with no `origin/HEAD` is the local one, and a
+stale one would make a merged branch look unmerged, which is what made
+`git branch -d` refuse after a push from a worktree.
 
 It **refuses** when the worktree holds work that exists nowhere else —
 uncommitted tracked changes, untracked files git does not ignore, a detached
@@ -143,10 +160,16 @@ checkout:
 python3 ~/GitHub/dotfiles/src/init_worktree.py --remove --worktree ~/.t3/worktrees/<repo>/<id>
 ```
 
-T3 Code re-creates a missing worktree as a fresh, empty checkout of the same
-branch when a **new** turn starts in that thread, so a thread spoken to again
-after cleaning up simply runs `/init_worktree` then `/remove_worktree` again;
-nothing accumulates in between.
+When a **new** turn starts in a thread whose worktree is gone, T3 Code
+re-creates it with `git worktree add <path> <branch>` (v0.1.2
+`ProviderTurnStartService.ts:486`, `GitVcsDriverCore.ts:3740`). While the
+branch exists that gives a fresh checkout, and the thread runs
+`/init_worktree` then `/remove_worktree` again. Once the branch has been
+deleted the re-create fails, T3 only logs `provider turn start failed to
+recreate worktree`, and the turn starts in its worktree path
+(`ProviderTurnStartService.ts:1348`), which is not there. That is the price of
+deleting the branch: a thread spoken to after its teardown carries on from the
+main checkout or a new thread.
 
 ## Sweeping the leftovers: `/sweep_worktrees`
 

@@ -53,12 +53,15 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
 ever touches the one worktree it is run from (or pointed at with
 ``--worktree``). A thread runs it on itself as its LAST command: the script
 steps out of the directory before deleting it. Settling has nothing to do with
-it - settling never deletes a directory. T3 Code does re-create a missing
-worktree as a fresh, empty checkout of the same branch when a NEW turn starts
-in that thread, so a thread that is spoken to again after cleaning up simply
-runs the same command again at the end; nothing accumulates in between.
-it drops that worktree's workspace entry, then ``git worktree remove --force``
-on that exact path from the main checkout, which deletes the directory and
+it - settling never deletes a directory. When a NEW turn starts in that thread
+T3 Code re-creates a missing worktree with ``git worktree add <path> <branch>``,
+which works only while the branch exists: once the branch is deleted (below)
+the re-create fails, T3 only logs it, and the turn starts in a folder that is
+not there. A thread that is spoken to again after cleaning up while its
+branch still exists simply runs the same command again at the end. The
+teardown fetches every remote with ``--prune``, drops that worktree's
+workspace entry, then runs ``git worktree remove --force`` on that exact
+path from the main checkout, which deletes the directory and
 everything that accumulated in it - the ``.venv``, the links above, caches,
 and any file placed there by hand. There is no list of files to keep current:
 the directory is the only place a worktree accumulates anything, and the
@@ -67,12 +70,14 @@ source link (step 3), goes with the last worktree beside it that names it.
 Before touching anything it refuses when the worktree holds work that exists
 nowhere else: uncommitted tracked changes, untracked files git does not
 ignore, a detached HEAD, or commits that are neither on the branch's upstream
-nor already on the default branch. A ticket branch is left
-alone (it is pushed; it goes when its remote does); a ``t3code/`` placeholder
-branch whose tip is already on the default branch is deleted with its
-worktree, since the name is throwaway and must never be pushed. Other
-worktrees are never listed, inspected or changed - the script never operates
-on a path it was not given.
+nor already on the default branch. After the worktree goes, the main
+checkout's default branch is fast-forwarded to its upstream (only when it is
+checked out there and has no commits of its own), and then the branch is
+deleted when its work is on the default branch and no remote branch is left
+for it: a spent ``t3code/`` placeholder, or a ticket branch whose PR merged
+and took its remote branch with it. A branch whose remote branch still exists
+is left; it goes when that does. Other worktrees are never listed, inspected
+or changed - the script never operates on a path it was not given.
 
 Stdlib-only on purpose (like ``ticket_pr.py``): it runs with a bare
 ``python3`` from any repo in any context before that repo's venv exists.
@@ -226,38 +231,79 @@ def has_upstream(repo, branch):
     return probe.returncode == 0
 
 
-def ticket_branch_note(main, branch):
-    """Why a ticket branch is being left behind, told accurately rather than hopefully.
+def fetch_remotes(main):
+    """`git fetch --all --prune` in the main checkout; None on success, else why it failed.
 
-    "it goes when its remote does" is only true while a remote branch exists. After a squash
-    merge the PR deletes it, so the local branch has nothing left to follow and will sit there
-    forever unless it is deleted by hand - which is safe, because the work is on the default
-    branch. Saying so is the difference between a branch someone is waiting on and one they can
-    drop; see personal_credentials/backlog/dotfiles/stale-local-branches-after-squash-merge.md for
-    sweeping them in bulk.
+    Run before any decision that reads remote-tracking refs: a merge on the host is invisible
+    until fetched, and a remote branch deleted with its PR still looks live until pruned.
     """
-    if has_upstream(main, branch):
-        return "left in place (pushed; it goes when its remote does)"
-    base = default_branch(main)
-    if base and (is_ancestor(branch, base, main) or is_squash_merged(main, base, ref=branch)):
-        return f"left in place (merged into {base}, remote branch already gone - safe to delete locally)"
-    return "left in place (no upstream and not on the default branch - check it before deleting)"
+    result = subprocess.run(["git", "fetch", "--all", "--prune", "--quiet"], cwd=main, capture_output=True, text=True)
+    if result.returncode == 0:
+        return None
+    detail = (result.stderr.strip().splitlines() or ["git fetch failed"])[-1]
+    return f"failed, deciding from the refs as last fetched ({detail})"
 
 
-def retire_placeholder_branch(main, branch, dry_run=False):
-    """Delete a `t3code/` placeholder branch once its worktree is gone and its tip is on the default branch.
+def update_main_checkout(main, dry_run=False):
+    """Fast-forward the main checkout's default branch to its upstream, never anything else.
 
-    A ticket branch is never deleted here, only described: see `ticket_branch_note`.
+    Only when the main checkout has the default branch checked out and has no commits of its
+    own on it: a main checkout on another branch, or ahead of its upstream, is left as it is and
+    said so. Other threads leave uncommitted edits there; `merge --ff-only` carries them across
+    and refuses only when the update would overwrite one, which is reported, not forced.
     """
-    if not branch.startswith("t3code/"):
-        return f"{branch} {ticket_branch_note(main, branch)}"
     base = default_branch(main)
-    if not base or not is_ancestor(branch, base, main):
-        return f"{branch} left in place (placeholder with commits not on {base or 'the default branch'})"
+    if not base:
+        return "left as is (no default branch found)"
+    name = local_name(base)
+    try:
+        current = git(["symbolic-ref", "--quiet", "--short", "HEAD"], main)
+    except subprocess.CalledProcessError:
+        return f"left as is (HEAD is detached, not on {name})"
+    if current != name:
+        return f"left as is (on {current}, not {name})"
+    try:
+        upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", f"{name}@{{upstream}}"], main)
+    except subprocess.CalledProcessError:
+        return f"left as is ({name} has no upstream)"
+    ahead = git(["rev-list", "--count", f"{upstream}..{name}"], main)
+    behind = git(["rev-list", "--count", f"{name}..{upstream}"], main)
+    if ahead != "0":
+        return f"left as is ({name} has {ahead} commit(s) {upstream} does not)"
+    if behind == "0":
+        return f"up to date with {upstream}"
     if dry_run:
-        return f"{branch} would be deleted (placeholder, fully on {base})"
+        return f"would fast-forward {name} by {behind} commit(s) to {upstream}"
+    result = subprocess.run(
+        ["git", "merge", "--ff-only", "--quiet", upstream], cwd=main, capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        detail = " ".join(result.stderr.split())
+        return f"not fast-forwarded ({detail or 'git merge --ff-only failed'})"
+    return f"fast-forwarded {name} by {behind} commit(s) to {git(['rev-parse', '--short', 'HEAD'], main)}"
+
+
+def retire_branch(main, branch, dry_run=False):
+    """Delete this worktree's branch once its worktree is gone and nothing on it exists only here.
+
+    Deleted when its work is on the default branch (an ancestor, or landed as one squashed
+    commit) and no remote branch is left for it to follow: a spent `t3code/` placeholder, or a
+    ticket branch whose PR merged and took its remote branch with it. Left in place while its
+    remote branch still exists (an open PR, or one merged without deleting its branch) and when
+    its work is not on the default branch. Needs `fetch_remotes` first, so a merge and a
+    deleted remote branch are both visible. The default branch itself is never deleted.
+    """
+    base = default_branch(main)
+    if base and branch == local_name(base):
+        return f"{branch} left in place (the default branch)"
+    if has_upstream(main, branch):
+        return f"{branch} left in place (its remote branch still exists; it goes when that does)"
+    if not base or not (is_ancestor(branch, base, main) or is_squash_merged(main, base, ref=branch)):
+        return f"{branch} left in place (no remote branch and not on {base or 'the default branch'} - check it)"
+    if dry_run:
+        return f"{branch} would be deleted (merged into {base}, no remote branch)"
     git(["branch", "-D", branch], main)
-    return f"{branch} deleted (placeholder, fully on {base})"
+    return f"{branch} deleted (merged into {base}, no remote branch)"
 
 
 def registered_worktrees(main):
@@ -286,25 +332,30 @@ def remove_worktree(main, worktree, dry_run=False):
 
 
 def teardown(main, worktree, dry_run=False, hostname=None):
-    """Remove exactly this one worktree: its workspace entry, the worktree, a spent placeholder branch.
+    """Remove exactly this one worktree, bring the main checkout up to date, drop the spent branch.
 
     Returns ``(True, [(label, status), ...])`` on success, or ``(False, [reason, ...])`` when the
-    worktree holds work that exists nowhere else - in which case nothing at all has been touched.
-    The single path given is the only path acted on; callers that enumerate (sweep_worktrees.py)
-    call this once per worktree they were told to remove.
+    worktree holds work that exists nowhere else - in which case nothing has been touched beyond
+    the fetch, which only moves remote-tracking refs. A dry run does not fetch. The single path
+    given is the only path acted on; callers that enumerate (sweep_worktrees.py) call this once
+    per worktree they were told to remove.
     """
+    fetched = None if dry_run else fetch_remotes(main)
     reasons = unpushed_work(worktree)
     if reasons:
         return False, reasons
     branch = git(["symbolic-ref", "--quiet", "--short", "HEAD"], worktree)
     sources = sibling_sources(worktree)  # read now: the pyproject goes with the directory
+    lines = [("fetch", fetched)] if fetched else []
     statuses = update_workspace(main, worktree, None, remove=True, dry_run=dry_run, hostname=hostname)
-    lines = [("workspace", status) for status in statuses]
+    lines.extend(("workspace", status) for status in statuses)
     if os.path.realpath(os.getcwd()).startswith(worktree + os.sep) or os.path.realpath(os.getcwd()) == worktree:
         os.chdir(main)  # the cwd is about to be deleted
     lines.append(("worktree", remove_worktree(main, worktree, dry_run=dry_run)))
     lines.extend(("sibling", status) for status in remove_sibling_links(main, worktree, sources, dry_run=dry_run))
-    lines.append(("branch", retire_placeholder_branch(main, branch, dry_run=dry_run)))
+    # before the branch: when the default branch is the local one, a stale one makes a merged branch look unmerged
+    lines.append(("main", update_main_checkout(main, dry_run=dry_run)))
+    lines.append(("branch", retire_branch(main, branch, dry_run=dry_run)))
     return True, lines
 
 
@@ -321,6 +372,11 @@ def default_branch(repo):
         if probe.returncode == 0:
             return name
     return None
+
+
+def local_name(base):
+    """The local branch name of a default branch: `origin/master` -> `master`, `master` -> `master`."""
+    return base.split("/", 1)[1] if base.startswith("origin/") else base
 
 
 def derive_label(worktree):

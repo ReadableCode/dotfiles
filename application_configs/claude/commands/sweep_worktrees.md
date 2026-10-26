@@ -77,9 +77,10 @@ the whole run before anything is removed, so one wrong path never takes the
 others with it.
 
 Each removal is the same
-`init_worktree.teardown` `/remove_worktree` uses — workspace entry dropped,
-worktree removed, a spent `t3code/` placeholder branch retired, a ticket
-branch left alone — so there is no second delete path to reason about.
+`init_worktree.teardown` `/remove_worktree` uses — fetch, workspace entry
+dropped, worktree removed, main checkout fast-forwarded, the branch deleted
+once its work is on the default branch and its remote branch is gone — so
+there is no second delete path to reason about.
 
 Add `--dry-run` to walk the prompts and print what each removal would do.
 
