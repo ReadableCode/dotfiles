@@ -380,8 +380,9 @@ def outgoing_hits(fields, repo=None, ticket=None, parent=None):
     return hits
 
 
-def tracked_files(repo_dir):
-    result = _git(repo_dir, "ls-files", "-z")
+def worktree_files(repo_dir):
+    """Tracked files plus new ones not yet added (gitignored excluded), so a file is checked before its commit."""
+    result = _git(repo_dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
     return [p for p in result.stdout.split("\0") if p] if result.returncode == 0 else []
 
 
@@ -423,7 +424,7 @@ def scan_repo(repo_dir, contexts, staged=False):
         (context, ident, _pattern(ident)) for context, info in rules.items() for ident in sorted(info["identifiers"])
     ]
     hits = []
-    for path in staged_files(repo_dir) if staged else tracked_files(repo_dir):
+    for path in staged_files(repo_dir) if staged else worktree_files(repo_dir):
         content = read_content(repo_dir, path, staged)
         if not content:
             continue

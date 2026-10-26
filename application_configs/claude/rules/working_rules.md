@@ -42,6 +42,10 @@ context's own user-level CLAUDE.md.
   or not, branches left, thread settled or not.
 - After an interruption or "continue", resume the interrupted step; never
   reply "No response requested."
+- "You pick" hands that decision to you for the rest of the thread: decide,
+  do it, and report what you chose.
+- Say which layer a problem is in: the bytes on disk, a listing, or an app's
+  record. Write "lost", "missing" or "deleted" only when the bytes are gone.
 - Explain what and why before any permission prompt, especially on sensitive
   paths or state-changing commands. Reading my credentials repos is fine; an
   unexplained grep of them is not.
@@ -169,6 +173,8 @@ context's own user-level CLAUDE.md.
 - If T3's `preview_snapshot` times out once, take the screenshot with headless
   Chrome (`--headless=new --screenshot=<png> --window-size=W,H`) and a
   throwaway `--user-data-dir`.
+- Read only attachments whose path appears in this thread; never pick the
+  newest file in the T3 attachments folder.
 
 ## Shell
 

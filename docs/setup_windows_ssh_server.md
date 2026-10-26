@@ -234,6 +234,9 @@ default shell and the profile dot-sourcing `powershell_aliases.ps1`.
   (`python3 -c "import base64,sys; print(base64.b64encode(sys.stdin.read().encode('utf-16-le')).decode())"`),
   and run `ssh host "powershell -NoProfile -EncodedCommand <b64>"`. The
   command line caps around 32k characters.
+- Windows PowerShell 5.1 has no `&&` or `||`, and `&` is its call operator,
+  not a separator: chain commands with `;`, or `; if ($?) { ... }` to stop on
+  a failure.
 - `-NoProfile` leaves the shell functions and aliases undefined. To use one
   (`gitpullall`, an ssh alias), run it bare: `ssh host "gitpullall"`.
 - The profile's "Sourced:" banner is guarded to interactive sessions. An

@@ -154,6 +154,17 @@ def test_ticket_prefix_needs_a_number_and_words_need_boundaries(constellation):
     assert idents == ["ACM-", "acme", "acme-app"]
 
 
+def test_a_new_file_is_scanned_before_it_is_added(constellation):
+    contexts = leak.derive_contexts(constellation)
+    repo = os.path.join(constellation, "dotfiles")
+    write(os.path.join(repo, "docs/x.md"), "clean\n")
+    subprocess.run(["git", "-C", repo, "add", "-A"], check=True)
+    write(os.path.join(repo, "docs/new.md"), "written for acme, never added\n")
+    write(os.path.join(repo, ".gitignore"), "scratch.md\n")
+    write(os.path.join(repo, "scratch.md"), "acme in an ignored file\n")
+    assert [(h[0], h[3]) for h in leak.scan_repo(repo, contexts)] == [("docs/new.md", "acme")]
+
+
 def test_staged_mode_sees_only_the_index(constellation):
     contexts = leak.derive_contexts(constellation)
     repo = os.path.join(constellation, "dotfiles")
