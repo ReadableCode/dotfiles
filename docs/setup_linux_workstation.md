@@ -99,12 +99,11 @@ echo 'export EDITOR=nvim' >> ~/.bashrc
 * Not applicable for headless setups
 * For desktop: Raspberry Pi Configuration -> Display -> Screen Blanking
 
-### Lid (laptop workstations)
+### Lid (a laptop you don't take with you)
 
-A laptop set up as a workstation never sleeps when its lid closes, on power
-or on battery. logind's default suspends it, and an empty
-`HandleLidSwitchExternalPower` falls back to that. The setting is a logind
-drop-in, `/etc/systemd/logind.conf.d/lid.conf`:
+On a laptop you don't plan to take with you, turn off suspend on lid close,
+on power and on battery. Put this logind drop-in in
+`server_configs/system_configs/<host>/logind.conf.d/lid.conf`:
 
 ```ini
 [Login]
@@ -112,18 +111,27 @@ HandleLidSwitch=ignore
 HandleLidSwitchExternalPower=ignore
 ```
 
-It is a `method: system` entry in the host's context manifest, with
-`reload: systemctl reload systemd-logind` and the payload in
-`server_configs/system_configs/<host>/logind.conf.d/lid.conf`, never a file
-placed by hand. JasonZephyrus's entry, `zephyrus_logind_lid_ignore` in
-personal_manifest.yaml, is the one to copy. Read it back with:
+and deploy it with a `method: system` entry in the host's context manifest:
+
+```yaml
+- name: <host>_logind_lid_ignore
+  repo: ../server_configs/system_configs/<host>/logind.conf.d/lid.conf
+  dest:
+    linux: /etc/systemd/logind.conf.d/lid.conf
+  requires: "{repo_parent}/server_configs"
+  hosts: [<HOST>]
+  method: system
+  owner: root:root
+  mode: "0644"
+  reload: systemctl reload systemd-logind
+```
+
+After the deploy, both of these say `s "ignore"`:
 
 ```bash
 busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
   org.freedesktop.login1.Manager HandleLidSwitch HandleLidSwitchExternalPower
 ```
-
-Both say `s "ignore"`.
 
 ## Screen Sharing (Fedora GNOME)
 
@@ -132,7 +140,7 @@ gnome-remote-desktop, so VNC shows exactly what its screen shows. These are
 per-user GNOME settings (dconf, and the VNC password in the login keyring),
 which the deployer cannot link, so they are set by hand once per machine with
 the commands in [setup_vnc_server.md](./setup_vnc_server.md), "GNOME session
-sharing". JasonZephyrus has them as of 2026-10-02:
+sharing", to these values:
 
 | Setting | Value |
 | --- | --- |
@@ -145,8 +153,7 @@ sharing". JasonZephyrus has them as of 2026-10-02:
 
 Check a machine with `grdctl status` and
 `gsettings list-recursively org.gnome.desktop.remote-desktop.vnc`. It shares
-only a logged-in session, so after a reboot VNC shows nothing until someone
-signs in at the machine.
+only a logged-in session.
 
 ## OpenSSH Server
 
