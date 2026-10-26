@@ -27,7 +27,8 @@ works if you just want a straight install of everything.
 - macOS system settings: hostname, scaling, Finder behaviour, keyboard, Dock, power
 - signing in to iCloud / App Store
 - licensed apps and their keys
-- Xcode and the iOS / watchOS simulator runtimes, on MacBookProM5 only (see `setup_xcode_beta.md`)
+- Xcode and the iOS / watchOS simulator runtimes, if this Mac builds for iOS or
+  watchOS and has the internal space (see `setup_xcode_beta.md`)
 
 The rest of this page is the reference detail behind those steps.
 
@@ -117,8 +118,8 @@ Set "Key Repeat" to Fast and "Delay Until Repeat" to one click below short
 - Steam
 - Epic Games
 - Activity Monitor
-- Xcode Beta (MacBookProM5 only)
-- Device Hub (MacBookProM5 only)
+- Xcode Beta (if installed)
+- Device Hub (if installed)
 - Stream Deck
 
 The Downloads stack and Trash sit past the divider at the end of the Dock.
@@ -147,13 +148,13 @@ System Settings → Menu Bar → Weather
 2. Click on the Weather item in Menu Bar
 3. Click open weather to select your preferred city and settings
 
-## Lid (laptop workstations)
+## Lid (a laptop you don't take with you)
 
-A Mac laptop set up as a workstation never sleeps when its lid closes, on
-power or on battery. macOS has no lid action to change: a closed MacBook
-sleeps unless it is in clamshell mode (on power with an external display).
-The one switch that keeps it up is `disablesleep`, which turns system sleep
-off entirely, idle sleep included:
+On a Mac laptop you don't plan to take with you, keep it from sleeping when
+the lid closes, on power or on battery. macOS has no lid action to change: a
+closed MacBook sleeps unless it is in clamshell mode (on power with an
+external display). The one switch that keeps it up is `disablesleep`, which
+turns system sleep off entirely, idle sleep included:
 
 ```bash
 sudo pmset -a disablesleep 1
@@ -310,7 +311,8 @@ tool for the same reason.
 
 ### Moving Homebrew Cache
 
-Only Envy does this — its internal disk is small. Other Macs keep the defaults.
+Do this when the internal disk is short on space and an external SSD is
+attached; otherwise keep the defaults.
 
 ```bash
 # create new cache directory
@@ -638,8 +640,8 @@ instance can be driven from a shell (`hs -c "wl.applyAll()"`); reload with
 close stdin (`hs -c "..." </dev/null`) or feed the code on stdin
 (`hs -s <<'EOF'`): when stdin is a pipe the client runs the `-c` command and
 then keeps reading the pipe for more code until it closes, so an inherited
-pipe that never closes looks like a hang while the command has already run
-(verified 2026-09-30). Stream Deck's Website action
+pipe that never closes looks like a hang while the command has already run.
+Stream Deck's Website action
 drops custom URL schemes; its "GET request in background" mode is what reaches
 the loopback trigger server.
 
@@ -650,8 +652,7 @@ init.lua drags the window by its header while pressing ctrl+N. The grab point
 is read from the window's accessibility tree each time: the widest strip of the
 top 44px with no control in it, because a press on a control (Slack's search
 box) focuses the control and the window stays put, and apps move their
-controls between releases (Slack's search box went from 17-80% of the header
-to 29-68% and the fixed 30% grab stopped working, 2026-09-30). Before pressing
+controls between releases, so a fixed grab point stops working. Before pressing
 it checks what is under the cursor and skips a point that belongs to another
 window, since a stranded window can share its rectangle with the one that
 belongs there. The console line per attempt names the point and what it
@@ -673,10 +674,9 @@ A Dock icon that turns into a question mark means the shim under
 `~/Applications/Chrome Apps.localized/` is gone. Uninstalling a web app on any
 device signed in to the profile propagates through Chrome Sync and deletes the
 shim here; a reinstall on that device arrives as a sync install, which Chrome
-marks as not installed on this Mac and gives no shim (Messenger, 2026-09-29,
-after a reinstall on another device). Fix: chrome://apps in that profile,
-right-click the app, Install; the shim returns at the same path. Nothing in
-the app lists or `app_removals.yaml` removes shims.
+marks as not installed on this Mac and gives no shim. Fix: chrome://apps in
+that profile, right-click the app, Install; the shim returns at the same path.
+Nothing in the app lists or `app_removals.yaml` removes shims.
 
 ## Enable SSH Server
 
@@ -692,8 +692,7 @@ Once a key login from another machine works (its `id_rsa.pub` is in
 `~/.ssh/authorized_keys` here), turn password and keyboard-interactive logins
 off. `sshd_config` includes `sshd_config.d/*` before its own settings and sshd
 keeps the first value it reads, so a file sorting before `100-macos.conf` wins.
-launchd starts sshd per connection, so no restart is needed. Done on
-MacBookProM5 2026-10-15.
+launchd starts sshd per connection, so no restart is needed.
 
 ```bash
 printf 'PasswordAuthentication no\nKbdInteractiveAuthentication no\n' | sudo tee /etc/ssh/sshd_config.d/000-key-only.conf
