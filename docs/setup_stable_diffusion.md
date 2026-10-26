@@ -5,15 +5,11 @@ Windows 11) from **Stability Matrix**: a GUI launcher, no Docker, no Windows
 service, nothing running unless its window is open. Start it when you want
 images, close it before gaming.
 
-JasonZephyrus had a Docker setup for Forge Neo with a Samba share of its
-models, retired on 2026-10-02 along with its data: that laptop is a
-workstation now, and its 6 GB GPU was never the right place for this.
-
 ## Why this setup
 
 - **RyzenWhite over Zephyrus.** 16 GB of VRAM holds SDXL whole and makes
-  Flux-class models practical; the laptop's 6 GB only just fits SDXL (1.18
-  it/s measured on 2026-09-13) and is needed by Odysseus anyway.
+  Flux-class models practical; the laptop's 6 GB only just fits SDXL and is
+  needed by Odysseus anyway.
 - **Forge Neo** (`Haoming02/sd-webui-forge-classic`, `neo` branch) is the
   maintained continuation of the AUTOMATIC1111 / Forge UI. A1111 has had no
   release since v1.10.1 (July 2024) and lllyasviel's Forge has been idle since
@@ -29,8 +25,7 @@ workstation now, and its 6 GB GPU was never the right place for this.
 1. Download `StabilityMatrix-win-x64.zip` from
    <https://github.com/LykosAI/StabilityMatrix/releases/latest> and extract it
    to a folder on the drive with the most free space (models are 2 to 7 GB
-   each), for example `D:\StabilityMatrix`. Check free space first; C: was
-   short on space before the GPU swap.
+   each), for example `D:\StabilityMatrix`. Check free space first.
 2. Run `StabilityMatrix.exe`. On first launch choose **Portable mode** so all
    data (packages, models, images) stays inside that folder.
 3. Add a package: choose **Stable Diffusion WebUI Forge - Neo**, keep the
