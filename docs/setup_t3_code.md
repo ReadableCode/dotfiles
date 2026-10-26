@@ -926,9 +926,6 @@ platform variants, the update command, Local Network pre-authorization, the
 Linux prereq script, Tailscale Serve past the tunnel cap, the http2 pin,
 Windows restart sign-on) are not repeated here.
 
-- **Slash commands**: link every command into `~/.claude/commands` through
-  the overlay manifests. A repo's own `.claude/commands` never shows in the
-  `/` menu.
 - **Same repo on two environments**: add the parent workspace folder (e.g.
   `~/GitHub`) as the project instead of the repo, and prefix project names
   with the machine (`RW-GitHub`, `Envy-GitHub`) so the sidebar tells them
