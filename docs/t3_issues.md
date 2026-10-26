@@ -193,50 +193,58 @@ machine, are in [setup_t3_code.md](setup_t3_code.md).
   [Working on the T3 source](#working-on-the-t3-source) for the checkout and
   PR mechanics.
 
-- **A repo's own `.claude/commands` are never listed in the `/` menu
-  (upstream, verified 2026-09-30 on desktop 0.0.42 against the `v0.0.42` tag
-  and `main @ d2c9281b81`)**: a command file kept in a project's
-  `.claude/commands` does not appear when `/` is typed in a thread of that
-  project. It still runs when typed in full, because the agent loads project
-  commands itself. Only commands in `~/.claude/commands` are listed, in every
-  thread of every project.
+- **A repo's own `.claude/commands` show in that repo's `/` menu since 0.1.0
+  (fixed upstream by commit `836098543c`, "fix(server): discover Claude
+  commands in each workspace"
+  ([#15462](https://github.com/pingdotgg/t3code/pull/15462)), 2026-10-04;
+  read in the `v0.1.2` tag on 2026-10-23)**: through 0.0.45 a command kept
+  only in a project's `.claude/commands` was missing from the menu in every
+  thread, that project's included, though it ran when typed in full. The
+  Claude driver's `snapshotForCwd` copied the machine command list and looked
+  up only skills per directory. `v0.1.0` is the first stable tag with the
+  fix; envy runs 0.1.2. Seen on a 0.1.2 desktop on 2026-10-23: a command that
+  exists only in a repo's `.claude/commands`, with no link in
+  `~/.claude/commands`, is listed in a thread of that repo. The fix that
+  landed is #15462, not [#13077](https://github.com/pingdotgg/t3code/pull/13077)
+  cited here before.
 
-  **Mechanism.** T3 is built to hold a command list per working directory:
-  each workspace snapshot carries its own `slashCommands`, and the client
-  prefers it over the machine list (`resolveProviderSlashCommandsForCwd`,
-  `packages/client-runtime/src/providerSkills.ts:121`). The Cursor and
-  Antigravity drivers fill it per directory. The Claude driver does not:
-  `snapshotForCwd` (`apps/server/src/provider/Drivers/ClaudeDriver.ts:261`)
-  returns `{...machineSnapshot, skills}`, where only `skills` is looked up
-  for the thread's directory (`discoverClaudeSkills`, `ClaudeSkills.ts`,
-  which reads `~/.claude/skills` and `<cwd>/.claude/skills`). The commands
-  are the machine list, and the machine list comes from one probe run in the
-  server's own working directory (`ServerConfig.cwd`, `ClaudeDriver.ts:119`
-  and `:187`): `/` for the desktop app, the home folder under systemd. The
-  probe does pass `settingSources: user, project, local`, so a project's
-  commands would be listed only if that project were the server's start
-  directory.
+  **Mechanism (v0.1.2).** `snapshotForCwd`
+  (`apps/server/src/provider/Drivers/ClaudeDriver.ts:399`) calls
+  `probeClaudeWorkspaceSnapshot` (`ClaudeProvider.ts:453`), which runs the
+  health check's capabilities probe (`settingSources: user, project, local`)
+  with the thread's directory as `cwd`, so the list is `~/.claude/commands`
+  plus that directory's `.claude/commands`. The entry is stored under that
+  exact `cwd` (`upsertProviderWorkspaceSnapshot`, `ProviderRegistry.ts:129`).
+  A failed or timed-out probe marks it `slashCommandsPending` and keeps that
+  directory's previous list (only `/compact` for a new one); the composer
+  retries every 10 s. The client takes the entry whose `cwd` equals the
+  composer's (`resolveProviderSlashCommandsForCwd`,
+  `packages/client-runtime/src/providerSkills.ts:148`): the thread's worktree
+  path, else the project root (`apps/web/src/components/ChatView.tsx:1573`).
+  Until a directory has an entry the menu shows the machine list, whose probe
+  runs in T3's state directory (`~/.t3/userdata`, `ClaudeDriver.ts:206`) and
+  so holds user commands only.
 
-  **What follows from it.** Project skills are found per thread and project
-  commands are not. That is why every slash command here is a flat file
-  link in `~/.claude/commands`
-  ([repo_deploy_configs.md](repo_deploy_configs.md)), and why every thread
-  lists every context's commands. Moving a command into its repo alone takes
-  it out of the menu everywhere. Measured 2026-09-30: 31 commands are
-  deployed this way by 34 manifest entries, and the T3 cache on the Mac
-  lists the 29 that machine has.
+  **Other projects' menus.** One directory's commands cannot reach another's
+  menu: the server writes and reads entries by exact `cwd`
+  (`ProviderRegistry.ts:129-151` and `:916`), the client looks them up the
+  same way (`providerSkills.ts:88`), the fallback list is probed outside
+  every project, and the menu adds only the client built-ins and skills
+  (`useComposerMenuItems.ts:209`). Which folders count as the project is
+  Claude Code's own loader, read in the 2.1.309 binary T3 probes with
+  (`getProjectDirsUpToHome`): `.claude/commands` in every directory from the
+  `cwd` up to the git root, never above it, and in a git worktree with no
+  `.claude/commands` of its own, the main checkout's. The Claude CLI and the
+  desktop app's Code tab (its bundled 2.1.308) load commands the same way,
+  so neither needs the `~/.claude/commands` link inside the repo either.
 
-  **Upstream state (checked 2026-09-30).**
-  [#13077](https://github.com/pingdotgg/t3code/pull/13077), "fix(server):
-  Claude picks up project slash commands", is open and is exactly this
-  change. It is not in `main @ d2c9281b81`. It touches the provider layers
-  that are frozen for the V2 rewrite (see the entry above), so it may wait
-  for V2.
-
-  **Workaround.** Keep linking commands into `~/.claude/commands` through
-  the overlay manifests. Revisit per-repo commands when #13077 or its V2
-  equivalent ships; the check is whether a file placed in a project's
-  `.claude/commands` shows in that project's menu and in no other.
+  **What follows from it.** The menu no longer forces every slash command to
+  be a flat file link in `~/.claude/commands`
+  ([repo_deploy_configs.md](repo_deploy_configs.md)): a command kept only in
+  its repo now shows in that repo's threads and, by the code, only there.
+  The links stay as they are until moving commands into their repos is
+  decided
+  (`personal_credentials/backlog/dotfiles/claude-commands-into-their-repos.md`).
 
 - **No verbose transcript view (upstream)**: T3 has no equivalent of Claude
   Code's verbose mode — tool calls render as truncated summaries with no

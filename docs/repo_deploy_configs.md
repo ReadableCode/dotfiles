@@ -235,20 +235,17 @@ removal when the thing dropped was a link and a real file or directory now
 sits at that path (the real directory that replaced a directory link): it
 is then neither removed nor reported as drift.
 
-Slash commands are deliberately **not** per repo. T3 Code builds its command
-menu from one probe of `claude` run in its server's own working directory
-(`/` for the desktop app, the home folder under systemd), so
-`~/.claude/commands` is the only place its picker can list from. Each context
-therefore links its commands **one file at a time** into that directory, and
-the context prefix in every filename is what keeps N contexts from colliding
-in one path. Two alternatives do not work: per-repo directory links (they
-empty that menu) and per-context subfolders under `~/.claude/commands`
-(Claude Code namespaces those, so `/acme_x` becomes `/acme:acme_x`).
-A command kept only in its own repo's `.claude/commands` still runs when typed
-in full, and is missing from the menu in every thread, that repo's included.
-This was re-checked on 2026-09-30; the mechanism and the open upstream change
-that would lift it are in
-[setup_t3_code.md](setup_t3_code.md#known-issues--recommended-fixes).
+Slash commands are **not** per repo today. Each context links its commands
+**one file at a time** into `~/.claude/commands`, and the context prefix in
+every filename is what keeps N contexts from colliding in one path.
+Per-context subfolders under `~/.claude/commands` do not work: Claude Code
+namespaces those, so `/acme_x` becomes `/acme:acme_x`. The original reason
+for the user-level links, that T3 Code listed only `~/.claude/commands` in
+its `/` menu, is gone since T3 0.1.0: a command kept only in its own repo's
+`.claude/commands` now shows in that repo's threads (mechanism and version in
+[t3_issues.md](t3_issues.md)). Moving commands into their repos is an open
+decision, tracked in
+`personal_credentials/backlog/dotfiles/claude-commands-into-their-repos.md`.
 
 Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is
