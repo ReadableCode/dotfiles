@@ -22,23 +22,21 @@ See also: [`setup_stable_diffusion.md`](setup_stable_diffusion.md),
 | CPU | Ryzen 9 5900HS (8C/16T, Zen 3) | Ryzen 7 2700X (8C/16T, Zen+) |
 | RAM | 16 GB | **64 GB** |
 | GPU | RTX 3060 Laptop **6 GB**, NVIDIA/CUDA | **RTX 5070 Ti 16 GB**, NVIDIA/CUDA |
-| Free disk | ~800 GB | not checked since the GPU swap |
+| Free disk | ~800 GB | not checked |
 | Role | always on; Docker + NVIDIA toolkit working | gaming PC, Windows; on only when in use |
 
 GPU facts come from the host inventory (`personal_hosts.json`); the RyzenWhite
-column is not verified on the machine itself. This table used to list an RX
-6600 XT for RyzenWhite, which it no longer has.
+column is not verified on the machine itself.
 
 **Split by job, not one winner.**
 
-- **Zephyrus holds the LLM, stopped** (Odysseus's llama-server, below). Since
-  2026-10-02 the odysseus stack is stopped by hand (`docker compose -p
-  odysseus stop`), so its `unless-stopped` containers stay down across
-  reboots and the 6 GB GPU and ~5.5 GB of VRAM stay free for the agent
-  server. Everything stays installed: `cd ~/GitHub/odysseus && docker compose
-  up -d` brings it back, and `ODYSSEUS_LLAMA_AUTOSERVE=true` in its `.env`
-  loads the model at once. It has no Stable Diffusion setup any more
-  (retired 2026-10-02); image generation is RyzenWhite's.
+- **Zephyrus holds the LLM, stopped** (Odysseus's llama-server, below). The
+  odysseus stack is stopped by hand (`docker compose -p odysseus stop`), so
+  its `unless-stopped` containers stay down across reboots and the 6 GB GPU
+  and ~5.5 GB of VRAM stay free for the agent server. Everything stays
+  installed: `cd ~/GitHub/odysseus && docker compose up -d` brings it back,
+  and `ODYSSEUS_LLAMA_AUTOSERVE=true` in its `.env` loads the model at once.
+  Image generation is RyzenWhite's.
 - **RyzenWhite does image generation**, started by hand when wanted and closed
   before gaming: 16 GB of VRAM holds SDXL whole and makes Flux-class models
   practical. See [`setup_stable_diffusion.md`](setup_stable_diffusion.md). It
