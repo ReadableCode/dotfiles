@@ -22,28 +22,17 @@ response time 1 s up and 3 s down.
 | `CPU` | CPU_FAN (`/lpc/nct6687d/control/0`) | 40,35 50,45 60,60 70,80 78,95 85,100 |
 | `Case` | PUMP_FAN and SYS_FAN1 to 6 (`/lpc/nct6687d/control/1` to `/7`) | 40,40 55,50 65,65 75,85 85,100 |
 
-Checked against the LibreHardwareMonitor log right after the restart: at 51.8
-degrees CPU_FAN and PUMP_FAN sat at 48%, which is what both curves give there.
-The system fan headers were added later the same day; their duty went from the
-BIOS's 58 to 60% to 55% at 56 degrees, following the `Case` curve
-(see [setup_windows_sensor_logging.md](setup_windows_sensor_logging.md)).
+Check them against the sensor log
+([setup_windows_sensor_logging.md](setup_windows_sensor_logging.md)): at any
+CPU temperature each header's duty is what its curve gives there.
 
 ## Load check
 
-Ten minutes on all 12 threads, from a PowerShell arithmetic loop (no AVX, so
-lighter than Prime95), with an abort at 90 degrees C that never fired:
-
-| Phase | Tctl avg / max | Package | CPU_FAN | PUMP_FAN | VRM max |
-| --- | --- | --- | --- | --- | --- |
-| idle, 2 min before | 52.6 / 53.1 | 31.5 W | 48%, 1181 rpm | 48%, 1018 rpm | 33.0 |
-| load | 84.6 / 85.8 | 71.4 W (max 72.8) | 100%, 2547 rpm | 100%, 1777 rpm | 37.0 |
-| 90 s after | 59.5 avg, 57.8 at the end | 32.5 W | back to 58% | back to 55% | 36.0 |
-
-Tctl plateaued at 85.5 to 85.8 after about five minutes. No throttle, WHEA or
-Kernel-Power events. Both curves reach 100% at 85 degrees, so under sustained
-all-core load the fans have nothing left: a heavier load or a warmer case goes
-past 85 with no more cooling to give. During this run the system fan headers were
-still on the BIOS; they were put on the `Case` curve afterwards.
+After setting the curves, run ten minutes on all threads with a PowerShell
+arithmetic loop (no AVX, so lighter than Prime95) and an abort at 90 degrees C,
+and read Tctl, package power, fan duty and VRM from the sensor log. Look for
+throttle, WHEA or Kernel-Power events afterwards. Both curves reach 100% at 85
+degrees, so a load that holds Tctl past 85 has no more cooling to give.
 
 ## Config file format (FanControl V273)
 
