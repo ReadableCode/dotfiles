@@ -81,17 +81,16 @@ message, then `Power restored (ONLINE)`.
 - **`RUN_AS_USER pi`.** upssched and `upssched-cmd` run as pi so they can
   reach the Assistant venv under `/home/pi`. upsmon's root parent still reads
   `upsmon.conf`, so that file can stay 0640. `upssched.conf` must be readable
-  by pi, hence 0644: the trixie package's 0640 root:nut on it is what silenced
-  the 2026-09-21 outage (`Can't open /etc/nut/upssched.conf: Permission
-  denied` while upsmon kept running).
+  by pi, hence 0644: the trixie package's 0640 root:nut on it silences
+  upssched (`Can't open /etc/nut/upssched.conf: Permission denied` while
+  upsmon keeps running).
 - **Pipe in /tmp.** The package puts upssched's pipe under `/run/nut/`, which
-  is nut:nut 0770, so as pi the timer daemon never started (`Failed to
+  is nut:nut 0770, so as pi the timer daemon never starts (`Failed to
   connect to parent and failed to create parent: Permission denied` on every
-  outage through 2026-08) and the 30-second and 5-minute timers never fired.
+  outage) and the 30-second and 5-minute timers never fire.
   `PIPEFN` and `LOCKFN` point at `/tmp`, which pi can write and
   nut-monitor.service does not privatise.
-- **Release upgrades.** The trixie upgrade offered the maintainer's version of
-  every edited conffile; on raspberrypi3 that installed `MODE=none` and the
-  UPS went unmonitored for two days. Take the local version at the prompt, or
-  just let the next loop re-install the repo copies; either way the repo
-  files win.
+- **Release upgrades.** A release upgrade offers the maintainer's version of
+  every edited conffile, and taking it installs `MODE=none` and leaves the UPS
+  unmonitored. Take the local version at the prompt, or just let the next loop
+  re-install the repo copies; either way the repo files win.
