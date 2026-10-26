@@ -346,6 +346,10 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
 - New docs: add a `docs/<prefix>_<topic>.md`, one topic per file, using one
   of the existing prefix families (`repo_`, `setup_`, `homelab_`, `howto_`,
   `plan_`) and add it to `docs/README.md`.
+- `docs/setup_*.md` read start to finish as the steps to set up a machine:
+  say what is needed and when (install X if you want it and have N GB free),
+  never a log of what happened on a machine and the change it led to. Machine
+  names are fine; only client names are private.
 - Match the style of nearby code; `uv run ruff format .` settles layout and line
   length (120), so match intent and naming rather than hand-wrapping.
 - **Commit messages**: plain lowercase description of the change, matching the
