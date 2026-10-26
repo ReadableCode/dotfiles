@@ -31,7 +31,7 @@ layout must exist on the Mac and on the servers.
 | Repo | Role |
 |------|------|
 | `Docker` | Compose files, one per host. `docker_compose_projects.yaml` = the elitedesk stack. `scripts/git_pull.sh` + `scripts/redeploy.sh` = auto-deploy. |
-| `personal_credentials` | `personal.env` (KEY="value" secrets) and `personal_hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is this checkout (`receive.denyCurrentBranch=updateInstead`), so a push from any machine lands in the working tree directly. Listed in `~/GitHub/.skiprepos` so nothing tries to fetch it; `git_pull.sh` treats it as a *hub* repo and redeploys its consumers when HEAD moves. |
+| `personal_credentials` | `personal.env` (KEY="value" secrets) and `personal_hosts.json` (herdstone machine/service inventory). **Hosted on elitedesk itself** — its origin is this checkout (`receive.denyCurrentBranch=updateInstead`), so a push from any machine lands in the working tree directly. Listed in `~/GitHub/.skiprepos` so nothing tries to fetch it; `git_pull.sh` treats it as a *hub* repo and redeploys its consumers when a push moves `personal.env` or `personal_hosts.json`. |
 | `server_configs` | SWAG reverse-proxy confs per host: `application_configs/swag/<host>/proxy-confs/<app>.subdomain.conf`. Also owns elitedesk's crontabs — see [Cron](#cron-how-scheduled-jobs-are-declared). |
 | `dotfiles` | `go_apps/git_puller` (bulk repo puller, fast-forward only, reads `.skiprepos`). |
 | `herdstone` | Machine herd monitor + media remote (CLI/TUI/web). Web UI container `herdstone_web` :8787. |
@@ -57,6 +57,10 @@ Key behaviors:
   (sonarr, radarr, plex, swag, ...) are never touched.
 - A change to the `Docker` repo itself runs a plain `up -d` (recreates only
   services whose compose config changed).
+- A pull that changes only documentation (markdown anywhere, `docs/`,
+  `backlog/`) is pulled but deploys nothing, in every repo including `Docker`
+  and `server_configs`; the log says `PULLED <repo>: docs only, nothing to
+  deploy`.
 - Ignore list: `~/GitHub/.skiprepos` (one repo name per line; shared with the
   go git_puller). Contains `personal_credentials` and every other
   credentials repo whose git hub lives on this box. Deployed like any other
@@ -66,10 +70,12 @@ Key behaviors:
 - **Hub repos** (skipped, mapped to services, updated in place by push):
   `personal_credentials`. The loop compares HEAD with the rev it last
   deployed, recorded in `~/GitHub/.git_pull_state/<repo>.rev`, and recreates
-  the mapped services (herdstone-web, syncplex-web) when it moved. So a push
-  of `personal.env` or `personal_hosts.json` from any machine is live within
-  5 minutes like everything else, with no manual `redeploy.sh` step. Delete
-  the state file to force one redeploy.
+  the mapped services (herdstone-web, syncplex-web) only when the push moved
+  a file they read (`HUB_FILES` in the script: `personal.env`,
+  `personal_hosts.json`). So a push of either from any machine is live within
+  5 minutes like everything else, with no manual `redeploy.sh` step, and a
+  push of anything else there (backlog entries, the generated deploy map)
+  logs `nothing to redeploy`. Delete the state file to force one redeploy.
 - **dotfiles on this box**: root's loop pulls every repo but
   never clones a newly declared one or links anything, so jason's crontab
   (`jason.cron`, minute 5 of every quarter hour) runs the two steps
