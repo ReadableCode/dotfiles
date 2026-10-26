@@ -1232,8 +1232,11 @@ def cmd_merge_pr(args):
     they land; GitHub refuses auto-merge on a PR that can already merge, hence
     the split. Any other state (a conflict, a base that must be current, a
     failing check, a draft) is reported for a human rather than worked around.
-    --disable-auto-merge does the one opposite thing: it clears a queued
-    auto-merge so an approval no longer merges the PR on its own.
+    --allow-failing-checks is that human's call: it also merges an "unstable"
+    PR, one whose only fault is a failing or pending check that branch
+    protection does not require. --disable-auto-merge does the one opposite
+    thing: it clears a queued auto-merge so an approval no longer merges the PR
+    on its own.
     """
     provider, repo = repo_spec(args.repo)
     if provider == "bitbucket":
@@ -1263,7 +1266,7 @@ def cmd_merge_pr(args):
         pull = http_json("GET", pull_url, headers)
     state = pull.get("mergeable_state")
     result = {"pr": number, "mergeable_state": state, "url": pull["html_url"]}
-    if state in MERGE_NOW_STATES:
+    if state in MERGE_NOW_STATES or (state == "unstable" and args.allow_failing_checks):
         merged = http_json(
             "PUT", f"{pull_url}/merge", headers, payload={"merge_method": args.method, "sha": pull["head"]["sha"]}
         )
@@ -1276,7 +1279,8 @@ def cmd_merge_pr(args):
         raise SystemExit(
             f"PR #{number} can neither merge nor queue auto-merge from mergeable_state "
             f"{state!r}: dirty is a conflict, behind needs update-branch, unstable is "
-            f"a failing or pending check (pr-status), draft needs request-review"
+            f"a failing or pending check (pr-status; --allow-failing-checks merges it anyway), "
+            f"draft needs request-review"
         )
     if not pull.get("auto_merge"):
         mutation = (
@@ -2874,6 +2878,11 @@ def build_parser():
     )
     merge.add_argument(
         "--disable-auto-merge", action="store_true", help="clear a queued auto-merge instead of merging or queueing"
+    )
+    merge.add_argument(
+        "--allow-failing-checks",
+        action="store_true",
+        help="GitHub: also merge an 'unstable' PR, whose failing or pending checks are not required",
     )
     merge.set_defaults(func=cmd_merge_pr)
 

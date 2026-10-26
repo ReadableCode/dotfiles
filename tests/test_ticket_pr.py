@@ -2247,6 +2247,25 @@ def test_merge_pr_refuses_a_pr_with_a_failing_check(monkeypatch):
     assert calls == [("GET", "https://api.github.com/repos/owner/name/pulls/12", None)]
 
 
+def test_merge_pr_merges_a_pr_with_a_failing_check_when_allowed(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(
+        monkeypatch, {"/merge": {"sha": "def456", "merged": True}, "/pulls/12": _github_pull("unstable")}
+    )
+    ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12", "--allow-failing-checks"])
+    base = "https://api.github.com/repos/owner/name/pulls/12"
+    assert calls == [("GET", base, None), ("PUT", f"{base}/merge", {"merge_method": "squash", "sha": "abc123"})]
+    assert json.loads(capsys.readouterr().out.strip().splitlines()[-1])["merged"] is True
+
+
+def test_merge_pr_still_refuses_a_conflict_when_failing_checks_are_allowed(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    calls = _record_http(monkeypatch, {"/pulls/12": _github_pull("dirty")})
+    with pytest.raises(SystemExit, match="'dirty'"):
+        ticket_pr.main(["merge-pr", "--repo", "owner/name", "--pr", "12", "--allow-failing-checks"])
+    assert calls == [("GET", "https://api.github.com/repos/owner/name/pulls/12", None)]
+
+
 def test_merge_pr_disables_a_queued_auto_merge(monkeypatch, capsys):
     monkeypatch.setenv("GITHUB_TOKEN", "tok")
     calls = _record_http(
