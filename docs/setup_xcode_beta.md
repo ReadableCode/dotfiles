@@ -15,11 +15,12 @@ Xcode is a per-host install, not a fleet one. Nothing in `app_lists/Brewfile`
 or a context's `<context>_app_lists.yaml` installs it, so bootstrap and
 myupdater never put it on a Mac; this page is the only way it arrives.
 
-| Host | Xcode | Why |
-|---|---|---|
-| MacBookProM5 | Yes, internal-only layout: `/Applications/Xcode-beta.app`, iOS + watchOS runtimes | The iOS / iPadOS / watchOS dev Mac. 460 GB internal, so everything stays on the default internal paths. |
-| Envy | **Not now.** Command Line Tools only | 228 GB internal and short on free space: the simulator runtimes (~20 GB on 27.2) must live on the internal disk whatever the layout, so the external SSD cannot take that part of the load. Envy ran Xcode 27 beta 3 in the external-SSD layout (`/Volumes/EnvyExtSSD`) earlier in 2026 and it has since been removed. If Envy gets Xcode back, use that layout and change this row first. |
-| Any other Mac | No | Add a row here first if one ever should. |
+Install Xcode if you want to build for iOS, iPadOS or watchOS and the Mac has
+the free internal space: about 30 GB for the internal-only layout, or about
+25 GB for the external-SSD layout, which moves the app and Derived Data to an
+APFS external drive. The simulator runtimes (~20 GB for iOS and watchOS on
+27.2) stay on the internal disk in either layout. Without that space, keep
+Command Line Tools only.
 
 Homebrew's Command Line Tools stay on every Mac; they are not Xcode and build
 nothing for iOS or watchOS.
@@ -266,7 +267,7 @@ Worth aliasing (`alias simoff='xcrun simctl shutdown all'`). Occasionally-orphan
 
 ## Quick-reference: full command sequence
 
-### Internal-only layout (MacBookProM5)
+### Internal-only layout
 
 ```bash
 # download the matching beta .xip to ~/Downloads via browser, then:
@@ -283,7 +284,7 @@ xcodebuild -downloadPlatform watchOS
 xcrun simctl list runtimes
 ```
 
-### External-SSD layout (Envy, if it ever gets Xcode back)
+### External-SSD layout
 
 ```bash
 # download the matching beta .xip to /Volumes/EnvyExtSSD via browser, then:
@@ -308,7 +309,7 @@ Internal-only skips the Derived Data relocation entirely; defaults are correct w
 
 ## Disk budget summary
 
-| | Internal-only (MacBookProM5) | External-SSD |
+| | Internal-only | External-SSD |
 |---|---|---|
 | Internal cost | ~4 GB app + ~20 GB (iOS + watchOS runtimes, 27.2) + simulator device data and Derived Data over time | ~20 GB (iOS + watchOS runtimes, 27.2) + simulator device data over time |
 | Practical minimum free internal before starting | ~30 GB | ~25 GB |
