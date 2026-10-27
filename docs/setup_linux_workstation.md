@@ -135,25 +135,25 @@ busctl get-property org.freedesktop.login1 /org/freedesktop/login1 \
 
 ## Screen Sharing (Fedora GNOME)
 
-A Fedora workstation on GNOME/Wayland shares its own session over VNC through
-gnome-remote-desktop, so VNC shows exactly what its screen shows. These are
-per-user GNOME settings (dconf, and the VNC password in the login keyring),
-which the deployer cannot link, so they are set by hand once per machine with
-the commands in [setup_vnc_server.md](./setup_vnc_server.md), "GNOME session
-sharing", to these values:
+A Fedora workstation on GNOME/Wayland shares its own live session through
+gnome-remote-desktop's RDP Desktop Sharing, so the remote view is exactly what
+its screen shows. Nothing is set by hand: give the host's inventory record a
+`remote_desktop` block, add its dconf keyfile and certificate as manifest
+entries, and `gitpullall` applies them. The settings, the reason it is RDP and
+not VNC, and the inventory block are in
+[setup_vnc_server.md](./setup_vnc_server.md), "GNOME session sharing".
 
 | Setting | Value |
 | --- | --- |
-| `org.gnome.desktop.remote-desktop.vnc enable` | `true` |
-| `auth-method` | `password` (set with `grdctl vnc set-password`, at most 8 characters) |
+| `org.gnome.desktop.remote-desktop.rdp enable` | `true` |
 | `view-only` | `false` |
-| `encryption` | `['none', 'tls-anon']`, so macOS Screen Sharing can use VNC Auth |
-| `screen-share-mode` | `mirror-primary` (the default) |
-| `gnome-remote-desktop.service` | user unit, enabled |
+| `port` / `negotiate-port` | `3389` / `false` |
+| `screen-share-mode` | `mirror-primary` |
+| `tls-cert` / `tls-key` | `~/.local/share/gnome-remote-desktop/rdp-tls.{crt,key}`, linked from the credentials repo |
+| `org.gnome.desktop.remote-desktop.vnc enable` | `false` |
+| username and password | in the keyring, set from the inventory by `src/remote_desktop_credentials.py` |
 
-Check a machine with `grdctl status` and
-`gsettings list-recursively org.gnome.desktop.remote-desktop.vnc`. It shares
-only a logged-in session.
+It shares only a logged-in session.
 
 ## OpenSSH Server
 

@@ -17,6 +17,17 @@ every Pi runs, offers only VeNCrypt, RSA-AES and RA2. macOS Screen Sharing
 speaks VNC Auth and Apple ARD, so it cannot negotiate at all - it fails before
 asking for a password. TigerVNC speaks every one of them, so a single viewer
 reaches the Pis, the Windows boxes running TightVNC, and the Macs.
+
+A host whose inventory record carries an rdp ``remote_desktop`` block gets
+FreeRDP instead (``--rdp <name>``): a GNOME desktop on Wayland shares its live
+session only through gnome-remote-desktop, whose VNC side Fedora offers as
+anonymous TLS or unencrypted VNC Auth, and its RDP side as TLS. The record
+names the user, the env var holding the password and the certificate's sha256
+fingerprint; the whole command line goes to FreeRDP on stdin
+(``/args-from:stdin``), so the password never appears in a process list, and the
+pinned fingerprint means no trust prompt and no other certificate accepted.
+FreeRDP is Apache-2.0 on every platform: Homebrew's ``freerdp``, Fedora's
+``freerdp``, Debian's ``freerdp3-sdl`` and MSYS2's ucrt64 package on Windows.
 """
 
 # %%
@@ -28,10 +39,26 @@ import shutil
 import subprocess
 import sys
 
+from utils.inventory_tools import find_host_record
+from utils.secret_tools import resolve_secret
+
 # %%
 # Variables #
 
 DEFAULT_VNC_PORT = 5900
+DEFAULT_RDP_PORT = 3389
+DEFAULT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# FreeRDP's SDL client. Debian suffixes its binaries with the major version;
+# Fedora and Homebrew do not. MSYS2 installs outside PATH on Windows.
+RDP_VIEWERS = ("sdl-freerdp", "sdl-freerdp3")
+MSYS2_ROOT = r"C:\msys64"
+WINDOWS_RDP_VIEWER = MSYS2_ROOT + r"\ucrt64\bin\sdl-freerdp.exe"
+WINDOWS_RDP_PACKAGE = "mingw-w64-ucrt-x86_64-freerdp"
+
+# Mirrored sessions are the size of the remote screen, which may not fit this
+# one: smart-sizing scales it to the window. The clipboard is shared both ways.
+RDP_ARGS = ["/smart-sizing", "+clipboard"]
 
 
 # The macOS cask installs an .app rather than something on PATH, so that one is
@@ -90,6 +117,29 @@ def viewer_plan(key):
     return "vncviewer", package, argv
 
 
+def rdp_plan(key):
+    """(viewer candidates, package, install argv) for FreeRDP on a platform key."""
+    if key == "darwin":
+        return list(RDP_VIEWERS), "freerdp", ["brew", "install", "freerdp"]
+    if key == "windows":
+        pacman = MSYS2_ROOT + r"\usr\bin\pacman.exe"
+        return [WINDOWS_RDP_VIEWER], WINDOWS_RDP_PACKAGE, [pacman, "-S", "--noconfirm", WINDOWS_RDP_PACKAGE]
+    if shutil.which("apt-get"):
+        return list(RDP_VIEWERS), "freerdp3-sdl", ["sudo", "apt-get", "install", "-y", "freerdp3-sdl"]
+    if shutil.which("dnf"):
+        return list(RDP_VIEWERS), "freerdp", ["sudo", "dnf", "install", "-y", "freerdp"]
+    return list(RDP_VIEWERS), None, None
+
+
+def find_any_viewer(viewers):
+    """The first of several candidate viewers that is installed, or None."""
+    for viewer in viewers:
+        found = find_viewer(viewer)
+        if found:
+            return found
+    return None
+
+
 def find_viewer(viewer):
     """The runnable viewer path, or None. An absolute path is checked directly, a bare name on PATH."""
     if os.path.isabs(viewer):
@@ -109,7 +159,7 @@ def ask_yes_no(question):
         return False
 
 
-def offer_install(viewer, package, install_argv, ask=None, run=subprocess.call):
+def offer_install(viewer, package, install_argv, ask=None, run=subprocess.call, name="TigerVNC"):
     """
     Offer to install just the viewer, returning its path once present.
 
@@ -123,9 +173,10 @@ def offer_install(viewer, package, install_argv, ask=None, run=subprocess.call):
     needs. The prompt is still there, and nothing installs without a terminal.
     """
     ask = ask or ask_yes_no
-    print(f"The VNC viewer is not installed on this machine (looked for {viewer}).")
+    viewers = viewer if isinstance(viewer, list) else [viewer]
+    print(f"The viewer is not installed on this machine (looked for {', '.join(viewers)}).")
     if not package or not install_argv:
-        print("No known package manager on this machine; install TigerVNC by hand.")
+        print(f"No known package manager on this machine; install {name} by hand.")
         return None
     if not sys.stdin.isatty():
         print(f"Not running on a terminal, so not prompting. Install {package}, then try again.")
@@ -133,7 +184,7 @@ def offer_install(viewer, package, install_argv, ask=None, run=subprocess.call):
     if not ask("Install {} now? [y/N] ".format(" ".join(install_argv))):
         return None
     run(install_argv)
-    return find_viewer(viewer)
+    return find_any_viewer(viewers)
 
 
 # %%
@@ -156,6 +207,45 @@ def connect(target, port=DEFAULT_VNC_PORT, platform_token=None, run=subprocess.c
     return run([found] + VIEWER_ARGS + [f"{target}::{int(port)}"])
 
 
+def rdp_target(name, root=DEFAULT_ROOT):
+    """(host, port, user, password, fingerprint) for an inventory host with an rdp remote_desktop block."""
+    context, record = find_host_record(name, root)
+    block = (record or {}).get("remote_desktop") or {}
+    if block.get("protocol") != "rdp":
+        raise ValueError(f"{name}: no rdp remote_desktop block in any inventory under {root}")
+    panel = {
+        "name": record["name"],
+        "password_env": block["password_env"],
+        "env_file": block.get("env_file"),
+        "_base_dir": os.path.join(root, f"{context}_credentials"),
+    }
+    host = record.get("hostname") or record["name"]
+    port = int(block.get("port") or DEFAULT_RDP_PORT)
+    return host, port, block["user"], resolve_secret(panel, "password_env"), block["fingerprint"]
+
+
+def rdp_arguments(host, port, user, password, fingerprint):
+    """FreeRDP's command line, one argument per line, for /args-from:stdin. An empty line ends it."""
+    lines = [f"/v:{host}:{int(port)}", f"/u:{user}", f"/p:{password}", f"/cert:fingerprint:{fingerprint}"]
+    return "\n".join(lines + RDP_ARGS) + "\n\n"
+
+
+def run_with_input(argv, text):
+    return subprocess.run(argv, input=text, text=True).returncode
+
+
+def connect_rdp(name, platform_token=None, run=run_with_input, install=subprocess.call, ask=None, root=DEFAULT_ROOT):
+    """Launch FreeRDP at an inventory host, offering to install it when missing."""
+    target = rdp_target(name, root)
+    viewers, package, install_argv = rdp_plan(platform_key(platform_token))
+    found = find_any_viewer(viewers)
+    if not found:
+        found = offer_install(viewers, package, install_argv, ask=ask, run=install, name="FreeRDP")
+    if not found:
+        return 1
+    return run([found, "/args-from:stdin"], rdp_arguments(*target))
+
+
 # %%
 # Main #
 
@@ -164,10 +254,15 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description="Open a VNC viewer at a host, offering to install the viewer when it is missing."
     )
-    parser.add_argument("target", help="hostname or address of the VNC server")
+    parser.add_argument("target", nargs="?", help="hostname or address of the VNC server")
     parser.add_argument("port", nargs="?", type=int, default=DEFAULT_VNC_PORT, help="VNC port (default 5900)")
+    parser.add_argument("--rdp", metavar="NAME", help="connect over RDP to this inventory host instead")
     parser.add_argument("--platform", default=None, help="platform token, for testing (defaults to sys.platform)")
     args = parser.parse_args(argv)
+    if args.rdp:
+        return connect_rdp(args.rdp, args.platform)
+    if not args.target:
+        parser.error("a target is required without --rdp")
     return connect(args.target, args.port, args.platform)
 
 

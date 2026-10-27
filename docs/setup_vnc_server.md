@@ -32,6 +32,7 @@ a refresh offers it.
 | Linux (apt) | TigerVNC Viewer | the same file (`apt: tigervnc-viewer`) |
 | Linux (Fedora) | TigerVNC Viewer | the same file (`dnf: tigervnc`) |
 | Android | AVNC | F-Droid |
+| any, for an RDP host | FreeRDP (`sdl-freerdp`, Apache-2.0) | the same file (`brew: freerdp`, `dnf: freerdp`, `apt: freerdp3-sdl`); on Windows MSYS2's `mingw-w64-ucrt-x86_64-freerdp`, offered on first use |
 | iOS | *(none - see below)* | |
 
 ### Which viewer an alias picks, and why it matters
@@ -66,6 +67,11 @@ server offers:
 | TightVNC 2.8 (RyzenWhite) | VNC Auth, Tight | yes |
 | x0vncserver / Xtigervnc | VeNCrypt, VNC Auth | yes |
 | wayvnc (the Pis) | VeNCrypt, RSA-AES, RA2 | **no** |
+| gnome-remote-desktop (Fedora) | anonymous TLS (18) only | **no, and TigerVNC neither** |
+
+A host whose record carries an rdp `remote_desktop` block keeps its
+`vnc<stem>` alias, but it launches FreeRDP from every platform: see "GNOME
+session sharing" below.
 
 The portables (UltraPocket, MacBookProM5) run no screen server at all. VNC
 Auth is a password-only protocol (an 8-byte DES challenge, no encryption, no
@@ -347,38 +353,62 @@ systemctl --user disable --now vncserver@1   # and across reboots
   this belongs on the LAN, not on anything port-forwarded.
 - No firewall work is needed on NukBuntu - ufw is disabled there.
 
-## GNOME session sharing (gnome-remote-desktop)
+## GNOME session sharing (gnome-remote-desktop, over RDP)
 
 For a Fedora box whose console runs GNOME on Wayland - JasonZephyrus. Neither
-path above fits it: x0vncserver can only scrape an X display, and an Xtigervnc
-virtual desktop is a second session, so VNC would show something the laptop
-screen does not. GNOME's own server mirrors the logged-in session instead
-(`screen-share-mode` `mirror-primary`): one desktop, the same on the laptop
-and over VNC. `gnome-remote-desktop` ships with Fedora Workstation and is built
-with its VNC backend. Everything below is per user, so no sudo.
+path above fits it: x0vncserver can only scrape an X display (Fedora 44 ships
+no X11 session at all), and an Xtigervnc virtual desktop is a second session,
+so it would show something the laptop screen does not. GNOME's own
+`gnome-remote-desktop` mirrors the logged-in session instead
+(`screen-share-mode` `mirror-primary`): the screen as it was left, which stays
+as it was after a disconnect. This is RDP Desktop Sharing, not Remote Login:
+no new session is made.
 
-```bash
-grdctl vnc set-auth-method password
-grdctl vnc disable-view-only
-gsettings set org.gnome.desktop.remote-desktop.vnc encryption "['none', 'tls-anon']"
-grdctl vnc enable
-grdctl vnc set-password            # at most 8 characters: VNC Auth is a DES key
-systemctl --user enable --now gnome-remote-desktop.service
+It is served over RDP, not VNC. Fedora's VNC side offers anonymous TLS
+(security type 18), which neither TigerVNC nor macOS Screen Sharing speaks
+(TigerVNC: "No matching security types"), or unencrypted VNC Auth; setting
+`encryption` to `['none', 'tls-anon']` is rejected ("Invalid VNC encryption
+setting, falling back to TLS-ANON"). RDP is TLS with a certificate the clients
+pin.
+
+Nothing is set by hand. The host's records do it, and `gitpullall` applies
+them:
+
+| Piece | Where it lives | Applied by |
+| --- | --- | --- |
+| Settings: RDP on, view-only off, port 3389 with no negotiation, VNC off, the certificate paths | `server_configs/system_configs/<host>/dconf/local.d/50-remote-desktop`, every key locked in `locks/remote-desktop` so a value saved earlier in the user's dconf cannot win | `method: system` manifest entries, `reload: dconf update` |
+| TLS certificate and key | `personal_credentials/remote_desktop/<host>/rdp-tls.{crt,key}`, linked to `~/.local/share/gnome-remote-desktop/` | link manifest entries |
+| Username and password | the inventory record's `remote_desktop` block names the user and the env var in `personal.env` | `src/remote_desktop_credentials.py`, step 5b of `refresh_machine.py`, which writes them to the keyring with `grdctl` |
+| The viewer | `freerdp` in the context app lists | the app-list installers, or `vnc_connect.py` on first use |
+
+The inventory block:
+
+```json
+"remote_desktop": {
+  "protocol": "rdp",
+  "port": 3389,
+  "user": "jason",
+  "password_env": "JASONZEPHYRUS_RDP_PASSWORD",
+  "env_file": "personal.env",
+  "fingerprint": "sha256:<openssl x509 -noout -fingerprint -sha256 -in rdp-tls.crt>"
+}
 ```
 
-Over ssh, export `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus`
-first, or the settings land on a throwaway bus.
+With it the host's `vnc<stem>` alias runs `vnc_connect.py --rdp <name>`, which
+starts FreeRDP's SDL client on every platform with the whole command line on
+stdin (`/args-from:stdin`), so the password is in no process list, and with
+`/cert:fingerprint:` so no other certificate is accepted and nothing prompts.
 
-- **Encryption is the setting that matters for a Mac.** The default
-  `['tls-anon']` offers only security type 18, which macOS Screen Sharing
-  cannot speak, so it fails with the "make sure Screen Sharing is enabled"
-  dialog. Adding `none` offers VNC Auth (type 2) as well (the server then
-  offers `[2, 18]`), which is why the inventory sets `vnc_screen_sharing:
-  true` and the alias opens Screen Sharing on 5900.
-- **It shares only a logged-in session.** After a reboot nothing is served
-  until someone signs in at the laptop.
-- The `RDP server certificate is invalid` lines `grdctl` prints come from the
-  RDP backend, which stays disabled; they are harmless.
+A new certificate is made with
+`openssl req -new -newkey rsa:4096 -days 3650 -nodes -x509 -subj /CN=<host> -out rdp-tls.crt -keyout rdp-tls.key`,
+and its fingerprint goes into the inventory in the same commit.
+
+- **It shares only a logged-in session**, and the keyring holding the login
+  is unlocked only then. After a reboot nothing is served until someone signs
+  in at the laptop.
+- Read the state with `grdctl status` (over ssh, export
+  `DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus` first) and
+  `gsettings list-recursively org.gnome.desktop.remote-desktop.rdp`.
 
 ## Install TightVNC on Windows
 

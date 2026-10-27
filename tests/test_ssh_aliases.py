@@ -205,6 +205,30 @@ def test_a_non_default_port_reaches_the_wrapper(tmp_path):
     assert aliases(tmp_path)["vncenvy"] == vnc_call("192.168.1.20", 5900)
 
 
+RDP_HOST = {
+    "name": "Laptop",
+    "hostname": "192.168.1.30",
+    "user": "jason",
+    "os": "linux",
+    "aliases": ["sshlaptop"],
+    "remote_desktop": {"protocol": "rdp", "user": "jason", "password_env": "X", "fingerprint": "sha256:AA"},
+}
+
+
+@pytest.mark.parametrize("platform_token", ["darwin", "linux", "win32"])
+def test_an_rdp_host_keeps_its_vnc_alias_and_gets_freerdp_everywhere(tmp_path, platform_token):
+    """GNOME on Wayland shares its live session over RDP; the alias name stays vnc<stem>."""
+    write_inventory(tmp_path, "personal", [RDP_HOST])
+    expected = "python3 {} --rdp Laptop".format(ssh_aliases.VNC_CONNECT)
+    assert aliases(tmp_path, platform_token=platform_token)["vnclaptop"] == expected
+
+
+def test_a_remote_desktop_block_for_another_protocol_changes_nothing(tmp_path):
+    host = dict(RDP_HOST, remote_desktop={"protocol": "spice"})
+    write_inventory(tmp_path, "personal", [host])
+    assert aliases(tmp_path)["vnclaptop"] == vnc_call("192.168.1.30")
+
+
 def test_a_host_that_cannot_serve_a_screen_gets_no_vnc_alias(tmp_path):
     """An android tablet or a switch would only get an alias that never connects."""
     write_inventory(tmp_path, "personal", [dict(VNC_HOST, os="android")])

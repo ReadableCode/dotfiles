@@ -248,6 +248,16 @@ is the one-paragraph orientation so an agent knows which file to open.
   `ssh_aliases.py`, one file for every platform. TigerVNC and not the native
   client because wayvnc offers only VeNCrypt/RSA-AES/RA2 and macOS Screen
   Sharing speaks neither. Doc: `docs/setup_vnc_server.md`, "Clients".
+  A host whose record carries an rdp `remote_desktop` block gets FreeRDP
+  instead (`--rdp <name>`), its whole command line on stdin and the
+  certificate pinned by fingerprint: GNOME on Wayland shares its live session
+  only through gnome-remote-desktop, whose VNC side no viewer here can use.
+- **`remote_desktop_credentials.py`** - step 5b of `refresh_machine.py`: on a
+  host whose record has that block, writes the RDP username and password
+  (from the context's env file) to the keyring through `grdctl`, the one part
+  of gnome-remote-desktop no deployed file can hold. Its settings and
+  certificate are manifest entries. `--check` is read-only. Doc:
+  `docs/setup_vnc_server.md`, "GNOME session sharing".
 - **`fleet_check.py`** - asks every ssh-reachable machine in the inventories the
   same read-only question at once (default `gitpullall --check`) and prints one
   row per host: ok, drift, unreachable, failed, or no command. Hosts and their

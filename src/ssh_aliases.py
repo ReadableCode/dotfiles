@@ -52,6 +52,10 @@ asks for a password (proven against pi4a, 2026-09-20). TigerVNC speaks all of
 them, so one viewer covers wayvnc on the Pis, TightVNC on the Windows boxes and
 Screen Sharing on the Macs.
 
+A host with an rdp ``remote_desktop`` block keeps its ``vnc<stem>`` alias but
+gets FreeRDP through ``vnc_connect.py --rdp <name>``, which reads the address,
+user, password and certificate fingerprint from the same record.
+
 Anything wrong with an inventory - a file that will not parse, an alias name
 that is not a bare word - raises and exits non-zero, so the shells define
 NOTHING and say why. There is no partial-success mode on purpose: these are
@@ -238,6 +242,12 @@ def serves_screen_sharing(host):
     return bool(host.get("vnc_screen_sharing"))
 
 
+def uses_rdp(host):
+    """Whether the host serves its screen over RDP: an inventory ``remote_desktop`` block with protocol rdp."""
+    block = host.get("remote_desktop")
+    return isinstance(block, dict) and block.get("protocol") == "rdp"
+
+
 def vnc_command(host, platform_token):
     """
     The vncviewer command line for a host, or None if it cannot serve a screen.
@@ -272,6 +282,10 @@ def vnc_command(host, platform_token):
     # leave the LAN and keep 5900 closed) says so and gets no vnc alias.
     if host.get("vnc_server") is False:
         return None
+    # A host serving its screen over RDP (GNOME on Wayland, see vnc_connect.py)
+    # keeps the vnc<stem> name; vnc_connect.py reads the rest of the record.
+    if uses_rdp(host):
+        return "{} --rdp {}".format(viewer_for_platform(platform_token), host["name"])
     target = host.get("vnc_hostname") or host_target(host)
     if not target:
         return None

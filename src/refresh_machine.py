@@ -63,6 +63,9 @@ HELP_PAGE = """# refresh_machine
    runs `src/sync_python_envs.py`
 5. deploy configs from the manifests, for this host and platform
    runs `src/deploy_configs.py`
+5b. set the remote desktop login in the keyring, on a host whose inventory record declares an rdp `remote_desktop`
+   the one part of gnome-remote-desktop no file can hold; its settings and certificate deploy in step 5
+   runs `src/remote_desktop_credentials.py`
 6. prune config paths a removals file names and no manifest entry still wants
    runs `src/deploy_configs.py prune --apply`
 7. with `--packages` only: offer to uninstall apps an app removals file retired, asking [y/N/q] per app
@@ -241,6 +244,11 @@ def check_steps(git_dir, dotfiles, windows, powershell, packages, pull_only):
             family="deploy",
         ),
         Step(
+            "checking the remote desktop login",
+            uv_python(dotfiles, "remote_desktop_credentials.py", "--check"),
+            needs="uv",
+        ),
+        Step(
             "checking for configs to prune",
             uv_python(dotfiles, "deploy_configs.py", "prune"),
             needs="uv",
@@ -404,6 +412,7 @@ def build_steps(
         Step("checking for repos to clone", uv_python(dotfiles, "clone_repos.py"), needs="uv", family="clone"),
         Step("syncing python environments", uv_python(dotfiles, "sync_python_envs.py"), needs="uv", family="env"),
         Step("deploying configs", uv_python(dotfiles, "deploy_configs.py"), needs="uv", family="deploy"),
+        Step("setting the remote desktop login", uv_python(dotfiles, "remote_desktop_credentials.py"), needs="uv"),
         Step(
             "pruning removed configs",
             uv_python(dotfiles, "deploy_configs.py", "prune", "--apply"),
