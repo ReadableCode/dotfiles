@@ -18,7 +18,10 @@ only through ``grdctl``. So this runs as a refresh step after the deploy:
 on the host's record in ``<context>_hosts.json`` names the user and the env var
 holding the password, in ``env_file`` beside the inventory. The keyring copy is
 read with ``grdctl status --show-credentials`` and set only when it differs;
-the password goes to ``grdctl`` on stdin, never on its command line. A host
+the password goes to ``grdctl`` on stdin, never on its command line. When the
+login changed or nothing listens on the RDP port, the user's
+``gnome-remote-desktop.service`` is restarted: the daemon starts RDP only from
+what it reads at startup. A host
 with no ``remote_desktop`` block, or one whose protocol is not rdp, is not
 governed and nothing runs.
 
@@ -38,6 +41,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import time
 
 from utils.inventory_tools import find_host_record
 from utils.secret_tools import resolve_secret
@@ -108,7 +112,21 @@ def set_credentials(user, password, env, run=subprocess.run):
     run(["grdctl", "rdp", "set-credentials", user], env=env, input=password + "\n", text=True, check=True)
 
 
-def sync(hostname, root, check=False, run=subprocess.run, which=shutil.which, environ=None):
+def listening(port, host="127.0.0.1", timeout=2):
+    """Whether something accepts connections on the RDP port."""
+    try:
+        with socket.create_connection((host, int(port)), timeout):
+            return True
+    except OSError:
+        return False
+
+
+def restart_daemon(env, run=subprocess.run):
+    """Restart the user's gnome-remote-desktop, which starts RDP only from settings it reads at startup."""
+    run(["systemctl", "--user", "restart", "gnome-remote-desktop.service"], env=env, check=True)
+
+
+def sync(hostname, root, check=False, run=subprocess.run, which=shutil.which, environ=None, is_listening=listening):
     """Bring this host's RDP login in line with its inventory record. Returns an exit code."""
     context, record = find_host_record(hostname, root)
     if rdp_block(record) is None:
@@ -116,16 +134,37 @@ def sync(hostname, root, check=False, run=subprocess.run, which=shutil.which, en
     if not which("grdctl"):
         print(f"{record['name']} declares an rdp remote_desktop, but grdctl is not installed here.")
         return 1
+    block = rdp_block(record)
+    port = int(block.get("port") or 3389)
     user, password = wanted_credentials(context, record, root)
     env = session_environ(environ)
-    if current_credentials(env, run=run) == (user, password):
-        print(f"remote desktop login for {user} is current")
+    current = current_credentials(env, run=run) == (user, password)
+    up = is_listening(port)
+    if current and up:
+        print(f"remote desktop login for {user} is current and port {port} is listening")
         return 0
     if check:
-        print(f"remote desktop login for {user} differs from the inventory; a refresh would set it")
+        if not current:
+            print(f"remote desktop login for {user} differs from the inventory; a refresh would set it")
+        if not up:
+            print(f"nothing listens on port {port}; a refresh would restart gnome-remote-desktop")
         return 0
-    set_credentials(user, password, env, run=run)
-    print(f"remote desktop login for {user} set from {rdp_block(record)['password_env']}")
+    if not current:
+        set_credentials(user, password, env, run=run)
+        print(f"remote desktop login for {user} set from {block['password_env']}")
+    # The daemon reads the RDP settings, certificate and login when it starts;
+    # a change it hears about while running (the deploy's dconf update lands
+    # before the certificate links do) leaves RDP off until a restart.
+    restart_daemon(env, run=run)
+    if not is_listening(port):
+        time.sleep(3)
+    if not is_listening(port):
+        print(
+            f"gnome-remote-desktop restarted, but nothing listens on port {port}; "
+            "see journalctl --user -u gnome-remote-desktop"
+        )
+        return 1
+    print(f"gnome-remote-desktop restarted, rdp listening on port {port}")
     return 0
 
 
