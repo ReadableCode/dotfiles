@@ -238,7 +238,7 @@ uv run python src/deploy_configs.py
 then log out and back in — autostart entries only run at session start. The
 entry is host-filtered (EliteDesk today) in the personal overlay manifest,
 because not every Linux box should answer on 5900; JasonZephyrus shares its
-Wayland session through [GNOME Remote Desktop](#gnome-session-sharing-gnome-remote-desktop)
+Wayland session over RDP through [GNOME Remote Desktop](#gnome-session-sharing-gnome-remote-desktop-over-rdp)
 instead, since x0vncserver can only scrape an X display. To add a machine, add its name to that entry's `hosts:` list. If its
 checkout path or username is not `/home/jason/GitHub`, add a
 `start_x0vncserver.<host>.desktop` variant next to the payload — `.desktop`

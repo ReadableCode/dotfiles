@@ -128,10 +128,10 @@ actually needed.
 - T3 threads have no computer use (`docs/setup_t3_code.md`, "What T3
   replaces"), so the server drives the browser through a browser-automation
   MCP server with a persistent profile, in the laptop's own GNOME session.
-  There is one desktop only: VNC mirrors that session through
-  gnome-remote-desktop (`docs/setup_vnc_server.md`, "GNOME session
-  sharing"), so nothing runs over VNC that the laptop screen does not show.
-  Logins and 2FA are typed by hand into that browser over VNC, and a password
+  There is one desktop only: `vnczephyrus` mirrors that session over RDP
+  through gnome-remote-desktop (`docs/setup_vnc_server.md`, "GNOME session
+  sharing"), so nothing runs remotely that the laptop screen does not show.
+  Logins and 2FA are typed by hand into that browser over that connection, and a password
   manager extension unlocked there fills the rest; passwords never go through
   chat.
 - The three T3 Connect slots go to Envy, the work laptop and JasonZephyrus.
