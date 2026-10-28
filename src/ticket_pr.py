@@ -1117,14 +1117,23 @@ def cmd_update_branch(args):
 
 
 def bb_find_member(workspace, headers, query):
-    """Match a workspace member by nickname or display name (case-insensitive)."""
+    """Match a workspace member by nickname or display name (case-insensitive).
+
+    Returns (user, near): the exact match or None, and when there is none the
+    display names that contain the query, so a first name alone
+    says who it could be instead of only that nobody matched.
+    """
     wanted = query.lower()
+    near = []
     for member in bb_paginate(f"{BITBUCKET_API}/workspaces/{workspace}/members", headers):
         user = member.get("user", {})
-        names = {(user.get("nickname") or "").lower(), (user.get("display_name") or "").lower()}
-        if wanted in names:
-            return user
-    return None
+        nickname = user.get("nickname") or ""
+        display = user.get("display_name") or ""
+        if wanted in {nickname.lower(), display.lower()}:
+            return user, []
+        if wanted in nickname.lower() or wanted in display.lower():
+            near.append(f"{display} ({nickname})" if nickname and nickname != display else display)
+    return None, near
 
 
 def github_mark_ready(pull, headers):
@@ -1155,9 +1164,10 @@ def cmd_request_review(args):
             if args.dry_run:
                 print(f"[dry-run] would look up workspace member {name!r}")
                 continue
-            user = bb_find_member(workspace, headers, name)
+            user, near = bb_find_member(workspace, headers, name)
             if user is None or not user.get("account_id"):
-                raise SystemExit(f"no Bitbucket workspace member matched {name!r}")
+                hint = f"; members whose name contains it: {', '.join(near)}" if near else ""
+                raise SystemExit(f"no Bitbucket workspace member matched {name!r}{hint}")
             entry = {"account_id": user["account_id"]}
             if entry not in reviewers:
                 reviewers.append(entry)

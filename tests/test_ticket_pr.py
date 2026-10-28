@@ -1476,16 +1476,16 @@ def test_review_rollup_bitbucket_reports_a_merged_pr():
 def test_review_rollup_github_keeps_the_latest_real_vote_per_login():
     pull = {"state": "open", "draft": True, "requested_reviewers": [{"login": "dana"}]}
     reviews = [
-        {"user": {"login": "csmith"}, "state": "CHANGES_REQUESTED", "submitted_at": "2026-09-01T10:00:00Z"},
-        {"user": {"login": "csmith"}, "state": "APPROVED", "submitted_at": "2026-09-02T10:00:00Z"},
-        {"user": {"login": "csmith"}, "state": "COMMENTED", "submitted_at": "2026-09-03T10:00:00Z"},
+        {"user": {"login": "rkim"}, "state": "CHANGES_REQUESTED", "submitted_at": "2026-09-01T10:00:00Z"},
+        {"user": {"login": "rkim"}, "state": "APPROVED", "submitted_at": "2026-09-02T10:00:00Z"},
+        {"user": {"login": "rkim"}, "state": "COMMENTED", "submitted_at": "2026-09-03T10:00:00Z"},
         {"user": {"login": "lee"}, "state": "APPROVED", "submitted_at": "2026-09-01T10:00:00Z"},
         {"user": {"login": "lee"}, "state": "DISMISSED", "submitted_at": "2026-09-02T10:00:00Z"},
     ]
     review = ticket_pr.review_rollup_github(pull, reviews)
-    assert review["reviewers"] == {"dana": None, "csmith": "approved", "lee": None}
-    assert review["approved_by"] == ["csmith"] and review["awaiting"] == ["dana", "lee"]
-    assert ticket_pr.review_line(review) == "review: approved by csmith; awaiting dana, lee; still a draft"
+    assert review["reviewers"] == {"dana": None, "rkim": "approved", "lee": None}
+    assert review["approved_by"] == ["rkim"] and review["awaiting"] == ["dana", "lee"]
+    assert ticket_pr.review_line(review) == "review: approved by rkim; awaiting dana, lee; still a draft"
     merged = ticket_pr.review_rollup_github({"state": "closed", "merged": True}, [])
     assert merged["state"] == "MERGED"
 
@@ -2749,3 +2749,30 @@ def test_jira_text_is_checked_against_every_context_but_the_ticket_s_own(acme_co
         ticket_pr.main(["--dry-run", "add-comment", "--key", "OTHER-7", "--body", "AW sheet built"])
     with pytest.raises(SystemExit, match="context-leak"):
         ticket_pr.main(["--dry-run", "update-ticket", "--key", "OTHER-7", "--summary", "Acme Widgets sheet"])
+
+
+def _members(*users):
+    return [{"user": {"account_id": f"id-{i}", **u}} for i, u in enumerate(users)]
+
+
+def test_bb_find_member_matches_nickname_or_display_name_exactly(monkeypatch):
+    members = _members(
+        {"nickname": "spark", "display_name": "Sam Park"}, {"nickname": "ajones", "display_name": "Alex Jones"}
+    )
+    monkeypatch.setattr(ticket_pr, "bb_paginate", lambda url, headers: iter(members))
+    assert ticket_pr.bb_find_member("acme", {}, "sam park")[0]["account_id"] == "id-0"
+    assert ticket_pr.bb_find_member("acme", {}, "AJONES") == (members[1]["user"], [])
+
+
+def test_bb_find_member_lists_near_names_when_nothing_matches(monkeypatch):
+    members = _members(
+        {"nickname": "spark", "display_name": "Sam Park"},
+        {"nickname": "Alex", "display_name": "Alex Jones"},
+        {"nickname": "alexr", "display_name": "Alex Rivera"},
+    )
+    monkeypatch.setattr(ticket_pr, "bb_paginate", lambda url, headers: iter(members))
+    assert ticket_pr.bb_find_member("acme", {}, "Alex Jones")[0]["account_id"] == "id-1"
+    user, near = ticket_pr.bb_find_member("acme", {}, "rivera")
+    assert user is None
+    assert near == ["Alex Rivera (alexr)"]
+    assert ticket_pr.bb_find_member("acme", {}, "nobody") == (None, [])
