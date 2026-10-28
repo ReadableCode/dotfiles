@@ -258,6 +258,15 @@ is the one-paragraph orientation so an agent knows which file to open.
   of gnome-remote-desktop no deployed file can hold. Its settings and
   certificate are manifest entries. `--check` is read-only. Doc:
   `docs/setup_vnc_server.md`, "GNOME session sharing".
+- **`tailscale_routes.py`** - step 5c of `refresh_machine.py`, and the
+  crontab line on a server with no refresh loop: on a host whose record has
+  a `tailscale.advertise_routes` list, hands it to
+  `scripts/tailscale_subnet_router.sh`, which advertises those routes with
+  accept-routes off and changes nothing when they already match. Tailscale
+  keeps routes only in its own state, so no deployed file can hold them; the
+  plain-bash script is the one implementation, also copied to hosts with no
+  checkout. Stdlib only. `--check` is read-only. Doc:
+  `docs/setup_tailscale.md`, "Subnet routers".
 - **`fleet_check.py`** - asks every ssh-reachable machine in the inventories the
   same read-only question at once (default `gitpullall --check`) and prints one
   row per host: ok, drift, unreachable, failed, or no command. Hosts and their

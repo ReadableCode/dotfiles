@@ -6,30 +6,62 @@
 
 ```bash
 curl -fsSL https://tailscale.com/install.sh | sh
-# Change this to your local LAN subnet
-sudo tailscale up --advertise-exit-node --advertise-routes=192.168.86.0/24
 sudo systemctl enable --now tailscaled
+sudo tailscale up
 ```
 
-#### To enable the subnet routing
+A plain `tailscale up`: no advertised routes, accept-routes left at its Linux
+default of off. That is every machine except a subnet router. Accept-routes
+must stay off on a Linux box at home: one that accepts the LAN's own route
+sends its LAN traffic into Tailscale and loses the network. Never re-run
+`tailscale up` with fewer flags to change one setting; it resets every flag
+it is not given. Use `tailscale set`.
 
-Go to the Tailscale admin panel: <https://login.tailscale.com/admin/machines>
+### Subnet routers
 
-Find the new system
+A subnet router advertises the home LAN to the tailnet, which is what lets a
+device away from home reach `192.168.86.x` addresses (the inventories and ssh
+fragments use them on purpose). Several machines advertise the same route so
+it survives any one of them being down; Tailscale picks one online router as
+primary and fails over by itself.
 
-Click the 3-dot menu → Enable subnet routes
+A machine is a router because its inventory record says so:
 
-This allows other Tailscale devices (like your laptop or phone) to reach anything on your local LAN via this system.
+```json
+"tailscale": {"advertise_routes": ["192.168.86.0/24"]}
+```
 
-#### To enable the exit node
+Tailscale keeps advertised routes only in its own state (`tailscale set`), so
+no deployed file can hold them, and its system policies have no key for them.
+`scripts/tailscale_subnet_router.sh` sets them, with accept-routes off, and
+changes nothing when they already match. What runs it:
 
-Go to the Tailscale admin panel: <https://login.tailscale.com/admin/machines>
+| Host kind | Runs it | How often |
+|-----------|---------|-----------|
+| A Linux server with a cron declared in server_configs | `python3 -B ~/GitHub/dotfiles/src/tailscale_routes.py` in that crontab | every 10 minutes |
+| A machine refreshed by hand (a Mac) | `src/tailscale_routes.py`, step 5c of `refresh_machine.py` | every gitpullall |
+| Unraid (no checkout) | a dynamix cron with the routes rendered in, pushed by `server_configs/scripts/deploy_behemoth.sh` | every 10 minutes |
 
-Find the new system
+`python3 src/tailscale_routes.py --check` reports whether this machine's
+prefs match its record and changes nothing.
 
-Click the 3-dot menu → Enable exit node
+New router, once per machine:
 
-This allows other Tailscale devices (like your laptop or phone) to use this system as a VPN exit node.
+1. Add the `tailscale` block to its inventory record.
+2. Linux only: turn on IP forwarding (below), and if its cron runs as a user
+   rather than root, let that user change prefs:
+   `sudo tailscale set --operator=jason`.
+3. Admin console, Machines, the machine, Edit route settings: approve
+   `192.168.86.0/24`. A route is advertised but unused until approved.
+4. Same menu: Disable key expiry, so the router does not drop off the tailnet
+   when its key ages out.
+
+#### Exit nodes
+
+An exit node is a separate choice, made with `tailscale set
+--advertise-exit-node` and approved in the same Edit route settings dialog.
+The subnet router script keeps whatever exit-node setting a machine already
+has.
 
 #### Using tailscale funnel
 
@@ -88,9 +120,6 @@ This machine has IP forwarding disabled and cannot relay traffic. Please enable 
 echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
 echo 'net.ipv6.conf.all.forwarding = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
 sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
-# then restart tailscale
-sudo tailscale up --reset
-sudo tailscale up --advertise-exit-node --advertise-routes=192.168.86.0/24
 ```
 
 - If it does not have a /etc/sysctl.d directory, use:
@@ -105,9 +134,6 @@ Then run the following command to apply the changes:
 
 ```bash
 sudo sysctl -p
-# then restart tailscale
-sudo tailscale up --reset
-sudo tailscale up --advertise-exit-node --advertise-routes=192.168.86.0/24
 ```
 
 ## Tailnet DNS

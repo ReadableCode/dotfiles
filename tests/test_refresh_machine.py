@@ -63,6 +63,7 @@ def test_default_steps_in_order(tmp_path):
         "syncing python environments",
         "deploying configs",
         "setting the remote desktop login",
+        "advertising the tailscale routes",
         "pruning removed configs",
     ]
     assert steps[-1].argv[-3:] == [os.path.join(tmp_path, "dotfiles", "src", "deploy_configs.py"), "prune", "--apply"]
@@ -372,6 +373,7 @@ def test_check_steps_are_the_read_only_twins(tmp_path):
         "checking python environments",
         "checking deployed configs",
         "checking the remote desktop login",
+        "checking the tailscale routes",
         "checking for configs to prune",
     ]
     assert steps[0].action is not None and steps[0].argv == []
