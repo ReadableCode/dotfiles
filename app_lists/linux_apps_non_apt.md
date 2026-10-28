@@ -41,6 +41,12 @@ uv python pin 3.10.12   # only if the pinned version differs from the system one
 uv sync
 ```
 
+## Tailscale
+
+Needs Tailscale's own package repo, which its vendor script adds, so it cannot go in
+`linux_apps.txt`. Install and setup, including subnet routers:
+[setup_tailscale.md](../docs/setup_tailscale.md).
+
 ## VS Code on Fedora
 
 Needs the Microsoft repo added before `dnf install code` will resolve, so it cannot go
