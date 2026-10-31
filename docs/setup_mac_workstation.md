@@ -686,6 +686,35 @@ Nothing in the app lists or `app_removals.yaml` removes shims.
 - System Settings -> General -> Sharing -> Remote Login (Allow access for:
   Only these users -> Administrators)
 
+### Stay unlocked after a Screen Sharing disconnect
+
+Screen Sharing puts the Mac back in the state it found it: a session that
+started at the lock screen locks again on disconnect (`ScreensharingAgent` calls
+`SACLockScreenImmediate`, visible in the `loginwindow` log), so the next session
+starts locked too and it repeats every time. A desktop that agents drive stays
+unlocked until someone locks it, through a `method: system` manifest entry: a
+LaunchDaemon that sets `RestoreMachineState` to false in
+`/Library/Preferences/com.apple.RemoteManagement` at load and at every boot.
+
+The same daemon sets `VNCAlwaysStartOnConsole` to true. A viewer signing in with
+only the VNC password (a phone's VNC app) carries no username, so without it
+macOS puts up a temporary login window (`uid -2`, its own session on a virtual
+display) that looks like the lock screen, and moves the viewer to the real
+session after a login there. With it the viewer goes straight to the console.
+
+`screensharingd` reads this key once when it starts, and it exits about 15
+seconds after the last viewer leaves. A viewer that stays connected keeps the old
+process and its login session alive, so after a change every viewer has to
+disconnect before it applies. A log line `should start on console  pref 1` shows
+it took.
+
+The agent reads `RestoreMachineState` for any user on the current host, which is
+that file and not `~/Library/Preferences`, so it takes root. The entry is scoped
+by its `hosts` list to the Macs that want it; `gitpullall` on one of them asks
+for the sudo password once when it has a system file to place. Anyone at the
+desk can use such a Mac after a disconnect, and the VNC password alone reaches
+the desktop, so a Mac joins the list only on purpose.
+
 ### Key-only logins on portable Macs
 
 Once a key login from another machine works (its `id_rsa.pub` is in

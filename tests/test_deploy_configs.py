@@ -2011,6 +2011,40 @@ def test_run_deploy_routes_system_rows_to_the_privileged_path(tmp_path, monkeypa
     assert "1 changed" in capsys.readouterr().out
 
 
+def _sudo_probe(monkeypatch, at_terminal, passwordless):
+    asked = []
+    monkeypatch.setattr(deploy_configs.sys.stdin, "isatty", lambda: at_terminal, raising=False)
+    monkeypatch.setattr(deploy_configs, "_privileged", lambda argv: (passwordless, ""))
+    return asked
+
+
+@pytest.mark.parametrize(
+    "at_terminal, passwordless, expected",
+    [(True, False, [["sudo", "-v"]]), (True, True, []), (False, False, [])],
+)
+def test_unlock_sudo_asks_only_at_a_terminal_when_sudo_needs_a_password(
+    monkeypatch, at_terminal, passwordless, expected
+):
+    asked = _sudo_probe(monkeypatch, at_terminal, passwordless)
+    deploy_configs.unlock_sudo_at_terminal(run=asked.append)
+    assert asked == expected
+
+
+def test_run_deploy_asks_for_sudo_only_with_a_system_row_to_change(tmp_path, monkeypatch):
+    write_file(str(tmp_path / "repo" / "conf"), "repo content")
+    asked = []
+    monkeypatch.setattr(deploy_configs, "unlock_sudo_at_terminal", lambda: asked.append(True))
+    monkeypatch.setattr(deploy_configs, "deploy_system_file", lambda *args, **kwargs: "installed")
+    monkeypatch.setattr(deploy_configs, "classify_system_entry", lambda *args: ("OK", "matches"))
+    entry = {"name": "x", "repo": "repo/conf", "dest": {"linux": "/etc/x"}, "method": "system", "mode": "0644"}
+    plan = deploy_configs.build_plan([entry], "linux", "HOST", repo_root=str(tmp_path))
+    deploy_configs.run_deploy(plan)
+    assert asked == []
+    monkeypatch.setattr(deploy_configs, "classify_system_entry", lambda *args: ("NOT_DEPLOYED", "missing"))
+    deploy_configs.run_deploy(plan)
+    assert asked == [True]
+
+
 def test_status_planned_action_for_system_rows_mentions_sudo():
     for status in ("NOT_DEPLOYED", "DIVERGED", "WRONG_MODE"):
         assert "sudo -n" in deploy_configs.planned_action(status, method="system")

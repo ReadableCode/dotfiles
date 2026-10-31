@@ -512,8 +512,10 @@ def _replace_system_file(repo_path, system_path, replace_system_if_exists, backu
 # path as a conffile it may replace. The repo file is still the truth: status
 # compares content hashes and owner/mode, deploy re-installs whatever differs
 # and then runs the entry's reload command, so a pulled change reaches the
-# running daemon on the next deploy. Nothing here ever prompts: without
-# passwordless sudo the row reports NEEDS_SUDO and is left alone.
+# running daemon on the next deploy. A deploy at a terminal with a system row
+# to change asks for the sudo password once, up front; every step after that is
+# still sudo -n. Without a terminal nothing prompts: without passwordless sudo
+# the row reports NEEDS_SUDO and is left alone.
 
 
 def file_owner_and_mode(path):
@@ -545,6 +547,12 @@ def _privileged(argv):
         return False, str(error)
     output = (completed.stdout + completed.stderr).strip()
     return completed.returncode == 0, output
+
+
+def unlock_sudo_at_terminal(run=subprocess.call):
+    """Ask for the sudo password once when a person is at the terminal, so the sudo -n steps after it can run."""
+    if sys.stdin.isatty() and not _privileged(("true",))[0]:
+        run(["sudo", "-v"])
 
 
 def system_file_info(path):
@@ -1450,6 +1458,8 @@ def run_deploy(plan):
 
     if work:
         print_section("Changes", len(work), "cyan")
+        if any(row["method"] == "system" for row in work):
+            unlock_sudo_at_terminal()
         for row in work:
             print("  " + paint(row["name"], "bold"))
             if row["method"] == "system":

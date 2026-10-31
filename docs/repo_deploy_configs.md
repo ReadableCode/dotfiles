@@ -123,9 +123,11 @@ first like it does for links. When the content changed (a first install or a
 re-install, never a mode-only fix) the entry's `reload` command runs through
 `sudo -n sh -c`, which is how a pulled change reaches the running daemon.
 
-Nothing prompts: on a machine without passwordless sudo the row reports
-`NEEDS_SUDO` and is left alone, and every failed sudo step reports and stops
-that entry. `sudo` is only ever invoked for `system` rows that apply on the
+A deploy at a terminal with a `system` row to change asks for the sudo password
+once, up front, so `gitpullall` on a new machine places these with no second
+command. Without a terminal nothing prompts: on a machine without passwordless
+sudo the row reports `NEEDS_SUDO` and is left alone, and every failed sudo step
+reports and stops that entry. `sudo` is only ever invoked for `system` rows that apply on the
 machine, so a host with no such entry never runs it (elitedesk mails every
 failed sudo). `system` entries take no `on_drift`, `refresh` or `windows`
 dest, and prune never removes them: a dropped entry leaves its file for
