@@ -447,6 +447,16 @@ is detected automatically — you are only prompted if detection fails.
 Layouts anchor on screen *orientation* (portrait vs landscape) rather than
 display IDs, so they survive the KVM re-enumerating the monitors.
 
+The file holds one layout per display set, under `"displays"`, named after the
+screens attached (their names sorted and joined with ` + `). A Mac uses the set
+that matches its screens right now, so the same MacBook gets the desk layout on
+the desk monitors and nothing on its own display. When the attached screens
+have no saved set, applying, gathering and the automatic re-pin after a display
+change all do nothing, and Hammerspoon shows "No window layout for <screens>".
+To give a screen set a layout, arrange the windows and snapshot: that starts
+its own entry. A layout entry for a screen orientation that is not attached is
+skipped rather than moved onto another screen.
+
 #### Assignment and position are separate
 
 *Which desktop* an app lives on and *where on the screen* it sits are different

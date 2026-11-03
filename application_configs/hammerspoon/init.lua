@@ -109,10 +109,20 @@ end)
 -- public repo); reads and editor saves both go through it, so changes land in
 -- the credentials repo to be committed there.
 --
+-- Display sets: a layout is only true for the monitors it was made on, so the
+-- file holds one layout per DISPLAY SET, named after the screens attached
+-- (sorted, " + " between them: "LS32A70 + LS32D70xE", "Built-in Retina
+-- Display"). Screen names survive the KVM flip where IDs do not. When the
+-- screens attached now have no saved set, nothing here moves, resizes or
+-- re-pins a window - a laptop on its own display is left alone until you
+-- snapshot a layout for it, which starts that display set's own entry.
+--
 -- File shape:
---   { "all":    [ {app, screen, unit{x,y,w,h}}, ... ],
---     "1": [...], "2": [...], "3": [...],
---     "assign": { "Mail": "all", "Microsoft Edge": 3 } }
+--   { "displays": {
+--       "<display set>": {
+--         "all":    [ {app, screen, unit{x,y,w,h}}, ... ],
+--         "1": [...], "2": [...], "3": [...],
+--         "assign": { "Mail": "all", "Microsoft Edge": 3 } } } }
 --
 -- "all" is the shared layout. An app assigned to All Desktops has ONE window
 -- that shows up everywhere, so it cannot be in two places at once and a
@@ -175,12 +185,44 @@ end
 
 function wl.file() return wl.dir() .. "window_layouts.json" end
 
-function wl.loadAll()
+-- The display set attached right now: every screen's name, sorted.
+function wl.displaySet()
+    local names = {}
+    for _, s in ipairs(hs.screen.allScreens()) do names[#names + 1] = s:name() or "unknown" end
+    table.sort(names)
+    return table.concat(names, " + ")
+end
+
+-- The whole file, every display set.
+local function loadFile()
     if hs.fs.attributes(wl.file()) then
         local data = hs.json.read(wl.file())
-        if type(data) == "table" then return data end
+        if type(data) == "table" then
+            if type(data.displays) ~= "table" then data.displays = {} end
+            return data
+        end
     end
-    return {}
+    return { displays = {} }
+end
+
+-- The layout for the attached display set ({} when it has none). Everything
+-- below reads and writes through this pair, so it only ever sees one set.
+function wl.loadAll()
+    local set = loadFile().displays[wl.displaySet()]
+    return type(set) == "table" and set or {}
+end
+
+function wl.hasLayout()
+    return type(loadFile().displays[wl.displaySet()]) == "table"
+end
+
+-- Gate for everything that moves windows on its own say-so: true when this
+-- display set has a layout, otherwise says so (unless quiet) and returns false.
+function wl.layoutHere(quiet)
+    if wl.hasLayout() then return true end
+    wl.log("no layout for display set %s, leaving windows alone", wl.displaySet())
+    if not quiet then hs.alert.show("No window layout for " .. wl.displaySet()) end
+    return false
 end
 
 -- Hand-rolled encoder instead of hs.json.write. Lua tables have no key order, so
@@ -242,7 +284,8 @@ local function encodeAssign(map)
     return '  "assign": {\n' .. table.concat(rows, ",\n") .. "\n  }"
 end
 
-function wl.saveAll(doc)
+-- One display set's layout as a JSON object at the top-level indent.
+local function encodeSet(doc)
     local keys = {}
     for k, v in pairs(doc) do
         if tostring(k):match("^%d+$") and type(v) == "table" then keys[#keys + 1] = tostring(k) end
@@ -254,10 +297,25 @@ function wl.saveAll(doc)
         parts[#parts + 1] = string.format('  "%s": %s', k, encodeLayout(doc[k]))
     end
     parts[#parts + 1] = encodeAssign(doc.assign)
+    return "{\n" .. table.concat(parts, ",\n") .. "\n}"
+end
+
+-- Save the attached display set's layout, keeping every other set as it is.
+function wl.saveAll(doc)
+    local file = loadFile()
+    file.displays[wl.displaySet()] = doc
+    local names = {}
+    for name in pairs(file.displays) do names[#names + 1] = name end
+    table.sort(names)
+    local sets = {}
+    for _, name in ipairs(names) do
+        local body = encodeSet(file.displays[name]):gsub("\n", "\n    ")
+        sets[#sets + 1] = "    " .. str(name) .. ": " .. body
+    end
 
     local f = io.open(wl.file(), "w")
     if not f then return false end
-    f:write("{\n" .. table.concat(parts, ",\n") .. "\n}\n")
+    f:write('{\n  "displays": {\n' .. table.concat(sets, ",\n") .. "\n  }\n}\n")
     f:close()
     return true
 end
@@ -279,7 +337,9 @@ end
 
 ----------Screens and spaces----------
 
--- Pick a screen by orientation. Falls back to primary if none matches.
+-- Pick a screen by orientation, or nil when none is attached. No fallback to
+-- the primary screen: that squeezed every portrait-monitor window onto a
+-- laptop's own display.
 function wl.screenFor(orientation)
     for _, s in ipairs(hs.screen.allScreens()) do
         local f = s:frame()
@@ -288,18 +348,19 @@ function wl.screenFor(orientation)
             return s
         end
     end
-    return hs.screen.primaryScreen()
+    return nil
 end
 
 -- Which numbered desktop is active right now? Returns index, orderedIDs.
--- Both monitors share one set of spaces here ("Displays have separate
--- Spaces" is off), so either screen reports the same list.
+-- Every screen shares one set of spaces here ("Displays have separate
+-- Spaces" is off), so the primary screen reports the same list as any other.
 function wl.spaceIndex()
+    local screen = hs.screen.primaryScreen()
     local ids = {}
-    for _, id in ipairs(hs.spaces.spacesForScreen(wl.screenFor("landscape")) or {}) do
+    for _, id in ipairs(hs.spaces.spacesForScreen(screen) or {}) do
         if hs.spaces.spaceType(id) == "user" then table.insert(ids, id) end
     end
-    local active = hs.spaces.activeSpaceOnScreen(wl.screenFor("landscape"))
+    local active = hs.spaces.activeSpaceOnScreen(screen)
     for i, id in ipairs(ids) do
         if id == active then return i, ids end
     end
@@ -556,6 +617,7 @@ end
 -- yields exactly the windows this pass may move; hand each out at most once
 -- so duplicate app entries (e.g. two GLKVM windows) get distinct windows.
 function wl.apply(key)
+    if not wl.layoutHere() then return end
     key = tostring(key)
     local doc = wl.loadAll()
     local per = doc[key]
@@ -628,6 +690,7 @@ end
 
 -- Apply just this desktop, no walking.
 function wl.applyHere()
+    if not wl.layoutHere() then return end
     local key = wl.currentKey("apply")
     if not key then return end
     wl.gather(function() wl.apply(key) end)
@@ -665,6 +728,7 @@ end
 -- desktops but has silently stopped following you would otherwise get placed
 -- on whichever desktop happens to still hold it, and skipped everywhere else.
 function wl.applyAll()
+    if not wl.layoutHere() then return end
     wl.fixAssign({ quiet = true, then_ = wl.applyAllNow })
 end
 
@@ -994,6 +1058,7 @@ end
 -- This desktop only: send away anything that belongs elsewhere, then lay out
 -- what is left.
 function wl.gatherHere()
+    if not wl.layoutHere() then return end
     wl.gather(function(moved)
         hs.alert.show(moved > 0 and ("Moved " .. moved .. " window" .. (moved == 1 and "" or "s"))
             or "Nothing to move from here")
@@ -1172,6 +1237,7 @@ end
 
 function wl.fixAssign(opts)
     opts = opts or {}
+    if not wl.layoutHere(opts.quiet) then return end
     local finish = function(msg)
         wl.log("fixAssign done: %s", msg or "nothing to report")
         if msg and not opts.quiet then hs.alert.show(msg) end
@@ -1301,10 +1367,14 @@ function wl.state()
     for k, v in pairs(doc) do
         if tostring(k):match("^%d+$") and type(v) == "table" then spaces[tostring(k)] = v end
     end
+    -- Only the orientations attached now; the editor draws a pane per entry.
     local screens = {}
     for _, orientation in ipairs({ "portrait", "landscape" }) do
-        local f = wl.screenFor(orientation):frame()
-        screens[orientation] = { w = f.w, h = f.h }
+        local s = wl.screenFor(orientation)
+        if s then
+            local f = s:frame()
+            screens[orientation] = { w = f.w, h = f.h }
+        end
     end
     local idx, ids = wl.spaceIndex()
     local pos = {}
@@ -1327,6 +1397,8 @@ function wl.state()
         live = live,
         broken = wl.brokenAssign(),
         file = wl.file(),
+        displays = wl.displaySet(),
+        known = wl.hasLayout(),
     }
 end
 

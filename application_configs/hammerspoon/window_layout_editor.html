@@ -419,7 +419,8 @@ async function load() {
   if (!doc.spaces[tab]) tab = Object.keys(doc.spaces).sort()[0] || "1";
   sel.clear();
   markDirty(false);
-  $("#fileHint").textContent = state.file || "";
+  $("#fileHint").textContent = (state.displays ? state.displays + (state.known ? "" : " (no layout saved yet)") + " · " : "")
+    + (state.file || "");
   renderAll();
 }
 
@@ -510,10 +511,16 @@ function visibleKeys() {
 // Pixel size of a screen pane on the page. Both panes share one scale factor so
 // the two monitors read at their true relative sizes, the way they sit on the desk.
 function paneScale() {
-  const p = state.screens.portrait, l = state.screens.landscape;
+  const panes = orientations().map((o) => state.screens[o]);
   const availH = Math.max(320, window.innerHeight - 230);
   const availW = Math.max(420, window.innerWidth - 310 - 90);
-  return Math.min(availH / Math.max(p.h, l.h), availW / (p.w + l.w));
+  return Math.min(availH / Math.max(...panes.map((s) => s.h)), availW / panes.reduce((n, s) => n + s.w, 0));
+}
+
+// The orientations of the screens attached now; a laptop on its own has no
+// portrait pane.
+function orientations() {
+  return ["portrait", "landscape"].filter((o) => state.screens && state.screens[o]);
 }
 
 function renderAll() {
@@ -556,7 +563,7 @@ function renderStages() {
   const div = +$("#grid").value;
   const showLive = $("#showLive").checked && tab === state.activeSpace;
 
-  for (const orientation of ["portrait", "landscape"]) {
+  for (const orientation of orientations()) {
     const s = state.screens[orientation];
     const wrap = document.createElement("div");
     wrap.className = "screen-wrap";
