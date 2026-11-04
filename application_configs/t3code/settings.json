@@ -37,6 +37,8 @@
   },
   "defaultRuntimeMode": "auto",
   "projectSettingsFolded": true,
+  "enableAgentDeviceAccess": true,
+  "enableDeviceSupport": true,
   "deviceOnboardingCompleted": true,
   "sidebarAutoSettleAfterDays": null,
   "idleCompaction": "off",
