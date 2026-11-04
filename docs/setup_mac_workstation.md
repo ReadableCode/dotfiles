@@ -34,7 +34,14 @@ The rest of this page is the reference detail behind those steps.
 
 ## Set hostname
 
-System Settings → General → About
+System Settings → General → About sets the computer name and the local
+(Bonjour) name. It leaves `HostName` unset, and then the shell's `hostname`
+and the prompt take whatever name the LAN's DNS hands back for this Mac's
+address (a router can answer `Mac.ts.net lan`). Pin it to the same name:
+
+```bash
+sudo scutil --set HostName "$(scutil --get LocalHostName)"
+```
 
 ## Always show all files
 
