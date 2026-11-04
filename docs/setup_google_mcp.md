@@ -290,3 +290,10 @@ dead — the 7-day *Testing* expiry above is the usual cause. Re-mint it.
 Nothing but JSON-RPC may reach stdout or the protocol breaks, which is why the
 server's imports run inside a `redirect_stdout` (importing `config` prints when
 it creates missing repo dirs). Keep any new `print` in this path on stderr.
+
+A refused call comes back as `Error executing tool <name>: <reason>` - no
+mailbox configured, several configured and none named, an unknown name, a dead
+refresh token. The tools raise those as `ValueError` and the shared wrapper in
+`src/utils/mcp_tool_errors.py` (also the mac server's) re-raises them as the
+SDK's `ToolError`, the one exception type whose message the SDK passes to the
+model; any other exception type shows only `Error executing tool <name>`.

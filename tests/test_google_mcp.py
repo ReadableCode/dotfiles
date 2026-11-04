@@ -7,6 +7,7 @@ import config_test_utils  # noqa F401
 import pytest
 
 import google_mcp
+from utils.mcp_tool_errors import ToolError
 
 # %%
 # Helpers #
@@ -150,7 +151,15 @@ def test_every_tool_is_registered_once():
         assert expected in names
 
 
-# %%
+def test_wrapped_tools_keep_their_argument_schema():
+    (search,) = [tool for tool in google_mcp.server._tool_manager.list_tools() if tool.name == "gmail_search"]
+    assert {"query", "mailbox"} <= set(search.parameters["properties"])
+
+
+def test_anticipated_failures_reach_the_model_with_their_reason(monkeypatch):
+    monkeypatch.setattr(google_mcp, "_mailboxes", lambda: [{"name": "a"}, {"name": "b"}])
+    with pytest.raises(ToolError, match="several mailboxes configured \\(a, b\\) - pass mailbox= to pick one"):
+        google_mcp.gmail_list_labels()
 
 
 # %%

@@ -280,7 +280,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   `docs/repo_chrome_bookmarks.md`.
 - **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,
   `secret_tools`, `calendarboard_tools`, `google_oauth_tools`,
-  `googlemcp_tools`, `mcpservers_tools`, `taskbar_tools`. Shared helpers come from the
+  `googlemcp_tools`, `macmcp_tools`, `mcp_tool_errors` (the one wrapper both
+  stdio MCP servers register their tools through, so an anticipated failure's
+  reason reaches the model), `mcpservers_tools`, `taskbar_tools`. Shared helpers come from the
   **`readable-utils`** package (github.com/ReadableCode/readable_utils), a uv
   git dependency pinned to a tag - no vendored copies. Homelab-only jobs
   (Bitwarden backup, Home Assistant/router pulls, log rotation) live in the

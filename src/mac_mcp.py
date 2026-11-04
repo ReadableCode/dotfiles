@@ -6,14 +6,12 @@
 # print. Every import that could talk to stdout goes through this redirect.
 import argparse
 import contextlib
-import functools
 import os
 import sys
 from datetime import date, datetime, timedelta
 
 with contextlib.redirect_stdout(sys.stderr):
     from mcp.server.mcpserver import MCPServer  # noqa: E402
-    from mcp.server.mcpserver.exceptions import ToolError  # noqa: E402
 
     from config import grandparent_dir  # noqa: E402
     from utils import macmcp_tools as mtools  # noqa: E402
@@ -21,6 +19,7 @@ with contextlib.redirect_stdout(sys.stderr):
         credentials_context,
         find_credentials_dirs,
     )
+    from utils.mcp_tool_errors import tool_decorator  # noqa: E402
 
 # %%
 # Variables #
@@ -57,25 +56,10 @@ preview, not whole bodies.
 
 server = MCPServer(name="mac", instructions=SERVER_INSTRUCTIONS, version="0.1.0")
 
-# Failures the readers raise on purpose - an account not configured, a store
-# macOS will not open, Calendar.app refusing a write. The SDK shows the model
-# only "Error executing tool <name>" for any other exception type, so these
-# are re-raised as ToolError to carry their reason through.
-ANTICIPATED_ERRORS = (ValueError, PermissionError, FileNotFoundError, RuntimeError)
-
-
-def tool(description):
-    def register(function):
-        @functools.wraps(function)
-        def wrapped(*args, **kwargs):
-            try:
-                return function(*args, **kwargs)
-            except ANTICIPATED_ERRORS as error:
-                raise ToolError(str(error)) from error
-
-        return server.tool(description=description)(wrapped)
-
-    return register
+# Anticipated failures (an account not configured, a store macOS will not open,
+# Calendar.app refusing a write) are re-raised as the SDK's ToolError by the
+# shared wrapper so their reason reaches the model; see utils/mcp_tool_errors.py.
+tool = tool_decorator(server)
 
 
 # %%

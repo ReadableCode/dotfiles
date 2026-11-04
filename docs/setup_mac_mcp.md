@@ -152,5 +152,7 @@ calendar: `calendar_list_calendars`, `calendar_agenda`, `calendar_search_events`
   the Notes protobuf and the Calendar schema are what macOS 27 writes; a macOS upgrade that changes
   them shows up as a failing read, and the fix is in `src/utils/macmcp_tools.py`.
 - Anticipated failures (not configured, access denied, a refused write) are
-  raised as the SDK's `ToolError` so their reason reaches the model; any other
-  exception type shows only "Error executing tool".
+  re-raised as the SDK's `ToolError` by the wrapper in
+  `src/utils/mcp_tool_errors.py` (shared with the Google server) so their
+  reason reaches the model; any other exception type shows only "Error
+  executing tool".

@@ -23,6 +23,7 @@ with contextlib.redirect_stdout(sys.stderr):
         credentials_context,
         find_credentials_dirs,
     )
+    from utils.mcp_tool_errors import tool_decorator  # noqa: E402
 
 # %%
 # Variables #
@@ -57,6 +58,11 @@ delete is not recoverable.
 """.strip()
 
 server = MCPServer(name="google", instructions=SERVER_INSTRUCTIONS, version="0.1.0")
+
+# Anticipated failures (nothing configured, several accounts and no name given,
+# an unknown name, a dead refresh token) are re-raised as the SDK's ToolError by
+# the shared wrapper so their reason reaches the model; see utils/mcp_tool_errors.py.
+tool = tool_decorator(server)
 
 
 # %%
@@ -175,7 +181,7 @@ def _serialize_event(event):
 # Discovery #
 
 
-@server.tool(
+@tool(
     description="List the configured Google Calendar sources, Gmail mailboxes and Drive accounts this server can reach."
 )
 def list_accounts() -> dict:
@@ -190,12 +196,12 @@ def list_accounts() -> dict:
 # Calendar tools #
 
 
-@server.tool(description="List every calendar on a Google account, with ids to pass to the other calendar tools.")
+@tool(description="List every calendar on a Google account, with ids to pass to the other calendar tools.")
 def calendar_list_calendars(source: str = "") -> list:
     return gtools.calendar_list_calendars(_source(source))
 
 
-@server.tool(
+@tool(
     description=(
         "Agenda across ALL of the account's calendars for a date range - the same view as the calendar board TUI. "
         "start_date is YYYY-MM-DD (default today); days counts forward from it. Returns events sorted by start, "
@@ -215,7 +221,7 @@ def calendar_agenda(start_date: str = "", days: int = 1, source: str = "") -> li
     return [_serialize_event(event) for event in events]
 
 
-@server.tool(
+@tool(
     description=(
         "Full detail for one event, including creator (who made it) and organizer (whose calendar owns it) plus "
         "every attendee's response. Note: Google records no per-attendee provenance, so who added an individual "
@@ -226,7 +232,7 @@ def calendar_get_event(event_id: str, calendar_id: str = "primary", source: str 
     return gtools.calendar_get_event(_source(source), event_id, calendar_id=calendar_id)
 
 
-@server.tool(
+@tool(
     description=(
         "Search one calendar's events by free text and/or an RFC3339 time window "
         "(time_min/time_max, e.g. 2026-08-27T00:00:00-05:00). Recurring events come pre-expanded."
@@ -250,7 +256,7 @@ def calendar_search_events(
     )
 
 
-@server.tool(
+@tool(
     description=(
         "Create a calendar event. start/end are RFC3339 timestamps for timed events "
         "(2026-08-27T10:00:00-05:00) or YYYY-MM-DD for all-day ones. attendees is a list of email addresses. "
@@ -290,7 +296,7 @@ def _time_field(value):
     return {"date": value} if len(value) == 10 else {"dateTime": value}
 
 
-@server.tool(
+@tool(
     description=(
         "Patch an existing event - only the arguments you pass change. Same formats as calendar_create_event. "
         "send_updates controls whether guests are emailed about the change."
@@ -326,7 +332,7 @@ def calendar_update_event(
     )
 
 
-@server.tool(description="Delete a calendar event. Not recoverable through the API - confirm with the user first.")
+@tool(description="Delete a calendar event. Not recoverable through the API - confirm with the user first.")
 def calendar_delete_event(
     event_id: str, calendar_id: str = "primary", send_updates: str = "none", source: str = ""
 ) -> dict:
@@ -337,12 +343,12 @@ def calendar_delete_event(
 # Gmail tools #
 
 
-@server.tool(description="The mailbox's own address and message totals - the cheapest check that credentials work.")
+@tool(description="The mailbox's own address and message totals - the cheapest check that credentials work.")
 def gmail_profile(mailbox: str = "") -> dict:
     return gtools.gmail_profile(_mailbox(mailbox))
 
 
-@server.tool(
+@tool(
     description=(
         "Search the mailbox using Gmail's own query syntax (from:, to:, subject:, newer_than:7d, is:unread, "
         "has:attachment, ...). Returns summaries with ids, headers, snippet and labels - no bodies."
@@ -354,7 +360,7 @@ def gmail_search(query: str = "", max_results: int = 25, include_spam_trash: boo
     )
 
 
-@server.tool(
+@tool(
     description=(
         "Every message id (with its thread id) matching a Gmail query, following every page itself - no bodies and "
         "no per-message fetch, so it scales to thousands. Use it to diff a mailbox against a record of what was "
@@ -365,17 +371,17 @@ def gmail_list_message_ids(query: str = "", include_spam_trash: bool = False, ma
     return gtools.gmail_list_message_ids(_mailbox(mailbox), query=query, include_spam_trash=include_spam_trash)
 
 
-@server.tool(description="One message in full: headers, decoded plain-text body, and attachment names/sizes.")
+@tool(description="One message in full: headers, decoded plain-text body, and attachment names/sizes.")
 def gmail_get_message(message_id: str, body_limit: int = 20000, mailbox: str = "") -> dict:
     return gtools.gmail_get_message(_mailbox(mailbox), message_id, body_limit=body_limit)
 
 
-@server.tool(description="Every label in the mailbox, with the ids gmail_modify_message needs.")
+@tool(description="Every label in the mailbox, with the ids gmail_modify_message needs.")
 def gmail_list_labels(mailbox: str = "") -> list:
     return gtools.gmail_list_labels(_mailbox(mailbox))
 
 
-@server.tool(
+@tool(
     description=(
         "Add or remove label ids on a message. UNREAD and STARRED are labels too, so this is also how you "
         "mark read/unread and star/unstar. Get ids from gmail_list_labels."
@@ -389,12 +395,12 @@ def gmail_modify_message(
     )
 
 
-@server.tool(description="Move a message to Trash, or restore it with undo=true. Recoverable either way.")
+@tool(description="Move a message to Trash, or restore it with undo=true. Recoverable either way.")
 def gmail_trash_message(message_id: str, undo: bool = False, mailbox: str = "") -> dict:
     return gtools.gmail_trash_message(_mailbox(mailbox), message_id, undo=undo)
 
 
-@server.tool(
+@tool(
     description=(
         "Send an email as the mailbox's own address. body is the plain text; html adds an HTML version beside it "
         "and body stays as the fallback. Pass reply_to_message_id to thread it as a reply. "
@@ -423,7 +429,7 @@ def gmail_send_message(
     )
 
 
-@server.tool(
+@tool(
     description=(
         "Save one Gmail attachment straight into a Drive folder, picked by its filename as gmail_get_message lists "
         "it. Stored as-is, never converted to a Google Doc or Sheet; name defaults to the attachment's filename. "
@@ -438,7 +444,7 @@ def gmail_save_attachment_to_drive(
     )
 
 
-@server.tool(
+@tool(
     description=(
         "Save one Gmail attachment to a local path that does not exist yet, picked by its filename as "
         "gmail_get_message lists it. The bytes are written as-is and the result carries their sha256. Never "
@@ -453,14 +459,12 @@ def gmail_download_attachment(message_id: str, filename: str, local_path: str, m
 # Drive tools #
 
 
-@server.tool(
-    description="The Drive account's own address and storage quota - the cheapest check that credentials work."
-)
+@tool(description="The Drive account's own address and storage quota - the cheapest check that credentials work.")
 def drive_about(drive: str = "") -> dict:
     return gtools.drive_about(_drive(drive))
 
 
-@server.tool(
+@tool(
     description=(
         "Search Drive with its own query syntax: name contains 'x', '<folder id>' in parents, "
         "mimeType = 'application/vnd.google-apps.folder', modifiedTime > '2026-09-01T00:00:00'. Covers My Drive and "
@@ -471,12 +475,12 @@ def drive_search(query: str = "", max_results: int = 50, order_by: str = "modifi
     return gtools.drive_search(_drive(drive), query=query, max_results=max_results, order_by=order_by)
 
 
-@server.tool(description="One Drive file's name, type, size, parent folders, created/modified times and web link.")
+@tool(description="One Drive file's name, type, size, parent folders, created/modified times and web link.")
 def drive_get_metadata(file_id: str, drive: str = "") -> dict:
     return gtools.drive_get_metadata(_drive(drive), file_id)
 
 
-@server.tool(
+@tool(
     description=(
         "Read a Drive file as text: Google Docs and Slides export as plain text, Sheets as CSV of the first tab "
         "(sheets_get_values reaches any tab), stored files decode as UTF-8. Binary files are refused - use "
@@ -487,7 +491,7 @@ def drive_read_file(file_id: str, max_chars: int = 100000, drive: str = "") -> d
     return gtools.drive_read_file(_drive(drive), file_id, max_chars=max_chars)
 
 
-@server.tool(
+@tool(
     description=(
         "Download a Drive file to a local path that does not exist yet (Google-native files exported as for "
         "drive_read_file). Never overwrites."
@@ -497,7 +501,7 @@ def drive_download_file(file_id: str, local_path: str, drive: str = "") -> dict:
     return gtools.drive_download_file(_drive(drive), file_id, local_path)
 
 
-@server.tool(
+@tool(
     description=(
         "Read one A1 range of a spreadsheet ('Tab name'!A1:Z50, or a bare tab name for the whole tab). render: "
         "FORMATTED_VALUE (default), UNFORMATTED_VALUE, or FORMULA to see each cell's formula instead of its value."
@@ -507,7 +511,7 @@ def sheets_get_values(spreadsheet_id: str, cell_range: str, render: str = "FORMA
     return gtools.sheets_get_values(_drive(drive), spreadsheet_id, cell_range, render=render)
 
 
-@server.tool(
+@tool(
     description=(
         "Create a file in a Drive folder (parent_id, default My Drive root) from text content or a local_path file - "
         "pass exactly one. Stored exactly as given, never converted. mime_type is guessed from the name when omitted. "
@@ -522,7 +526,7 @@ def drive_upload_file(
     )
 
 
-@server.tool(
+@tool(
     description=(
         "Replace an existing Drive file's content in place from text content or a local_path file, keeping its id, "
         "name, folder and sharing."
@@ -534,12 +538,12 @@ def drive_update_file(
     return gtools.drive_update_file(_drive(drive), file_id, content=content, local_path=local_path, mime_type=mime_type)
 
 
-@server.tool(description="Create a folder in Drive (parent_id, default My Drive root).")
+@tool(description="Create a folder in Drive (parent_id, default My Drive root).")
 def drive_create_folder(name: str, parent_id: str = "root", drive: str = "") -> dict:
     return gtools.drive_create_folder(_drive(drive), name, parent_id=parent_id)
 
 
-@server.tool(
+@tool(
     description=(
         "Move a Drive file or folder to the trash, or restore it with undo=true. Recoverable for 30 days; there is "
         "no permanent delete."

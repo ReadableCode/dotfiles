@@ -5,6 +5,7 @@ import config_test_utils  # noqa F401
 import pytest
 
 import mac_mcp
+from utils.mcp_tool_errors import ToolError
 
 # %%
 # Server wiring #
@@ -38,7 +39,7 @@ def test_anticipated_failures_reach_the_model_with_their_reason(monkeypatch):
         raise ValueError("no messages configured for this context")
 
     monkeypatch.setattr(mac_mcp, "_scope", refuse)
-    with pytest.raises(mac_mcp.ToolError, match="no messages configured"):
+    with pytest.raises(ToolError, match="no messages configured"):
         mac_mcp.messages_list_chats()
 
 
