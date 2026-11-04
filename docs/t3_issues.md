@@ -49,149 +49,77 @@ machine, are in [setup_t3_code.md](setup_t3_code.md).
     is an issue comment, not a PR.
 
 - **The `/` menu shows no provider commands in one project while the same
-  commands work in every other project (upstream, verified 2026-09-25 on
-  desktop 0.0.42 against `main @ 7a12aff471`; re-checked 2026-09-30 against
-  the `v0.0.42` tag and `main @ d2c9281b81`, same code paths)**: typing `/` lists only the
-  client built-ins (`/compact`, `/plan`, `/default`, `/usage-limits`) and none
-  of the `~/.claude/commands` entries, for every thread whose cwd is one
-  particular directory. The agent is unaffected: every session's `system.init`
-  message in `~/.t3/userdata/logs/provider/events.<thread>.log` carries the
-  full `slash_commands` list, so a command typed out in full still runs.
-  The old form of this note (a newly deployed command never appears until the
-  server restarts) is the same defect seen from the other side.
+  commands work in every other project (the 0.0.42 mechanism is gone since
+  0.1.0, commit `836098543c`, "fix(server): discover Claude commands in each
+  workspace" ([#15462](https://github.com/pingdotgg/t3code/pull/15462)),
+  2026-10-04; read in the `v0.1.7` tag on 2026-11-04)**: on 0.0.42 through
+  0.0.45, typing `/` listed only the client built-ins (`/compact`, `/plan`,
+  `/default`, `/usage-limits`) and none of the `~/.claude/commands` entries,
+  for every thread whose cwd was one particular directory, while a command
+  typed in full still ran. The cause, verified on 0.0.42, was that the
+  server's per-directory command entry was a copy of the machine-wide list at
+  the instant a thread first mounted, captured once and never revisited: a
+  thread restored at launch copied the startup placeholder's empty list, and
+  a mount during a 5-minute cycle whose probe had failed copied `[compact]`.
+  Either bad copy then hid the good machine list for that directory until a
+  server restart. `v0.1.0` (2026-10-15) is the first stable tag with #15462;
+  envy runs 0.1.7.
 
-  **Mechanism.** Since 0.0.42 (PR 11519, "expose native slash commands across
-  clients") the server keeps one command list *per working directory* on top
-  of the machine-wide list:
+  **Mechanism (v0.1.7).** `snapshotForCwd`
+  (`apps/server/src/provider/Drivers/ClaudeDriver.ts:376`) no longer copies
+  anything: it calls `probeClaudeWorkspaceSnapshot`
+  (`apps/server/src/provider/ClaudeProvider.ts:424`), which runs the
+  capabilities probe with the thread's directory as `cwd` and returns
+  `/compact` plus whatever that probe answered. A failed or timed-out probe
+  marks the entry `slashCommandsPending` (`ClaudeProvider.ts:447`) and the
+  registry keeps that directory's previous list under it
+  (`upsertProviderWorkspaceSnapshot`, `ProviderRegistry.ts:145-158`).
+  `refreshWorkspaceSnapshot` (`ProviderRegistry.ts:937`) re-probes an entry
+  that is pending or older than `PROVIDER_WORKSPACE_SNAPSHOT_TTL_MS`, 5
+  minutes (`packages/contracts/src/server.ts:135`), so a new
+  `~/.claude/commands` file also reaches an existing directory within that
+  window. The client takes the entry whose `cwd` equals the composer's and
+  falls back to the machine list until one exists
+  (`resolveProviderSlashCommandsForCwd`,
+  `packages/client-runtime/src/providerSkills.ts:128`); while an entry is
+  pending the `/` menu shows its loading state instead of a list
+  (`useComposerMenuItems.ts:376-379`), asks the server again after 10 s and
+  gives up after 3 attempts until the TTL passes
+  (`providerSkills.ts:135-137`). The machine-wide list is still probed in
+  T3's state directory (`ClaudeDriver.ts:182`) and the ring is still 16
+  entries per provider (`ProviderRegistry.ts:134`).
 
-  1. `checkClaudeProviderStatus` (`apps/server/src/provider/Layers/ClaudeProvider.ts:420`,
-     the list itself at line 540) builds the machine-wide list every 5 minutes from one SDK `initialize`
-     handshake run in the server's own cwd (`probeClaudeCapabilities`, 25 s
-     timeout, `settingSources: user,project,local`, no MCP). The result is
-     written to `~/.t3/caches/claudeAgent.json` (`slashCommands`, 99 entries
-     here on 2026-09-30). The `claude --version` health check that precedes it has a 4 s
-     timeout (`providerSnapshot.ts:23`) and takes 1 to 1.8 s on this Mac.
-  2. When a thread mounts, `ChatComposer.tsx:1957-2010` asks
-     `server.refreshProviders({instanceId, cwd})` for a *workspace snapshot*
-     of the thread's cwd (worktree path, else the project root), retrying
-     every 10 s until one exists. `ProviderRegistry.refreshWorkspaceSnapshot`
-     (`ProviderRegistry.ts:838`) calls `ClaudeDriver.snapshotForCwd`
-     (`ClaudeDriver.ts:261`), which is nothing more than
-     `{...machineSnapshot, skills: discoverClaudeSkills(cwd)}`: the commands
-     are a **copy of the machine list at that instant**. A turn start does the
-     same capture (`ProviderCommandReactor.ts:713`).
-  3. `upsertProviderWorkspaceSnapshot` (`ProviderRegistry.ts:85`) stores it in
-     a ring of **16 entries per provider** (`MAX_WORKSPACE_SNAPSHOTS_PER_PROVIDER`,
-     newest wins). The refresh returns early whenever an entry for the cwd
-     already exists (`ProviderRegistry.ts:847`), the 5-minute machine refresh
-     carries old entries over untouched (`mergeProviderSnapshot`,
-     `ProviderRegistry.ts:214`), and only `status === "error"` blocks a capture
-     (`ProviderRegistry.ts:863`). So an entry is captured once and **never
-     revisited**; it dies only by ring eviction or a server restart.
-  4. The client prefers the entry over the machine list
-     (`packages/client-runtime/src/providerSkills.ts:121`,
-     `resolveProviderSlashCommandsForCwd`), so a bad entry hides a perfectly
-     good machine list for that cwd.
+  **What remains.** Not established whether the symptom is gone: nobody has
+  watched for it on 0.1.x. By the code the one case left is a directory
+  whose first probes all fail: it has no previous list, so its entry holds
+  only `/compact`, and after the third failed attempt the composer stops
+  asking until the 5-minute TTL passes. The command palette's "Restart agent
+  session" (`CommandPalette.tsx:1443-1450`) is the manual escape: it calls
+  `refreshProviders` with `fresh: true` for the thread's cwd, which drops the
+  entry, re-runs the machine probe and probes the directory again. Settings >
+  Providers > Refresh still merges and keeps the old entries.
 
-  Two windows produce a bad entry, and both leave status `warning`, which
-  does not block the capture: (a) the seconds after a server start, when the
-  placeholder from `makePendingClaudeProvider` (`ClaudeProvider.ts:605`) has
-  `slashCommands: []` and the thread restored at launch asks straight away;
-  (b) any 5-minute cycle whose capability probe failed or timed out, when the
-  machine list is just `[compact]` (`ClaudeProvider.ts:540-556`). A
-  `--version` timeout is a third, softer case: status `error` blocks captures
-  and empties the machine list for that cycle, so threads *without* an entry
-  show an empty menu until the next successful check.
-
-  **Why one project.** A project whose threads each get a worktree has one cwd
-  per ticket thread (16 open ones here), every other project has one. The
-  worktree project drives all the churn: its threads are the ones open across
-  restarts and the ones creating new cwds, and its root directory is shared by
-  every non-worktree thread in it, so one bad root entry blanks most of the
-  project at once. A new worktree thread starts on the project root and
-  switches to the worktree path after its first turn, which triggers a fresh
-  capture: that is the "works after a few turns" behaviour.
-
-  Counted from `~/.t3/userdata/state.sqlite` on 2026-09-30, for the server
-  that had been up since 2026-09-23: threads with a turn since that start
-  (`projection_turns` joined to `projection_threads` and
-  `projection_projects`) ran in 14 distinct working directories across 8
-  projects. The worktree project accounts for 7 of them (its root and 6
-  worktrees) across 22 threads, 16 of which ran in the shared root; every
-  other project has exactly one. 14 is under the 16-entry ring, so turn
-  starts alone evicted nothing in that week.
-
-  A settled thread costs nothing by itself. A capture happens only when a
-  thread is mounted in the composer or starts a turn, so a settled thread
-  matters only if it is opened. Of 201 threads, 196 were settled.
-
-  The last three turns before that restart (13:46 to 13:49 UTC, four minutes
-  before it) were in a worktree thread of that project, so the thread
-  restored at launch was most likely one of its threads: window (a) above.
-  That is one restart, and it points at the project in daily use being the
-  one open when T3 restarts.
-
-  The user-level command folder is not the cause: the machine list read from
-  it held all 29 deployed commands on 2026-09-30. The per-directory entries
-  are in server memory, so an empty one is still inferred, not read back.
-
-  **How it was verified.** Server spans in
-  `~/.t3/userdata/logs/server.trace.ndjson*` (rotates every ~35 min at 10 MB
-  x 10 files): `refreshWorkspaceSnapshot` under `ensureSessionForThread` on
-  every turn start, 0 ms because the entry existed; `checkClaudeProviderStatus`
-  1.0-1.8 s every 5 min; the probe replayed by hand (the `initialize` control
-  request over `--input-format stream-json` with the probe's flags) answered
-  in 0.5-0.8 s with all 95 commands (99 by 2026-09-30). The per-cwd entries themselves are in
-  server memory only, reachable through the authenticated `/ws` RPC, so the
-  bad capture is inferred from the code paths, not read back.
-
-  **Workarounds.** Quit and reopen T3, and let the Claude provider reach
-  `ready` (Settings > Providers) *before* opening a thread, otherwise the
-  restored thread's cwd is captured against the placeholder again. Typing the
-  full command name still works. Settings > Providers > Refresh does not help:
-  `refresh()` merges and keeps the old entries.
-
-  **Upstream state (checked 2026-09-25).** The bug is reported three times:
+  **Upstream state (re-checked 2026-11-04).** The three reports of the
+  0.0.42 bug are closed as completed, all on 2026-10-21 by the maintainer:
   [#7111](https://github.com/pingdotgg/t3code/issues/7111) (probe failure
-  empties the list, Aug 15), [#11575](https://github.com/pingdotgg/t3code/issues/11575)
-  (startup placeholder captured, Sep 13, the exact mechanism above with span
-  timings) and [#13635](https://github.com/pingdotgg/t3code/issues/13635)
-  (probe stuck on `warning` for hours, Sep 25). Three fix PRs were closed
-  unmerged: [#7112](https://github.com/pingdotgg/t3code/pull/7112) and
-  [#7175](https://github.com/pingdotgg/t3code/pull/7175) (keep the last good
-  list) and [#11576](https://github.com/pingdotgg/t3code/pull/11576) (wait
-  for the first probe before capturing). On Sep 19 a maintainer closed
-  #11576 with: *"We're not taking changes to the orchestration and provider
-  layers right now: that part of the server is being rewritten for V2 ...
-  If this is still an issue once V2 lands, please reopen."*
-  [#13077](https://github.com/pingdotgg/t3code/pull/13077) (trusted
-  contributor, size L, open) re-probes commands per cwd with a 5-minute
-  expiry and would also fix this, but it touches the same layers.
-  Re-checked 2026-09-30: #7111, #11575 and #13635 are still open, and so is
-  #13077, now titled "fix(server): Claude picks up project slash commands",
-  with automated review comments unresolved and no maintainer decision.
-
-  **The fix, if we wanted to write it.** Small, all in
-  `apps/server/src/provider/Layers/ProviderRegistry.ts`:
-  - in `refreshWorkspaceSnapshot`, refuse to capture unless
-    `scopedSnapshot.status === "ready"` (today only `"error"` is refused). The
-    composer already retries every 10 s and the turn-start path retries per
-    turn, so the entry simply arrives once the first probe finishes. This
-    alone closes #11575 and the `[compact]` case of #7111.
-  - in `upsertProviders` / `mergeProviderSnapshot`, when the machine
-    `slashCommands` change, drop (or rewrite) every workspace entry of that
-    provider so the next mount recaptures; today a per-cwd entry can never
-    learn about a new `~/.claude/commands` file.
-  - optional: raise `MAX_WORKSPACE_SNAPSHOTS_PER_PROVIDER` above 16.
-  Tests live in `ProviderRegistry.test.ts` ("stores workspace skills and
-  commands without changing machine metadata", line 580, is the template);
-  the pending-provider case needs a fake instance whose `snapshotForCwd`
-  first returns a `warning` snapshot with `slashCommands: []`. Estimate: a
-  20-line change plus two tests, an afternoon. The realistic blocker is
-  the V2 freeze above, so the useful move is a comment on #11575 with the
-  span evidence, and a PR only once V2 lands or the freeze is lifted. See
-  [Working on the T3 source](#working-on-the-t3-source) for the checkout and
-  PR mechanics.
+  empties the list) and
+  [#13635](https://github.com/pingdotgg/t3code/issues/13635) (probe stuck on
+  `warning` for hours) point at
+  [#21042](https://github.com/pingdotgg/t3code/pull/21042), "fix(server):
+  recover after Claude capability probe failures" (`76ff0eb2a1`, 2026-10-19,
+  first stable tag `v0.1.1`), which reuses the last good machine probe when a
+  cycle's probe fails instead of publishing `[compact]`;
+  [#11575](https://github.com/pingdotgg/t3code/issues/11575) (startup
+  placeholder captured) points at #15462. The maintainer left one part of
+  #13635 open for a new issue: recovery still waits for a client to ask, with
+  no retry of its own and no display of how stale the state is. The earlier
+  fix PRs [#7112](https://github.com/pingdotgg/t3code/pull/7112),
+  [#7175](https://github.com/pingdotgg/t3code/pull/7175),
+  [#11576](https://github.com/pingdotgg/t3code/pull/11576) and
+  [#13077](https://github.com/pingdotgg/t3code/pull/13077) were closed
+  unmerged during the V2 rewrite freeze; #13077's per-cwd probe with a
+  5-minute expiry is what #15462 then shipped. Nothing left to file from here
+  unless the new-directory case above is seen on 0.1.x.
 
 - **A repo's own `.claude/commands` show in that repo's `/` menu since 0.1.0
   (fixed upstream by commit `836098543c`, "fix(server): discover Claude
@@ -202,7 +130,7 @@ machine, are in [setup_t3_code.md](setup_t3_code.md).
   thread, that project's included, though it ran when typed in full. The
   Claude driver's `snapshotForCwd` copied the machine command list and looked
   up only skills per directory. `v0.1.0` is the first stable tag with the
-  fix; envy runs 0.1.2. Seen on a 0.1.2 desktop on 2026-10-23: a command that
+  fix; envy ran 0.1.2 at that check. Seen on a 0.1.2 desktop on 2026-10-23: a command that
   exists only in a repo's `.claude/commands`, with no link in
   `~/.claude/commands`, is listed in a thread of that repo. The fix that
   landed is #15462, not [#13077](https://github.com/pingdotgg/t3code/pull/13077)
