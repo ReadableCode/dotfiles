@@ -454,15 +454,19 @@ is detected automatically — you are only prompted if detection fails.
 Layouts anchor on screen *orientation* (portrait vs landscape) rather than
 display IDs, so they survive the KVM re-enumerating the monitors.
 
-The file holds one layout per display set, under `"displays"`, named after the
+Window positions are kept per display set, under `"displays"`, named after the
 screens attached (their names sorted and joined with ` + `). A Mac uses the set
-that matches its screens right now, so the same MacBook gets the desk layout on
-the desk monitors and nothing on its own display. When the attached screens
-have no saved set, applying, gathering and the automatic re-pin after a display
-change all do nothing, and Hammerspoon shows "No window layout for <screens>".
-To give a screen set a layout, arrange the windows and snapshot: that starts
-its own entry. A layout entry for a screen orientation that is not attached is
-skipped rather than moved onto another screen.
+that matches its screens right now, so the same MacBook gets the desk positions
+on the desk monitors and leaves positions alone on its own display. Which
+desktop a window lives on does not depend on the screens, so `"assign"` sits at
+the top of the file and a window's desktop is read from every display set's
+entries. On screens with no saved set, Ctrl+Shift+L still re-pins All Desktops
+apps, sends windows to their desktops and walks every desktop (which clears the
+windows-not-coming-to-front bug), then shows "Desktops sorted, no window layout
+for <screens>" instead of positioning anything. To give a screen set positions,
+arrange the windows and snapshot: that starts its own entry. A layout entry for
+a screen orientation that is not attached is skipped rather than moved onto
+another screen.
 
 #### Assignment and position are separate
 
@@ -471,7 +475,7 @@ questions, so they are different config, and either can exist without the other:
 
 | | Where it lives in the JSON | What it means |
 | --- | --------------------------- | --------------- |
-| assignment | `"assign": {"Mail": "all", "Microsoft Edge": 3}` | Which desktop the app's windows belong on. This is the Dock's Options → Assign To setting, which the config enforces. |
+| assignment | top-level `"assign": {"Mail": "all", "Microsoft Edge": 3}`, shared by every display set | Which desktop the app's windows belong on. This is the Dock's Options → Assign To setting, which the config enforces. |
 | rectangle | `"all"` for all-desktops apps, `"1"`/`"2"`/`"3"` otherwise | Where the window sits. |
 | title match | `"match"` on a rectangle | *Which window* of that app the rectangle is for. |
 

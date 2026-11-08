@@ -109,20 +109,26 @@ end)
 -- public repo); reads and editor saves both go through it, so changes land in
 -- the credentials repo to be committed there.
 --
--- Display sets: a layout is only true for the monitors it was made on, so the
--- file holds one layout per DISPLAY SET, named after the screens attached
+-- Display sets: a position is only true for the monitors it was made on, so
+-- the file holds one layout per DISPLAY SET, named after the screens attached
 -- (sorted, " + " between them: "LS32A70 + LS32D70xE", "Built-in Retina
 -- Display"). Screen names survive the KVM flip where IDs do not. When the
--- screens attached now have no saved set, nothing here moves, resizes or
--- re-pins a window - a laptop on its own display is left alone until you
--- snapshot a layout for it, which starts that display set's own entry.
+-- screens attached now have no saved set, nothing is moved or resized - a
+-- laptop on its own display keeps its window positions until you snapshot a
+-- layout for it, which starts that display set's own entry.
+--
+-- Which desktop a window lives on does not depend on the screens, so that half
+-- applies on every display set: "assign" sits at the top of the file, and a
+-- window's desktop is read from the entries of every display set. A laptop on
+-- its own display still gets its windows sorted onto their desktops, its All
+-- Desktops apps re-pinned, and the Ctrl+Shift+L desktop walk.
 --
 -- File shape:
---   { "displays": {
+--   { "assign": { "Mail": "all", "Microsoft Edge": 3 },
+--     "displays": {
 --       "<display set>": {
 --         "all":    [ {app, screen, unit{x,y,w,h}}, ... ],
---         "1": [...], "2": [...], "3": [...],
---         "assign": { "Mail": "all", "Microsoft Edge": 3 } } } }
+--         "1": [...], "2": [...], "3": [...] } } }
 --
 -- "all" is the shared layout. An app assigned to All Desktops has ONE window
 -- that shows up everywhere, so it cannot be in two places at once and a
@@ -193,34 +199,56 @@ function wl.displaySet()
     return table.concat(names, " + ")
 end
 
--- The whole file, every display set.
+-- The whole file: the assignments and every display set.
 local function loadFile()
     if hs.fs.attributes(wl.file()) then
         local data = hs.json.read(wl.file())
         if type(data) == "table" then
             if type(data.displays) ~= "table" then data.displays = {} end
+            if type(data.assign) ~= "table" then data.assign = {} end
             return data
         end
     end
-    return { displays = {} }
+    return { assign = {}, displays = {} }
 end
 
--- The layout for the attached display set ({} when it has none). Everything
--- below reads and writes through this pair, so it only ever sees one set.
+-- The layout for the attached display set ({} when it has none), with the
+-- file's assignments under "assign". Everything below reads and writes through
+-- this pair, so it only ever sees one set.
 function wl.loadAll()
-    local set = loadFile().displays[wl.displaySet()]
-    return type(set) == "table" and set or {}
+    local file = loadFile()
+    local set = file.displays[wl.displaySet()]
+    set = type(set) == "table" and set or {}
+    set.assign = file.assign
+    return set
+end
+
+-- What decides which desktop a window belongs on: the assignments, and the
+-- per-desktop entries of EVERY display set, since a window's desktop does not
+-- change with the screens. Positions are not read from this.
+function wl.desktopRules()
+    local file = loadFile()
+    local rules = { assign = file.assign }
+    for _, set in pairs(file.displays) do
+        for k, list in pairs(type(set) == "table" and set or {}) do
+            if tostring(k):match("^%d+$") and type(list) == "table" then
+                rules[tostring(k)] = rules[tostring(k)] or {}
+                for _, item in ipairs(list) do table.insert(rules[tostring(k)], item) end
+            end
+        end
+    end
+    return rules
 end
 
 function wl.hasLayout()
     return type(loadFile().displays[wl.displaySet()]) == "table"
 end
 
--- Gate for everything that moves windows on its own say-so: true when this
--- display set has a layout, otherwise says so (unless quiet) and returns false.
+-- Gate for everything that moves or resizes windows: true when this display
+-- set has a layout, otherwise says so (unless quiet) and returns false.
 function wl.layoutHere(quiet)
     if wl.hasLayout() then return true end
-    wl.log("no layout for display set %s, leaving windows alone", wl.displaySet())
+    wl.log("no layout for display set %s, leaving positions alone", wl.displaySet())
     if not quiet then hs.alert.show("No window layout for " .. wl.displaySet()) end
     return false
 end
@@ -296,14 +324,22 @@ local function encodeSet(doc)
     for _, k in ipairs(keys) do
         parts[#parts + 1] = string.format('  "%s": %s', k, encodeLayout(doc[k]))
     end
-    parts[#parts + 1] = encodeAssign(doc.assign)
     return "{\n" .. table.concat(parts, ",\n") .. "\n}"
 end
 
 -- Save the attached display set's layout, keeping every other set as it is.
+-- doc.assign goes to the top of the file. A display set with no layout is not
+-- started just because an assignment was saved from it.
 function wl.saveAll(doc)
     local file = loadFile()
-    file.displays[wl.displaySet()] = doc
+    if doc.assign then file.assign = doc.assign end
+    local set = {}
+    local hasContent = type(doc.all) == "table" and #doc.all > 0
+    for k, v in pairs(doc) do
+        if k ~= "assign" then set[k] = v end
+        if tostring(k):match("^%d+$") and type(v) == "table" and #v > 0 then hasContent = true end
+    end
+    if hasContent or file.displays[wl.displaySet()] then file.displays[wl.displaySet()] = set end
     local names = {}
     for name in pairs(file.displays) do names[#names + 1] = name end
     table.sort(names)
@@ -315,7 +351,7 @@ function wl.saveAll(doc)
 
     local f = io.open(wl.file(), "w")
     if not f then return false end
-    f:write('{\n  "displays": {\n' .. table.concat(sets, ",\n") .. "\n  }\n}\n")
+    f:write("{\n" .. encodeAssign(file.assign) .. ',\n  "displays": {\n' .. table.concat(sets, ",\n") .. "\n  }\n}\n")
     f:close()
     return true
 end
@@ -690,7 +726,6 @@ end
 
 -- Apply just this desktop, no walking.
 function wl.applyHere()
-    if not wl.layoutHere() then return end
     local key = wl.currentKey("apply")
     if not key then return end
     wl.gather(function() wl.apply(key) end)
@@ -727,8 +762,11 @@ end
 -- Assignments are repaired FIRST: a window that macOS thinks is on all
 -- desktops but has silently stopped following you would otherwise get placed
 -- on whichever desktop happens to still hold it, and skipped everywhere else.
+--
+-- On a display set with no layout this still repairs assignments, gathers and
+-- walks every desktop (which is what clears the stuck-on-top bug below), and
+-- only the positioning pass is skipped.
 function wl.applyAll()
-    if not wl.layoutHere() then return end
     wl.fixAssign({ quiet = true, then_ = wl.applyAllNow })
 end
 
@@ -794,14 +832,14 @@ end
 -- Personal Calendar entries on different desktops with no match is ambiguous;
 -- three VS Code entries with distinct matches is not.
 function wl.targetDesktop(win, doc)
-    doc = doc or wl.loadAll()
+    doc = doc or wl.desktopRules()
     local app = win:application():name()
     local want = (doc.assign or {})[app]
     if want == "all" then return nil end
     if want then return tonumber(want) end
 
     local title = win:title() or ""
-    local matched, matchedN = nil, 0
+    local matched, matchedN = {}, 0
     local desktops, desktopN = {}, 0
     for k, list in pairs(doc) do
         if tostring(k):match("^%d+$") and type(list) == "table" then
@@ -811,14 +849,18 @@ function wl.targetDesktop(win, doc)
                         desktops[tonumber(k)] = true
                         desktopN = desktopN + 1
                     end
-                    if item.match and item.match ~= "" and title:find(item.match, 1, true) then
-                        matched, matchedN = tonumber(k), matchedN + 1
+                    -- counted per desktop: the same entry in two display sets is
+                    -- one answer, not an ambiguity
+                    if item.match and item.match ~= "" and title:find(item.match, 1, true)
+                        and not matched[tonumber(k)] then
+                        matched[tonumber(k)] = true
+                        matchedN = matchedN + 1
                     end
                 end
             end
         end
     end
-    if matchedN == 1 then return matched end
+    if matchedN == 1 then for d in pairs(matched) do return d end end
     if matchedN > 1 then return nil end
     if desktopN == 1 then for d in pairs(desktops) do return d end end
     return nil
@@ -998,7 +1040,7 @@ end
 
 -- Which windows visible from here are on the wrong desktop?
 function wl.gatherPlan()
-    local doc = wl.loadAll()
+    local doc = wl.desktopRules()
     local _, ids = wl.spaceIndex()
     local plan = {}
     for _, win in ipairs(currentWindows()) do
@@ -1050,6 +1092,11 @@ function wl.applyAllNow()
     wl.walkAsync(function(_, next_)
         wl.gather(function(n) total = total + n; next_() end)
     end, function()
+        if not wl.hasLayout() then
+            wl.log("gathered %d window(s), no layout for %s so positions are left alone", total, wl.displaySet())
+            hs.alert.show(string.format("Desktops sorted (%d moved), no window layout for %s", total, wl.displaySet()))
+            return
+        end
         wl.log("gathered %d window(s), now applying", total)
         wl.walk(function(i) wl.apply(tostring(i)) end)
     end)
@@ -1058,7 +1105,6 @@ end
 -- This desktop only: send away anything that belongs elsewhere, then lay out
 -- what is left.
 function wl.gatherHere()
-    if not wl.layoutHere() then return end
     wl.gather(function(moved)
         hs.alert.show(moved > 0 and ("Moved " .. moved .. " window" .. (moved == 1 and "" or "s"))
             or "Nothing to move from here")
@@ -1078,7 +1124,7 @@ end
 --    window, so clicking another app activates it without raising it.
 --    Invisible to the detection below; re-pinning frees one app at a time,
 --    while switching to another desktop and back clears it at once, which the
---    Ctrl+Shift+L walk already does.
+--    Ctrl+Shift+L walk already does, on every display set.
 --
 -- Detection is cheap and needs no menus: hs.spaces.windowSpaces(win) returns
 -- every space a window is on, and wl.spaceIndex() gives the space-ID -> desktop
@@ -1237,7 +1283,6 @@ end
 
 function wl.fixAssign(opts)
     opts = opts or {}
-    if not wl.layoutHere(opts.quiet) then return end
     local finish = function(msg)
         wl.log("fixAssign done: %s", msg or "nothing to report")
         if msg and not opts.quiet then hs.alert.show(msg) end
