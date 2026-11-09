@@ -33,7 +33,7 @@ a refresh offers it.
 | Linux (Fedora) | TigerVNC Viewer | the same file (`dnf: tigervnc`) |
 | Android | AVNC | F-Droid |
 | any, for an RDP host | FreeRDP (`sdl-freerdp`, Apache-2.0) | the same file (`brew: freerdp`, `dnf: freerdp`, `apt: freerdp3-sdl`); on Windows MSYS2's `mingw-w64-ucrt-x86_64-freerdp`, offered on first use |
-| iOS | *(none - see below)* | |
+| iOS | Moonlight, to a Sunshine host (no VNC client - see below) | the personal `<context>_app_lists.yaml` (`brew: lizardbyte/homebrew/sunshine` on the host side; Moonlight itself comes from the App Store) |
 
 ### Which viewer an alias picks, and why it matters
 
@@ -154,10 +154,36 @@ TigerVNC speaks all of them, which is why the Pis - and only the Pis - launch
 `vncviewer` from a Mac rather than `open vnc://`.
 
 iOS has no free software VNC client: the only GPL-lineage app on the App Store
-is paid and ships no iOS source. Reach a GPU host from an iPad with Moonlight
-instead, which is GPL-3.0 and free on every platform. That covers RyzenWhite,
-which already runs Sunshine. It does not cover the Pis or a login screen, which
-is what this doc is for.
+is paid and ships no iOS source. An iPhone or iPad reaches a host with
+Moonlight instead, which is GPL-3.0 and free on every platform, talking to
+Sunshine on the host. RyzenWhite serves it from its winget install;
+Envy serves it from `lizardbyte/homebrew/sunshine` started by the
+`sunshine_launch_agent` manifest entry. It does not cover the Pis, and it is a
+backup path rather than the method: Sunshine streams ONE display per session,
+picked in its web UI at `https://localhost:47990`, so two monitors cannot both
+be on screen the way a VNC viewer shows them.
+
+Two Moonlight client settings decide whether it is usable at all, and both
+live on the app's host-list screen, not in the stream (`StreamFrameViewController`
+has no route to them): set **On-Screen Controls** to **Off**, because on
+**Auto** with no physical controller the overlay is drawn and `StreamView`
+offers every touch to it before the mouse handler, so the cursor never moves;
+and set **Touch Mode** to **Touchpad** for a relative cursor, or
+**Touchscreen** for absolute taps plus the pinch-zoom and two-finger pan that
+only exist there (absolute mode wraps the stream in a scroll view, max zoom
+10x, and forces the overlay off by itself). Settings are read in `viewDidLoad`,
+so a change needs a reconnect. There is no mode with both relative cursor and
+zoom.
+
+Neither Sunshine nor a login screen reaches a Mac before sign-in when FileVault
+is on, which it is on Envy with no auto-login: the pre-boot unlock screen has
+no network stack, so that case is the physical keyboard whatever the protocol.
+A LaunchAgent also loads only in the Aqua session. Screen Recording is granted
+to the binary and not to a bundle, so the first launchd start after a fresh
+grant can still fail with `No screen capture permission!` and
+`Platform failed to initialize`; `launchctl kickstart -k gui/$(id -u)/local.sunshine`
+clears it, and Sunshine truncates `~/.config/sunshine/sunshine.log` on start,
+so check the log right after the failure or it is gone.
 
 Do not use RealVNC. It moved direct IP connections to its
 Enterprise tier, leaving the free and Home tiers able to connect only through

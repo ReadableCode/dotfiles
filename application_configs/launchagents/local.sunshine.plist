@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>local.sunshine</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/opt/sunshine/bin/sunshine</string>
+		<string>/Users/jason/.config/sunshine/sunshine.conf</string>
+	</array>
+	<key>LimitLoadToSessionType</key>
+	<array>
+		<string>Aqua</string>
+	</array>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>StandardErrorPath</key>
+	<string>/Users/jason/logs/sunshine_launchd.log</string>
+</dict>
+</plist>

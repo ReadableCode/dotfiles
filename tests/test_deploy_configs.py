@@ -1556,6 +1556,7 @@ OVERLAY_OWNED_PAYLOADS = {
     "claude/settings.json": "personal_dev",
     "claude/statusline.sh": "personal_dev",
     "claude/themes/dark-high-contrast.json": "personal_dev",
+    "launchagents/local.sunshine.plist": "personal_credentials",
     "ssh/config": "personal_credentials",
     "ssh/config.mac": "personal_credentials",
     "systemd/vncserver@.service": "personal_credentials",
