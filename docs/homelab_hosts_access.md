@@ -26,10 +26,10 @@ the things that silently fail a plausible remote workflow.
 - Headless with no console session: every DRM output is disconnected and gdm
   sits at the greeter. Nothing that needs display `:0` works; that is why it
   runs the Xtigervnc virtual desktop.
-- Its ssh key is not registered on GitHub, so GitHub pulls fail there. Forward
-  the agent for a one-off (`ssh-add` locally, `ssh -A -o ControlPath=none`,
-  `ssh-add -d` after). Its key does reach elitedesk, so the credentials repo
-  pulls unaided.
+- Its ssh key is registered on GitHub (`ssh -T git@github.com` authenticates
+  as ReadableCode, checked 2026-11-09), so dotfiles, Docker and server_configs
+  pull unaided from the deploy cron. Its key reaches elitedesk too, so the
+  credentials repo pulls unaided.
 - sudo needs a password (no NOPASSWD); root-side work is mine. Probing sudo
   here is harmless, unlike elitedesk.
 - jason is in the docker group; app data lives in `/home/jason/docker_app_data`,
