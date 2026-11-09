@@ -190,6 +190,12 @@ context's own user-level CLAUDE.md.
   the whole string as one field has hit this; fix the loop before reading
   anything into the remote's reply.
 - `log` is a zsh builtin: run the macOS unified log as `/usr/bin/log show`.
+- Never `find`, `grep -r` or otherwise walk recursively through a cloud-drive
+  mount (OneDrive, Google Drive FUSE, rclone): the mount fetches every file it
+  lists and the call hangs with no output. Before any recursive walk that
+  starts at a home folder, run `mount` and `ls ~`, prune every mount point, and
+  narrow to a named subfolder. A repo's path comes from the host inventory or
+  `ls`, never from a home-wide search.
 - In a uv project run Python as `uv run python`; bare `python3` lacks the
   project's packages.
 - Read a tool's main or `--help` before running it; a run with no arguments
