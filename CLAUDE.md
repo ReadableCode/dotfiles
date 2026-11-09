@@ -258,6 +258,17 @@ is the one-paragraph orientation so an agent knows which file to open.
   of gnome-remote-desktop no deployed file can hold. Its settings and
   certificate are manifest entries. `--check` is read-only. Doc:
   `docs/setup_vnc_server.md`, "GNOME session sharing".
+- **`rustdesk_server.py`** - step 5d of `refresh_machine.py`: on a host whose
+  record has a `rustdesk` block, ensures `direct-server` and
+  `direct-access-port` under `[options]` in RustDesk's own `RustDesk2.toml`,
+  leaving every other key alone. A tool and not a deployed link because
+  RustDesk rewrites that file itself, beside its runtime state (`nat_type`,
+  `serial`, `local-ip-addr`). Direct IP is the point: the phone connects
+  straight to the host, so RustDesk's public ID and relay servers are never in
+  the path. The permanent password is machine-local and in no repo, like
+  `~/.vnc/passwd`. Only the host that answers declares the block, so the
+  portable Macs stay clients. Stdlib only. `--check` is read-only. Doc:
+  `docs/setup_rustdesk.md`.
 - **`tailscale_routes.py`** - step 5c of `refresh_machine.py`, and the
   crontab line on a server with no refresh loop: on a host whose record has
   a `tailscale.advertise_routes` list, hands it to

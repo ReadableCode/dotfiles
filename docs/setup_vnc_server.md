@@ -154,9 +154,11 @@ TigerVNC speaks all of them, which is why the Pis - and only the Pis - launch
 `vncviewer` from a Mac rather than `open vnc://`.
 
 iOS has no free software VNC client: the only GPL-lineage app on the App Store
-is paid and ships no iOS source. An iPhone or iPad reaches a host with
-Moonlight instead, which is GPL-3.0 and free on every platform, talking to
-Sunshine on the host. RyzenWhite serves it from its winget install;
+is paid and ships no iOS source. An iPhone or iPad therefore reaches a host
+with **RustDesk** (AGPL-3.0, direct IP, switches between a host's monitors) -
+see `setup_rustdesk.md`, which is the method. Moonlight to Sunshine is the
+backup and the rest of this section: GPL-3.0 and free on every platform,
+talking to Sunshine on the host. RyzenWhite serves it from its winget install;
 Envy serves it from `lizardbyte/homebrew/sunshine` started by the
 `sunshine_launch_agent` manifest entry. It does not cover the Pis, and it is a
 backup path rather than the method: Sunshine streams ONE display per session,

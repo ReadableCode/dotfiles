@@ -49,6 +49,7 @@ prefixes; nothing lives unprefixed.
 - [setup_tiktok_scraper.md](setup_tiktok_scraper.md) - setup_tiktok_scraper
 - [setup_unison.md](setup_unison.md) - Unison
 - [setup_ups_monitoring.md](setup_ups_monitoring.md) - Setup NUT (Network UPS Tools)
+- [setup_rustdesk.md](setup_rustdesk.md) - Setup RustDesk
 - [setup_vnc_server.md](setup_vnc_server.md) - Setup Tiger VNC
 - [setup_vscode.md](setup_vscode.md) - Setting up Visual Studio Code
 - [setup_windows_chocolatey.md](setup_windows_chocolatey.md) - Setting Up Chocolatey on Windows
