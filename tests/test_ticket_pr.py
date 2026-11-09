@@ -1453,7 +1453,9 @@ def test_pr_status_bitbucket_reports_the_reviewers_votes(monkeypatch, capsys):
     ticket_pr.main(["pr-status", "--repo", "bitbucket:ws/slug", "--pr", "98"])
     out = capsys.readouterr().out
     assert "review: approved by Alex Reviewer; awaiting Pat Lee" in out
-    review = json.loads(out.strip().splitlines()[-1])["review"]
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result["title"] == "Drop overrides"
+    review = result["review"]
     assert review == {
         "state": "OPEN",
         "draft": False,

@@ -1028,10 +1028,24 @@ def cmd_pr_status(args):
         print(f"waiting on {len(report['pending'])} check(s): {', '.join(report['pending'][:5])} ...", flush=True)
         time.sleep(args.interval)
     if provider == "bitbucket":
-        report.update({"pr": pull["id"], "url": bb_pr_url(pull, repo), "review": review_rollup_bitbucket(pull)})
+        report.update(
+            {
+                "pr": pull["id"],
+                "title": pull.get("title"),
+                "url": bb_pr_url(pull, repo),
+                "review": review_rollup_bitbucket(pull),
+            }
+        )
     else:
         reviews = list(github_paginate(f"{GITHUB_API}/repos/{repo}/pulls/{pull['number']}/reviews", headers))
-        report.update({"pr": pull["number"], "url": pull["html_url"], "review": review_rollup_github(pull, reviews)})
+        report.update(
+            {
+                "pr": pull["number"],
+                "title": pull.get("title"),
+                "url": pull["html_url"],
+                "review": review_rollup_github(pull, reviews),
+            }
+        )
         report["merge"] = merge_state_github(repo, pull, headers)
     state = "GREEN" if report["green"] else ("FAILED" if report["failed"] else "PENDING")
     print(review_line(report["review"]))
