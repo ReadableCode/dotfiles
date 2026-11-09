@@ -16,6 +16,14 @@ Moonlight to Sunshine was the first way round that and is still the backup
 model is built for games. RustDesk controls a desktop, switches between a
 host's monitors, and has a real modifier key row.
 
+A self-hosted Apache Guacamole (behemoth, proxied by SWAG) was the other
+candidate, as the one option that speaks VNC and RDP to every machine here from
+a browser. It lost on the two things that mattered most: iOS Safari gives a web
+page no modifier keys and will not hand it the system clipboard without a
+gesture, and routing every machine through one container makes a single point
+of failure where today each host answers for itself. It stays configured and
+is deliberately stopped, so the setup can still be demonstrated.
+
 On the rug-pull question, which is the reason this was not decided quickly:
 
 - The client is plain AGPL-3.0. Its `LICENCE` is unmodified FSF text with no
@@ -43,9 +51,20 @@ app would cost convenience from the phone, not access to any machine.
 
 By default the client registers with RustDesk's public ID server
 (`rendezvous_server = 'rs-ny.rustdesk.com:21116'` in `RustDesk2.toml`) and
-connects by a numeric ID. Direct IP access skips that: the phone connects
-straight to the host's LAN address, reachable from anywhere through the
-Tailscale subnet route, and nothing that company runs is involved.
+connects by a numeric ID. Direct IP access takes that out of the CONNECTION
+path: the phone connects straight to the host's LAN address, reachable from
+anywhere through the Tailscale subnet route, and no server of theirs carries
+the session.
+
+It does not stop the host registering. The host still pings the ID server to
+publish its numeric ID, and there is no documented setting that stops it while
+keeping direct IP working. The options that sound like they would are not that:
+`disable-udp` only moves the same contact to TCP 21116, `register-device` is
+Pro-server-only and concerns the web console, and the docs say nothing about
+what an empty or unreachable `rendezvous_server` does. The only documented way
+to have no contact with their servers is to point the client at a self-hosted
+hbbs, which is a bigger change than this needs. Checked 2026-11-09; the
+registration carries the ID and nothing about the session.
 
 That is two options under `[options]` in `RustDesk2.toml`:
 
