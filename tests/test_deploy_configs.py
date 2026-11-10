@@ -1368,7 +1368,7 @@ def test_prune_candidates_come_from_removals_and_skip_still_wanted_dests(monkeyp
     )
     entries = [{"name": "keep", "repo": "r.txt", "dest": {"darwin": "~/.keep"}}]
     candidates = deploy_configs.build_prune_candidates(entries, "darwin", "ENVY")
-    assert [dest for dest, _, _ in candidates] == [os.path.join(str(fake_home), ".gone")]
+    assert [dest for dest, *_ in candidates] == [os.path.join(str(fake_home), ".gone")]
     assert candidates[0][1] == "removals:dead"
 
 
@@ -1407,7 +1407,7 @@ def test_prune_takes_back_the_links_of_an_overlay_this_machine_is_not_in(overlay
     os.symlink(write_file(os.path.join(str(fake_home), "elsewhere.md"), "mine"), foreign)  # not into gitDir
     os.makedirs(os.path.join(str(fake_home), ".acme_dir"))  # a real directory, never a link
     candidates = deploy_configs.build_prune_candidates([], "darwin", "HUB")
-    assert candidates == [(link, "unloaded overlay:acme_shard", False)]
+    assert candidates == [(link, "unloaded overlay:acme_shard", False, False)]
     # the record listing the context ends the take-back
     write_records_at(
         str(overlay_tree / "personal_credentials" / "personal_hosts.json"), [{"name": "Hub", "contexts": ["acme"]}]
@@ -1420,7 +1420,7 @@ def test_prune_removes_orphaned_symlink_only_with_apply(tmp_path, fake_home):
     dest = os.path.join(str(fake_home), "skills", "old", "SKILL.md")
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     os.symlink(source, dest)
-    candidates = [(dest, "removals:old", False)]
+    candidates = [(dest, "removals:old", False, False)]
 
     deploy_configs.run_prune(candidates, apply_changes=False)
     assert os.path.lexists(dest), "dry run must not delete"
@@ -1438,7 +1438,9 @@ def test_prune_removes_dangling_symlink_and_leaves_real_dirs(tmp_path, fake_home
     real_dir = os.path.join(str(fake_home), "realdir")
     os.makedirs(real_dir, exist_ok=True)
 
-    deploy_configs.run_prune([(dangling, "removals:x", False), (real_dir, "removals:y", False)], apply_changes=True)
+    deploy_configs.run_prune(
+        [(dangling, "removals:x", False, False), (real_dir, "removals:y", False, False)], apply_changes=True
+    )
     assert not os.path.lexists(dangling), "a dangling symlink is still ours to remove"
     assert os.path.isdir(real_dir), "a real directory is never pruned"
 
@@ -1446,13 +1448,13 @@ def test_prune_removes_dangling_symlink_and_leaves_real_dirs(tmp_path, fake_home
 def test_prune_removes_hard_link_style_regular_file(fake_home):
     """The Windows fallback: a hard link is a plain file once its source is gone."""
     dest = write_file(os.path.join(str(fake_home), "hardlinked.md"), "stale content")
-    deploy_configs.run_prune([(dest, "removals:old", False)], apply_changes=True)
+    deploy_configs.run_prune([(dest, "removals:old", False, False)], apply_changes=True)
     assert not os.path.exists(dest)
 
 
 def test_prune_is_idempotent_when_targets_are_already_gone(fake_home, capsys):
     dest = os.path.join(str(fake_home), "never-existed.md")
-    assert deploy_configs.run_prune([(dest, "removals:x", False)], apply_changes=True) == 0
+    assert deploy_configs.run_prune([(dest, "removals:x", False, False)], apply_changes=True) == 0
     assert "already absent 1" in capsys.readouterr().out
 
 
@@ -1490,7 +1492,131 @@ def test_link_only_removal_ignores_a_real_directory_but_removes_a_link(overlay_t
     target.rmdir()
     os.symlink(str(fake_home), str(target))
     candidates = deploy_configs.build_prune_candidates(entries, "darwin", "ENVY")
-    assert [dest for dest, _, _ in candidates] == [str(target)]
+    assert [dest for dest, *_ in candidates] == [str(target)]
+
+
+def test_keep_copy_removal_replaces_a_link_with_a_copy_and_leaves_its_target_alone(tmp_path, fake_home, capsys):
+    source = write_file(str(tmp_path / "repo" / "settings.json"), '{"a": 1}')
+    dest = os.path.join(str(fake_home), ".app", "settings.json")
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(source, dest)
+    candidates = [(dest, "removals:settings_link", False, True)]
+
+    deploy_configs.run_prune(candidates, apply_changes=False)
+    assert os.path.islink(dest), "dry run must not touch the link"
+    assert "WOULD UNLINK" in capsys.readouterr().out
+
+    deploy_configs.run_prune(candidates, apply_changes=True)
+    assert "UNLINKED" in capsys.readouterr().out
+    assert os.path.isfile(dest) and not os.path.islink(dest)
+    assert open(dest).read() == '{"a": 1}'
+    assert open(source).read() == '{"a": 1}', "the file the link pointed at is never touched"
+    assert os.listdir(os.path.dirname(dest)) == ["settings.json"], "no temporary file is left beside it"
+    # the app's writes now stay in its own file
+    write_file(dest, '{"a": 2}')
+    assert open(source).read() == '{"a": 1}'
+
+
+def test_keep_copy_removal_breaks_a_hard_link_the_same_way(tmp_path, fake_home):
+    """The Windows fallback link: a second name for the repo file's inode."""
+    source = write_file(str(tmp_path / "repo" / "settings.json"), "shared")
+    dest = os.path.join(str(fake_home), "settings.json")
+    os.link(source, dest)
+    assert deploy_configs.is_shared_file(dest)
+
+    deploy_configs.run_prune([(dest, "removals:settings_link", False, True)], apply_changes=True)
+    assert not os.path.samefile(source, dest) and open(dest).read() == "shared"
+    assert not deploy_configs.is_shared_file(dest)
+
+
+def test_keep_copy_removal_drops_a_dangling_link_and_skips_a_link_to_a_directory(tmp_path, fake_home, capsys):
+    dangling = os.path.join(str(fake_home), "dangling.json")
+    os.symlink(str(tmp_path / "deleted.json"), dangling)
+    folder_link = os.path.join(str(fake_home), "folder")
+    os.symlink(str(tmp_path), folder_link)
+
+    deploy_configs.run_prune(
+        [(dangling, "removals:x", False, True), (folder_link, "removals:y", False, True)], apply_changes=True
+    )
+    assert not os.path.lexists(dangling), "nothing to keep behind a dangling link"
+    assert os.path.islink(folder_link)
+    assert "link to a directory - left in place" in capsys.readouterr().out
+
+
+def test_keep_copy_removal_recovers_a_dangling_link_from_the_history_of_its_checkout(tmp_path, fake_home, capsys):
+    """The pull that retires the link also deletes its target, so the link is already dangling when prune runs."""
+    repo = _git_repo(str(tmp_path / "checkout"), remote=False)
+    tracked = write_file(os.path.join(repo, "app", "settings.json"), '{"a": 1}')
+    commit = ["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm"]
+    subprocess.run(["git", "-C", repo, "add", "."], check=True)
+    subprocess.run([*commit, "add settings"], check=True)
+    dest = os.path.join(str(fake_home), ".app", "settings.json")
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(tracked, dest)
+    candidates = [(dest, "removals:settings_link", False, True)]
+
+    # deleted in the working tree only: HEAD still holds it
+    os.remove(tracked)
+    deploy_configs.run_prune(candidates, apply_changes=False)
+    assert "WOULD UNLINK" in capsys.readouterr().out and os.path.islink(dest)
+
+    # deleted by a commit, with another commit on top: the copy from before the deletion
+    subprocess.run(["git", "-C", repo, "rm", "-q", "--cached", "app/settings.json"], check=True)
+    subprocess.run([*commit, "retire settings"], check=True)
+    write_file(os.path.join(repo, "later.txt"), "x")
+    subprocess.run(["git", "-C", repo, "add", "."], check=True)
+    subprocess.run([*commit, "later"], check=True)
+    deploy_configs.run_prune(candidates, apply_changes=True)
+    assert "last committed content of its deleted target" in capsys.readouterr().out
+    assert os.path.isfile(dest) and not os.path.islink(dest) and open(dest).read() == '{"a": 1}'
+    assert not os.path.exists(tracked), "nothing is put back into the checkout"
+    assert deploy_configs.last_committed_content(os.path.dirname(tracked)) is None, "a folder has no content to keep"
+    assert deploy_configs.last_committed_content(os.path.join(repo, "never", "tracked.json")) is None
+    assert subprocess.check_output(["git", "-C", repo, "status", "--porcelain"], text=True) == ""
+
+
+def test_keep_copy_removal_is_done_once_the_path_is_a_file_of_its_own(monkeypatch, fake_home, tmp_path):
+    _removals(monkeypatch, [{"name": "settings_link", "dest": {"darwin": "~/.app/settings.json"}, "keep_copy": True}])
+    dest = os.path.join(str(fake_home), ".app", "settings.json")
+    # absent: still listed, and prune counts it as already absent
+    assert deploy_configs.build_prune_candidates([], "darwin", "ENVY") == [
+        (dest, "removals:settings_link", False, True)
+    ]
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(write_file(str(tmp_path / "settings.json"), "{}"), dest)
+    assert [row[0] for row in deploy_configs.build_prune_candidates([], "darwin", "ENVY")] == [dest]
+    deploy_configs.run_prune(deploy_configs.build_prune_candidates([], "darwin", "ENVY"), apply_changes=True)
+    # the app's own file: neither a prune candidate nor an orphan in status, on every later run
+    assert deploy_configs.build_prune_candidates([], "darwin", "ENVY") == []
+
+
+def test_an_ingest_entry_does_not_keep_a_retired_link_at_its_machine_path(monkeypatch, fake_home, tmp_path):
+    """An ingest row reads its dest and deploys nothing there, so the removal of the old link still applies."""
+    _removals(monkeypatch, [{"name": "settings_link", "dest": {"darwin": "~/.app/settings.json"}, "keep_copy": True}])
+    dest = os.path.join(str(fake_home), ".app", "settings.json")
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(write_file(str(tmp_path / "settings.json"), "{}"), dest)
+    entry = {
+        "name": "settings",
+        "repo": "settings.json",
+        "method": "ingest",
+        "dest": {"darwin": "~/.app/settings.json"},
+    }
+    candidates = deploy_configs.build_prune_candidates([entry], "darwin", "ENVY", repo_root=str(tmp_path))
+    assert [row[0] for row in candidates] == [dest]
+    # a link entry at the same path still wins over the removal
+    linked = {**entry, "method": "symlink"}
+    assert deploy_configs.build_prune_candidates([linked], "darwin", "ENVY", repo_root=str(tmp_path)) == []
+
+
+def test_load_removals_rejects_bad_keep_copy(tmp_path, monkeypatch):
+    removals_path = os.path.join(str(tmp_path), "x_removals.yaml")
+    monkeypatch.setattr(deploy_configs, "discover_removals", lambda: [removals_path])
+    for extra, message in (({"keep_copy": "yes"}, "non-boolean keep_copy"), ({"directory": True}, "both keep_copy")):
+        with open(removals_path, "w", encoding="utf-8") as handle:
+            yaml.safe_dump([{"name": "bad", "dest": {"darwin": "~/.x"}, "keep_copy": True, **extra}], handle)
+        with pytest.raises(ValueError, match=message):
+            deploy_configs.load_removals()
 
 
 def test_load_removals_rejects_entry_without_dest(tmp_path, monkeypatch):
@@ -1509,11 +1635,7 @@ def test_own_removals_parse_and_name_no_still_wanted_dest():
         assert entry.get("name") and entry.get("dest"), entry
     entries, _ = deploy_configs.load_manifests()
     for platform_key in ("darwin", "linux", "windows"):
-        wanted = {
-            row["dest"]
-            for row in deploy_configs.build_plan(entries, platform_key, "ENVY")
-            if row["action"] == "apply" and row["dest"]
-        }
+        wanted = deploy_configs.wanted_dests(deploy_configs.build_plan(entries, platform_key, "ENVY"))
         targeted = {deploy_configs.resolve_dest(entry, platform_key, "ENVY") for entry in removals}
         assert not (wanted & targeted), f"removals would delete a live dest on {platform_key}"
 
@@ -1566,7 +1688,6 @@ OVERLAY_OWNED_PAYLOADS = {
     "t3code/service.d/30-tunnel-http2.elitedesk.conf": "personal_dev",
     "t3code/service.d/30-tunnel-http2.jasonzephyrus.conf": "personal_dev",
     "t3code/service.d/30-tunnel-http2.nukbuntu.conf": "personal_dev",
-    "t3code/settings.json": "personal_dev",
     "vnc/xstartup": "personal_credentials",
 }
 
@@ -1673,20 +1794,20 @@ def test_payload_exemption_lists_stay_in_step_with_the_files():
 def test_deploy_prunes_live_removals_by_default(tmp_path, capsys):
     dead = tmp_path / "dead_link"
     dead.symlink_to(tmp_path / "gone")
-    deploy_configs.prune_before_deploy([(str(dead), "removals:test_entry", False)])
+    deploy_configs.prune_before_deploy([(str(dead), "removals:test_entry", False, False)])
     assert not os.path.lexists(dead)
     assert "REMOVED" in capsys.readouterr().out
 
 
 def test_deploy_prune_prints_nothing_when_no_candidate_is_on_disk(tmp_path, capsys):
-    deploy_configs.prune_before_deploy([(str(tmp_path / "absent"), "removals:test_entry", False)])
+    deploy_configs.prune_before_deploy([(str(tmp_path / "absent"), "removals:test_entry", False, False)])
     assert capsys.readouterr().out == ""
 
 
 def test_deploy_prune_still_skips_what_run_prune_protects(tmp_path, capsys):
     real_dir = tmp_path / "real_dir"
     real_dir.mkdir()
-    deploy_configs.prune_before_deploy([(str(real_dir), "removals:test_entry", False)])
+    deploy_configs.prune_before_deploy([(str(real_dir), "removals:test_entry", False, False)])
     assert real_dir.is_dir()
     assert "SKIP" in capsys.readouterr().out
 
@@ -1728,7 +1849,7 @@ def test_directory_flag_flows_from_removals_entry(monkeypatch, fake_home):
         ],
     )
     candidates = deploy_configs.build_prune_candidates([], "darwin", "ENVY")
-    assert [(os.path.basename(dest), allow) for dest, _, allow in candidates] == [
+    assert [(os.path.basename(dest), allow) for dest, _, allow, _ in candidates] == [
         (".gone-file", False),
         ("gone-repo", True),
     ]
@@ -1736,7 +1857,7 @@ def test_directory_flag_flows_from_removals_entry(monkeypatch, fake_home):
 
 def test_prune_directory_removes_only_a_clean_remoted_git_checkout(tmp_path, capsys):
     repo = _git_repo(str(tmp_path / "clean_repo"))
-    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    deploy_configs.run_prune([(repo, "removals:x", True, False)], apply_changes=True)
     assert not os.path.exists(repo)
     assert "REMOVED" in capsys.readouterr().out
 
@@ -1744,7 +1865,7 @@ def test_prune_directory_removes_only_a_clean_remoted_git_checkout(tmp_path, cap
 def test_prune_directory_skips_checkout_with_commits_not_on_its_remote(tmp_path, capsys):
     """A clean tree can still be the only copy of work: commits ahead of the remote."""
     repo = _git_repo(str(tmp_path / "unpushed_repo"), pushed=False)
-    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    deploy_configs.run_prune([(repo, "removals:x", True, False)], apply_changes=True)
     assert os.path.exists(repo)
     assert "not on its remote" in capsys.readouterr().out
 
@@ -1754,7 +1875,9 @@ def test_prune_directory_skips_dirty_checkout_and_plain_dirs(tmp_path, capsys):
     write_file(os.path.join(dirty, "uncommitted.txt"), "wip")
     plain = str(tmp_path / "plain_dir")
     os.makedirs(plain)
-    deploy_configs.run_prune([(dirty, "removals:x", True), (plain, "removals:y", True)], apply_changes=True)
+    deploy_configs.run_prune(
+        [(dirty, "removals:x", True, False), (plain, "removals:y", True, False)], apply_changes=True
+    )
     out = capsys.readouterr().out
     assert os.path.isdir(dirty) and "uncommitted changes" in out
     assert os.path.isdir(plain) and "not a git checkout" in out
@@ -1762,7 +1885,7 @@ def test_prune_directory_skips_dirty_checkout_and_plain_dirs(tmp_path, capsys):
 
 def test_prune_directory_never_deletes_a_remoteless_origin_hub(tmp_path, capsys):
     hub = _git_repo(str(tmp_path / "hub_repo"), remote=False)
-    deploy_configs.run_prune([(hub, "removals:x", True)], apply_changes=True)
+    deploy_configs.run_prune([(hub, "removals:x", True, False)], apply_changes=True)
     assert os.path.isdir(hub)
     assert "NO remote" in capsys.readouterr().out
 
@@ -1784,7 +1907,7 @@ def test_prune_directory_skips_checkout_holding_gitignored_files_of_its_own(tmp_
     _ignore_in_repo(repo, ["data/", "token.json"])
     write_file(os.path.join(repo, "data", "2024-ytd.csv"), "rows")
     write_file(os.path.join(repo, "token.json"), "{}")
-    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    deploy_configs.run_prune([(repo, "removals:x", True, False)], apply_changes=True)
     out = capsys.readouterr().out
     assert os.path.isfile(os.path.join(repo, "data", "2024-ytd.csv"))
     assert "exist nowhere else" in out and "data" in out and "token.json" in out
@@ -1804,7 +1927,7 @@ def test_prune_directory_takes_regenerable_and_deployed_ignored_paths_with_it(tm
     os.symlink(target, os.path.join(repo, ".claude", "settings.local.json"))
     os.makedirs(os.path.join(repo, "build", "__pycache__"))
     write_file(os.path.join(repo, "build", "__pycache__", "g.pyc"), "x")
-    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    deploy_configs.run_prune([(repo, "removals:x", True, False)], apply_changes=True)
     assert not os.path.exists(repo)
     assert os.path.isfile(target)
     assert "REMOVED" in capsys.readouterr().out
@@ -1818,14 +1941,14 @@ def test_prune_directory_skips_checkout_with_a_stash(tmp_path, capsys):
         ["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "stash", "-q"],
         check=True,
     )
-    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    deploy_configs.run_prune([(repo, "removals:x", True, False)], apply_changes=True)
     assert os.path.isdir(repo)
     assert "stash" in capsys.readouterr().out
 
 
 def test_prune_directory_without_flag_still_refuses_git_repos(tmp_path, capsys):
     repo = _git_repo(str(tmp_path / "unflagged_repo"))
-    deploy_configs.run_prune([(repo, "removals:x", False)], apply_changes=True)
+    deploy_configs.run_prune([(repo, "removals:x", False, False)], apply_changes=True)
     assert os.path.isdir(repo)
     assert "real directory" in capsys.readouterr().out
 
@@ -2189,3 +2312,78 @@ def test_run_deploy_routes_copy_rows_to_the_copy_path(tmp_path, capsys):
     assert "1 changed" in capsys.readouterr().out
     assert deploy_configs.classify_row(plan[0])[0] == "OK"
     assert "copy the repo file" in deploy_configs.planned_action("NOT_DEPLOYED", method="copy")
+
+
+# %%
+# Ingested files (method: ingest) #
+
+
+def _ingest_entry(dest):
+    return {"name": "settings", "repo": "repo/settings.json", "dest": {"darwin": dest}, "method": "ingest"}
+
+
+def test_load_manifest_accepts_ingest_entries_and_rejects_drift_keys(tmp_path):
+    entry = _ingest_entry("~/.app/settings.json")
+    assert deploy_configs.load_manifest(write_manifest(tmp_path, [entry]))[0]["method"] == "ingest"
+    for extra in ({"on_drift": "adopt"}, {"refresh": "relink"}):
+        with pytest.raises(ValueError, match="method: ingest, which takes neither on_drift nor refresh"):
+            deploy_configs.load_manifest(write_manifest(tmp_path, [{**entry, **extra}]))
+
+
+def test_ingest_entries_apply_on_the_worktree_host_alone(tmp_path):
+    entry = _ingest_entry(str(tmp_path / "machine" / "settings.json"))
+    here = deploy_configs.build_plan([entry], "darwin", deploy_configs.WORKTREE_HOST.upper(), repo_root=str(tmp_path))
+    assert here[0]["action"] == "apply"
+    elsewhere = deploy_configs.build_plan([entry], "darwin", "OTHERBOX", repo_root=str(tmp_path))
+    assert elsewhere[0]["action"] == "skip_host" and elsewhere[0]["dest"] is None
+    assert deploy_configs.WORKTREE_HOST in deploy_configs._info_detail(elsewhere[0], "darwin")
+
+
+def test_classify_ingest_entry_states(tmp_path):
+    repo_file = str(tmp_path / "repo" / "settings.json")
+    machine = str(tmp_path / "machine" / "settings.json")
+    assert deploy_configs.classify_ingest_entry(repo_file, machine)[0] == "OK"  # nothing on the machine
+    write_file(machine, '{"b":2,"a":1}')
+    assert deploy_configs.classify_ingest_entry(repo_file, machine)[0] == "DIVERGED"  # no repo copy yet
+    write_file(repo_file, '{"b":2,"a":1}')
+    assert deploy_configs.classify_ingest_entry(repo_file, machine)[0] == "DIVERGED"  # same data, not canonical
+    write_file(repo_file, deploy_configs.normalized_json(machine))
+    assert deploy_configs.classify_ingest_entry(repo_file, machine)[0] == "OK"
+    os.remove(machine)
+    os.symlink(repo_file, machine)  # a link older deploys made, before prune turns it into a copy
+    assert deploy_configs.classify_ingest_entry(repo_file, machine)[0] == "OK"
+    os.remove(machine)
+    os.makedirs(machine)
+    assert deploy_configs.classify_ingest_entry(repo_file, machine)[0] == "DIVERGED"
+    assert deploy_configs.ingest_machine_file(repo_file, machine) == "skipped"
+
+
+def test_ingest_machine_file_writes_canonical_json_and_never_touches_the_machine(tmp_path, capsys):
+    repo_file = write_file(str(tmp_path / "repo" / "settings.json"), '{\n  "a": 0\n}\n')
+    machine = write_file(str(tmp_path / "machine" / "settings.json"), '{"b":2,"a":1}')
+    assert deploy_configs.ingest_machine_file(repo_file, machine) == "ingested"
+    assert open(repo_file).read() == '{\n  "a": 1,\n  "b": 2\n}\n'
+    assert open(machine).read() == '{"b":2,"a":1}' and not os.path.islink(machine)
+    assert "worktree is now dirty" in capsys.readouterr().out
+    assert deploy_configs.ingest_machine_file(repo_file, machine) == "noop"
+    # anything that is not json, or does not parse, is copied as it is
+    broken = write_file(str(tmp_path / "machine" / "broken.json"), "{not json")
+    repo_broken = str(tmp_path / "repo" / "new" / "broken.json")
+    assert deploy_configs.ingest_machine_file(repo_broken, broken) == "ingested"
+    assert open(repo_broken).read() == "{not json"
+
+
+def test_run_deploy_routes_ingest_rows_and_status_names_the_drift(tmp_path, capsys):
+    write_file(str(tmp_path / "repo" / "settings.json"), "{}\n")
+    machine = write_file(str(tmp_path / "machine" / "settings.json"), '{"a":1}')
+    plan = deploy_configs.build_plan(
+        [_ingest_entry(machine)], "darwin", deploy_configs.WORKTREE_HOST.upper(), repo_root=str(tmp_path)
+    )
+    assert deploy_configs.run_status(plan, "darwin") == 1
+    assert "write the machine's file over the repo copy" in capsys.readouterr().out
+    deploy_configs.run_deploy(plan)
+    assert "1 changed" in capsys.readouterr().out
+    assert open(str(tmp_path / "repo" / "settings.json")).read() == '{\n  "a": 1\n}\n'
+    assert open(machine).read() == '{"a":1}'
+    assert deploy_configs.classify_row(plan[0])[0] == "OK"
+    assert deploy_configs.run_status(plan, "darwin") == 0

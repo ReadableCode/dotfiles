@@ -45,7 +45,7 @@ disable colors).
     windows: ~/AppData/...                # only if the app is deployed on Windows
   hosts: [ENVY, ELITEDESK]                # optional: limit to specific hostnames
                                           # (overlay manifests only, see below)
-  method: symlink | none | system | copy  # default symlink; system = root-owned copy,
+  method: symlink | none | system | copy | ingest  # default symlink; system = root-owned copy,
   owner: root:nut                         #   see "Root-owned system files" below
   mode: "0640"                            #   (quoted octal, required for system)
   reload: systemctl restart nut-monitor   #   optional, run through sudo -n after a change
@@ -148,6 +148,37 @@ pulled change reaches the copy on the next deploy. A directory in the way is
 reported and left alone. `copy` entries take no `on_drift` or `refresh`, and
 like `system` copies prune never removes them.
 
+### Files ingested from one machine (`method: ingest`)
+
+An `ingest` entry runs the other way. Nothing is deployed, on any machine. On
+`WORKTREE_HOST` (envy) each deploy reads the machine's own file at `dest` and
+writes it over the repo copy when the two differ. The checkout is then dirty,
+to be reviewed with `git diff` and committed by hand, like the deployment map.
+Every other machine skips the entry (`SKIP_HOST`), so no other checkout is
+ever dirtied.
+
+It is for a file its app rewrites on its own, where a link turns the tracked
+file dirty on every machine and a deployed copy fights the app. T3 Code's
+`settings.json`, `client-settings.json` and `keybindings.json` are the case:
+T3 writes them after an in-app change, after an app update and when a client
+pushes its shared settings, and it wrote through the link, so a machine other
+than envy ended up with a modified tracked file and its next pull of that file
+was refused. Each machine's T3 now owns its own files, and the repo copy is
+a record of how envy is set up that nothing reads back. The entries are in
+the personal overlay manifest and the record is `t3code/` in
+`personal_credentials`, a private repo, because `settings.json` has a field
+for a provider password and the copy is taken without anyone looking at it
+first. An overlay entry's `repo:` resolves against its own repo, so that is
+where an `ingest` entry in an overlay writes.
+
+A `.json` file is written in the canonical form (2-space indent, sorted keys,
+trailing newline, array order untouched), so an app that minifies its saves
+still diffs per key; a `.json` that does not parse, and any other file, is
+copied as it is. `status` reports `DIVERGED` while the repo copy is behind the
+machine's file. The machine's file is never written. `ingest` entries take no
+`on_drift` or `refresh`, and an `ingest` entry does not count as wanting its
+`dest`, so a removals line for a link an older deploy left there still applies.
+
 Any other copy is still refused: a plain copy nothing hashes is how a config
 drifts silently, and the symlink method never falls back to one.
 
@@ -235,7 +266,9 @@ Removals files accept the same keys, so a dropped per-repo link is removed
 from every checkout it reached with one line. Add `link_only: true` to a
 removal when the thing dropped was a link and a real file or directory now
 sits at that path (the real directory that replaced a directory link): it
-is then neither removed nor reported as drift.
+is then neither removed nor reported as drift. `keep_copy: true` is for a
+link whose path must go on existing, see
+[Removing an entry](#removing-an-entry-and-cleaning-up-its-links).
 
 Slash commands are **not** per repo today. Each context links its commands
 **one file at a time** into `~/.claude/commands`, and the context prefix in
@@ -345,7 +378,10 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
   uncommitted adoption on every other machine until someone reverts it by
   hand. So in-app settings changes are made on envy (or in the repo
   file); a change made in the app elsewhere lasts until that machine's next
-  deploy.
+  deploy. That still left the other machines with a dirty checkout whenever
+  the app wrote through a live link, so T3's own files moved to
+  `method: ingest` on 2026-11-10 and no entry sets `adopt` or
+  `refresh: relink` today.
 
   Adopted `.json` payloads land in a **canonical form** — 2-space indent,
   sorted keys, trailing newline (array order untouched) — produced by reading
@@ -379,7 +415,7 @@ tags (e.g. `settings.acme.json`) are never auto-resolved.
 | `BROKEN_LINK` | Destination is a dangling symlink. |
 | `WRONG_TARGET` | Destination is a link resolving somewhere else. |
 | `STALE_LINK` | `refresh: relink` entries only: the link is correct but older than the repo file it points at, so an app that cached the file still holds the pre-pull content. Deploy re-creates the link to fire the path event. |
-| `DIVERGED` | `method: system` only: the root-owned copy's content differs from the repo file, or a link or directory sits where the copy belongs. Deploy backs up a regular file, installs the repo file over it and runs the reload. |
+| `DIVERGED` | `method: copy`: the copy differs from the repo file. `method: ingest`: the repo copy differs from the machine's file, and deploy writes the machine's file over it. `method: system`: the root-owned copy's content differs from the repo file, or a link or directory sits where the copy belongs. Deploy backs up a regular file, installs the repo file over it and runs the reload. |
 | `WRONG_MODE` | `method: system` only: content matches but owner or mode differ. Deploy chowns and chmods in place, no reload. |
 | `NEEDS_SUDO` | `method: system` only: the copy is unreadable and `sudo -n` cannot read it either. Nothing is checked or changed. |
 | `NOT_A_LINK` | Regular file where a link was expected — an unmanaged file, an orphaned hard link (git replaced the inode on pull), or an app's atomic-rename save; the detail says whether its content matches the repo copy or diverges. Deploy backs it up, then replaces it with a link to the repo version — except under `on_drift: adopt`, where a newer diverging system file is first adopted into the repo working tree. |
@@ -627,6 +663,25 @@ machine where the path is already gone it is a no-op, so the removals files
 are the standing list of what must not exist rather than a queue to drain
 (decided 2026-10-15). A line goes only when a live manifest entry wants the
 path again, and prune already defers to that.
+
+**Retiring a link but keeping the file.** An entry with `keep_copy: true`
+names a path that has to go on existing, because an app reads it, while the
+link there must stop pointing into a checkout. Prune replaces the link with a
+regular file holding what the link resolved to (`UNLINKED`; `WOULD UNLINK` in
+a dry run). The copy is written beside the path and renamed over it, so the
+path is never missing, and the file the link pointed at is not touched. A hard
+link, the Windows fallback, is separated from the repo file the same way. Once
+the path is a regular file nothing else shares, the entry has done its work:
+it is neither a prune candidate nor reported by `status`.
+
+The target can be deleted in the same commit that adds the removal. A machine
+pulls before it prunes, so its link is then already dangling; prune asks the
+checkout the link pointed into for the content git last held at that path
+(HEAD's copy, or the copy from just before the commit that deleted it) and
+writes that. It is what the link showed, so no machine has to refresh before
+the file can go. Only a dangling link whose target was never committed has
+nothing to keep and is removed. T3 Code's three files are retired this way,
+so T3 keeps its settings and stops writing into a checkout.
 
 **Retiring a whole checkout.** An entry with `directory: true` names a clone
 under gitDir that no repos file declares any more. Prune removes it only when

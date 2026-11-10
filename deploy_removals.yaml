@@ -160,3 +160,38 @@
     as a hard link / regular file, and the emptied go_apps/cmdr goes with it.
     Nothing builds this path any more.
 
+
+# 2026-11-10: T3's own files are no longer deployed, and the files the links
+# pointed at are deleted from their repos (see the T3 section of
+# deploy_manifest.yaml). keep_copy: the link goes and the path stays, as a
+# regular file holding what the link resolved to, or, when the pull has
+# already deleted the target, the content git last held for it. So the app
+# keeps its settings whichever order a machine pulls and prunes in. A file
+# the app already replaced with its own is left alone.
+#
+# settings.json was linked by overlay entries, never by this manifest, and its
+# removal is here all the same, beside the code that knows keep_copy. A
+# checkout older than that key reads the line as a plain removal and deletes
+# the link, and the machines this is for are the ones whose dotfiles had
+# stopped pulling while their other repos kept moving.
+
+- name: removed_t3code_settings_link
+  dest:
+    darwin: ~/.t3/userdata/settings.json
+    linux: ~/.t3/userdata/settings.json
+    windows: ~/.t3/userdata/settings.json
+  keep_copy: true
+
+- name: removed_t3code_client_settings_link
+  dest:
+    darwin: ~/.t3/userdata/client-settings.json
+    linux: ~/.t3/userdata/client-settings.json
+    windows: ~/.t3/userdata/client-settings.json
+  keep_copy: true
+
+- name: removed_t3code_keybindings_link
+  dest:
+    darwin: ~/.t3/userdata/keybindings.json
+    linux: ~/.t3/userdata/keybindings.json
+    windows: ~/.t3/userdata/keybindings.json
+  keep_copy: true

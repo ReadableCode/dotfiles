@@ -26,25 +26,10 @@ tag and are never resolved by `@latest`. A desktop install can still grab a
 nightly build, and a nightly writes config entries a stable server then
 rejects (see [t3_issues.md](t3_issues.md)).
 
-**The one coupling to watch.** The deployed bare `keybindings.json` in
-`application_configs/t3code/` carries some server version's default bindings.
-A server **older** than that logs `ignoring invalid keybinding entry`; a
-**newer** one merges its own defaults in and saves. 0.1.8 writes through the
-deployed symlink, so the tracked file shows as modified in that machine's
-dotfiles checkout (`git status`) and blocks its next pull of that file;
-earlier servers replaced the link with a plain file (`NOT_A_LINK` in
-`deploy_configs.py status`). So the bare file tracks the **oldest server
-running anywhere**:
-
-1. roll every server up (Linux: `npx -y t3@latest update`),
-2. only then promote new default bindings into the bare file,
-3. after any server install, check that box's boot log for
-   `ignoring invalid keybinding entry`.
-
-Because installs float, a machine that hasn't been touched in months is the
-one that falls behind — update the quiet boxes before step 2, or hold a machine
-deliberately with an explicit `t3@<version>`.
-`keybindings.mac.json` is a separate track (the desktop app's version).
+No file in this repo reaches a server's `~/.t3/userdata/`, so an update has
+nothing here to keep in step: at start a server merges any default binding its
+own `keybindings.json` lacks and saves the file, and that file is its own
+(see [Settings](#settings)).
 
 ## Install (macOS)
 
@@ -183,39 +168,22 @@ missing package. `sudo dnf install -y gcc-c++ make` (Debian:
 it's also in the Fedora package line in
 [setup_linux_workstation.md](./setup_linux_workstation.md).
 
-### Managed settings
+### Settings
 
-`~/.t3/userdata/` only exists after the service has started once, and the
-`t3code_*` manifest entries are gated on it — so deploy **after** the install,
-then restart to pick the files up:
+Nothing is deployed into `~/.t3/userdata/` ([Settings](#settings)). A new
+server starts from T3's defaults and a signed-in client pushes the five shared
+settings to it on its own. To start a personal machine from envy's provider
+setup instead, stop the service, copy envy's `settings.json` from the record
+in `personal_credentials`, and start it again:
 
 ```bash
-uv run python src/deploy_configs.py
-systemctl --user restart t3code.service
+systemctl --user stop t3code.service
+cp ~/GitHub/personal_credentials/t3code/settings.json ~/.t3/userdata/settings.json
+systemctl --user start t3code.service
 ```
 
-The host must be in the `user_t3code_settings` hosts list in
-`personal_manifest.yaml` or `settings.json` is skipped (the other two files
-deploy for everyone). Confirm all three landed as symlinks with
-`ls -l ~/.t3/userdata/*.json`, and check the boot log for "ignoring invalid
-keybinding entry" — the bare (non-`.mac`) files must stay within the pinned
-server's schema.
-
-**The headless server rewrites `keybindings.json` too.** At every start a
-headless server merges any default binding the file lacks into
-`keybindings.json` and saves. 0.1.8 saves through the deployed symlink, so the
-link stays healthy in `deploy_configs.py status` and the tracked file turns up
-modified in that machine's dotfiles checkout instead (`git status` there, then
-`git checkout -- application_configs/t3code/keybindings.json` before the pull
-that brings the promoted file). A file that already contains the defaults is
-left alone.
-
-Re-deploying alone just hands the server a file it rewrites again, so the bare
-file has to move up with the servers: **it tracks the lowest server version
-deployed anywhere**. Bump every server first, promote the new default bindings
-into the bare `keybindings.json` second, then restart after re-deploying and
-the server leaves the file alone. `keybindings.mac.json` is a separate track
-(the desktop app's version).
+The directory only exists after the service has started once. From then on the
+file is that server's own.
 
 ### Reachability: Tailscale Serve on the boot service
 
@@ -373,12 +341,12 @@ sections below; this is the order that matters.
    window after ~10s, it is hung: kill it, clear the quarantine attr and the
    `Singleton*` files, and if `open -a` still hangs, exec the binary in
    `Contents/MacOS/` directly (all commands in the quirks section).
-3. **Quit the app, then deploy the managed settings**:
-   `uv run python src/deploy_configs.py` from the dotfiles repo. The
-   `t3code_*` entries are gated on `~/.t3/userdata` existing, which is why
-   the first launch comes first. Relaunch afterwards and the repo settings
-   (providers, keybindings, UI prefs) are live — skip any in-app
-   provider/keybinding configuration, it's already done.
+3. **Settings**: nothing is deployed ([Settings](#settings)). To start from
+   Envy's setup, quit the app and copy `settings.json`,
+   `client-settings.json` and `keybindings.json` from
+   `personal_credentials/t3code/` into `~/.t3/userdata/`, then relaunch. The
+   first launch comes first because it creates that directory. From then on
+   this machine's T3 owns those files.
 4. **Verify providers and GitHub**: Settings (bottom-left) → **Providers**
    should list Claude; **Source Control** should show GitHub "Authenticated
    as" the personal account (click rescan if it doesn't). If the Claude row
@@ -432,10 +400,8 @@ Connect-linked environments). Much shorter than the Mac list:
    unreachable and burns no tunnel slot), no Network access toggle. There is no
    Windows headless-server option to skip; see
    [Windows: desktop app only](#windows-desktop-app-only).
-4. **Optional managed settings**: if the machine has a dotfiles clone, quit
-   the app, `uv run python src/deploy_configs.py`, relaunch. Windows
-   correctly resolves the bare server-safe config files, not the `.mac.json`
-   variants. With no clone, in-app defaults are fine for a client-only box.
+4. **Settings**: nothing is deployed ([Settings](#settings)); in-app
+   defaults are fine for a client-only box.
 5. **Verify**: open a thread running on another environment and watch it
    stream; steering from here works (the backend is event-sourced, clients
    are subscribers). Don't compose into the same running thread from two
@@ -535,21 +501,21 @@ inside the app. Notes on that block:
   the dots and colons survive intact. It's an array — list several profiles
   if more than one is enabled.
 
-**Where the file comes from.** Bedrock config must not reach the personal
-machines, so such a host gets its own `settings.json` from its context
-manifest instead of the shared one (Settings section below). A host variant
-`t3code/settings.<host>.json` in that context's credentials repo auto-resolves
-for that machine; other hosts on the same entry fall through to the bare
-`t3code/settings.json` beside it.
+**Where the file comes from.** Nowhere: no manifest deploys a T3
+`settings.json` (Settings section below), so the block is merged by hand into
+that machine's own file. Keep the model IDs in that context's own docs, so a
+rebuilt machine can be given them again.
 
 **Applying it**, on the machine running the server:
 
 ```bash
-git -C <dotfiles> pull && git -C <context credentials repo> pull
-uv run python src/deploy_configs.py            # from the dotfiles checkout
-ls -l ~/.t3/userdata/settings.json             # confirm it points at the variant
-systemctl --user restart t3code.service        # if installed as a boot service
+systemctl --user stop t3code.service           # if installed as a boot service
+$EDITOR ~/.t3/userdata/settings.json           # merge the block above
+systemctl --user start t3code.service
 ```
+
+Stop the server first: it rewrites the file on its own and would overwrite an
+edit made under it.
 
 Then per thread: permission dropdown off Auto, model picker → the inference
 profile. If the model isn't listed after the restart, that pinned server
@@ -558,8 +524,6 @@ for a config-issue warning); fall back to putting
 `--model <region>.anthropic.<model>-v1:0` in the provider's **Launch
 arguments** field, which *is* in the UI. Those parse into the SDK's
 `extraArgs` and are appended after T3's own `--model`, so the last one wins.
-Only safe once that host owns its own settings file — otherwise the write
-lands in the shared one.
 
 **Also check `~/.claude/settings.json`** on that machine: a top-level
 `"model"` key (e.g. `"opus[1m]"`) beats `env.ANTHROPIC_MODEL`, so any CLI
@@ -783,55 +747,66 @@ running version) and wait for the 4 registered connections in
 
 ## Settings
 
-`settings.json`, `client-settings.json`, and `keybindings.json` in
-`~/.t3/userdata/` are deployed as symlinks from
-`application_configs/t3code/` (gated on `~/.t3/userdata` existing, so machines
-without T3 are skipped). `client-settings.json` and `keybindings.json` deploy
-from the `t3code_*` entries in `deploy_manifest.yaml`; **`settings.json`
-deploys from `user_t3code_settings` in `personal_manifest.yaml`**. The file is
-still the public one in this repo, but the entry needs a hosts whitelist so a
-client context can point the same dest at its own copy (hosts filters are
-overlay-manifest-only). Work machines get their `settings.json` from their own
-context manifest instead, the case being
-[Claude Code on Bedrock](#claude-code-on-bedrock). Adding a personal T3 machine
-means adding it to that entry's hosts list.
+`settings.json`, `client-settings.json` and `keybindings.json` in
+`~/.t3/userdata/` are **not deployed**, by this repo or by any context. Each
+machine's T3 owns its own three files. T3 writes them itself, after an in-app
+change, after an app update and when a client pushes its shared settings, and
+while they were links into a checkout those writes went through the link: the
+machine was left with a modified tracked file, and git refused its next pull
+of that file.
 
-All three carry `on_drift: adopt`, and adoption acts on **envy only**
-(`WORKTREE_HOST` in `src/deploy_configs.py`): T3 rewrites these files after
-every app update, not just on a settings change, so a machine that adopts its
-own copy and never commits it can never pull the file again: it sits behind
-with two "modified" t3code files git refuses to merge over. Elsewhere the repo
-copy wins on deploy and the app's rewrite goes to the backup, so make settings
-changes on envy or in the repo file; a change made in the app on another
-machine lasts until that machine's next deploy.
+A record of envy's files is kept in `personal_credentials/t3code/`. Three
+`method: ingest` entries in `personal_manifest.yaml` (`t3code_settings`,
+`t3code_client_settings`, `t3code_keybindings`) run on envy alone: every
+deploy there writes envy's file over the record when the two differ, in
+canonical JSON, and leaves that checkout dirty to be committed by hand like
+the deployment map. Nothing reads the record back. It is in the private
+credentials repo because `settings.json` has a field for a provider password.
+`t3code/README.md` there says the same beside the files, and
+[repo_deploy_configs.md](repo_deploy_configs.md) describes the method.
 
-`settings.json` also carries **`refresh: relink`**: the server reads it at
-startup and watches the destination *path*, so without it a pull that changes
-the repo file leaves every running server serving the pre-pull value while the
-file on disk is already correct — `deployconfigs` sees a healthy link and
-reports `0 changed`. The symptom is the client's "Settings differ on
-<host>. Thread and source control preferences are meant to match on every
-environment" banner refusing to clear after the fix is pulled. With the flag,
-deploy re-creates the link when it is older than the repo file, which is the
-path event the server needs; see `refresh: relink` in
-[repo_deploy_configs.md](repo_deploy_configs.md). The five keys the client
-holds identical on every environment
+A machine that still has the old links loses them on its next `gitpullall`:
+the `keep_copy` removals replace each link with a regular file, so T3 keeps
+its settings. The files those links pointed at are deleted from their repos,
+so the link is usually dangling by the time prune reaches it; prune then
+writes the content git last held for the target, which is what the link
+showed. Check with `ls -l ~/.t3/userdata/*.json`; none of the three should be
+a link.
+
+One case needs a hand. A machine whose T3 had already written through a link
+has a modified tracked file, and git refuses the pull that deletes it, so the
+new code never arrives. `gitpullall` there reports the repo as not pulled. On
+that machine, once:
+
+```bash
+git -C ~/GitHub/dotfiles checkout -- application_configs/t3code
+gitpullall
+```
+
+That drops what T3 had written into the checkout since the last commit. The
+pull then deletes the files, and prune gives T3 the last committed content as
+its own file. To keep the uncommitted changes instead, copy the two files out
+of `application_configs/t3code/` before the checkout and over
+`~/.t3/userdata/` after the `gitpullall`.
+
+The five keys the client holds identical on every environment
 (`continueThreadsAfterServerUpdate`, `sidebarAutoSettleAfterDays`,
 `sidebarAutoSettleOnMerge`, `newWorktreesStartFromOrigin`,
 `sourceControlWritingStyle`) are defined in the app's own
-`packages/client-runtime/src/state/sharedSettings.ts`; the client pushes them
-to every environment, so each context's `settings.json` has to carry them or
-that environment shows up in the banner. Reloads are visible in
+`packages/client-runtime/src/state/sharedSettings.ts`. The client pushes them
+to every environment it is connected to, so they converge without any file
+from here; an environment that differs shows up in the client's "Settings
+differ on <host>" banner. Reloads are visible in
 `~/.t3/userdata/logs/server.trace.ndjson` as `"startup.phase":"settings.start"`.
 
-| File | Manifest-worthy? | Why |
-|------|------------------|-----|
-| `settings.json` | yes | Provider instances, default model/effort. Has an `opencode.serverPassword` field — must stay empty in a public repo. |
-| `client-settings.json` | yes | UI preferences (sidebar, diff, word wrap, ...). |
-| `keybindings.json` | yes | Custom keybindings. |
+| File | In the repo? | Why |
+|------|--------------|-----|
+| `settings.json` | envy's copy, in `personal_credentials` | Provider instances, default model/effort. Has an `opencode.serverPassword` field, which is why the record is not in a public repo. |
+| `client-settings.json` | envy's copy, in `personal_credentials` | UI preferences (sidebar, diff, word wrap, ...). |
+| `keybindings.json` | envy's copy, in `personal_credentials` | Custom keybindings. |
 | `desktop-settings.json` | no | Per-machine window bounds churn on every resize; also holds `serverExposureMode`. |
 | `connection-catalog.json` | never | Per-machine registry of paired environments (named `saved-environments.json` in newer source). **Not syncable even by hand**: the app writes `{version, encryptedCatalog}` where the payload is Electron `safeStorage` — DPAPI on Windows, Keychain on macOS — so it is keyed to one OS user on one machine. A copy from another box cannot decrypt, hand-written JSON is not the expected shape, and the only writer is the `desktop:set-connection-catalog` IPC channel, i.e. the GUI. Adding an environment is a GUI-only operation in 0.0.33; there is no CLI subcommand for it (every `t3` subcommand is server-side). |
-| `clerk-tokens.json`, `secrets/`, `state.sqlite`, `logs/`, `environment-id`, `server-runtime.json`, `~/.t3/caches/` | never | Auth tokens, signing keys, thread state — machine-private. |
+| `clerk-tokens.json`, `secrets/`, `statev2.sqlite`, `logs/`, `environment-id`, `server-runtime.json`, `~/.t3/caches/` | never | Auth tokens, signing keys, thread state — machine-private. |
 
 `clerk-tokens.json` and `connection-catalog.json` are **home-private** as well
 as machine-private; see
@@ -839,21 +814,6 @@ as machine-private; see
 
 One runtime entry lives one level up in `~/.t3/`: `t3code_client_startup`, the
 desktop app's Startup-folder launcher.
-
-Caveat (still true): Electron saves settings via atomic rename, which
-replaces a deployed symlink with a plain file — expect `NOT_A_LINK` drift
-after in-app settings changes. `deploy_configs.py status` catches it; merge
-the in-app edit into the repo copy, then re-deploy to re-link (deploy backs
-the machine file up to `data/config_backups/` first).
-
-**Platform variants**: all three files exist as a `*.mac.json` variant plus a
-bare default. Macs auto-resolve the mac variant; Windows and Linux (both
-running the npm `t3` server) fall through to the bare file, which must stay
-within what that pinned server version's schema accepts — the server
-hard-warns on unknown keys/commands ("ignoring invalid keybinding entry" in
-`~/.t3/server.log`, surfaced as config-issue warnings in connected clients).
-Merge Envy's in-app edits into the `*.mac.json` files only, and promote
-settings to the bare files only after confirming the npm build accepts them.
 
 ## Remote access from other devices
 

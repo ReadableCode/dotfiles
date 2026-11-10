@@ -328,15 +328,14 @@ machine, are in [setup_t3_code.md](setup_t3_code.md).
   (`Restart=always`), which is the only supervision that exists for this. To
   confirm a suspected leak on a running box:
   `Get-Process node | Sort-Object WS -Descending | Select-Object -First 3 Id,WS,StartTime`.
-- **npm server rejects newer config than its pinned version (this repo,
-  handled)**: the headless `t3` server schema-validates managed configs and
-  warns on anything a newer build wrote — RyzenWhite's `server.log` spammed
+- **npm server rejects newer config than its own version**: the headless
+  `t3` server schema-validates its config files and warns on anything a newer
+  build wrote — RyzenWhite's `server.log` spammed
   "ignoring invalid keybinding entry" for `filePicker.toggle` /
   `projectSearch.toggle`, leftovers from the 0.0.32 nightly's default
-  keybindings after the downgrade to 0.0.31. Handled by the platform
-  variant split in the Settings section of `setup_t3_code.md` (bare files
-  stay server-safe);
-  deploying to RyzenWhite replaces the stale file and clears the warnings.
+  keybindings after the downgrade to 0.0.31. Each machine's T3 owns its
+  `keybindings.json` (Settings section of `setup_t3_code.md`), so the cure is
+  on that machine: take the rejected entries out of its own file.
 - **"Copy update command" starts a second server instead of updating the
   service (upstream)**: for a service-managed Linux environment,
   the remote-environments panel's update command is bare `npx t3@<version>`

@@ -31,8 +31,9 @@ from utils.inventory_tools import (
 )
 
 # The ONE machine whose repo working tree a deploy may dirty: deploy_map.py
-# regenerates the fleet map there (its MAP_HOST is this constant), and
-# on_drift: adopt copies an app's rewrite into the worktree only there. Every
+# regenerates the fleet map there (its MAP_HOST is this constant), on_drift:
+# adopt copies an app's rewrite into the worktree only there, and a method:
+# ingest entry copies that machine's file into the repo only there. Every
 # other machine treats the repo copy as the truth and never gets a dirty
 # checkout from a deploy. Adopting everywhere deadlocks pulls: T3 Code
 # rewrites its settings on every update, so each machine adopts its own copy,
@@ -156,6 +157,8 @@ def _info_detail(row, platform_key):
             note = note[:90].rstrip() + "... (see manifest note)"
         return f"no link by design{': ' + note if note else ''}"
     if row["action"] == "skip_host":
+        if row["method"] == "ingest":
+            return f"ingested from {WORKTREE_HOST} only; nothing is deployed"
         return "not for this host"
     if row["action"] == "skip_variant":
         return f"no {os.path.basename(row['repo'])} variant for this host"
@@ -378,8 +381,13 @@ def load_removals():
         for entry in parsed:
             if not isinstance(entry, dict) or "name" not in entry or "dest" not in entry:
                 raise ValueError(f"Removal entry must be a mapping with 'name' and 'dest' keys: {entry}")
-            if "link_only" in entry and not isinstance(entry["link_only"], bool):
-                raise ValueError(f"Removal entry {entry['name']} has non-boolean link_only: {entry['link_only']}")
+            for flag in ("link_only", "keep_copy"):
+                if flag in entry and not isinstance(entry[flag], bool):
+                    raise ValueError(f"Removal entry {entry['name']} has non-boolean {flag}: {entry[flag]}")
+            if entry.get("keep_copy") and entry.get("directory"):
+                raise ValueError(
+                    f"Removal entry {entry['name']} sets both keep_copy and directory; keep_copy is for one linked file"
+                )
             _validate_context_repo_keys(entry, path, allow_literal_token=True)
         # a removals file expands per_context_repo exactly like a manifest, so a
         # per-repo link that was retired is retired in every checkout it reached
@@ -749,6 +757,68 @@ def deploy_copy_file(repo_path, dest, backup_root=None, repo_root=None):
 
 
 # %%
+# Ingested files #
+
+# A method: ingest entry runs the other way: nothing is deployed, and on
+# WORKTREE_HOST the machine's own file is copied into the repo on every deploy,
+# to be committed by hand like the deployment map. It is for a file its app
+# rewrites on its own and syncs between its own clients, where a link makes
+# every machine's checkout dirty and a deployed copy fights the app (T3 Code's
+# settings and keybindings are the case that named it). The repo copy is a
+# record of how that one machine is set up; no other machine reads it. A .json
+# file lands in the canonical form (see normalized_json) so an app that
+# minifies its saves still diffs per key.
+
+
+def ingested_content(system_path):
+    """The bytes the repo copy of a machine file should hold: canonical JSON when it parses, else the file as it is."""
+    if system_path.endswith(".json"):
+        normalized = normalized_json(system_path)
+        if normalized is not None:
+            return normalized.encode("utf-8")
+    with open(system_path, "rb") as file_handle:
+        return file_handle.read()
+
+
+def classify_ingest_entry(repo_path, system_path):
+    """Whether the repo copy holds what the machine's file holds. Returns (status, detail) like classify_entry."""
+    if not os.path.exists(system_path):
+        return "OK", "the machine has no such file; nothing to ingest"
+    if os.path.isdir(system_path):
+        return "DIVERGED", "the machine path is a directory; an ingest entry reads one file"
+    if is_deployed(repo_path, system_path):
+        return "OK", "the machine's file is still a link to the repo file"
+    if os.path.isfile(repo_path):
+        with open(repo_path, "rb") as file_handle:
+            if file_handle.read() == ingested_content(system_path):
+                return "OK", "repo copy matches the machine's file"
+    return "DIVERGED", "repo copy differs from the machine's file"
+
+
+def ingest_machine_file(repo_path, system_path):
+    """
+    Write the machine's file over the repo copy, leaving the machine's file
+    alone. The worktree turns dirty for the user to review and commit; deploy
+    never commits. Idempotent: a matching repo copy is a no-op.
+    """
+    repo_path = os.path.abspath(os.path.expanduser(repo_path))
+    system_path = os.path.abspath(os.path.expanduser(system_path))
+    status, detail = classify_ingest_entry(repo_path, system_path)
+    if status == "OK":
+        print(f"  nothing to ingest: {detail}")
+        return "noop"
+    if os.path.isdir(system_path):
+        print(f"  skipped: {detail}")
+        return "skipped"
+    os.makedirs(os.path.dirname(repo_path), exist_ok=True)
+    with open(repo_path, "wb") as file_handle:
+        file_handle.write(ingested_content(system_path))
+    print(f"  ingested {system_path}\n         -> {repo_path}")
+    print("  the worktree is now dirty: git diff to review, then commit")
+    return "ingested"
+
+
+# %%
 # Manifest #
 
 
@@ -880,14 +950,14 @@ def _parse_manifest_file(manifest_path):
         if not isinstance(entry, dict) or "name" not in entry or "repo" not in entry:
             raise ValueError(f"Manifest entry must be a mapping with 'name' and 'repo' keys: {entry}")
         method = entry.get("method", "symlink")
-        if method not in ("symlink", "none", "system", "copy"):
+        if method not in ("symlink", "none", "system", "copy", "ingest"):
             raise ValueError(f"Manifest entry {entry['name']} has invalid method: {method}")
         _validate_system_keys(entry)
-        if method == "copy" and (
+        if method in ("copy", "ingest") and (
             entry.get("on_drift", "replace") != "replace" or entry.get("refresh", "none") != "none"
         ):
             raise ValueError(
-                f"Manifest entry {entry['name']} is method: copy, which takes neither on_drift nor refresh"
+                f"Manifest entry {entry['name']} is method: {method}, which takes neither on_drift nor refresh"
             )
         on_drift = entry.get("on_drift", "replace")
         if on_drift not in ("replace", "adopt"):
@@ -1248,7 +1318,8 @@ def build_plan(entries, platform_key, hostname, repo_root=None, assume_requires=
         }
         if row["method"] == "none":
             row["action"] = "none"
-        elif not host_allowed(entry, hostname):
+        elif not host_allowed(entry, hostname) or (row["method"] == "ingest" and not adopts_here(hostname)):
+            # an ingest entry writes the repo copy, so it runs on WORKTREE_HOST alone
             row["action"] = "skip_host"
         else:
             row["dest"] = resolve_dest(entry, platform_key, hostname, repo_root)
@@ -1319,11 +1390,13 @@ def classify_entry(repo_path, system_path, refresh="none"):
 
 
 def classify_row(row):
-    """classify_entry, classify_system_entry or classify_copy_entry, whichever the row's method needs."""
+    """classify_entry or its system, copy or ingest twin, whichever the row's method needs."""
     if row["method"] == "system":
         return classify_system_entry(row["repo"], row["dest"], row["owner"], row["mode"])
     if row["method"] == "copy":
         return classify_copy_entry(row["repo"], row["dest"])
+    if row["method"] == "ingest":
+        return classify_ingest_entry(row["repo"], row["dest"])
     return classify_entry(row["repo"], row["dest"], row.get("refresh", "none"))
 
 
@@ -1346,6 +1419,12 @@ def planned_action(status, on_drift="replace", method="symlink"):
             "DIVERGED": "deploy would back up a diverging file to data/config_backups (a link is just removed), "
             "then copy the repo file over it",
             "REPO_MISSING": "nothing to deploy (repo file missing)",
+        }.get(status, "unknown")
+    if method == "ingest":
+        return {
+            "OK": "no action needed",
+            "DIVERGED": "deploy would write the machine's file over the repo copy and leave the worktree dirty "
+            "(git diff to review, then commit); the machine's file is not touched",
         }.get(status, "unknown")
     if status == "NOT_A_LINK" and on_drift == "adopt":
         return (
@@ -1415,7 +1494,7 @@ def run_status(plan, platform_key, prune_candidates=None, problems_only=False):
             print_unhealthy_row(status, row, detail, name_width)
         print()
 
-    orphans = [(dest, reason) for dest, reason, _ in (prune_candidates or []) if os.path.lexists(dest)]
+    orphans = [(dest, reason) for dest, reason, _, _ in (prune_candidates or []) if os.path.lexists(dest)]
     if orphans:
         print_section("Orphaned - no manifest entry wants these", len(orphans), "yellow")
         for dest, reason in orphans:
@@ -1466,6 +1545,8 @@ def run_deploy(plan):
                 result = deploy_system_file(row["repo"], row["dest"], row["owner"], row["mode"], reload=row["reload"])
             elif row["method"] == "copy":
                 result = deploy_copy_file(row["repo"], row["dest"])
+            elif row["method"] == "ingest":
+                result = ingest_machine_file(row["repo"], row["dest"])
             else:
                 result = deploy_config(
                     row["repo"],
@@ -1524,24 +1605,37 @@ def link_points_into(path, root):
     return target.startswith(os.path.realpath(root) + os.sep)
 
 
+def wanted_dests(plan):
+    """
+    The destinations some entry of this plan deploys to. An ingest row is left
+    out: it reads its machine path and puts nothing there, so it never keeps a
+    retired link at that path alive.
+    """
+    return {row["dest"] for row in plan if row["action"] == "apply" and row["dest"] and row["method"] != "ingest"}
+
+
+def is_shared_file(path):
+    """True for a symlink, or a regular file some other name hard-links: writing it writes somewhere else too."""
+    if os.path.islink(path):
+        return True
+    return os.path.isfile(path) and os.stat(path).st_nlink > 1
+
+
 def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assume_requires=False):
     """
     Every destination the removals files say must not exist, plus every
     symlink an overlay this machine is not a member of left behind, as sorted
-    (dest, reason, allow_directory). allow_directory reflects the entry's
-    opt-in ``directory: true`` key - without it a real directory is never
-    touched.
+    (dest, reason, allow_directory, keep_copy). allow_directory reflects the
+    entry's opt-in ``directory: true`` key - without it a real directory is
+    never touched. keep_copy reflects ``keep_copy: true``: the link goes and
+    the path stays, as a regular file holding what the link resolved to.
 
     A destination that some manifest entry still wants is never a candidate, so
     re-adding an entry silently wins over a stale removals line instead of the
     two fighting each other.
     """
     repo_root = repo_root or REPO_ROOT
-    wanted = {
-        row["dest"]
-        for row in build_plan(entries, platform_key, hostname, repo_root, assume_requires)
-        if row["action"] == "apply" and row["dest"]
-    }
+    wanted = wanted_dests(build_plan(entries, platform_key, hostname, repo_root, assume_requires))
     candidates: dict = {}
     for entry in load_removals():
         if not host_allowed(entry, hostname):
@@ -1556,7 +1650,13 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assu
         # replaced the link) and is neither removed nor reported as drift.
         if entry.get("link_only") and os.path.lexists(dest) and not os.path.islink(dest):
             continue
-        candidates.setdefault(dest, (f"removals:{entry['name']}", bool(entry.get("directory"))))
+        # keep_copy: the path is meant to stay, as the app's own file. Once it
+        # is a regular file nothing else shares, the entry has done its work.
+        if entry.get("keep_copy") and os.path.lexists(dest) and not is_shared_file(dest):
+            continue
+        candidates.setdefault(
+            dest, (f"removals:{entry['name']}", bool(entry.get("directory")), bool(entry.get("keep_copy")))
+        )
     # An overlay this machine is not in may have linked its entries here before
     # the membership gate existed (a client's shell shard on the box that hosts
     # that credentials repo's git hub). A symlink at one of its destinations that
@@ -1568,8 +1668,8 @@ def build_prune_candidates(entries, platform_key, hostname, repo_root=None, assu
             continue
         if not link_points_into(dest, grandparent_dir):
             continue
-        candidates.setdefault(dest, (f"unloaded overlay:{row['name']}", False))
-    return sorted((dest, reason, allow_dir) for dest, (reason, allow_dir) in candidates.items())
+        candidates.setdefault(dest, (f"unloaded overlay:{row['name']}", False, False))
+    return sorted((dest, *rest) for dest, rest in candidates.items())
 
 
 def force_rmtree(path):
@@ -1597,6 +1697,78 @@ def force_remove_file(path):
     except PermissionError:
         os.chmod(path, stat.S_IWRITE)
         os.remove(path)
+
+
+def last_committed_content(file_path):
+    """
+    The bytes git last held for a file inside a checkout, or None when the
+    path is in no checkout or was never committed. HEAD's copy when it is
+    still tracked, otherwise the copy from just before the commit that
+    deleted it. This is what a link into a checkout held before a pull took
+    its target away.
+    """
+    top = os.path.dirname(file_path)
+    while not os.path.exists(os.path.join(top, ".git")):
+        parent = os.path.dirname(top)
+        if parent == top:
+            return None
+        top = parent
+    relative = os.path.relpath(file_path, top).replace(os.sep, "/")
+
+    def git(*args):
+        try:
+            return subprocess.run(["git", "-C", top, *args], capture_output=True, check=True).stdout
+        except (OSError, subprocess.CalledProcessError):
+            return None
+
+    # cat-file blob, not show: a path that was a directory has no content to
+    # keep, and show would hand back its listing
+    content = git("cat-file", "blob", f"HEAD:{relative}")
+    if content is None:
+        deleted_by = (git("rev-list", "-1", "HEAD", "--", relative) or b"").decode().strip()
+        if deleted_by:
+            content = git("cat-file", "blob", f"{deleted_by}^:{relative}")
+    return content
+
+
+def link_content(path):
+    """
+    What a keep_copy removal leaves at a linked path: the bytes the link
+    resolves to, or for a dangling link the last content git held for its
+    target (see last_committed_content). Returns (content, where), with
+    content None when there is nothing to keep.
+    """
+    target = os.path.realpath(path)
+    if os.path.isfile(target):
+        with open(target, "rb") as file_handle:
+            return file_handle.read(), "a copy"
+    return last_committed_content(target), "the last committed content of its deleted target"
+
+
+def replace_link_with_copy(path):
+    """
+    Turn a symlink (or a hard link) into a regular file of its own, holding
+    what link_content finds for it. The file is written beside the path and
+    renamed over it, so the path never goes missing under an app that is
+    reading it, and whatever the link pointed at is not touched. A dangling
+    link with nothing to recover is removed. Returns link_content's "where",
+    or None when the link was removed.
+    """
+    content, where = link_content(path)
+    if content is None:
+        os.remove(path)
+        return None
+    temporary = f"{path}.unlinking"
+    try:
+        with open(temporary, "wb") as file_handle:
+            file_handle.write(content)
+        if os.path.exists(path):
+            shutil.copystat(path, temporary)
+        os.replace(temporary, path)
+    finally:
+        if os.path.lexists(temporary):
+            os.remove(temporary)
+    return where
 
 
 def inside_linked_directory(path):
@@ -1818,20 +1990,32 @@ def run_prune(candidates, apply_changes=False):
         len(candidates),
         "cyan" if apply_changes else "yellow",
     )
-    for dest, reason, allow_directory in candidates:
+    for dest, reason, allow_directory, keep_copy in candidates:
         if not os.path.lexists(dest):
             absent += 1
             continue
         removable, description = classify_prune_target(dest, allow_directory=allow_directory)
+        if removable and keep_copy and os.path.isdir(dest):
+            removable, description = False, "link to a directory - left in place (keep_copy copies one file)"
         if not removable:
             print(f"  {paint('SKIP', 'yellow')}  {dest}  ({description}; {reason})")
             skipped += 1
             if apply_changes:
                 refresh_report.record("prune.skipped", dest, description)
             continue
+        # keep_copy: only the link goes. The path stays as a regular file with
+        # the content the link resolved to, or the content git last held for
+        # its target when a pull already deleted that; with neither, the
+        # dangling link is removed like any other.
+        kept = None
+        if keep_copy:
+            content, where = link_content(dest)
+            kept = where if content is not None else None
         if apply_changes:
             try:
-                if os.path.isdir(dest) and not os.path.islink(dest):
+                if kept:
+                    replace_link_with_copy(dest)
+                elif os.path.isdir(dest) and not os.path.islink(dest):
                     force_rmtree(dest)
                 else:
                     force_remove_file(dest)
@@ -1842,9 +2026,15 @@ def run_prune(candidates, apply_changes=False):
                 skipped += 1
                 refresh_report.record("prune.skipped", dest, f"failed: {exc}")
                 continue
-            remove_empty_parents(dest)
-            print(f"  {paint('REMOVED', 'green')}  {dest}  ({description}; {reason})")
-            refresh_report.record("prune.removed", dest, reason)
+            if kept:
+                print(f"  {paint('UNLINKED', 'green')}  {dest}  ({description} replaced by {kept}; {reason})")
+                refresh_report.record("prune.removed", dest, f"{reason} (link replaced by {kept})")
+            else:
+                remove_empty_parents(dest)
+                print(f"  {paint('REMOVED', 'green')}  {dest}  ({description}; {reason})")
+                refresh_report.record("prune.removed", dest, reason)
+        elif kept:
+            print(f"  {paint('WOULD UNLINK', 'yellow')}  {dest}  ({description} would be replaced by {kept}; {reason})")
         else:
             print(f"  {paint('WOULD REMOVE', 'yellow')}  {dest}  ({description}; {reason})")
         removed += 1

@@ -276,76 +276,31 @@
 
 # --- T3 Code (agent control plane) ---
 
-# Manifest-worthy: settings.json / client-settings.json / keybindings.json.
+# settings.json / client-settings.json / keybindings.json are NOT deployed
+# anywhere, by this manifest or by any overlay, and this repo holds no copy of
+# them. T3 writes all three on its own (every in-app change, every app update,
+# every client that pushes its shared settings), so a link into a checkout
+# turned the tracked file dirty on every machine and blocked that machine's
+# next pull of it, and a deployed copy would fight the app. Each machine's T3
+# owns its own files.
+#
+# A record of one machine's files is kept by method: ingest entries in the
+# personal overlay manifest: on WORKTREE_HOST (envy) only, each deploy copies
+# envy's own file into t3code/ in that overlay's credentials repo, committed
+# by hand like the deployment map. Nothing reads it back, and it is in a
+# private repo because settings.json has a field for a provider password.
+#
+# The links older deploys made are retired by the keep_copy lines in
+# deploy_removals.yaml: the link goes and the app keeps a regular file. The
+# files those links pointed at were deleted in the same commit, so on most
+# machines the link is already dangling when prune reaches it; prune then
+# writes the content git last held for the target, which is what the link
+# showed. No machine has to refresh before anything can be deleted.
+#
 # NEVER manage: saved-environments.json (per-machine environment registry with
 # an encrypted bearer token), desktop-settings.json (window-bounds churn),
-# clerk-tokens.json, secrets/, state.sqlite, logs/, environment-id,
-# server-runtime.json. The requires gate keeps deploy from creating ~/.t3 on
-# machines that don't run T3. Electron saves settings via atomic rename, which
-# replaces the deployed link with a plain file - so all three entries set
-# on_drift: adopt: the next deploy copies the in-app edit INTO the repo
-# working tree (git diff to review, commit or revert - VS Code-style) and
-# re-links, instead of clobbering it with the repo copy - on WORKTREE_HOST
-# (envy) only; every other machine deploys these as replace, because T3
-# rewrites them after each app update, and adopting on two machines leaves the
-# second one unable to pull. The machine file is still backed up to
-# data/config_backups first, and a repo copy that is the
-# newer side (orphaned hard link after git pull) still wins as usual. Adopted
-# json is re-serialized to the canonical repo form (2-space indent, sorted
-# keys) so the app's minified saves diff per-key - keep the repo copies in
-# that form so a re-minified-but-unchanged save reads as format-only drift.
-#
-# Only keybindings.json has a mac variant: macs resolve keybindings.mac.json,
-# Windows and Linux fall through to the bare file, which is the npm-server-safe
-# copy - the headless `t3` server hard-rejects commands its own version
-# doesn't know (RyzenWhite logged "ignoring invalid keybinding entry" for
-# filePicker.toggle / projectSearch.toggle left behind by a 0.0.32 nightly).
-# Servers install unpinned (t3@latest), so the bare file has to track the
-# OLDEST server running anywhere: roll every server up BEFORE promoting new
-# default bindings here, and remember the quiet machines are the ones that
-# fall behind. See the "Server version" section of docs/setup_t3_code.md.
-# settings.json and client-settings.json have no variant; if a mac drift-merge
-# ever introduces a key the npm server rejects, split off a .mac.json variant
-# at that point.
-
-# t3code_settings (application_configs/t3code/settings.json ->
-# ~/.t3/userdata/settings.json) deploys via personal_manifest.yaml: the file
-# stays here and is still public, but the ENTRY needs a
-# hosts whitelist so a work context can point that dest at its own copy,
-# and hosts filters are overlay-manifest-only. Same split as claude_settings
-# above, and for the same reason: a work machine on Bedrock needs a
-# claudeAgent providerInstance whose customModels names an inference profile,
-# which must not leak into the file every personal machine gets. Adding a new
-# personal T3 machine means adding it to that entry's hosts list, not here.
-# client-settings.json and keybindings.json are unaffected - they have no
-# per-context content, so they stay below.
-
-- name: t3code_client_settings
-  repo: application_configs/t3code/client-settings.json
-  dest:
-    darwin: ~/.t3/userdata/client-settings.json
-    linux: ~/.t3/userdata/client-settings.json
-    windows: ~/.t3/userdata/client-settings.json
-  requires: ~/.t3/userdata
-  on_drift: adopt
-  note: >-
-    Desktop-client UI prefs; headless servers ignore it. All platforms get the
-    bare file. The app rewrites this file on every in-app settings change, so
-    drift adopts into the worktree instead of reverting the change.
-
-- name: t3code_keybindings
-  repo: application_configs/t3code/keybindings.json
-  dest:
-    darwin: ~/.t3/userdata/keybindings.json
-    linux: ~/.t3/userdata/keybindings.json
-    windows: ~/.t3/userdata/keybindings.json
-  requires: ~/.t3/userdata
-  on_drift: adopt
-  note: >-
-    Macs get keybindings.mac.json, other platforms the bare file. Keep every
-    command in the bare file within the npm server's schema - unknown commands
-    make it log "ignoring invalid keybinding entry" and surface config-issue
-    warnings in connected clients.
+# clerk-tokens.json, secrets/, statev2.sqlite, logs/, environment-id,
+# server-runtime.json.
 
 # There is no Windows headless server method, and the files are gone with it.
 # On Windows, T3 is the DESKTOP APP ONLY - one backend, the app's own, on

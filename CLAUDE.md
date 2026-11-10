@@ -58,7 +58,15 @@ is the one-paragraph orientation so an agent knows which file to open.
   A `method: system` entry is a root-owned copy outside the home
   (`/etc/nut/*.conf` on the UPS pis), placed through `sudo -n`, checked by
   content hash and owner/mode, with a `reload:` command run after a change;
-  everything else is a link. Manifest `hosts:` names must exist in the union
+  a `method: copy` entry is a user-owned copy; a `method: ingest` entry
+  deploys nothing and, on envy only, copies the machine's own file into the
+  repo to be committed by hand (T3 Code's settings and keybindings, which the
+  app rewrites itself: the personal overlay keeps that record in
+  `personal_credentials/t3code/` and this repo holds no copy); everything
+  else is a link. A removals line with `keep_copy: true` replaces a retired
+  link with a regular file of the same content instead of deleting the path,
+  taking the content from git history when the link's target is already gone.
+  Manifest `hosts:` names must exist in the union
   of the `*_credentials` inventories (`<context>_hosts.json`). An overlay loads only where the
   machine's inventory record is in its context (its own inventory or the
   record's `contexts:` list); a checkout held for another reason, such as
@@ -69,8 +77,9 @@ is the one-paragraph orientation so an agent knows which file to open.
   those same plans on every deploy, into `generated/deploy_map.{html,txt}` in the personal
   credentials repo - only on host `envy` (`MAP_HOST`, which is
   `deploy_configs.WORKTREE_HOST`, the one machine a deploy may leave with a
-  dirty checkout; `on_drift: adopt` acts there only for the same reason - any
-  other machine writing tracked files blocks its own next pull).
+  dirty checkout; `on_drift: adopt` and `method: ingest` act there only for
+  the same reason - any other machine writing tracked files blocks its own
+  next pull).
   Template `templates/deploy_map.html`; both must stay context-agnostic
   because the rendered map names every machine and client at once.
 - **`claude_mcp.py`** — generates one `data/mcp/<context>.mcp.json` per
