@@ -606,7 +606,7 @@ Current fleet:
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
 | JasonZephyrus | T3 Connect **and** Tailscale Serve | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 | EliteDesk | T3 Connect | Ubuntu: systemd boot service, agent-activity publishing on, node from nvm linked into `~/.local/bin` by the prereq script. Same CLI path as JasonZephyrus. |
-| nukbuntu | T3 Connect | Ubuntu: same setup as EliteDesk. Nothing on this box pulls `personal_dev`, so its agent config moves only when someone pulls it there. |
+| nukbuntu | T3 Connect | Ubuntu: same setup as EliteDesk. |
 | RyzenWhite | Client only | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve. Its T3 Connect publishing is off; it watches and drives the slotted environments. See [Windows: desktop app only](#windows-desktop-app-only). |
 
 

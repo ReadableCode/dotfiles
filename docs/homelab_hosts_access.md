@@ -27,9 +27,9 @@ the things that silently fail a plausible remote workflow.
   sits at the greeter. Nothing that needs display `:0` works; that is why it
   runs the Xtigervnc virtual desktop.
 - Its ssh key is registered on GitHub (`ssh -T git@github.com` authenticates
-  as ReadableCode, checked 2026-11-09), so dotfiles, Docker and server_configs
-  pull unaided from the deploy cron. Its key reaches elitedesk too, so the
-  credentials repo pulls unaided.
+  as ReadableCode, checked 2026-11-09), so every repo under `~/GitHub` pulls
+  unaided from the `*/5` deploy loop (`Docker/scripts/git_pull_nukbuntu.sh`).
+  Its key reaches elitedesk too, so the credentials repo pulls unaided.
 - sudo needs a password (no NOPASSWD); root-side work is mine. Probing sudo
   here is harmless, unlike elitedesk.
 - jason is in the docker group; app data lives in `/home/jason/docker_app_data`,

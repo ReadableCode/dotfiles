@@ -137,9 +137,13 @@ on change. Do not add it here.
   same way elitedesk's cron line is. Logs: `journalctl -u gitpullall`.
 - **nukbuntu** — jason's crontab only (docker runs as jason there), declared
   in `server_configs/system_configs/nukbuntu/cron/jason.cron` and reinstalled
-  by `Docker/scripts/git_pull_nukbuntu.sh` on every `*/5` tick. The same file
-  runs the nightly `git_pull_nukbuntu.sh --update-images` (04:47) and the
-  dotfiles pull, clone and deploy every 15 minutes.
+  by `Docker/scripts/git_pull_nukbuntu.sh` on every `*/5` tick. That script
+  also pulls every repo under `~/GitHub` the way elitedesk's `git_pull.sh`
+  does (master/main, fast-forward only, minus `.skiprepos`); only the Docker
+  repo, its configs in server_configs and `personal.env` deploy anything
+  there. The same crontab runs the nightly
+  `git_pull_nukbuntu.sh --update-images` (04:47) and the dotfiles clone and
+  deploy every 15 minutes. Log: `~/logs/git_pull_nukbuntu.log`.
 - **Envy, macmini14, the other three pis** — no user or root crontab
   at all. Macs would use launchd if they ever need one.
 - **Windows machines** — Task Scheduler, no cron.
