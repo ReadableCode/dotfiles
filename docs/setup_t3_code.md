@@ -29,9 +29,12 @@ rejects (see [t3_issues.md](t3_issues.md)).
 **The one coupling to watch.** The deployed bare `keybindings.json` in
 `application_configs/t3code/` carries some server version's default bindings.
 A server **older** than that logs `ignoring invalid keybinding entry`; a
-**newer** one merges its own defaults in and replaces the deployed symlink
-with a plain file (`NOT_A_LINK` in `deploy_configs.py status`). So the bare
-file tracks the **oldest server running anywhere**:
+**newer** one merges its own defaults in and saves. 0.1.8 writes through the
+deployed symlink, so the tracked file shows as modified in that machine's
+dotfiles checkout (`git status`) and blocks its next pull of that file;
+earlier servers replaced the link with a plain file (`NOT_A_LINK` in
+`deploy_configs.py status`). So the bare file tracks the **oldest server
+running anywhere**:
 
 1. roll every server up (Linux: `npx -y t3@latest update`),
 2. only then promote new default bindings into the bare file,
@@ -111,21 +114,24 @@ systemctl`, it's a user unit. Logs go to
 command — see [Updating a service-managed Linux
 server](#updating-a-service-managed-linux-server)).
 
-What it writes, as of 0.0.33 — worth knowing before hand-editing anything:
+What it writes, as of 0.1.8 — worth knowing before hand-editing anything:
 
 ```ini
 # ~/.config/systemd/user/t3code.service
 Environment=T3CODE_HOME=/home/<user>/.t3
-ExecStart=/usr/bin/node-22 /home/<user>/.t3/runtime/service-launcher.mjs
+Environment=T3_BOOT_SERVICE_UNIT=t3code.service
+ExecStart=/home/<user>/.t3/runtime/versions/<version>/t3 __service-launcher
 Restart=always
 RestartSec=5
 StandardOutput=append:/home/<user>/.t3/userdata/logs/boot-service.log
 WantedBy=default.target
 ```
 
-`ExecStart` points at the version-agnostic `service-launcher.mjs` (the runtime
-itself lives in `~/.t3/runtime/versions/<version>/`), so `service update`
-swaps versions without rewriting the unit. The server binds **loopback only**
+`ExecStart` is the release's own standalone binary (node is only needed for
+the `npx` that installs it), and `t3 update` rewrites the line to the new
+version's directory. That binary is also the CLI on a box with no `t3` on
+PATH: `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3 <subcommand>`.
+The unit sets no `PATH`. The server binds **loopback only**
 (`127.0.0.1:3773`) — no `0.0.0.0` bind, no firewall rule; every reachability
 path below dials loopback. The connection string and a pairing token are
 printed into the boot log once it's ready.
@@ -188,13 +194,14 @@ deploy for everyone). Confirm all three landed as symlinks with
 keybinding entry" — the bare (non-`.mac`) files must stay within the pinned
 server's schema.
 
-**The headless server breaks the keybindings symlink too.** The `NOT_A_LINK`
-drift documented under Settings is not desktop-only: on first start a headless
-server merges its own defaults into `keybindings.json` and saves, replacing the
-deployed symlink with a regular file. It writes once — a file that already
-contains the defaults survives later restarts — so this is a one-shot on a
-fresh install, not a loop, but `deploy_configs.py status` reports `NOT_A_LINK`
-until it's resolved.
+**The headless server rewrites `keybindings.json` too.** At every start a
+headless server merges any default binding the file lacks into
+`keybindings.json` and saves. 0.1.8 saves through the deployed symlink, so the
+link stays healthy in `deploy_configs.py status` and the tracked file turns up
+modified in that machine's dotfiles checkout instead (`git status` there, then
+`git checkout -- application_configs/t3code/keybindings.json` before the pull
+that brings the promoted file). A file that already contains the defaults is
+left alone.
 
 Re-deploying alone just hands the server a file it rewrites again, so the bare
 file has to move up with the servers: **it tracks the lowest server version
@@ -848,7 +855,7 @@ Gaps that matter next to the Claude desktop app:
 | Other desktop-app surfaces missing | The in-app browser pane, artifacts and the iOS simulator panel are Claude-desktop-app features and don't exist in T3 threads (T3 has its own device panel for simulators, `mcp__t3-code__device_*`). claude.ai connectors (Gmail, Calendar, Drive, Docs, Slack) DO reach T3 threads: they are remote MCP servers registered on the claude.ai account and `claude mcp list` shows them connected from inside a thread (verified 2026-09-25). CLAUDE.md, skills, auto-memory, and MCP servers configured in `~/.claude` also apply, since it's the same `claude` binary. |
 | No Anthropic cloud sessions | T3 can't spawn or steer sessions running in Anthropic's GitHub-repo sandbox; those are reachable only from Anthropic's own apps. |
 | One serving machine | Everything a session touches (repo, agent CLI, auth) must exist on the machine whose t3 server owns the thread. |
-| T3 Connect tunnel cap | Accounts get **3 managed tunnels**, counted against *published environments* — the local desktop's own published environment occupies a slot, so the dashboard's remote-environments list understates usage (it looks like 2 when all 3 are taken). The headless CLI surfaces a refusal only as a bare `403` with no message; the desktop dialog shows the real reason. Machines beyond the cap pair over Tailscale Serve instead — full thread functionality, but no phone push or Live Activities unless also linked `--publish-only` (see Slot policy). Why 3: each managed tunnel is a real Cloudflare Tunnel plus DNS record in T3's own Cloudflare account, billed whether or not a connector is attached; `DEFAULT_MANAGED_TUNNEL_LIMIT = 3` in `infra/relay/src/environments/ManagedTunnelLimits.ts` (lowered from 10 in upstream #4530, no reason given) is a soft quota the T3 team can raise per user with a row in `relay_managed_tunnel_limits`. No plan or paid tier exists. |
+| T3 Connect tunnel cap | Accounts get **3 managed tunnels**, counted against *published environments* — the local desktop's own published environment occupies a slot, so the dashboard's remote-environments list understates usage (it looks like 2 when all 3 are taken). The headless CLI surfaces a refusal only as a bare `403` with no message; the desktop dialog shows the real reason. Machines beyond the cap pair over Tailscale Serve instead — full thread functionality, but no phone push or Live Activities unless also linked `--publish-only` (see Slot policy). Why 3: each managed tunnel is a real Cloudflare Tunnel plus DNS record in T3's own Cloudflare account, billed whether or not a connector is attached; `DEFAULT_MANAGED_TUNNEL_LIMIT = 3` in `infra/relay/src/environments/ManagedTunnelLimits.ts` (lowered from 10 in upstream #4530, no reason given) is a soft quota the T3 team can raise per user with a row in `relay_managed_tunnel_limits`. A linked paid T3 Chat plan raises it: 10 on Pro, 100 on Premier (`T3CHAT_PLAN_TUNNEL_LIMITS` in `packages/contracts/src/relay.ts`, upstream #25931). |
 
 ## Multi-machine control surface (target setup)
 

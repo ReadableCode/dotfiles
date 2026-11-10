@@ -1,5 +1,26 @@
 [
   {
+    "key": "f6",
+    "command": "workspace.focusNext"
+  },
+  {
+    "key": "shift+f6",
+    "command": "workspace.focusPrevious"
+  },
+  {
+    "key": "mod+f6",
+    "command": "workspace.focusNext"
+  },
+  {
+    "key": "mod+shift+f6",
+    "command": "workspace.focusPrevious"
+  },
+  {
+    "key": "mod+shift+d",
+    "command": "composer.dictation",
+    "when": "!terminalFocus"
+  },
+  {
     "key": "mod+[",
     "command": "navigation.back",
     "when": "!terminalFocus"
