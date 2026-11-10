@@ -65,6 +65,9 @@ The gotcha: several things must be set **before the first `docker compose up`**,
 because the admin account and other state get baked into `./data` on first boot
 and are not re-read afterward.
 
+The repo is declared for JasonZephyrus in the personal repo list, so
+`gitpullall` offers the clone there. By hand, or on another machine:
+
 ```bash
 git clone https://github.com/pewdiepie-archdaemon/odysseus.git
 cd odysseus
