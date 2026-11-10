@@ -237,15 +237,34 @@ Parsed by Effect's `Config.boolean`, so `true`/`1`/`on` all work. Use
 firewalld — Tailscale Serve needs no firewall rule, since it proxies from
 loopback).
 
+**Linking the boot service to T3 Connect.** With no `t3` on PATH, call the
+service's own binary on the box:
+
+```bash
+T3=~/.t3/runtime/versions/<version>/t3
+printf 'y\n' | T3CODE_HOME=~/.t3 $T3 connect link --headless   # prints a URL and a code, waits 10 minutes for the approval
+systemctl --user restart t3code.service                         # the link applies at the next start
+T3CODE_HOME=~/.t3 $T3 connect publish                           # phone push, off after a link
+T3CODE_HOME=~/.t3 $T3 connect status
+```
+
+The `y` answers the one-time question about downloading the relay client
+(`cloudflared`); over ssh with no terminal the unanswered question exits 130.
+Open the URL on any device signed in to the T3 account. Ignore the "start the
+server with `t3 serve`" hint it ends with: the service is the server.
+
 **The T3 Connect tunnel is pinned to http2.** T3 Connect runs a `cloudflared`
 child (`~/.t3/tools/cloudflared/`) that inherits the service environment, so
 `30-tunnel-http2.conf` sets `TUNNEL_TRANSPORT_PROTOCOL=http2`. QUIC to the
-edge fails from JasonZephyrus every time (`tls: no application protocol`).
-cloudflared falls back to http2 on a cold start, but after a suspend it
-retries QUIC only and never reconnects: the service stays `active` while the
-machine is gone from T3 Connect. Check the tunnel with `curl -s
-127.0.0.1:20241/ready`: `readyConnections` should be 4, and a `503` means the
-tunnel is down even though the server is up.
+edge fails from every machine on the home LAN that has tried it
+(JasonZephyrus, EliteDesk, nukbuntu) every time (`tls: no application protocol`).
+cloudflared falls back to http2 on a cold start (one to three minutes
+unpinned), but after a suspend it retries QUIC only and never reconnects: the
+service stays `active` while the machine is gone from T3 Connect. Check the
+tunnel with `t3 connect status`, which should end `Other devices can reach
+this machine · Tunnel connected · 4 connections · HTTP2`. 0.1.8 starts
+cloudflared with `--metrics 127.0.0.1:0`, so its `/ready` endpoint is on a
+random port (`ss -tlnp | grep cloudflared`), no longer 20241.
 
 **`tailscale serve` needs an operator grant.** It is a state-changing command,
 so as a normal user it fails and the server logs a `WARN ... Failed to
@@ -585,7 +604,9 @@ Current fleet:
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
 | Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
-| JasonZephyrus | T3 Connect **and** Tailscale Serve | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 node-22 ~/.t3/runtime/versions/<version>/node_modules/.bin/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
+| JasonZephyrus | T3 Connect **and** Tailscale Serve | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
+| EliteDesk | T3 Connect | Ubuntu: systemd boot service, agent-activity publishing on, node from nvm linked into `~/.local/bin` by the prereq script. Same CLI path as JasonZephyrus. |
+| nukbuntu | T3 Connect | Ubuntu: same setup as EliteDesk. Nothing on this box pulls `personal_dev`, so its agent config moves only when someone pulls it there. |
 | RyzenWhite | Client only | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve. Its T3 Connect publishing is off; it watches and drives the slotted environments. See [Windows: desktop app only](#windows-desktop-app-only). |
 
 
@@ -599,9 +620,11 @@ to reach, never to one that is only a client. A desktop or phone app signed
 into the T3 account sees every slotted environment without a slot of its own,
 and the desktop app raises its own notifications for every environment it is
 connected to (`apps/web/src/components/ThreadNotificationCoordinator.tsx`
-upstream); only phone push and Live Activities come from the relay. The three
-slots go to Envy, the work laptop and JasonZephyrus, the always-on agent
-server and dev target. RyzenWhite and the MacBook are clients only: a thread
+upstream); only phone push and Live Activities come from the relay. The
+account holds more than the default three since 2026-11 (see the tunnel cap
+row under the gaps); the slots go to Envy, the work laptop, JasonZephyrus (the
+always-on agent server and dev target), EliteDesk and nukbuntu. RyzenWhite and
+the MacBook are clients only: a thread
 started on the MacBook is finished there. To move a slot: turn T3 Connect off
 on the old host (Settings → Connections), then on any signed-in client open
 the account avatar → **Manage account** → **T3 Connect** and **Deregister**

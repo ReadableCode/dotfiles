@@ -1564,7 +1564,9 @@ OVERLAY_OWNED_PAYLOADS = {
     "t3code/service.d/10-path.jasonzephyrus.conf": "personal_dev",
     "t3code/service.d/10-path.nukbuntu.conf": "personal_dev",
     "t3code/service.d/20-tailscale-serve.jasonzephyrus.conf": "personal_dev",
+    "t3code/service.d/30-tunnel-http2.elitedesk.conf": "personal_dev",
     "t3code/service.d/30-tunnel-http2.jasonzephyrus.conf": "personal_dev",
+    "t3code/service.d/30-tunnel-http2.nukbuntu.conf": "personal_dev",
     "t3code/settings.json": "personal_dev",
     "vnc/xstartup": "personal_credentials",
 }
