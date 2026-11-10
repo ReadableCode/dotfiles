@@ -770,8 +770,10 @@ the `keep_copy` removals replace each link with a regular file, so T3 keeps
 its settings. The files those links pointed at are deleted from their repos,
 so the link is usually dangling by the time prune reaches it; prune then
 writes the content git last held for the target, which is what the link
-showed. Check with `ls -l ~/.t3/userdata/*.json`; none of the three should be
-a link.
+showed. A running T3 saves a nearly empty `settings.json` back through the
+dangling link in the meantime; prune ignores that file and removes it from the
+checkout. Check with `ls -l ~/.t3/userdata/*.json`; none of the three should
+be a link.
 
 One case needs a hand. A machine whose T3 had already written through a link
 has a modified tracked file, and git refuses the pull that deletes it, so the

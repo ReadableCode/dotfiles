@@ -680,8 +680,17 @@ checkout the link pointed into for the content git last held at that path
 (HEAD's copy, or the copy from just before the commit that deleted it) and
 writes that. It is what the link showed, so no machine has to refresh before
 the file can go. Only a dangling link whose target was never committed has
-nothing to keep and is removed. T3 Code's three files are retired this way,
-so T3 keeps its settings and stops writing into a checkout.
+nothing to keep and is removed.
+
+The committed content wins even when a file sits at the deleted target again.
+A running app that finds its settings gone does not wait: T3's servers saved a
+fresh, nearly empty `settings.json` straight back through the dangling link
+within two minutes of the pull, re-creating the deleted file as an untracked
+one, and a plain copy of the link's target then handed T3 that file. So when
+the checkout no longer tracks the target's path, prune takes the last
+committed content and removes the file that was written back. T3 Code's three
+files are retired this way, so T3 keeps its settings and stops writing into a
+checkout.
 
 **Retiring a whole checkout.** An entry with `directory: true` names a clone
 under gitDir that no repos file declares any more. Prune removes it only when

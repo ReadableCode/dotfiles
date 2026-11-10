@@ -1570,8 +1570,35 @@ def test_keep_copy_removal_recovers_a_dangling_link_from_the_history_of_its_chec
     assert "last committed content of its deleted target" in capsys.readouterr().out
     assert os.path.isfile(dest) and not os.path.islink(dest) and open(dest).read() == '{"a": 1}'
     assert not os.path.exists(tracked), "nothing is put back into the checkout"
-    assert deploy_configs.last_committed_content(os.path.dirname(tracked)) is None, "a folder has no content to keep"
-    assert deploy_configs.last_committed_content(os.path.join(repo, "never", "tracked.json")) is None
+    assert deploy_configs.committed_content(os.path.dirname(tracked)) == (None, False), "a folder has no content"
+    assert deploy_configs.committed_content(os.path.join(repo, "never", "tracked.json")) == (None, False)
+
+
+def test_keep_copy_removal_ignores_what_an_app_wrote_back_through_the_dangling_link(tmp_path, fake_home, capsys):
+    """
+    A running app that finds its settings gone saves a fresh file through the
+    dangling link before prune runs, re-creating the deleted target as an
+    untracked file. That file is not what the link held.
+    """
+    repo = _git_repo(str(tmp_path / "checkout"), remote=False)
+    tracked = write_file(os.path.join(repo, "app", "settings.json"), '{"favorites": [1, 2], "model": "x"}')
+    write_file(os.path.join(repo, "app", "stays.conf"), "x")  # the folder outlives the file, so the write can land
+    commit = ["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm"]
+    subprocess.run(["git", "-C", repo, "add", "."], check=True)
+    subprocess.run([*commit, "add settings"], check=True)
+    dest = os.path.join(str(fake_home), ".app", "settings.json")
+    os.makedirs(os.path.dirname(dest))
+    os.symlink(tracked, dest)
+    subprocess.run(["git", "-C", repo, "rm", "-q", "app/settings.json"], check=True)
+    subprocess.run([*commit, "retire settings"], check=True)
+    write_file(dest, "{}")  # the app, writing through the link
+    assert open(tracked).read() == "{}", "the write landed back in the checkout"
+
+    deploy_configs.run_prune([(dest, "removals:settings_link", False, True)], apply_changes=True)
+    assert "written back through the link is removed" in capsys.readouterr().out
+    assert not os.path.islink(dest) and open(dest).read() == '{"favorites": [1, 2], "model": "x"}'
+    assert not os.path.exists(tracked)
+    assert subprocess.check_output(["git", "-C", repo, "status", "--porcelain"], text=True) == ""
     assert subprocess.check_output(["git", "-C", repo, "status", "--porcelain"], text=True) == ""
 
 

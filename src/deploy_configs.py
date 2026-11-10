@@ -1699,19 +1699,19 @@ def force_remove_file(path):
         os.remove(path)
 
 
-def last_committed_content(file_path):
+def committed_content(file_path):
     """
-    The bytes git last held for a file inside a checkout, or None when the
-    path is in no checkout or was never committed. HEAD's copy when it is
-    still tracked, otherwise the copy from just before the commit that
-    deleted it. This is what a link into a checkout held before a pull took
-    its target away.
+    What git holds for a file inside a checkout, as (content, retired).
+    HEAD's copy with retired False while the path is still tracked; the copy
+    from just before the commit that deleted it with retired True once it is
+    gone from HEAD; (None, False) when the path is in no checkout or was never
+    committed.
     """
     top = os.path.dirname(file_path)
     while not os.path.exists(os.path.join(top, ".git")):
         parent = os.path.dirname(top)
         if parent == top:
-            return None
+            return None, False
         top = parent
     relative = os.path.relpath(file_path, top).replace(os.sep, "/")
 
@@ -1724,25 +1724,36 @@ def last_committed_content(file_path):
     # cat-file blob, not show: a path that was a directory has no content to
     # keep, and show would hand back its listing
     content = git("cat-file", "blob", f"HEAD:{relative}")
-    if content is None:
-        deleted_by = (git("rev-list", "-1", "HEAD", "--", relative) or b"").decode().strip()
-        if deleted_by:
-            content = git("cat-file", "blob", f"{deleted_by}^:{relative}")
-    return content
+    if content is not None:
+        return content, False
+    deleted_by = (git("rev-list", "-1", "HEAD", "--", relative) or b"").decode().strip()
+    if deleted_by:
+        content = git("cat-file", "blob", f"{deleted_by}^:{relative}")
+    return content, content is not None
 
 
 def link_content(path):
     """
-    What a keep_copy removal leaves at a linked path: the bytes the link
-    resolves to, or for a dangling link the last content git held for its
-    target (see last_committed_content). Returns (content, where), with
-    content None when there is nothing to keep.
+    What a keep_copy removal leaves at a linked path, as (content, where,
+    stray). Normally the bytes the link resolves to. When the link's target
+    is a path its checkout has deleted (the pull that brings the removal is
+    usually the one that deletes the target), the content is the last one git
+    held for it, which is what the link showed before the pull. That holds
+    even when a file is there again: a running app that finds its settings
+    gone saves a fresh, mostly empty file straight back through the dangling
+    link, and that file is neither the app's settings nor the repo's. It is
+    returned as stray, to be removed with the link. content is None when
+    there is nothing to keep.
     """
     target = os.path.realpath(path)
+    committed, retired = committed_content(target)
+    if retired:
+        stray = target if os.path.isfile(target) else None
+        return committed, "the last committed content of its deleted target", stray
     if os.path.isfile(target):
         with open(target, "rb") as file_handle:
-            return file_handle.read(), "a copy"
-    return last_committed_content(target), "the last committed content of its deleted target"
+            return file_handle.read(), "a copy", None
+    return committed, "the committed content of its missing target", None
 
 
 def replace_link_with_copy(path):
@@ -1750,11 +1761,12 @@ def replace_link_with_copy(path):
     Turn a symlink (or a hard link) into a regular file of its own, holding
     what link_content finds for it. The file is written beside the path and
     renamed over it, so the path never goes missing under an app that is
-    reading it, and whatever the link pointed at is not touched. A dangling
-    link with nothing to recover is removed. Returns link_content's "where",
-    or None when the link was removed.
+    reading it. A live target is not touched; a stray one (see link_content)
+    is removed once the path no longer leads to it. A dangling link with
+    nothing to recover is removed. Returns link_content's "where", or None
+    when the link was removed.
     """
-    content, where = link_content(path)
+    content, where, stray = link_content(path)
     if content is None:
         os.remove(path)
         return None
@@ -1762,12 +1774,12 @@ def replace_link_with_copy(path):
     try:
         with open(temporary, "wb") as file_handle:
             file_handle.write(content)
-        if os.path.exists(path):
-            shutil.copystat(path, temporary)
         os.replace(temporary, path)
     finally:
         if os.path.lexists(temporary):
             os.remove(temporary)
+    if stray:
+        os.remove(stray)
     return where
 
 
@@ -2009,8 +2021,9 @@ def run_prune(candidates, apply_changes=False):
         # dangling link is removed like any other.
         kept = None
         if keep_copy:
-            content, where = link_content(dest)
-            kept = where if content is not None else None
+            content, where, stray = link_content(dest)
+            if content is not None:
+                kept = where + (f", and the file written back through the link is removed ({stray})" if stray else "")
         if apply_changes:
             try:
                 if kept:

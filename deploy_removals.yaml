@@ -165,9 +165,11 @@
 # pointed at are deleted from their repos (see the T3 section of
 # deploy_manifest.yaml). keep_copy: the link goes and the path stays, as a
 # regular file holding what the link resolved to, or, when the pull has
-# already deleted the target, the content git last held for it. So the app
-# keeps its settings whichever order a machine pulls and prunes in. A file
-# the app already replaced with its own is left alone.
+# already deleted the target, the content git last held for it (also when a
+# running app has since written a fresh file back through the dangling link;
+# that file is removed). So the app keeps its settings whichever order a
+# machine pulls and prunes in. A file the app already replaced with its own
+# is left alone.
 #
 # settings.json was linked by overlay entries, never by this manifest, and its
 # removal is here all the same, beside the code that knows keep_copy. A
