@@ -1767,6 +1767,62 @@ def test_prune_directory_never_deletes_a_remoteless_origin_hub(tmp_path, capsys)
     assert "NO remote" in capsys.readouterr().out
 
 
+def _ignore_in_repo(repo, patterns):
+    """Commit and push a .gitignore so the checkout stays clean while it holds ignored paths."""
+    write_file(os.path.join(repo, ".gitignore"), "\n".join(patterns) + "\n")
+    subprocess.run(["git", "-C", repo, "add", ".gitignore"], check=True)
+    subprocess.run(
+        ["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "ignore"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", repo, "push", "-q"], check=True)
+
+
+def test_prune_directory_skips_checkout_holding_gitignored_files_of_its_own(tmp_path, capsys):
+    """Gitignored does not mean disposable: a clean tree hides the data folder that is the only copy."""
+    repo = _git_repo(str(tmp_path / "data_repo"))
+    _ignore_in_repo(repo, ["data/", "token.json"])
+    write_file(os.path.join(repo, "data", "2024-ytd.csv"), "rows")
+    write_file(os.path.join(repo, "token.json"), "{}")
+    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    out = capsys.readouterr().out
+    assert os.path.isfile(os.path.join(repo, "data", "2024-ytd.csv"))
+    assert "exist nowhere else" in out and "data" in out and "token.json" in out
+
+
+def test_prune_directory_takes_regenerable_and_deployed_ignored_paths_with_it(tmp_path, capsys):
+    """An environment, a cache and the deployer's own links are no reason to keep a retired checkout."""
+    repo = _git_repo(str(tmp_path / "venv_repo"))
+    _ignore_in_repo(repo, [".venv/", "__pycache__/", ".env", ".claude/", ".t3icon.svg", "build/"])
+    write_file(os.path.join(repo, ".venv", "bin", "python"), "x")
+    write_file(os.path.join(repo, "__pycache__", "f.cpython-312.pyc"), "x")
+    write_file(os.path.join(repo, ".t3icon.svg"), "<svg/>")
+    target = str(tmp_path / "elsewhere.env")
+    write_file(target, "KEY=1")
+    os.symlink(target, os.path.join(repo, ".env"))
+    os.makedirs(os.path.join(repo, ".claude"))
+    os.symlink(target, os.path.join(repo, ".claude", "settings.local.json"))
+    os.makedirs(os.path.join(repo, "build", "__pycache__"))
+    write_file(os.path.join(repo, "build", "__pycache__", "g.pyc"), "x")
+    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    assert not os.path.exists(repo)
+    assert os.path.isfile(target)
+    assert "REMOVED" in capsys.readouterr().out
+
+
+def test_prune_directory_skips_checkout_with_a_stash(tmp_path, capsys):
+    """A stash is on no branch and no remote, and the tree it leaves behind is clean."""
+    repo = _git_repo(str(tmp_path / "stash_repo"))
+    write_file(os.path.join(repo, "f.txt"), "changed")
+    subprocess.run(
+        ["git", "-C", repo, "-c", "user.email=t@t", "-c", "user.name=t", "stash", "-q"],
+        check=True,
+    )
+    deploy_configs.run_prune([(repo, "removals:x", True)], apply_changes=True)
+    assert os.path.isdir(repo)
+    assert "stash" in capsys.readouterr().out
+
+
 def test_prune_directory_without_flag_still_refuses_git_repos(tmp_path, capsys):
     repo = _git_repo(str(tmp_path / "unflagged_repo"))
     deploy_configs.run_prune([(repo, "removals:x", False)], apply_changes=True)

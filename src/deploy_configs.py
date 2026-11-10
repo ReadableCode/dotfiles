@@ -1657,12 +1657,15 @@ def classify_prune_target(dest, allow_directory=False):
 
 def classify_repo_directory(dest):
     """
-    Whether a directory named by a ``directory: true`` removal may go. Four
+    Whether a directory named by a ``directory: true`` removal may go. Six
     guards, each protecting a real failure mode: only git checkouts (anything
     else was never a managed clone), only clean trees (uncommitted work), only
     repos WITH a remote - a remoteless repo is a git origin hub and deleting it
-    destroys the only copy - and only checkouts that are not ahead of their
-    remote, because a clean tree can still hold commits that exist nowhere else.
+    destroys the only copy - only checkouts that are not ahead of their
+    remote, because a clean tree can still hold commits that exist nowhere
+    else, none with a stash, which sits on no branch at all, and none holding
+    gitignored files of its own: a data folder or a token file a clean tree
+    hides is the only copy too. Such a checkout is left for a person to empty.
     """
     if not os.path.isdir(os.path.join(dest, ".git")):
         return False, "directory is not a git checkout - left in place"
@@ -1686,7 +1689,87 @@ def classify_repo_directory(dest):
     ahead = unpushed_commits(dest)
     if ahead:
         return False, f"git checkout has {ahead} commit(s) not on its remote - left in place"
+    stashes = stashed_work(dest)
+    if stashes:
+        return False, f"git checkout has {stashes} stash(es) - left in place"
+    local = local_only_paths(dest)
+    if local:
+        shown = ", ".join(local[:3]) + (f" and {len(local) - 3} more" if len(local) > 3 else "")
+        return False, f"git checkout holds gitignored files that exist nowhere else ({shown}) - left in place"
     return True, "clean git checkout with a remote, nothing unpushed"
+
+
+def stashed_work(dest):
+    """
+    How many stashes a checkout holds. A stash is on no branch and no remote,
+    and a clean tree does not show it. Returns 0 when git cannot answer, like
+    unpushed_commits.
+    """
+    try:
+        out = subprocess.check_output(["git", "-C", dest, "stash", "list"], text=True, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.CalledProcessError):
+        return 0
+    return len([line for line in out.splitlines() if line.strip()])
+
+
+# Gitignored names a retired checkout may take with it: the environments and
+# caches any clone regenerates, and the icon the deployer copies into a checkout.
+REGENERABLE_IGNORED_NAMES = frozenset(
+    {
+        ".venv",
+        "venv",
+        "node_modules",
+        "__pycache__",
+        ".mypy_cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        ".tox",
+        ".DS_Store",
+        "Thumbs.db",
+        ".t3icon.svg",
+    }
+)
+
+
+def _regenerable(path):
+    """A link (the deployer's own: .env, .mcp.json, an allow list) or a name any clone regenerates."""
+    name = os.path.basename(path)
+    return os.path.islink(path) or name in REGENERABLE_IGNORED_NAMES or name.endswith((".pyc", ".egg-info"))
+
+
+def _holds_local_files(directory):
+    """Whether anything under directory is a real file that is not regenerable."""
+    for where, names, files in os.walk(directory):
+        names[:] = [name for name in names if not _regenerable(os.path.join(where, name))]
+        if any(not _regenerable(os.path.join(where, name)) for name in files):
+            return True
+    return False
+
+
+def local_only_paths(dest):
+    """
+    The gitignored paths in a checkout that exist nowhere else: what git
+    reports as ignored, minus links, minus regenerable names, minus directories
+    holding nothing but those. Gitignored does not mean disposable - a data
+    folder, an export or a token file is ignored precisely because it is local.
+    Returns [] when git cannot answer, like unpushed_commits.
+    """
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", dest, "status", "--porcelain", "--ignored", "-z"], text=True, stderr=subprocess.DEVNULL
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return []
+    kept = []
+    for record in out.split("\0"):
+        if not record.startswith("!! "):
+            continue
+        relative = record[3:].rstrip("/")
+        path = os.path.join(dest, relative)
+        if _regenerable(path) or (os.path.isdir(path) and not _holds_local_files(path)):
+            continue
+        kept.append(relative)
+    return kept
 
 
 def unpushed_commits(dest):

@@ -628,7 +628,18 @@ are the standing list of what must not exist rather than a queue to drain
 (decided 2026-10-15). A line goes only when a live manifest entry wants the
 path again, and prune already defers to that.
 
-`prune` never touches a real directory, removes a file only if a removals entry
+**Retiring a whole checkout.** An entry with `directory: true` names a clone
+under gitDir that no repos file declares any more. Prune removes it only when
+nothing in it would be lost: it is a git checkout, the tree is clean, it has a
+remote, no commit is missing from that remote, it holds no stash, and it holds
+no gitignored files of its own (a `data/` folder, an export, a token file).
+Links, environments and caches (`.venv`, `node_modules`, `__pycache__` and the
+like) do not count: any clone regenerates them. A checkout that fails a guard
+is left in place and printed as `SKIP` with the reason, so whoever runs the
+refresh can move the files out and let the next run remove it. Prune never
+asks before it removes.
+
+Without that flag `prune` never touches a real directory. It removes a file only if a removals entry
 names it, cleans up a directory left empty behind a removed file (e.g. a skill
 folder), and **ignores any dest a live manifest entry still wants** — so
 re-adding an entry beats a stale removals line instead of the two fighting.
