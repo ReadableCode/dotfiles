@@ -131,10 +131,15 @@ WantedBy=default.target
 the `npx` that installs it), and `t3 update` rewrites the line to the new
 version's directory. That binary is also the CLI on a box with no `t3` on
 PATH: `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3 <subcommand>`.
-The unit sets no `PATH`. The server binds **loopback only**
+The unit sets no `PATH`. A fresh install binds **loopback only**
 (`127.0.0.1:3773`) — no `0.0.0.0` bind, no firewall rule; every reachability
 path below dials loopback. The connection string and a pairing token are
-printed into the boot log once it's ready.
+printed into the boot log once it's ready. `t3 status` shows the bind as
+`Local network off`. A box where that line reads `on` listens on
+`0.0.0.0:3773` and answers the whole LAN with only a pairing code as the
+lock: JasonZephyrus does, kept from an older install, and Fedora's default
+firewall zone leaves the port open. `t3 up --no-lan` turns it off; Tailscale
+Serve does not need it, since it proxies loopback.
 
 ### Trap 1: `~/.local/bin` is not on a systemd user service's PATH
 
@@ -336,6 +341,10 @@ loginctl show-user "$USER" -p Linger           # ...without a login
 different servers: the launcher in `~/.t3/ssh-launch/*/run-t3.sh` prefers a
 `t3` on PATH and otherwise runs `npx t3@<version>`, starting a server of its
 own — the same "second server" hazard as the copy-update-command bug above.
+No machine uses the SSH card any more. To check a host, `ls ~/.t3/ssh-launch`
+should find nothing and the only `t3 serve` process should be the boot
+service's child; a launcher folder that comes back means some client still
+has an SSH environment saved for that host.
 
 ## New-Mac setup checklist
 
@@ -371,13 +380,13 @@ sections below; this is the order that matters.
 5. **Sign into T3 Connect**: environments linked to the account (see the fleet
    table) appear on their own once the app is signed in; nothing to re-create
    per machine.
-6. **Add any SSH-card environments** from the fleet table (e.g. the Linux dev
-   box): Settings → **Connections** → Remote environments → **Add
-   environment**. These pairings ARE per-machine: Envy's do not sync, so
-   re-create them. **[agent]** dialog quirks: the dialog remembers the
-   last-used card, so select the SSH card before typing; the suggested-hosts
-   list shows tailnet `100.x` IPs from known_hosts — ignore them and type the
-   LAN IP.
+6. **Add no SSH-card environment.** The fleet table has none: every remote is
+   reached through T3 Connect, and T3 is not to reach another host over SSH.
+   If one is ever wanted again it is added under Settings → **Connections** →
+   Remote environments → **Add environment**, per machine (they do not sync).
+   **[agent]** dialog quirks: the dialog remembers the last-used card, so
+   select the SSH card before typing; the suggested-hosts list shows tailnet
+   `100.x` IPs from known_hosts — ignore them and type the LAN IP.
 7. **Verify**: each remote environment shows a green dot under
    Settings → Connections → Remote environments, and its projects/threads
    appear in the sidebar. **[agent]** a "Transport error" on a correct
@@ -603,7 +612,6 @@ Current fleet:
 | Machine | How | Notes |
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
-| Linux dev box | SSH card: LAN IP, user, port 22 | T3 starts/reuses a headless server on the remote over an SSH tunnel. |
 | JasonZephyrus | T3 Connect **and** Tailscale Serve | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 | EliteDesk | T3 Connect | Ubuntu: systemd boot service, agent-activity publishing on, node from nvm linked into `~/.local/bin` by the prereq script. Same CLI path as JasonZephyrus. |
 | nukbuntu | T3 Connect | Ubuntu: same setup as EliteDesk. |
