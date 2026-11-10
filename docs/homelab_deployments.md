@@ -135,6 +135,12 @@ on change. Do not add it here.
   `refresh_machine.py` as pi: pull, clone, sync envs, deploy, prune. The
   deploy installs the unit that runs it, so the loop is self-carrying the
   same way elitedesk's cron line is. Logs: `journalctl -u gitpullall`.
+- **raspberrypi4** — the same `gitpullall.timer` loop as the UPS pis, plus a
+  drop-in (`gitpullall.service.d/10-compose.conf`) that runs
+  `docker compose -f Docker/docker_compose_pi4.yaml up -d` after every run, so
+  a compose change is live within one 15-minute tick. `up -d` does nothing
+  when no service's definition changed. The unit that brings the stack up at
+  boot, `docker_compose_pi4.service`, is installed by the same manifest.
 - **nukbuntu** — jason's crontab only (docker runs as jason there), declared
   in `server_configs/system_configs/nukbuntu/cron/jason.cron` and reinstalled
   by `Docker/scripts/git_pull_nukbuntu.sh` on every `*/5` tick. That script
@@ -144,7 +150,7 @@ on change. Do not add it here.
   there. The same crontab runs the nightly
   `git_pull_nukbuntu.sh --update-images` (04:47) and the dotfiles clone and
   deploy every 15 minutes. Log: `~/logs/git_pull_nukbuntu.log`.
-- **Envy, macmini14, the other three pis** — no user or root crontab
+- **Envy, macmini14, the other two pis** — no user or root crontab
   at all. Macs would use launchd if they ever need one.
 - **Windows machines** — Task Scheduler, no cron.
 
