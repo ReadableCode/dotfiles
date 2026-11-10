@@ -135,11 +135,13 @@ The unit sets no `PATH`. A fresh install binds **loopback only**
 (`127.0.0.1:3773`) — no `0.0.0.0` bind, no firewall rule; every reachability
 path below dials loopback. The connection string and a pairing token are
 printed into the boot log once it's ready. `t3 status` shows the bind as
-`Local network off`. A box where that line reads `on` listens on
-`0.0.0.0:3773` and answers the whole LAN with only a pairing code as the
-lock: JasonZephyrus does, kept from an older install, and Fedora's default
-firewall zone leaves the port open. `t3 up --no-lan` turns it off; Tailscale
-Serve does not need it, since it proxies loopback.
+`Local network off`, and `~/.t3/service.env` holds `T3CODE_LAN=false`. A
+service first installed on an older release has no such line and keeps the
+old default, LAN on: it listens on `0.0.0.0:3773`, answers the whole LAN with
+only a pairing code as the lock, and `t3 status` reads `Local network on ·
+kept from an older install`. `t3 up --no-lan` writes the line and restarts the
+service; do it on any box whose status reads that (JasonZephyrus did until
+2026-11-10).
 
 ### Trap 1: `~/.local/bin` is not on a systemd user service's PATH
 
@@ -216,6 +218,10 @@ the server leaves the file alone. `keybindings.mac.json` is a separate track
 (the desktop app's version).
 
 ### Reachability: Tailscale Serve on the boot service
+
+No machine uses this now: every T3 host is linked to T3 Connect and reachable
+no other way. It is the fallback for an account that has run out of managed
+tunnels, and the last drop-in for it (JasonZephyrus) was retired 2026-11-10.
 
 A service-managed box is loopback-only and linked to nothing by default. Only
 **T3 Connect** (`t3 connect link`) consumes one of the account's 3 managed
@@ -612,7 +618,7 @@ Current fleet:
 | Machine | How | Notes |
 |-------------|-----|-------|
 | Envy (local) | implicit | The desktop app's own server. |
-| JasonZephyrus | T3 Connect **and** Tailscale Serve | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
+| JasonZephyrus | T3 Connect | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 | EliteDesk | T3 Connect | Ubuntu: systemd boot service, agent-activity publishing on, node from nvm linked into `~/.local/bin` by the prereq script. Same CLI path as JasonZephyrus. |
 | nukbuntu | T3 Connect | Ubuntu: same setup as EliteDesk. |
 | RyzenWhite | Client only | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve. Its T3 Connect publishing is off; it watches and drives the slotted environments. See [Windows: desktop app only](#windows-desktop-app-only). |
@@ -644,7 +650,7 @@ account and, per the source (`apps/server/src/cli/connect.ts`), still sends
 phone push through the relay; not tried here yet, and other devices still pair
 to it per device. Mixing transports is fine: the connection method is
 per-environment plumbing, threads behave identically once connected, and a
-machine can carry both at once, as JasonZephyrus does.
+machine can carry both at once.
 
 **SSH environments (Linux/macOS remotes only).** Requirements on the remote:
 Node `^22.16 || ^23.11 || >=24.10` resolvable from a *non-interactive* shell,
