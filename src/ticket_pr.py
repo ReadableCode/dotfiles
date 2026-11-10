@@ -2270,7 +2270,19 @@ def cmd_pr_comment(args):
     if not body:
         raise SystemExit("empty comment: pr-comment needs --body or --body-file")
     refuse_leaks({"comment": body}, repo=repo)
-    if provider == "bitbucket":
+    if args.edit:
+        if provider != "github":
+            raise SystemExit("pr-comment --edit is GitHub-only")
+        response = http_json(
+            "PATCH",
+            f"{GITHUB_API}/repos/{repo}/issues/comments/{args.edit}",
+            github_headers(),
+            payload={"body": body},
+            dry_run=args.dry_run,
+        )
+        comment_id = response["id"] if response else int(args.edit)
+        url = response["html_url"] if response else f"https://github.com/{repo}/pull/{args.pr}"
+    elif provider == "bitbucket":
         response = bb_post_comment(repo, args.pr, body, bitbucket_headers(), args.dry_run)
         comment_id = response["id"] if response else 0
         url = (((response or {}).get("links") or {}).get("html") or {}).get(
@@ -2779,6 +2791,9 @@ def build_parser():
     pr_comment.add_argument("--pr", required=True, help="PR number")
     pr_comment.add_argument("--body", help="comment text (Markdown)")
     pr_comment.add_argument("--body-file", help="file containing the comment text")
+    pr_comment.add_argument(
+        "--edit", metavar="COMMENT_ID", help="replace this existing comment's text instead of posting (GitHub)"
+    )
     pr_comment.set_defaults(func=cmd_pr_comment)
 
     rerun = sub.add_parser("rerun-job", help="re-run one GitHub Actions job on the same commit")

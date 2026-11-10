@@ -775,6 +775,26 @@ def test_pr_comment_dry_run_posts_an_issue_comment(monkeypatch, capsys):
     assert result == {"pr": "7", "comment_id": 0, "url": "https://github.com/acme/widgets/pull/7"}
 
 
+def test_pr_comment_edit_patches_the_existing_comment(monkeypatch, capsys):
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+    out = _run_cli(
+        ["--dry-run", "pr-comment", "--repo", "acme/widgets", "--pr", "7", "--edit", "42", "--body", "Reworded"],
+        monkeypatch,
+        capsys,
+    )
+    assert "[dry-run] PATCH https://api.github.com/repos/acme/widgets/issues/comments/42" in out
+    assert '"body": "Reworded"' in out
+    result = json.loads(out.strip().splitlines()[-1])
+    assert result == {"pr": "7", "comment_id": 42, "url": "https://github.com/acme/widgets/pull/7"}
+
+
+def test_pr_comment_edit_is_github_only(monkeypatch):
+    with pytest.raises(SystemExit, match="GitHub-only"):
+        ticket_pr.main(
+            ["--dry-run", "pr-comment", "--repo", "bitbucket:ws/slug", "--pr", "7", "--edit", "42", "--body", "x"]
+        )
+
+
 def test_pr_comment_rejects_an_empty_body(monkeypatch):
     monkeypatch.setenv("GITHUB_TOKEN", "t")
     with pytest.raises(SystemExit, match="empty comment"):
