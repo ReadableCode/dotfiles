@@ -140,7 +140,9 @@ on change. Do not add it here.
   `docker compose -f Docker/docker_compose_pi4.yaml up -d` after every run, so
   a compose change is live within one 15-minute tick. `up -d` does nothing
   when no service's definition changed. The unit that brings the stack up at
-  boot, `docker_compose_pi4.service`, is installed by the same manifest.
+  boot, `docker_compose_pi4.service`, is installed by the same manifest, and
+  so is `docker_compose_pi4_update.timer`, the nightly image update at 05:17
+  (elitedesk's runs at 04:17, nukbuntu's at 04:47).
 - **nukbuntu** — jason's crontab only (docker runs as jason there), declared
   in `server_configs/system_configs/nukbuntu/cron/jason.cron` and reinstalled
   by `Docker/scripts/git_pull_nukbuntu.sh` on every `*/5` tick. That script
