@@ -524,8 +524,8 @@ Two files are written, side by side:
 
 | File | What it is |
 | --- | --- |
-| `deploy_map.html` | One self-contained page (no network, no build step), four views: **Disk** (default), **Fleet**, **Matrix** and **Destinations** — see below. Open it straight from the repo. |
-| `deploy_map.txt` | The same facts as plain text (`format_text`), the half you read in `git diff`. Each entry is a block: its manifest, source, note, filters, destinations, then one line per matrix action listing the machines (`apply ~/.zshrc: Envy Pi`, `skip_platform: Tower`). Then each machine's contexts and missing checkouts, each repo's clone state per machine, and each prune candidate with its machines. A new link is a couple of added lines in one place. |
+| `deploy_map.html` | One self-contained page (no network, no build step), views: **Disk** (default), **Fleet**, **Matrix**, **Destinations**, **Machine** and **Claude** — see below. Open it straight from the repo. |
+| `deploy_map.txt` | The same facts as plain text (`format_text`), the half you read in `git diff`. Each entry is a block: its manifest, source, note, filters, destinations, then one line per matrix action listing the machines (`apply ~/.zshrc: Envy Pi`, `skip_platform: Tower`). Then each machine's contexts and missing checkouts, each repo's clone state per machine, each prune candidate with its machines, and the Claude tab's commands and skills by context. A new link is a couple of added lines in one place. |
 
 The map also applies the **clone gate**: an entry from an overlay manifest
 counts on a machine only if that overlay's repo would be cloned there, so a
@@ -545,7 +545,7 @@ the Machine view never shows more than would land. A `hosts:` filter naming
 a machine is not membership; the entry stays skipped until the record lists
 the context.
 
-The four views answer different questions:
+The views answer different questions:
 
 - **Disk** — *where does this file on disk come from?* Source files on the
   left, the places they land on the right, clustered by the kind of place
@@ -563,6 +563,30 @@ The four views answer different questions:
   cell is empty.
 - **Destinations** — the filesystem tree the links land in, as deployed
   (per-machine paths expanded).
+- **Claude** — *where did I define that command?* Every slash command and
+  skill on the machine that draws the map (envy), one section per context in
+  that machine's context order (each listed even when it has none), one card
+  per repo whose files define them, commands and skills apart inside each
+  card, with its own commands / skills pills. A row
+  names the file to edit, the manifest entry that links it, and where it is
+  available: **every session** for a link into `~/.claude/commands` or
+  `~/.claude/skills`, or the checkouts whose own `.claude` folder holds it.
+  Two sources feed it: the manifest entries applied on envy whose destination
+  Claude reads, and what a checkout envy clones commits in its own `.claude`
+  folder with no entry (only threads in that checkout see those). A row sits
+  under the context of the repo holding its file: a `<context>_<gate>` repo
+  under that context even when another context's repos file declares it, any
+  other repo under the context whose repos file declares it.
+
+Every view shares the context and category pills on the toolbar. Each group
+has an **all** pill: with all on, clicking a pill shows only that one, later
+clicks add or remove pills, and removing the last one (or picking every pill
+by hand) is all again.
+
+An entry's context is the context that owns its manifest's repo: a
+`<context>_<gate>` overlay folds into that context, and any other overlay
+repo into the context whose repos file declares it, so a dev repo named
+differently from its client still sits with that client.
 
 Both files land in the **personal credentials repo**, and only when the deploy
 runs on **envy** (`MAP_HOST` in `src/deploy_map.py`) with that repo cloned:

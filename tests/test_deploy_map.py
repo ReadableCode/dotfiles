@@ -183,6 +183,17 @@ def test_map_context_names_the_owning_repo(tmp_path):
     assert deploy_map.map_context(overlays[1], repo_root, overlays) == "acme"
 
 
+def test_map_context_folds_a_dev_repo_into_the_context_declaring_it(tmp_path):
+    repo_root = str(tmp_path / "dotfiles")
+    overlays = [str(tmp_path / "acme_credentials"), str(tmp_path / "ac_dev"), str(tmp_path / "acme_dev")]
+    # ac_dev does not start with acme_, but acme's repos file declares it
+    declared = {"ac_dev": "acme", "acme_dev": "personal"}
+    assert deploy_map.map_context(overlays[1], repo_root, overlays, declared) == "acme"
+    # the name wins over a declaration made only for a hosts filter
+    assert deploy_map.map_context(overlays[2], repo_root, overlays, declared) == "acme"
+    assert deploy_map.map_context(overlays[1], repo_root, overlays) == "ac_dev"
+
+
 def test_map_context_keeps_standalone_overlay_separate(tmp_path):
     repo_root = str(tmp_path / "dotfiles")
     overlays = [str(tmp_path / "acme_dev")]
@@ -483,3 +494,81 @@ def test_an_overlay_entry_only_applies_where_its_repo_is_cloned(fleet):
     # the credentials repo's own entries still reach every machine in its inventory
     shared = next(e for e in data["entries"] if e["id"] == "acme_env")
     assert shared["hosts"] == ["Envy", "Pi", "Tower"]
+
+
+# %%
+# Claude commands and skills #
+
+
+def test_claude_target_reads_user_level_and_checkout_folders():
+    assert deploy_map.claude_target("~/.claude/commands/x.md", "~/GitHub") == ("command", "x", "")
+    assert deploy_map.claude_target("~/.claude/skills/s", "~/GitHub") == ("skill", "s", "")
+    assert deploy_map.claude_target("~/GitHub/app/.claude/skills/s/SKILL.md", "~/GitHub") == ("skill", "s", "app")
+    assert deploy_map.claude_target("~/GitHub/app/.claude/commands/y.md", "~/GitHub") == ("command", "y", "app")
+    assert deploy_map.claude_target("~/.claude/settings.json", "~/GitHub") is None
+    assert deploy_map.claude_target("~/GitHub/app/.env", "~/GitHub") is None
+
+
+def test_claude_description_prefers_frontmatter_then_heading(tmp_path):
+    command = touch(str(tmp_path / "c.md"), "---\ndescription: Does  the\n  thing\n---\n# Title\n")
+    assert deploy_map.claude_description(command) == "Does the thing"
+    plain = touch(str(tmp_path / "p.md"), "intro\n# Heading here\n")
+    assert deploy_map.claude_description(plain) == "Heading here"
+    touch(str(tmp_path / "skill" / "SKILL.md"), "---\nname: s\ndescription: A skill\n---\n")
+    assert deploy_map.claude_description(str(tmp_path / "skill")) == "A skill"
+
+
+def test_claude_tab_lists_the_map_hosts_commands_and_skills_by_context(fleet):
+    # acme_dev is declared by the dotfiles repos file but named after acme, so
+    # its commands belong to acme; acme-app is cloned on Envy and commits a
+    # command of its own, and holds the skill link an entry put there
+    write_yaml(
+        str(fleet / "dotfiles" / "dotfiles_repos.yaml"),
+        {"defaults": {"provider": "github", "org": "me"}, "repos": [{"name": "acme_dev", "hosts": ["Envy"]}]},
+    )
+    touch(str(fleet / "acme_dev" / "claude" / "commands" / "acme_x.md"), "---\ndescription: Acme x\n---\n")
+    touch(str(fleet / "acme_dev" / "claude" / "skills" / "acme_s" / "SKILL.md"), "---\ndescription: Acme s\n---\n")
+    write_yaml(
+        str(fleet / "acme_dev" / "acme_dev_manifest.yaml"),
+        [
+            {
+                "name": "acme_command_x",
+                "repo": "claude/commands/acme_x.md",
+                "dest": {"darwin": "~/.claude/commands/acme_x.md"},
+            },
+            {
+                "name": "acme_skill_s",
+                "repo": "claude/skills/acme_s/SKILL.md",
+                "dest": {"darwin": "{repo_parent}/acme-app/.claude/skills/acme_s/SKILL.md"},
+            },
+        ],
+    )
+    touch(str(fleet / "acme-app" / ".claude" / "commands" / "local.md"), "# Local run\n")
+    touch(str(fleet / "acme-app" / ".claude" / "skills" / "acme_s" / "SKILL.md"), "linked\n")
+    data = build(fleet)
+    claude = data["claude"]
+    assert claude["host"] == "Envy"
+    assert claude["contexts"] == ["dotfiles", "acme"]
+    rows = {(t["kind"], t["name"]): t for t in claude["tools"]}
+    assert set(rows) == {("command", "acme_x"), ("skill", "acme_s"), ("command", "local")}
+    assert all(t["ctx"] == "acme" for t in claude["tools"])
+    x = rows[("command", "acme_x")]
+    assert x["userLevel"] and x["repos"] == [] and x["entries"] == ["acme_command_x"]
+    assert x["src"] == "acme_dev/claude/commands/acme_x.md" and x["desc"] == "Acme x"
+    skill = rows[("skill", "acme_s")]
+    assert not skill["userLevel"] and skill["repos"] == ["acme-app"]
+    assert skill["src"] == "acme_dev/claude/skills/acme_s"
+    local = rows[("command", "local")]
+    assert local["entries"] == [] and local["repos"] == ["acme-app"] and local["desc"] == "Local run"
+    text = deploy_map.format_text(data)
+    assert "// claude commands and skills on Envy" in text
+    assert "[dotfiles] none" in text
+    assert "  acme_dev/\n    COMMAND /acme_x  claude/commands/acme_x.md" in text
+    assert [t["repo"] for t in claude["tools"]] == ["acme-app", "acme_dev", "acme_dev"]
+
+
+def test_claude_tab_is_empty_without_the_map_host(fleet, monkeypatch):
+    monkeypatch.setattr(deploy_map, "MAP_HOST", "nobody")
+    data = build(fleet)
+    assert data["claude"] == {"host": None, "contexts": [], "tools": []}
+    assert "claude commands" not in deploy_map.format_text(data)

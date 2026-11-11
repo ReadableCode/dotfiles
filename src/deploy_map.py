@@ -208,24 +208,28 @@ def dest_zone(dest, repo_parent):
 # Contexts #
 
 
-def map_context(base_dir, repo_root, overlay_dirs):
+def map_context(base_dir, repo_root, overlay_dirs, declared=None):
     """
     The cluster an entry belongs to: ``dotfiles`` for the main manifest, and
-    otherwise the overlay repo's context token.
+    otherwise the context that owns the overlay repo.
 
     An opt-in overlay named ``<context>_<gate>`` (the pattern for config that
     must reach a narrower set of clones than the credentials repo itself - see
-    docs/repo_deploy_configs.md) folds into ``<context>`` whenever that credentials
-    repo is also cloned here, so one context is one cluster on the map.
+    docs/repo_deploy_configs.md) folds into ``<context>`` whenever that
+    credentials repo is also cloned here, even when another context's repos
+    file declares it (a hosts filter naming machines only that inventory
+    knows). Any other overlay repo belongs to the context whose repos file
+    declares it (``declared``: repo dir -> context), so a dev repo with a
+    shorter name still sits with its client. One context is one cluster.
     """
     if os.path.normpath(base_dir) == os.path.normpath(repo_root):
         return SHARED_CONTEXT
     context = overlay_context(base_dir)
     credential_contexts = {overlay_context(path) for path in overlay_dirs if path.endswith(CREDENTIALS_SUFFIX)}
     for known in sorted(credential_contexts, key=len, reverse=True):
-        if context.startswith(f"{known}_"):
+        if context == known or context.startswith(f"{known}_"):
             return known
-    return context
+    return (declared or {}).get(os.path.basename(os.path.normpath(base_dir)), context)
 
 
 def build_contexts(entries):
@@ -382,20 +386,18 @@ def required_checkouts(entry, repo_parent):
     return names
 
 
-def _add_clone_sets(mapped, hosts, repo_root, credentials_root):
+def _add_clone_sets(hosts, declarations):
     """
     Per machine: every declared repo with its clone state, and the resulting
     clone set. Runs before the matrix, because the clone set decides which
     overlay manifests even load on that machine.
     """
-    declarations = load_repo_declarations(repo_root, credentials_root)
     for host in hosts:
         contexts = host_contexts(host)
         states = [{"name": d["dir"], "ctx": d["ctx"], "state": repo_state(d, host, contexts)} for d in declarations]
         host["repos"] = states
         host["contexts"] = contexts
         host["_cloned"] = {"dotfiles"} | {s["name"] for s in states if s["state"] in ("cloned", "credentials")}
-    return declarations
 
 
 def _add_machine_view(mapped, entries, hosts, matrix, repo_parent):
@@ -419,6 +421,200 @@ def _add_machine_view(mapped, entries, hosts, matrix, repo_parent):
 
 
 # %%
+# Claude commands and skills #
+
+# The Claude tab answers "where did I define that command": every slash command
+# and skill reachable on MAP_HOST, grouped by the context of the repo whose file
+# defines it. A T3 Code thread works inside one checkout, so a command kept in
+# another repo is easy to lose; this lists them all in one place.
+CLAUDE_KINDS = ("command", "skill")
+CLAUDE_FOLDERS = {"command": "commands", "skill": "skills"}
+# a clone state that puts the checkout on disk (see REPO_STATES)
+ON_DISK_STATES = ("cloned", "credentials")
+
+
+def claude_target(dest, repo_parent):
+    """
+    ``(kind, name, repo)`` when Claude reads ``dest`` as a slash command or a
+    skill, else None. ``repo`` is ``""`` for the user-level folders under
+    ``~/.claude`` (every session) and the checkout's directory name for a
+    repo's own ``.claude`` folder (only sessions in that checkout).
+    """
+    prefix = repo_parent.rstrip("/") + "/"
+    if dest.startswith("~/.claude/"):
+        repo, rest = "", dest[len("~/.claude/") :]
+    elif dest.startswith(prefix):
+        repo, _, tail = dest[len(prefix) :].partition("/")
+        if not tail.startswith(".claude/"):
+            return None
+        rest = tail[len(".claude/") :]
+    else:
+        return None
+    folder, _, item = rest.partition("/")
+    if folder == "commands" and item.endswith(".md") and "/" not in item:
+        return "command", item[: -len(".md")], repo
+    if folder == "skills" and item:
+        return "skill", item.split("/")[0], repo
+    return None
+
+
+def claude_description(path):
+    """The ``description:`` of a command file or a skill folder's SKILL.md, else its first heading, else ""."""
+    file_path = os.path.join(path, "SKILL.md") if os.path.isdir(path) else path
+    try:
+        with open(file_path, "r", encoding="utf-8") as file_handle:
+            text = file_handle.read()
+    except (OSError, UnicodeDecodeError):
+        return ""
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end != -1:
+            try:
+                front = yaml.safe_load(text[3:end]) or {}
+            except yaml.YAMLError:
+                front = {}
+            if isinstance(front, dict) and front.get("description"):
+                return " ".join(str(front["description"]).split())
+            text = text[end + len("\n---") :]
+    for line in text.splitlines():
+        if line.startswith("#"):
+            return line.lstrip("#").strip()
+    return ""
+
+
+def _claude_record(tools, kind, name, src, ctx):
+    return tools.setdefault(
+        (kind, name, src),
+        {"ctx": ctx, "kind": kind, "name": name, "src": src, "userLevel": False, "repos": set(), "entries": set()},
+    )
+
+
+def repo_owner_contexts(declarations):
+    """
+    ``repo dir -> context`` for the Claude tab: an ``<context>_<gate>`` repo
+    belongs to that context even when another context's repos file declares
+    it (a hosts filter naming machines only that inventory knows), anything
+    else to the repos file declaring it, and dotfiles to the shared context.
+    """
+    declared = {SHARED_CONTEXT: SHARED_CONTEXT}
+    for declaration in declarations:
+        declared.setdefault(declaration["dir"], declaration["ctx"])
+    known = sorted({d["ctx"] for d in declarations if d["implicit"]}, key=len, reverse=True)
+
+    def owner(repo, default=SHARED_CONTEXT):
+        prefixed = next((ctx for ctx in known if repo == ctx or repo.startswith(f"{ctx}_")), None)
+        return prefixed or declared.get(repo, default)
+
+    return owner
+
+
+def _add_linked_tools(tools, mapped, matrix, column, repo_parent, owner):
+    """The entries applied on the map host whose destination Claude reads; returns every applied destination."""
+    applied = set()
+    for index, entry in enumerate(mapped):
+        code, dest = matrix[index][column]
+        if code != ACTION_CODE["apply"] or not dest:
+            continue
+        applied.add(dest)
+        target = claude_target(dest, repo_parent)
+        if target is None:
+            continue
+        kind, name, repo = target
+        src = entry["srcPath"]
+        # a skill entry may link the SKILL.md inside its folder; the skill is the folder
+        if kind == "skill" and src.endswith("/SKILL.md"):
+            src = src[: -len("/SKILL.md")]
+        record = _claude_record(tools, kind, name, src, owner(entry["srcRepo"], entry["ctx"]))
+        entry_id = entry["id"]
+        if repo:
+            record["repos"].add(repo)
+            # a per_context_repo entry is expanded once per checkout as <name>__<repo>
+            if entry_id.endswith(f"__{repo}"):
+                entry_id = entry_id[: -len(f"__{repo}")]
+        else:
+            record["userLevel"] = True
+        record["entries"].add(entry_id)
+    return applied
+
+
+def _committed_items(folder, kind):
+    """``(name, path)`` for each command file or skill folder directly inside ``folder``."""
+    if not os.path.isdir(folder):
+        return []
+    items = []
+    for item in sorted(os.listdir(folder)):
+        path = os.path.join(folder, item)
+        if kind == "command" and item.endswith(".md") and os.path.isfile(path):
+            items.append((item[: -len(".md")], path))
+        elif kind == "skill" and os.path.isfile(os.path.join(path, "SKILL.md")):
+            items.append((item, path))
+    return items
+
+
+def _add_committed_tools(tools, repos, applied, credentials_root, repo_parent, owner):
+    """What each checkout on the map host commits in its own ``.claude`` folder with no entry linking it."""
+    defined = {os.path.realpath(os.path.join(credentials_root, src)) for _, _, src in tools}
+    for repo in repos:
+        for kind in CLAUDE_KINDS:
+            folder = os.path.join(credentials_root, repo, ".claude", CLAUDE_FOLDERS[kind])
+            for name, path in _committed_items(folder, kind):
+                where = f"{repo_parent}/{repo}/.claude/{CLAUDE_FOLDERS[kind]}/{os.path.basename(path)}"
+                # a link some entry put there is already listed under its source
+                if where in applied or any(dest.startswith(where + "/") for dest in applied):
+                    continue
+                real = os.path.realpath(path)
+                if real in defined:
+                    continue
+                src = os.path.relpath(real, credentials_root).replace("\\", "/")
+                _claude_record(tools, kind, name, src, owner(repo))["repos"].add(repo)
+
+
+def build_claude_tools(mapped, hosts, matrix, declarations, credentials_root, repo_parent):
+    """
+    Every command and skill on MAP_HOST, one record per defining file.
+
+    Two sources: the manifest entries the matrix applies there whose
+    destination Claude reads (``~/.claude/commands``, ``~/.claude/skills`` or
+    a checkout's ``.claude`` folder), and the commands and skills a checkout
+    on that machine commits in its own ``.claude`` folder without any entry.
+    A record sits under the context of the repo holding its file
+    (repo_owner_contexts); the contexts are the machine's own
+    (host_contexts), in that order, each listed even when empty.
+    """
+    host = next((h for h in hosts if h["id"].lower() == MAP_HOST), None)
+    if host is None:
+        return {"host": None, "contexts": [], "tools": []}
+    owner = repo_owner_contexts(declarations)
+    tools: dict = {}
+    applied = _add_linked_tools(tools, mapped, matrix, hosts.index(host), repo_parent, owner)
+    on_disk = sorted({SHARED_CONTEXT} | {r["name"] for r in host["repos"] if r["state"] in ON_DISK_STATES})
+    _add_committed_tools(tools, on_disk, applied, credentials_root, repo_parent, owner)
+
+    records = []
+    for record in tools.values():
+        record["repos"] = sorted(record["repos"])
+        record["entries"] = sorted(record["entries"])
+        record["desc"] = claude_description(os.path.join(credentials_root, record["src"]))
+        # the repo whose file defines it, and the file's path inside that repo
+        record["repo"], _, record["path"] = record["src"].partition("/")
+        records.append(record)
+    contexts = host["contexts"]
+    rank = {ctx: index for index, ctx in enumerate(contexts)}
+    records.sort(
+        key=lambda r: (
+            rank.get(r["ctx"], len(rank)),
+            r["ctx"],
+            r["repo"].lower(),
+            CLAUDE_KINDS.index(r["kind"]),
+            r["name"],
+            r["src"],
+        )
+    )
+    listed = contexts + sorted({r["ctx"] for r in records} - set(contexts))
+    return {"host": host["id"], "contexts": listed, "tools": records}
+
+
+# %%
 # Dataset #
 
 
@@ -439,7 +635,8 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
     repo_parent = portable_path(credentials_root)
     overlay_dirs = find_overlay_dirs(credentials_root)
 
-    mapped = _map_entries(entries, repo_root, credentials_root, overlay_dirs)
+    declarations = load_repo_declarations(repo_root, credentials_root)
+    mapped = _map_entries(entries, repo_root, credentials_root, overlay_dirs, declarations)
     entry_index = {entry["id"]: index for index, entry in enumerate(mapped)}
 
     inventory = load_hosts(credentials_root)
@@ -454,7 +651,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
     # shared table: an index shifts for every cell after a newly added path,
     # which turned one new link into thousands of changed lines in the diff
     dests = set()
-    declarations = _add_clone_sets(mapped, hosts, repo_root, credentials_root)
+    _add_clone_sets(hosts, declarations)
     matrix = [[[ACTION_CODE["none"], None] for _ in hosts] for _ in mapped]
     variants = [["" for _ in hosts] for _ in mapped]
     for column, host in enumerate(hosts):
@@ -482,6 +679,7 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
     _roll_up_hosts(mapped, hosts, matrix, repo_parent)
     _add_disk_view(mapped, entries, repo_root, credentials_root, repo_parent)
     _add_machine_view(mapped, entries, hosts, matrix, repo_parent)
+    claude = build_claude_tools(mapped, hosts, matrix, declarations, credentials_root, repo_parent)
 
     return {
         "meta": {
@@ -507,18 +705,22 @@ def build_map_data(entries, repo_root=None, credentials_root=None):
         "matrix": matrix,
         "paths": _build_path_tree(mapped, hosts, matrix, repo_parent),
         "disk": _build_disk_nodes(mapped, repo_parent),
+        "claude": claude,
     }
 
 
-def _map_entries(entries, repo_root, credentials_root, overlay_dirs):
+def _map_entries(entries, repo_root, credentials_root, overlay_dirs, declarations=()):
     """Static per-entry facts, ordered by context then source repo then name."""
+    declared: dict = {}
+    for declaration in declarations:
+        declared.setdefault(declaration["dir"], declaration["ctx"])
     mapped = []
     for entry in entries:
         base_dir = entry.get("_base_dir") or repo_root
         mapped.append(
             {
                 "id": entry["name"],
-                "ctx": map_context(base_dir, repo_root, overlay_dirs),
+                "ctx": map_context(base_dir, repo_root, overlay_dirs, declared),
                 "repo": os.path.relpath(base_dir, credentials_root).replace("\\", "/"),
                 "manifest": entry["_manifest"],
                 "src": str(entry["repo"]).replace("\\", "/"),
@@ -770,6 +972,30 @@ def _text_prune(data):
     return ["", "// prune candidates", *_host_lines(candidates, "")]
 
 
+def _text_claude(data):
+    claude = data["claude"]
+    if not claude["host"]:
+        return []
+    lines = ["", f"// claude commands and skills on {claude['host']}"]
+    for ctx in claude["contexts"]:
+        records = [r for r in claude["tools"] if r["ctx"] == ctx]
+        lines.append(f"[{ctx}]" + ("" if records else " none"))
+        repo = None
+        for record in records:
+            if record["repo"] != repo:
+                repo = record["repo"]
+                lines.append(f"  {repo}/")
+            label = f"/{record['name']}" if record["kind"] == "command" else record["name"]
+            lines.append(f"    {record['kind'].upper()} {label}  {record['path']}")
+            where = (["every session"] if record["userLevel"] else []) + record["repos"]
+            lines.append(f"      in: {' '.join(where)}")
+            if record["entries"]:
+                lines.append(f"      entry: {' '.join(record['entries'])}")
+            if record["desc"]:
+                lines.append(f"      about: {record['desc']}")
+    return lines
+
+
 def format_text(data):
     """
     The map as plain text, for reading in a diff.
@@ -785,7 +1011,7 @@ def format_text(data):
     the totals are left out because every new link would change a line for
     every machine it lands on.
     """
-    sections = [_text_header, _text_machines, _text_repos, _text_entries, _text_prune]
+    sections = [_text_header, _text_machines, _text_repos, _text_entries, _text_prune, _text_claude]
     return "\n".join(line for section in sections for line in section(data)) + "\n"
 
 

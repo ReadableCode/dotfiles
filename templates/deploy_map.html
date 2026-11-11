@@ -248,6 +248,53 @@
   }
   .rchip .dot{width:6px;height:6px;border-radius:50%;background:currentColor}
   .rchip.dim{opacity:.25}
+
+  /* ---------- pills: click one to show only it, more to add, all to reset ---------- */
+  .chip.all{color:var(--ink-dim)}
+  .chip.all.on{color:#56d364;border-color:#2ea043;background:rgba(46,160,67,.12)}
+
+  /* ---------- claude ---------- */
+  .claude{padding:18px 22px 48px;max-width:1560px}
+  .claude .lead{color:var(--ink-dim);font-size:11.5px;line-height:1.7;margin:0 0 12px;max-width:1100px}
+  .claude .lead b{color:var(--ink);font-weight:500}
+  .claude .kindbar{display:flex;gap:6px;align-items:center;margin:0 0 20px}
+  .claude .kindbar .lbl{color:var(--ink-faint);font-size:10px;letter-spacing:.14em;margin-right:4px}
+  .claude section.ctx{margin:0 0 30px}
+  .claude h3{margin:0 0 12px;font-size:15px;font-weight:600;letter-spacing:.04em;display:flex;align-items:baseline;gap:12px;
+    padding-bottom:8px;border-bottom:1px solid var(--line)}
+  .claude h3 .sl{color:#56d364}
+  .claude h3 .cnt{color:var(--ink-faint);font-size:11px;font-weight:400;letter-spacing:.02em}
+  .claude .empty{color:var(--ink-faint);font-size:11.5px;padding:2px 0 0 2px}
+  .claude .repo{margin:0 0 14px;border:1px solid var(--line);border-left:3px solid var(--ctx);border-radius:10px;
+    background:linear-gradient(180deg,rgba(18,27,42,.85),rgba(13,20,32,.7))}
+  .claude .repo>header{display:flex;align-items:baseline;gap:12px;padding:10px 14px;border-bottom:1px solid var(--line)}
+  .claude .repo>header .rn{font-size:13.5px;font-weight:600;color:#e3edf9}
+  .claude .repo>header .rp{color:var(--ink-faint);font-size:11px}
+  .claude .repo>header .rc{margin-left:auto;color:var(--ink-faint);font-size:11px}
+  .claude .grp{padding:6px 14px 10px}
+  .claude .grp+.grp{border-top:1px dashed #1e2b3d}
+  .claude .grp h5{margin:6px 0 4px;font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
+  .claude .grp.command h5{color:#56d364}
+  .claude .grp.skill h5{color:#e3b341}
+  .claude .row{display:grid;grid-template-columns:86px minmax(240px,330px) 1fr minmax(170px,240px);gap:14px;
+    align-items:start;padding:9px 0;border-top:1px solid rgba(27,38,53,.7)}
+  .claude .grp h5+.row{border-top:none}
+  .claude .badge{display:inline-block;text-align:center;width:78px;padding:3px 0;border-radius:6px;font-size:10px;
+    font-weight:700;letter-spacing:.14em}
+  .claude .badge.command{background:rgba(46,160,67,.18);color:#56d364;border:1px solid #2ea043}
+  .claude .badge.skill{background:rgba(184,134,11,.18);color:#e3b341;border:1px solid #b8860b}
+  .claude .nm{font-size:13px;color:#f1f6fc;font-weight:600;word-break:break-word}
+  .claude .row.command .nm .slash{color:#56d364}
+  .claude .file{display:block;margin-top:4px;color:#8ea4bd;font-size:11px;word-break:break-all;cursor:copy}
+  .claude .file:hover{color:#e3edf9}
+  .claude .entry{display:block;color:var(--ink-faint);font-size:10.5px;margin-top:2px;word-break:break-all}
+  .claude .desc{color:#b6c6d8;font-size:12px;line-height:1.55}
+  .claude .where{font-size:11px;line-height:1.9}
+  .claude .where .lbl{display:block;color:var(--ink-faint);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;line-height:1.4}
+  .claude .ev{color:#56d364;font-weight:600}
+  .claude .rpill{display:inline-block;margin:0 4px 0 0;padding:0 7px;border:1px solid #223047;border-radius:999px;
+    color:var(--ink-dim);font-size:10.5px;line-height:1.7}
+  @media (max-width:1100px){.claude .row{grid-template-columns:86px 1fr}.claude .desc,.claude .where{grid-column:2}}
 </style>
 </style>
 </head>
@@ -262,13 +309,14 @@
       <button class="tab" data-view="matrix">Matrix</button>
       <button class="tab" data-view="paths">Destinations</button>
       <button class="tab" data-view="machine">Machine</button>
+      <button class="tab" data-view="claude">Claude</button>
     </div>
     <div class="stats" id="stats"></div>
   </div>
 
   <div class="toolbar" id="toolbar">
-    <div id="ctxchips" style="display:flex;gap:6px"></div>
-    <div class="sep"></div>
+    <div id="ctxchips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+    <div class="sep" id="catsep"></div>
     <div id="catchips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
     <div class="sep"></div>
     <input class="search" id="search" placeholder="filter by name or path…" spellcheck="false">
@@ -316,6 +364,11 @@
     </svg>
     <div class="legend"></div>
   </div>
+  <div class="view" id="view-claude"><div class="scroll"><div class="claude" id="claude">
+    <div class="lead" id="claudelead"></div>
+    <div class="kindbar"><span class="lbl">SHOW</span><span id="claudekinds" style="display:flex;gap:6px"></span></div>
+    <div id="claudebody"></div>
+  </div></div></div>
 </div>
 <div class="card" id="card"></div>
 <div class="tip" id="tip"></div>
@@ -917,37 +970,54 @@ document.getElementById('stats').innerHTML = [
   [meta.manifests.length, 'manifests'],
 ].map(([n, l]) => `<span><b>${n}</b> ${l}</span>`).join('');
 
-const redraw = () => { GRAPHS.forEach(g => g.refresh()); buildMatrix(); buildPaths(); buildMachine(); };
+const redraw = () => { GRAPHS.forEach(g => g.refresh()); buildMatrix(); buildPaths(); buildMachine(); buildClaude(); };
+
+/* One pill group: an "all" pill plus one per key. With all on, a click shows
+   only that pill; later clicks add or remove pills; removing the last one, or
+   picking every pill by hand, is all again. */
+function pillGroup(box, items, selected, onChange){
+  const keys = items.map(item => item.key);
+  const buttons = {};
+  const allBtn = document.createElement('button');
+  allBtn.className = 'chip all';
+  allBtn.innerHTML = `all <span class="n">${items.reduce((n, item) => n + (item.count || 0), 0) || ''}</span>`;
+  box.appendChild(allBtn);
+  const paint = () => {
+    const all = keys.every(k => selected.has(k));
+    allBtn.classList.toggle('on', all);
+    keys.forEach(k => buttons[k].classList.toggle('off', !all && !selected.has(k)));
+  };
+  allBtn.onclick = () => { keys.forEach(k => selected.add(k)); paint(); onChange(); };
+  items.forEach(item => {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    if (item.color) b.style.color = item.color;
+    b.innerHTML = (item.color ? '<span class="dot"></span>' : '') +
+      `${esc(item.label)} <span class="n">${item.count ?? ''}</span>`;
+    b.onclick = () => {
+      const all = keys.every(k => selected.has(k));
+      if (all) { selected.clear(); selected.add(item.key); }
+      else if (selected.has(item.key)) {
+        selected.delete(item.key);
+        if (!selected.size) keys.forEach(k => selected.add(k));
+      } else selected.add(item.key);
+      paint(); onChange();
+    };
+    buttons[item.key] = b;
+    box.appendChild(b);
+  });
+  paint();
+}
 
 (function chips(){
-  const ctxBox = document.getElementById('ctxchips');
-  DATA.contexts.forEach(({key, color}) => {
-    const b = document.createElement('button');
-    b.className = 'chip';
-    b.style.color = color;
-    b.innerHTML = `<span class="dot"></span>${key.replace(/_/g, ' ')} <span class="n">${(byCtx[key] || []).length}</span>`;
-    b.onclick = () => {
-      state.ctx.has(key) ? state.ctx.delete(key) : state.ctx.add(key);
-      b.classList.toggle('off', !state.ctx.has(key));
-      redraw();
-    };
-    ctxBox.appendChild(b);
-  });
-  const catBox = document.getElementById('catchips');
+  pillGroup(document.getElementById('ctxchips'),
+    DATA.contexts.map(({key, color}) => ({key, color, label: key.replace(/_/g, ' '), count: (byCtx[key] || []).length})),
+    state.ctx, redraw);
   const counts = {};
   entries.forEach(e => counts[e.cat] = (counts[e.cat] || 0) + 1);
-  Object.entries(CATS).forEach(([key, label]) => {
-    if (!counts[key]) return;
-    const b = document.createElement('button');
-    b.className = 'chip';
-    b.innerHTML = `${label} <span class="n">${counts[key]}</span>`;
-    b.onclick = () => {
-      state.cat.has(key) ? state.cat.delete(key) : state.cat.add(key);
-      b.classList.toggle('off', !state.cat.has(key));
-      redraw();
-    };
-    catBox.appendChild(b);
-  });
+  pillGroup(document.getElementById('catchips'),
+    Object.entries(CATS).filter(([key]) => counts[key]).map(([key, label]) => ({key, label, count: counts[key]})),
+    state.cat, redraw);
 })();
 
 document.getElementById('search').addEventListener('input', ev => {
@@ -978,13 +1048,17 @@ document.querySelectorAll('.tab').forEach(tab => {
   tab.onclick = () => {
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t === tab));
     state.view = tab.dataset.view;
+    document.getElementById('catchips').style.display = state.view === 'claude' ? 'none' : 'flex';
+    document.getElementById('catsep').style.display = state.view === 'claude' ? 'none' : '';
     card.classList.remove('show', 'pin');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + state.view));
     const graph = graphFor(state.view);
     if (graph) graph.hint();
-    else document.getElementById('hint').textContent = state.view === 'matrix'
-      ? 'every entry × every machine — hover a cell for the exact path'
-      : 'every destination folder, and what lands in it';
+    else document.getElementById('hint').textContent = {
+      matrix: 'every entry × every machine — hover a cell for the exact path',
+      paths: 'every destination folder, and what lands in it',
+      claude: 'every slash command and skill, by context and repo — click a file path to copy it',
+    }[state.view];
   };
 });
 /* ---------------- matrix ---------------- */
@@ -1118,6 +1192,69 @@ function buildPaths(){
   });
 }
 
+/* ---------------- claude ----------------
+   Every slash command and skill on the machine that draws the map: one section
+   per context (the context pills filter them), one card per repo whose files
+   define them, commands and skills apart inside each card. */
+const CLAUDE = DATA.claude || {host: null, contexts: [], tools: []};
+const claudeKinds = new Set(['command', 'skill']);
+function buildClaudeKinds(){
+  const bar = document.getElementById('claudekinds');
+  const count = kind => CLAUDE.tools.filter(t => t.kind === kind).length;
+  pillGroup(bar, [
+    {key: 'command', label: 'commands', count: count('command')},
+    {key: 'skill', label: 'skills', count: count('skill')},
+  ], claudeKinds, buildClaude);
+}
+function buildClaude(){
+  const box = document.getElementById('claudebody');
+  if (!CLAUDE.host) { box.innerHTML = '<div class="lead">no machine in the inventories is the map host</div>'; return; }
+  const home = meta.repoParent.replace(/\/$/, '');
+  const match = t => claudeKinds.has(t.kind) && (!state.q ||
+    `${t.name} ${t.src} ${t.desc} ${t.repos.join(' ')} ${t.entries.join(' ')}`.toLowerCase().includes(state.q));
+  const where = t => '<span class="lbl">available in</span>' +
+    (t.userLevel ? '<span class="ev">every session</span>' : '') +
+    (t.userLevel && t.repos.length ? '<br>' : '') +
+    t.repos.map(r => `<span class="rpill">${esc(r)}</span>`).join('');
+  const rowHtml = t => `<div class="row ${t.kind}">
+      <div><span class="badge ${t.kind}">${t.kind.toUpperCase()}</span></div>
+      <div><div class="nm">${t.kind === 'command' ? '<span class="slash">/</span>' : ''}${esc(t.name)}</div>
+        <span class="file" data-path="${esc(home + '/' + t.src)}" title="click to copy ${esc(home + '/' + t.src)}">${esc(t.path)}</span>
+        <span class="entry">${t.entries.length ? 'manifest entry ' + t.entries.map(esc).join(', ') : 'committed in the repo, no manifest entry'}</span></div>
+      <div class="desc">${esc(t.desc)}</div>
+      <div class="where">${where(t)}</div>
+    </div>`;
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+  const sections = CLAUDE.contexts.filter(ctx => !CTX[ctx] || state.ctx.has(ctx)).map(ctx => {
+    const all = CLAUDE.tools.filter(t => t.ctx === ctx);
+    const items = all.filter(match);
+    const color = (CTX[ctx] || {}).color || '#7f93ab';
+    const repos = [...new Set(items.map(t => t.repo))];
+    const cards = repos.map(repo => {
+      const mine = items.filter(t => t.repo === repo);
+      const groups = ['command', 'skill'].map(kind => {
+        const list = mine.filter(t => t.kind === kind);
+        return list.length ? `<div class="grp ${kind}"><h5>${kind}s</h5>${list.map(rowHtml).join('')}</div>` : '';
+      }).join('');
+      const nc = mine.filter(t => t.kind === 'command').length, ns = mine.length - nc;
+      return `<div class="repo" style="--ctx:${color}"><header><span class="rn">${esc(repo)}</span>
+          <span class="rp">${esc(home + '/' + repo)}</span>
+          <span class="rc">${[nc && plural(nc, 'command'), ns && plural(ns, 'skill')].filter(Boolean).join(' · ')}</span></header>
+        ${groups}</div>`;
+    }).join('');
+    return `<section class="ctx"><h3 style="color:${color}"><span class="sl">//</span>${esc(ctx.replace(/_/g, ' '))}
+        <span class="cnt">${items.length === all.length ? plural(all.length, 'item') : `${items.length} of ${all.length}`}
+        in ${plural(repos.length, 'repo')}</span></h3>` +
+      (items.length ? cards : `<div class="empty">${all.length ? 'nothing matches the filter' : 'nothing defined in this context'}</div>`) +
+      `</section>`;
+  }).join('');
+  box.innerHTML = sections || '<div class="empty">no context selected</div>';
+}
+document.getElementById('claudebody').addEventListener('click', ev => {
+  const file = ev.target.closest('.file');
+  if (file && navigator.clipboard) navigator.clipboard.writeText(file.dataset.path).catch(() => {});
+});
+
 /* ---------------- about ---------------- */
 (function about(){
   const box = document.getElementById('about');
@@ -1156,7 +1293,11 @@ function buildPaths(){
     there dimmed (reason on hover), and in the map only the sources and places a real deploy there would link
     stay lit - <code>requires:</code> is evaluated against that clone set, so an absent checkout is a real skip
     here and nowhere else. A machine is in its own inventory's context, in any the
-    inventory record adds under <code>contexts</code>, and in any context whose repos file or manifest names it.`;
+    inventory record adds under <code>contexts</code>, and in any context whose repos file or manifest names it.
+    <b>Claude</b> lists every slash command and skill on the machine that draws the map, in that machine's contexts:
+    the manifest entries that link into <code>~/.claude/commands</code>, <code>~/.claude/skills</code> or a
+    checkout's <code>.claude</code> folder, plus what a cloned checkout commits in its own <code>.claude</code>
+    folder with no entry. Each sits under the context of the repo holding its file.`;
   const toggle = () => box.classList.toggle('show');
   document.getElementById('aboutbtn').onclick = toggle;
   box.addEventListener('click', ev => { if (ev.target.id === 'aboutclose') box.classList.remove('show'); });
@@ -1165,6 +1306,12 @@ function buildPaths(){
 buildMatrix();
 buildPaths();
 buildMachine();
+document.getElementById('claudelead').innerHTML = CLAUDE.host
+  ? `Every slash command and skill on <b>${esc(CLAUDE.host)}</b>: one section per context, one card per repo whose
+     files define them. <b>every session</b> means a link in <code>~/.claude</code>, so any thread can run it; a repo
+     name means only threads in that checkout see it. Click a file path to copy it.` : '';
+buildClaudeKinds();
+buildClaude();
 GRAPHS.forEach(graph => graph.refresh());
 graphFor('disk').hint();
 </script>

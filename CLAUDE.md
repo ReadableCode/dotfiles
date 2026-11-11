@@ -80,6 +80,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   dirty checkout; `on_drift: adopt` and `method: ingest` act there only for
   the same reason - any other machine writing tracked files blocks its own
   next pull).
+  Its Claude tab lists every slash command and skill on envy by context,
+  with the file that defines each and where it is available.
   Template `templates/deploy_map.html`; both must stay context-agnostic
   because the rendered map names every machine and client at once.
 - **`claude_mcp.py`** — generates one `data/mcp/<context>.mcp.json` per
