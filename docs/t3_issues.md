@@ -170,9 +170,8 @@ machine, are in [setup_t3_code.md](setup_t3_code.md).
   be a flat file link in `~/.claude/commands`
   ([repo_deploy_configs.md](repo_deploy_configs.md)): a command kept only in
   its repo now shows in that repo's threads and, by the code, only there.
-  The links stay as they are until moving commands into their repos is
-  decided
-  (`personal_credentials/backlog/dotfiles/claude-commands-into-their-repos.md`).
+  Commands moved into their repos on 2026-11-12; only the ones meant for
+  threads in any repo stay in `~/.claude/commands`.
 
 - **No verbose transcript view (upstream)**: T3 has no equivalent of Claude
   Code's verbose mode — tool calls render as truncated summaries with no

@@ -270,17 +270,21 @@ is then neither removed nor reported as drift. `keep_copy: true` is for a
 link whose path must go on existing, see
 [Removing an entry](#removing-an-entry-and-cleaning-up-its-links).
 
-Slash commands are **not** per repo today. Each context links its commands
-**one file at a time** into `~/.claude/commands`, and the context prefix in
-every filename is what keeps N contexts from colliding in one path.
-Per-context subfolders under `~/.claude/commands` do not work: Claude Code
-namespaces those, so `/acme_x` becomes `/acme:acme_x`. The original reason
-for the user-level links, that T3 Code listed only `~/.claude/commands` in
-its `/` menu, is gone since T3 0.1.0: a command kept only in its own repo's
-`.claude/commands` now shows in that repo's threads (mechanism and version in
-[t3_issues.md](t3_issues.md)). Moving commands into their repos is an open
-decision, tracked in
-`personal_credentials/backlog/dotfiles/claude-commands-into-their-repos.md`.
+Slash commands are per repo, like skills: each context links its commands
+**one file at a time** into `{repo_parent}/{context_repo}/.claude/commands/`
+of every checkout of that context (`per_context_repo`), so a thread lists only
+the commands of the repo it works in. A command whose only use is in one repo
+links into that repo alone. The global git ignore's `**/.claude/commands/`
+keeps the links out of `git status`; a repo that tracks commands of its own is
+unaffected, and a new command it adds is committed once with `git add -f`.
+`src/init_worktree.py` mirrors the links into each thread worktree. Only a
+command meant for threads in any repo (the worktree commands, a review across
+every personal repo) links into `~/.claude/commands`. Per-context subfolders
+under `~/.claude/commands` do not work: Claude Code namespaces those, so
+`/acme_x` becomes `/acme:acme_x`. This needs T3 0.1.0 or later, whose `/` menu
+lists a repo's own `.claude/commands` in that repo's threads (mechanism and
+version in [t3_issues.md](t3_issues.md)); before it, T3 listed only
+`~/.claude/commands`.
 
 Sources marked **`generated: true`** are produced by the deploy itself —
 `src/claude_mcp.py` writes `data/mcp/<context>.mcp.json` before the plan is

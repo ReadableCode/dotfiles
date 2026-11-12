@@ -13,6 +13,7 @@ carry over is every gitignored file, and those are exactly the ones
 | `.mcp.json`            | generated `dotfiles/data/mcp/<context>.mcp.json`  |
 | `.claude/settings.local.json` | `<context>_credentials/<repo>_claude_settings.json` |
 | `configuration.json`   | a per-host variant in a sibling working repo  |
+| `.claude/commands/<name>.md`, `.claude/skills/<name>/SKILL.md` | the context's dev overlay (one link per command or skill) |
 
 `src/init_worktree.py` mirrors them into a worktree, and `/init_worktree`
 (deployed to `~/.claude/commands` by the personal and dev overlays, never by

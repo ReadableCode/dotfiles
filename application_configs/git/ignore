@@ -9,6 +9,10 @@
 # project skills deploy into checkouts as .claude/skills/<name>/SKILL.md links
 # from a context's dev overlay; a repo that tracks its own skills is unaffected
 **/.claude/skills/
+# slash commands deploy into checkouts as .claude/commands/<name>.md links
+# from a context's dev overlay; a repo that tracks its own commands is
+# unaffected, and a new command it adds is committed once with git add -f
+**/.claude/commands/
 # T3 Code project file and the sidebar icon it names, linked into the root of
 # every checkout by each context's dev overlay (root-anchored so the payloads
 # in the dev repos stay visible); a tracked t3.json is unaffected

@@ -48,13 +48,10 @@ is the one-paragraph orientation so an agent knows which file to open.
   work context's `<context>_dev` repo gates agent tooling by a clone narrower than
   the credentials repo's. An entry marked `per_context_repo` expands at load
   time into one link per repo in that context's `<context>_repos.yaml` (the
-  per-repo `.mcp.json`, `.env` and allow-list links). Slash commands stay
-  user-level as flat per-file links in `~/.claude/commands`, since
-  subfolders there namespace the names. T3 Code lists a repo's own
-  `.claude/commands` in that repo's threads since 0.1.0
-  (`docs/t3_issues.md`); whether to move commands into their repos is
-  open
-  (`personal_credentials/backlog/dotfiles/claude-commands-into-their-repos.md`).
+  per-repo `.mcp.json`, `.env` and allow-list links, and the slash commands
+  and skills). A command links into each checkout's `.claude/commands`, and
+  into `~/.claude/commands` only when it is meant for threads in any repo
+  (`docs/repo_deploy_configs.md`).
   A `method: system` entry is a root-owned copy outside the home
   (`/etc/nut/*.conf` on the UPS pis), placed through `sudo -n`, checked by
   content hash and owner/mode, with a `reload:` command run after a change;

@@ -143,6 +143,23 @@ def test_a_linked_project_skill_is_mirrored_into_its_folder(repos):
     assert os.path.realpath(os.path.join(worktree, skill)) == os.path.realpath(source)
 
 
+def test_a_linked_command_is_mirrored_beside_the_repos_own_commands(repos):
+    repo_parent, main, worktree = repos
+    own = os.path.join(".claude", "commands", "own.md")
+    write(os.path.join(main, own), "# tracked here\n")
+    git(["add", "-f", own], main)
+    git(["commit", "-q", "-m", "own command"], main)
+    source = os.path.join(repo_parent, "acme_dev", "claude", "commands", "acme_x.md")
+    write(source, "# acme x\n")
+    linked = os.path.join(".claude", "commands", "acme_x.md")
+    os.symlink(source, os.path.join(main, linked))
+    entries = {e[0]: e for e in init_worktree.local_only_entries(main)}
+    assert own not in entries
+    assert entries[linked] == (linked, "link", os.path.realpath(source))
+    assert init_worktree.mirror_entry(entries[linked], worktree) == "linked"
+    assert os.path.realpath(os.path.join(worktree, linked)) == os.path.realpath(source)
+
+
 def test_second_run_is_a_no_op(repos):
     _, main, worktree = repos
     entries = init_worktree.local_only_entries(main)
