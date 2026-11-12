@@ -276,7 +276,9 @@ of every checkout of that context (`per_context_repo`), so a thread lists only
 the commands of the repo it works in. A command whose only use is in one repo
 links into that repo alone. The global git ignore's `**/.claude/commands/`
 keeps the links out of `git status`; a repo that tracks commands of its own is
-unaffected, and a new command it adds is committed once with `git add -f`.
+unaffected, and a new command it adds is committed once with `git add -f`;
+stage tracked command files by name or with `git add -u`, since `git add
+.claude/commands` (the folder) refuses an ignored path.
 `src/init_worktree.py` mirrors the links into each thread worktree. Only a
 command meant for threads in any repo (the worktree commands, a review across
 every personal repo) links into `~/.claude/commands`. Per-context subfolders

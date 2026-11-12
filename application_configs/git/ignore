@@ -11,7 +11,9 @@
 **/.claude/skills/
 # slash commands deploy into checkouts as .claude/commands/<name>.md links
 # from a context's dev overlay; a repo that tracks its own commands is
-# unaffected, and a new command it adds is committed once with git add -f
+# unaffected, and a new command it adds is committed once with git add -f.
+# Name tracked command files (or use git add -u) when staging them:
+# git add .claude/commands, naming the folder, refuses because it is ignored
 **/.claude/commands/
 # T3 Code project file and the sidebar icon it names, linked into the root of
 # every checkout by each context's dev overlay (root-anchored so the payloads
