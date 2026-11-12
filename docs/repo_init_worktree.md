@@ -52,9 +52,10 @@ venv, from any repo in any context.
    links next to the checkouts (see `setup_vscode.md`). The main checkout's
    entry is the gate in every file, the host-wide one included: a workspace
    where the repo is absent or commented out is reported as skipped and never
-   gets one of its worktrees. So where a context has its own workspace and
-   its repos are commented out of the host-wide one, a worktree lands only in
-   that context's window. VS
+   gets one of its worktrees. The host-wide file is also skipped whenever a
+   one-context file lists the repo, so a worktree lands only in its own
+   context's window even when the host-wide file still has the repo open.
+   `--remove` clears the entry from every file. VS
    Code watches the workspace file, so the folder appears in the open window
    without a reload. The label defaults to the ticket key in the branch name,
    else in the subjects of commits the branch adds on top of master (never

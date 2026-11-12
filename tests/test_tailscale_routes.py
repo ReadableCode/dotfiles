@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 
 import config_test_utils  # noqa F401
@@ -85,12 +86,16 @@ def fake_tailscale(tmp_path, routes, route_all):
         f'echo "$@" >> "{tmp_path}/calls"\n'
     )
     tool.chmod(0o755)
-    return {**os.environ, "PATH": f"{bindir}:{os.environ['PATH']}"}
+    return {**os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"}
 
 
 def run_script(env, *args):
-    script = os.path.join(os.path.dirname(tailscale_routes.SCRIPT), "tailscale_subnet_router.sh")
-    return subprocess.run(["bash", script, *args], env=env, capture_output=True, text=True)
+    script = os.path.join(os.path.dirname(tailscale_routes.SCRIPT), "tailscale_subnet_router.sh").replace(os.sep, "/")
+    # the bash on PATH: on Windows a bare "bash" resolves to System32's WSL launcher first, which reads a
+    # Windows path as nonsense and never sees the fake tailscale on PATH
+    return subprocess.run(
+        [shutil.which("bash", path=env["PATH"]), script, *args], env=env, capture_output=True, text=True
+    )
 
 
 def set_calls(tmp_path):

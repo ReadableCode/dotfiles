@@ -57,6 +57,10 @@ class FakeGrdctl:
         raise AssertionError(f"unexpected grdctl call {argv}")
 
 
+# a session bus already in the environment, so no test reaches os.getuid (absent on Windows)
+SESSION_ENV = {"DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus"}
+
+
 def run_sync(root, grdctl, check=False, hostname="laptop", up=True):
     return rdc.sync(
         hostname,
@@ -64,7 +68,7 @@ def run_sync(root, grdctl, check=False, hostname="laptop", up=True):
         check=check,
         run=grdctl,
         which=lambda name: "/usr/bin/grdctl",
-        environ={},
+        environ=SESSION_ENV,
         is_listening=lambda port: up,
     )
 
@@ -157,7 +161,10 @@ def test_a_daemon_not_listening_is_restarted_even_with_the_login_current(tmp_pat
         return grdctl(argv, **kwargs)
 
     assert (
-        rdc.sync("laptop", root, run=run, which=lambda n: "/usr/bin/grdctl", environ={}, is_listening=is_listening) == 0
+        rdc.sync(
+            "laptop", root, run=run, which=lambda n: "/usr/bin/grdctl", environ=SESSION_ENV, is_listening=is_listening
+        )
+        == 0
     )
     assert [c[0][0] for c in grdctl.calls] == ["grdctl", "systemctl"]
 

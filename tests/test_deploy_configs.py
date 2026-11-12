@@ -24,7 +24,7 @@ from utils.inventory_tools import (
 
 def write_file(path, content):
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as file_handle:
+    with open(path, "w", encoding="utf-8", newline="") as file_handle:
         file_handle.write(content)
     return path
 

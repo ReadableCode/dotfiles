@@ -29,7 +29,8 @@ the main checkout only (``.env``, ``.mcp.json``, ``.claude/settings.local.json``
    gets a folder entry for the worktree right after the main checkout's own
    entry, named ``│ <repo> · <label>`` to match the hand-kept layout. One
    where the repo is absent or commented out is skipped, the host-wide file
-   included, so a worktree lands only in the workspace of its own context. VS Code
+   included, and the host-wide file is also skipped whenever a one-context file
+   lists the repo, so a worktree lands only in the workspace of its own context. VS Code
    watches the workspace file, so the folder appears in the open window with
    no reload. The file is JSONC with trailing commas, so this is a text
    insertion, not a JSON round-trip. Idempotent by path; a re-run with a new
@@ -630,13 +631,21 @@ def update_workspace(main, worktree, label, remove=False, dry_run=False, hostnam
     """
     Add (or remove) the worktree's folder entry in each of this host's workspace
     files. Returns one status per file. The main checkout's own entry is the
-    gate: a file where it is absent or commented out never gets the worktree.
+    gate: a file where it is absent or commented out never gets the worktree,
+    and the host-wide file is skipped whenever one of the narrower
+    one-context files lists the repo, so the worktree lands in its context's
+    window only. Removal clears every file.
     """
     repo_parent = os.path.dirname(main)
     ws_paths = workspace_files(repo_parent, hostname)
     wt_rel = workspace_relpath(repo_parent, worktree)
+    main_rel = workspace_relpath(repo_parent, main)
+    context_holds = any(
+        os.path.isfile(path) and _folder_block_re(main_rel).search(open(path, encoding="utf-8").read())
+        for path in ws_paths[1:]
+    )
     statuses = []
-    for ws_path in ws_paths:
+    for index, ws_path in enumerate(ws_paths):
         if not os.path.isfile(ws_path):
             statuses.append(f"no workspace file at {ws_path}")
             continue
@@ -644,6 +653,8 @@ def update_workspace(main, worktree, label, remove=False, dry_run=False, hostnam
             text = file_handle.read()
         if remove:
             new_text, status = remove_workspace_folder(text, wt_rel)
+        elif index == 0 and context_holds and _folder_block_re(main_rel).search(text):
+            new_text, status = text, "skipped, its context's workspace holds it"
         else:
             name = WORKSPACE_LABEL.format(repo=os.path.basename(main), label=label)
             new_text, status = add_workspace_folder(text, workspace_relpath(repo_parent, main), name, wt_rel)
