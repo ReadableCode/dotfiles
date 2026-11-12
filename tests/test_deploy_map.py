@@ -555,16 +555,42 @@ def test_claude_tab_lists_the_map_hosts_commands_and_skills_by_context(fleet):
     x = rows[("command", "acme_x")]
     assert x["userLevel"] and x["repos"] == [] and x["entries"] == ["acme_command_x"]
     assert x["src"] == "acme_dev/claude/commands/acme_x.md" and x["desc"] == "Acme x"
+    assert x["dests"] == ["~/.claude/commands/acme_x.md"] and not x["native"]
     skill = rows[("skill", "acme_s")]
     assert not skill["userLevel"] and skill["repos"] == ["acme-app"]
     assert skill["src"] == "acme_dev/claude/skills/acme_s"
+    assert skill["dests"] == ["~/GitHub/acme-app/.claude/skills/acme_s/SKILL.md"]
     local = rows[("command", "local")]
     assert local["entries"] == [] and local["repos"] == ["acme-app"] and local["desc"] == "Local run"
+    assert local["native"] and local["dests"] == []
     text = deploy_map.format_text(data)
     assert "// claude commands and skills on Envy" in text
     assert "[dotfiles] none" in text
     assert "  acme_dev/\n    COMMAND /acme_x  claude/commands/acme_x.md" in text
     assert [t["repo"] for t in claude["tools"]] == ["acme-app", "acme_dev", "acme_dev"]
+
+
+def test_part_of_takes_globs_and_bang_exclusions():
+    patterns = ["bills-*", "transactions-*", "!*-add-company"]
+    assert deploy_map.part_of("bills-gexa", patterns)
+    assert not deploy_map.part_of("bills-add-company", patterns)
+    assert not deploy_map.part_of("cfc-update", patterns)
+
+
+def test_claude_tab_nests_the_parts_a_whole_names_under_it(fleet):
+    commands = fleet / "acme-app" / ".claude" / "commands"
+    touch(str(commands / "run-all.md"), '---\ndescription: All\nparts: ["src-*", "!src-add"]\n---\n')
+    for name in ("src-a", "src-b", "src-add", "other"):
+        touch(str(commands / f"{name}.md"), f"# {name}\n")
+    claude = build(fleet)["claude"]
+    rows = [(t["name"], t["parent"]) for t in claude["tools"] if t["repo"] == "acme-app"]
+    assert rows == [
+        ("other", None),
+        ("run-all", None),
+        ("src-a", "run-all"),
+        ("src-b", "run-all"),
+        ("src-add", None),
+    ]
 
 
 def test_claude_tab_is_empty_without_the_map_host(fleet, monkeypatch):

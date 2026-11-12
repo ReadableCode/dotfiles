@@ -47,7 +47,10 @@
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
   .stats{display:flex;gap:16px;margin-left:auto;color:var(--ink-faint);font-size:11.5px;letter-spacing:.04em}
   .stats b{color:var(--ink-dim);font-weight:500}
-  .tabs{display:flex;gap:2px;margin-left:18px}
+  .tabs{display:flex;flex-wrap:wrap;gap:2px;margin-left:18px}
+  /* narrow window: the top bar wraps so every tab stays reachable, and the stats give way first */
+  .topbar{flex-wrap:wrap;row-gap:8px}
+  @media (max-width:1000px){.tabs{margin-left:0}.stats{display:none}}
   .tab{
     padding:5px 13px;border:1px solid transparent;border-radius:999px;cursor:pointer;
     color:var(--ink-faint);font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;
@@ -279,6 +282,16 @@
   .claude .row{display:grid;grid-template-columns:86px minmax(240px,330px) 1fr minmax(170px,240px);gap:14px;
     align-items:start;padding:9px 0;border-top:1px solid rgba(27,38,53,.7)}
   .claude .grp h5+.row{border-top:none}
+  .claude .row.part{margin-left:28px;padding-left:12px;border-left:2px solid #223047}
+  .claude .locs{grid-column:2 / -1;margin:-6px 0 0;font-size:11px;line-height:1.5;color:#8ea4bd;display:grid;gap:3px}
+  .claude .locs .lk{display:grid;grid-template-columns:86px 1fr;gap:10px;align-items:baseline}
+  .claude .locs .ltag{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint)}
+  .claude .locs .src .ltag{color:#56d364}
+  .claude .locs .src .file{color:#e3edf9;font-weight:600}
+  .claude .locs .lk .file{display:inline;margin:0}
+  .claude .locs .to{color:var(--ink-faint)}
+  .claude .rpill.home{border-color:#2ea043;color:#56d364}
+  .claude .parts{display:block;color:var(--ink-faint);font-size:10.5px;margin-top:2px}
   .claude .badge{display:inline-block;text-align:center;width:78px;padding:3px 0;border-radius:6px;font-size:10px;
     font-weight:700;letter-spacing:.14em}
   .claude .badge.command{background:rgba(46,160,67,.18);color:#56d364;border:1px solid #2ea043}
@@ -423,7 +436,7 @@ const linkPath = (a, b) => {
 
 /* ---------------- shared filter state ---------------- */
 const state = {
-  view: 'disk', ghost: true,
+  view: 'disk', ghost: true, claudeLinks: false,
   ctx: new Set(Object.keys(CTX)), cat: new Set(Object.keys(CATS)), q: '',
 };
 const card = document.getElementById('card');
@@ -1024,10 +1037,15 @@ document.getElementById('search').addEventListener('input', ev => {
   state.q = ev.target.value.trim().toLowerCase();
   redraw();
 });
+// on the Claude tab the chip lists every place a command is linked to; elsewhere it draws every edge faintly
+const ghostOn = () => state.view === 'claude' ? state.claudeLinks : state.ghost;
 document.getElementById('ghosttoggle').addEventListener('click', function(){
-  state.ghost = !state.ghost;
-  GRAPHS.forEach(g => { g.ghost.style.display = state.ghost ? '' : 'none'; });
-  this.classList.toggle('off', !state.ghost);
+  if (state.view === 'claude') { state.claudeLinks = !state.claudeLinks; buildClaude(); }
+  else {
+    state.ghost = !state.ghost;
+    GRAPHS.forEach(g => { g.ghost.style.display = state.ghost ? '' : 'none'; });
+  }
+  this.classList.toggle('off', !ghostOn());
 });
 
 document.querySelector('#view-disk .legend').innerHTML =
@@ -1050,6 +1068,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     state.view = tab.dataset.view;
     document.getElementById('catchips').style.display = state.view === 'claude' ? 'none' : 'flex';
     document.getElementById('catsep').style.display = state.view === 'claude' ? 'none' : '';
+    document.getElementById('ghosttoggle').classList.toggle('off', !ghostOn());
     card.classList.remove('show', 'pin');
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('on', v.id === 'view-' + state.view));
     const graph = graphFor(state.view);
@@ -1057,7 +1076,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     else document.getElementById('hint').textContent = {
       matrix: 'every entry × every machine — hover a cell for the exact path',
       paths: 'every destination folder, and what lands in it',
-      claude: 'every slash command and skill, by context and repo — click a file path to copy it',
+      claude: 'every slash command and skill, by context and repo — all links lists where each is linked to, click a path to copy it',
     }[state.view];
   };
 });
@@ -1211,18 +1230,30 @@ function buildClaude(){
   if (!CLAUDE.host) { box.innerHTML = '<div class="lead">no machine in the inventories is the map host</div>'; return; }
   const home = meta.repoParent.replace(/\/$/, '');
   const match = t => claudeKinds.has(t.kind) && (!state.q ||
-    `${t.name} ${t.src} ${t.desc} ${t.repos.join(' ')} ${t.entries.join(' ')}`.toLowerCase().includes(state.q));
+    `${t.name} ${t.src} ${t.desc} ${t.repos.join(' ')} ${t.entries.join(' ')} ${t.dests.join(' ')}`.toLowerCase().includes(state.q));
   const where = t => '<span class="lbl">available in</span>' +
     (t.userLevel ? '<span class="ev">every session</span>' : '') +
     (t.userLevel && t.repos.length ? '<br>' : '') +
-    t.repos.map(r => `<span class="rpill">${esc(r)}</span>`).join('');
-  const rowHtml = t => `<div class="row ${t.kind}">
+    t.repos.map(r => r === t.repo && t.native
+      ? `<span class="rpill home" title="committed here">${esc(r)} · committed</span>`
+      : `<span class="rpill" title="linked into this checkout">${esc(r)}</span>`).join('');
+  const fileSpan = (path, label) => `<span class="file" data-path="${esc(path)}" title="click to copy ${esc(path)}">${esc(label)}</span>`;
+  const locs = t => !state.claudeLinks ? '' : `<div class="locs">
+      <div class="lk src"><span class="ltag">committed</span><span>${fileSpan(home + '/' + t.src, home + '/' + t.src)}</span></div>
+      ${t.dests.map(d => `<div class="lk"><span class="ltag">linked at</span><span>${fileSpan(d, d)}
+        <span class="to">→ ${esc(t.repo)}/${esc(t.path)}${d.startsWith('~/.claude/') ? ' · every session' : ''}</span></span></div>`).join('')}
+      ${t.dests.length ? '' : '<div class="lk"><span class="ltag">linked at</span><span class="to">nowhere, only the committed file</span></div>'}
+    </div>`;
+  const partCount = t => CLAUDE.tools.filter(p => p.parent === t.name && p.kind === t.kind && p.repo === t.repo).length;
+  const rowHtml = t => `<div class="row ${t.kind}${t.parent ? ' part' : ''}" ${t.parent ? `title="part of ${esc(t.parent)}"` : ''}>
       <div><span class="badge ${t.kind}">${t.kind.toUpperCase()}</span></div>
       <div><div class="nm">${t.kind === 'command' ? '<span class="slash">/</span>' : ''}${esc(t.name)}</div>
         <span class="file" data-path="${esc(home + '/' + t.src)}" title="click to copy ${esc(home + '/' + t.src)}">${esc(t.path)}</span>
-        <span class="entry">${t.entries.length ? 'manifest entry ' + t.entries.map(esc).join(', ') : 'committed in the repo, no manifest entry'}</span></div>
+        <span class="entry">${t.entries.length ? 'manifest entry ' + t.entries.map(esc).join(', ') : 'committed in the repo, no manifest entry'}</span>
+        ${partCount(t) ? `<span class="parts">runs the ${partCount(t)} indented below</span>` : ''}</div>
       <div class="desc">${esc(t.desc)}</div>
       <div class="where">${where(t)}</div>
+      ${locs(t)}
     </div>`;
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   const sections = CLAUDE.contexts.filter(ctx => !CTX[ctx] || state.ctx.has(ctx)).map(ctx => {
@@ -1297,7 +1328,9 @@ document.getElementById('claudebody').addEventListener('click', ev => {
     <b>Claude</b> lists every slash command and skill on the machine that draws the map, in that machine's contexts:
     the manifest entries that link into <code>~/.claude/commands</code>, <code>~/.claude/skills</code> or a
     checkout's <code>.claude</code> folder, plus what a cloned checkout commits in its own <code>.claude</code>
-    folder with no entry. Each sits under the context of the repo holding its file.`;
+    folder with no entry. Each sits under the context of the repo holding its file. A command or skill whose
+    frontmatter lists <code>parts:</code> (globs over names in its own repo, <code>!</code> to leave one out) is
+    a whole that runs the others, and the ones it names are indented under it.`;
   const toggle = () => box.classList.toggle('show');
   document.getElementById('aboutbtn').onclick = toggle;
   box.addEventListener('click', ev => { if (ev.target.id === 'aboutclose') box.classList.remove('show'); });

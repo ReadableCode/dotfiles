@@ -2,6 +2,7 @@
 # Imports #
 
 import argparse
+import fnmatch
 import json
 import os
 import sys
@@ -458,34 +459,93 @@ def claude_target(dest, repo_parent):
     return None
 
 
-def claude_description(path):
-    """The ``description:`` of a command file or a skill folder's SKILL.md, else its first heading, else ""."""
+def claude_front(path):
+    """``(frontmatter, body)`` of a command file or a skill folder's SKILL.md; ``({}, "")`` when unreadable."""
     file_path = os.path.join(path, "SKILL.md") if os.path.isdir(path) else path
     try:
         with open(file_path, "r", encoding="utf-8") as file_handle:
             text = file_handle.read()
     except (OSError, UnicodeDecodeError):
-        return ""
-    if text.startswith("---"):
-        end = text.find("\n---", 3)
-        if end != -1:
-            try:
-                front = yaml.safe_load(text[3:end]) or {}
-            except yaml.YAMLError:
-                front = {}
-            if isinstance(front, dict) and front.get("description"):
-                return " ".join(str(front["description"]).split())
-            text = text[end + len("\n---") :]
+        return {}, ""
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---", 3)
+    if end == -1:
+        return {}, text
+    try:
+        front = yaml.safe_load(text[3:end]) or {}
+    except yaml.YAMLError:
+        front = {}
+    return (front if isinstance(front, dict) else {}), text[end + len("\n---") :]
+
+
+def claude_description(path):
+    """The ``description:`` of a command file or a skill folder's SKILL.md, else its first heading, else ""."""
+    front, text = claude_front(path)
+    if front.get("description"):
+        return " ".join(str(front["description"]).split())
     for line in text.splitlines():
         if line.startswith("#"):
             return line.lstrip("#").strip()
     return ""
 
 
+def claude_parts(path):
+    """
+    The ``parts:`` patterns of a command or skill that runs others as one
+    whole: shell globs over names of the same kind in the same repo, a
+    leading ``!`` leaving a name out (``["bills-*", "!*-add-company"]``).
+    """
+    parts = claude_front(path)[0].get("parts") or []
+    if isinstance(parts, str):
+        parts = [parts]
+    return [str(part) for part in parts]
+
+
+def part_of(name, patterns):
+    """True when ``name`` matches a pattern of ``patterns`` and no ``!`` pattern."""
+    keep = [p for p in patterns if not p.startswith("!")]
+    drop = [p[1:] for p in patterns if p.startswith("!")]
+    return any(fnmatch.fnmatchcase(name, p) for p in keep) and not any(fnmatch.fnmatchcase(name, p) for p in drop)
+
+
+def _nest_parts(records, credentials_root):
+    """Set each record's ``parent`` to the name of the whole whose ``parts:`` claim it, else None."""
+    for record in records:
+        record["parent"] = None
+    for whole in records:
+        patterns = claude_parts(os.path.join(credentials_root, whole["src"]))
+        if not patterns:
+            continue
+        for record in records:
+            if (
+                record is not whole
+                and record["parent"] is None
+                and record["kind"] == whole["kind"]
+                and record["repo"] == whole["repo"]
+                and part_of(record["name"], patterns)
+            ):
+                record["parent"] = whole["name"]
+    # a whole that is itself a part keeps its own parts flat under it, never two levels deep
+    wholes = {(r["kind"], r["repo"], r["parent"]) for r in records if r["parent"]}
+    for record in records:
+        if record["parent"] and (record["kind"], record["repo"], record["name"]) in wholes:
+            record["parent"] = None
+
+
 def _claude_record(tools, kind, name, src, ctx):
     return tools.setdefault(
         (kind, name, src),
-        {"ctx": ctx, "kind": kind, "name": name, "src": src, "userLevel": False, "repos": set(), "entries": set()},
+        {
+            "ctx": ctx,
+            "kind": kind,
+            "name": name,
+            "src": src,
+            "userLevel": False,
+            "repos": set(),
+            "entries": set(),
+            "dests": set(),
+        },
     )
 
 
@@ -525,6 +585,7 @@ def _add_linked_tools(tools, mapped, matrix, column, repo_parent, owner):
         if kind == "skill" and src.endswith("/SKILL.md"):
             src = src[: -len("/SKILL.md")]
         record = _claude_record(tools, kind, name, src, owner(entry["srcRepo"], entry["ctx"]))
+        record["dests"].add(dest)
         entry_id = entry["id"]
         if repo:
             record["repos"].add(repo)
@@ -566,7 +627,11 @@ def _add_committed_tools(tools, repos, applied, credentials_root, repo_parent, o
                 if real in defined:
                     continue
                 src = os.path.relpath(real, credentials_root).replace("\\", "/")
-                _claude_record(tools, kind, name, src, owner(repo))["repos"].add(repo)
+                record = _claude_record(tools, kind, name, src, owner(repo))
+                record["repos"].add(repo)
+                # a committed symlink into another repo is a place it is linked to, not where it is defined
+                if real != os.path.abspath(path):
+                    record["dests"].add(where)
 
 
 def build_claude_tools(mapped, hosts, matrix, declarations, credentials_root, repo_parent):
@@ -594,10 +659,16 @@ def build_claude_tools(mapped, hosts, matrix, declarations, credentials_root, re
     for record in tools.values():
         record["repos"] = sorted(record["repos"])
         record["entries"] = sorted(record["entries"])
+        record["dests"] = sorted(record["dests"])
         record["desc"] = claude_description(os.path.join(credentials_root, record["src"]))
         # the repo whose file defines it, and the file's path inside that repo
         record["repo"], _, record["path"] = record["src"].partition("/")
+        # committed where Claude reads it, so threads in its own repo see it with no link
+        record["native"] = record["path"].startswith(".claude/")
+        if record["native"]:
+            record["repos"] = sorted(set(record["repos"]) | {record["repo"]})
         records.append(record)
+    _nest_parts(records, credentials_root)
     contexts = host["contexts"]
     rank = {ctx: index for index, ctx in enumerate(contexts)}
     records.sort(
@@ -606,6 +677,9 @@ def build_claude_tools(mapped, hosts, matrix, declarations, credentials_root, re
             r["ctx"],
             r["repo"].lower(),
             CLAUDE_KINDS.index(r["kind"]),
+            # a part sorts right after the whole that runs it
+            r["parent"] or r["name"],
+            r["parent"] is not None,
             r["name"],
             r["src"],
         )
@@ -986,13 +1060,16 @@ def _text_claude(data):
                 repo = record["repo"]
                 lines.append(f"  {repo}/")
             label = f"/{record['name']}" if record["kind"] == "command" else record["name"]
-            lines.append(f"    {record['kind'].upper()} {label}  {record['path']}")
+            pad = "      " if record["parent"] else "    "
+            lines.append(f"{pad}{record['kind'].upper()} {label}  {record['path']}")
             where = (["every session"] if record["userLevel"] else []) + record["repos"]
-            lines.append(f"      in: {' '.join(where)}")
+            lines.append(f"{pad}  in: {' '.join(where)}")
             if record["entries"]:
-                lines.append(f"      entry: {' '.join(record['entries'])}")
+                lines.append(f"{pad}  entry: {' '.join(record['entries'])}")
+            for dest in record["dests"]:
+                lines.append(f"{pad}  link: {dest}")
             if record["desc"]:
-                lines.append(f"      about: {record['desc']}")
+                lines.append(f"{pad}  about: {record['desc']}")
     return lines
 
 
