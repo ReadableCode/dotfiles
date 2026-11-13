@@ -51,6 +51,15 @@
 #                    re-enable themselves on update are turned off again by
 #                    the next myupdater. A name this machine does not have is
 #                    reported and skipped.
+#   sshd_as_user     run OpenSSH as the signed-in user instead of the SYSTEM
+#                    service: the sshd service stays stopped and Disabled, and
+#                    the scheduled task "sshd as me" runs the same sshd.exe at
+#                    logon with highest privileges. For an Entra ID (Azure AD)
+#                    account, whose key login the SYSTEM service cannot serve
+#                    (docs/setup_windows_ssh_server.md). Every OpenSSH upgrade
+#                    sets the service back to Automatic and starts it, which
+#                    stops the task's sshd, so the settings pass runs after the
+#                    package upgrades and puts this back on the same run.
 #
 # A key the entry leaves out is left alone, as is every setting on a machine
 # no inventory names. No uv or a broken inventory means the policy is unknown,
@@ -60,9 +69,10 @@ function Show-Usage {
     Write-Host @'
 usage: my_updater.ps1 [--check | --help]
 
-  (no arguments)  Set the Windows settings this host's inventory entry names
-                  (updater.windows), then upgrade this machine's packages with
-                  winget and Chocolatey, each only when it is installed.
+  (no arguments)  Upgrade this machine's packages with winget and Chocolatey,
+                  each only when it is installed, then set the Windows settings
+                  this host's inventory entry names (updater.windows), so a
+                  setting an upgrade undid is put back on the same run.
   --check         Read-only: list what winget and Chocolatey would upgrade and
                   which Windows settings differ from this host's inventory
                   entry, exit 1 when anything does and 0 when nothing does.
@@ -273,7 +283,51 @@ function Get-WindowsSettingDrift {
             }
         }
     }
-    return , @($drift + (Get-LogonAppDrift))
+    return , @($drift + (Get-LogonAppDrift) + (Get-SshdAsUserDrift))
+}
+
+$SshdExe = 'C:\Program Files\OpenSSH\sshd.exe'
+$SshdTaskName = 'sshd as me'
+
+function Get-SshdAsUserDrift {
+    # sshd_as_user: rows in the order they must be made true - the service off
+    # first, so the task's sshd can take port 22, then the task registered,
+    # then running.
+    $drift = @()
+    if (-not (Get-UpdaterPolicy 'windows.sshd_as_user')) { return , @() }
+    if (-not (Test-Path $SshdExe)) {
+        Write-Host "  windows.sshd_as_user: $SshdExe is not installed; skipped"
+        return , @()
+    }
+    $service = Get-Service sshd -ErrorAction SilentlyContinue
+    if ($service -and ($service.StartType -ne 'Disabled' -or $service.Status -ne 'Stopped')) {
+        $drift += [pscustomobject]@{ Kind = 'sshd_service'; Key = 'sshd_as_user'; Path = 'sshd'; Name = 'sshd'
+            Text = "the sshd service is $($service.Status) and $($service.StartType), inventory runs sshd as the user" }
+    }
+    $task = Get-ScheduledTask -TaskName $SshdTaskName -ErrorAction SilentlyContinue
+    $action = if ($task) { $task.Actions | Select-Object -First 1 }
+    if (-not $task -or $action.Execute -ne $SshdExe -or $action.Arguments -ne '-D') {
+        $drift += [pscustomobject]@{ Kind = 'sshd_task'; Key = 'sshd_as_user'; Path = $SshdTaskName; Name = $SshdTaskName
+            Text = "the task '$SshdTaskName' is $(if ($task) { 'not running sshd.exe -D' } else { 'missing' })" }
+    }
+    if (-not $task -or $task.State -ne 'Running') {
+        $drift += [pscustomobject]@{ Kind = 'sshd_start'; Key = 'sshd_as_user'; Path = $SshdTaskName; Name = $SshdTaskName
+            Text = "the task '$SshdTaskName' is not running" }
+    }
+    return , @($drift)
+}
+
+function Register-SshdAsUser {
+    # The task runs the installed sshd.exe with its normal config and host
+    # keys, as this user, at logon, elevated, restarted if it dies.
+    $me = "$env:USERDOMAIN\$env:USERNAME"
+    $action = New-ScheduledTaskAction -Execute $SshdExe -Argument '-D'
+    $trigger = New-ScheduledTaskTrigger -AtLogOn -User $me
+    $principal = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 `
+        -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+    Register-ScheduledTask -TaskName $SshdTaskName -Action $action -Trigger $trigger -Principal $principal `
+        -Settings $settings -Force | Out-Null
 }
 
 $ExplorerKey = 'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved'
@@ -337,9 +391,12 @@ function Get-LogonAppDrift {
 
 function Set-DriftRow {
     # Make one drift row true: a DWord value, a StartupApproved "off" entry,
-    # or a Store app task's State 1 (turned off by the user).
+    # a Store app task's State 1 (turned off by the user), or one sshd_as_user
+    # step (service off, task registered, task started).
     param($Row)
-    if (-not (Test-Path $Row.Path)) { New-Item -Path $Row.Path -Force | Out-Null }
+    if ($Row.Kind -in 'dword', 'approved', 'task' -and -not (Test-Path $Row.Path)) {
+        New-Item -Path $Row.Path -Force | Out-Null
+    }
     switch ($Row.Kind) {
         'dword' {
             New-ItemProperty -Path $Row.Path -Name $Row.Name -Value $Row.Want -PropertyType DWord -Force | Out-Null
@@ -353,6 +410,19 @@ function Set-DriftRow {
         'task' {
             New-ItemProperty -Path $Row.Path -Name 'State' -Value 1 -PropertyType DWord -Force | Out-Null
             Write-Host "  windows.$($Row.Key): turned off $(Split-Path $Row.Path -Leaf)"
+        }
+        'sshd_service' {
+            Stop-Service sshd -Force
+            Set-Service sshd -StartupType Disabled
+            Write-Host "  windows.$($Row.Key): stopped and disabled the sshd service"
+        }
+        'sshd_task' {
+            Register-SshdAsUser
+            Write-Host "  windows.$($Row.Key): registered the task '$SshdTaskName'"
+        }
+        'sshd_start' {
+            Start-ScheduledTask -TaskName $SshdTaskName
+            Write-Host "  windows.$($Row.Key): started the task '$SshdTaskName'"
         }
     }
 }
@@ -523,27 +593,6 @@ if ($mode -eq "check") {
 }
 
 $settingsFailed = $false
-Write-Host "applying windows settings..."
-try {
-    $drift = Get-WindowsSettingDrift
-    if ($drift.Count -eq 0) {
-        Write-Host "  windows settings match the inventory."
-    }
-    elseif (-not (Test-Elevated)) {
-        Show-Drift $drift
-        Write-Host "  not elevated, so these are left as they are; run myupdater from an elevated shell."
-        $settingsFailed = $true
-    }
-    else {
-        foreach ($row in $drift) {
-            Set-DriftRow $row
-        }
-    }
-}
-catch {
-    Write-Host "  policy unknown, settings left as they are: $_"
-    $settingsFailed = $true
-}
 
 $running = Get-RunningPrograms
 $logonAppsRunning = @(Get-LogonApps | Where-Object { $running.Contains($_.Program.ToLower()) } | ForEach-Object { $_.Name })
@@ -604,6 +653,31 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         Write-Host $uvOut
         $settingsFailed = $true
     }
+}
+
+# After the upgrades, so a setting an upgrade undid is put back on the same
+# run (an OpenSSH upgrade re-enables the sshd service; Windows updates drop
+# the Serialize key).
+Write-Host "applying windows settings..."
+try {
+    $drift = Get-WindowsSettingDrift
+    if ($drift.Count -eq 0) {
+        Write-Host "  windows settings match the inventory."
+    }
+    elseif (-not (Test-Elevated)) {
+        Show-Drift $drift
+        Write-Host "  not elevated, so these are left as they are; run myupdater from an elevated shell."
+        $settingsFailed = $true
+    }
+    else {
+        foreach ($row in $drift) {
+            Set-DriftRow $row
+        }
+    }
+}
+catch {
+    Write-Host "  policy unknown, settings left as they are: $_"
+    $settingsFailed = $true
 }
 
 Restore-LogonApps $logonAppsRunning

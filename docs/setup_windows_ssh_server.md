@@ -160,7 +160,7 @@
 
 A work laptop joined to Entra ID has no on-prem domain: the account is
 `azuread\<name>` (`whoami`), and `nltest /dsgetdc:` answers
-`ERROR_NO_SUCH_DOMAIN`. Win32-OpenSSH 9.4 running as the SYSTEM service cannot
+`ERROR_NO_SUCH_DOMAIN`. Win32-OpenSSH running as the SYSTEM service cannot
 serve that account with a key, and fails in three places, each one a bare
 "Connection reset" on the client with nothing in the OpenSSH log:
 
@@ -176,25 +176,30 @@ serve that account with a key, and fails in three places, each one a bare
   password, and resets again.
 
 The working setup runs the same `sshd.exe`, config and host keys as the user
-instead of as SYSTEM, from a scheduled task at logon with highest privileges,
-and disables the service so port 22 is free (admin PowerShell):
+instead of as SYSTEM: a scheduled task, "sshd as me", starts it at logon with
+highest privileges, and the sshd service stays stopped and Disabled so port
+22 is free. Checked on 9.4 and 10.4: 10.4 as the service still accepts the
+key and then drops the session.
 
-```powershell
-$me = "$env:USERDOMAIN\$env:USERNAME"
-$a = New-ScheduledTaskAction -Execute 'C:\Program Files\OpenSSH\sshd.exe' -Argument '-D'
-$t = New-ScheduledTaskTrigger -AtLogOn -User $me
-$p = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
-$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-Register-ScheduledTask -TaskName 'sshd as me' -Action $a -Trigger $t -Principal $p -Settings $s -Force
-Stop-Service sshd; Set-Service sshd -StartupType Disabled
-Start-ScheduledTask 'sshd as me'
+The host's inventory entry asks for it, and myupdater makes it true:
+
+```json
+"updater": {"windows": {"sshd_as_user": true}}
 ```
 
+`scripts/my_updater.ps1` registers the task, stops and disables the service
+and starts the task, after the package upgrades. That order matters: every
+OpenSSH Preview upgrade (winget) sets the service back to Automatic and
+starts it, which stops the task's sshd, so the same myupdater run puts it
+back and OpenSSH stays current with no manual step. A myupdater run over
+SSH survives the upgrade: the session process outlives the sshd it came from.
+
 SSH is then up whenever the user is logged in, with the key and no second
-account, and the session is elevated. The inventory's `user` is
-`azuread\<name>`; `src/ssh_aliases.py` quotes it so the backslash survives the
-shell. Undo: `Set-Service sshd -StartupType Automatic`, start it, and
-`Unregister-ScheduledTask 'sshd as me'`.
+account, and the session is elevated. Each SSH session opens a console window
+on the user's desktop, since sshd runs in that session. The inventory's
+`user` is `azuread\<name>`; `src/ssh_aliases.py` quotes it so the backslash
+survives the shell. Undo: drop the key, then `Set-Service sshd -StartupType
+Automatic`, start it, and `Unregister-ScheduledTask 'sshd as me'`.
 
 To find where sshd dies, run it in the foreground as the user for one login
 (`Stop-Service sshd`, then `sshd.exe -ddd -E <log>` from admin PowerShell), or
