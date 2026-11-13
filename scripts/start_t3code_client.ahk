@@ -31,6 +31,14 @@ installDir := EnvGet("LOCALAPPDATA") "\Programs\t3code"
 ; the child env (DESKTOP_BACKEND_ENV_NAMES).
 EnvSet("T3CODE_PORT", "3773")
 
+; Pin T3 Connect's tunnel to HTTP/2, the same as the Linux services'
+; 30-tunnel-http2.conf. The cloudflared child inherits this through the
+; backend (spawned with extendEnv). Unpinned it tries QUIC first, which fails
+; from every machine on the home LAN, so each start waits about 2 minutes for
+; the fallback and, after a sleep, the tunnel retries QUIC only and never
+; reconnects. A T3 started by hand from the Start Menu is not pinned.
+EnvSet("TUNNEL_TRANSPORT_PROTOCOL", "http2")
+
 Loop Files installDir "\*.exe"
 {
     ; "T3 Code (Alpha).exe" today, and the uninstaller sits next to it - match

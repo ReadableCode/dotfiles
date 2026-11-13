@@ -234,9 +234,13 @@ server with `t3 serve`" hint it ends with: the service is the server.
 
 **The T3 Connect tunnel is pinned to http2.** T3 Connect runs a `cloudflared`
 child (`~/.t3/tools/cloudflared/`) that inherits the service environment, so
-`30-tunnel-http2.conf` sets `TUNNEL_TRANSPORT_PROTOCOL=http2`. QUIC to the
-edge fails from every machine on the home LAN that has tried it
-(JasonZephyrus, EliteDesk, nukbuntu) every time (`tls: no application protocol`).
+`30-tunnel-http2.conf` sets `TUNNEL_TRANSPORT_PROTOCOL=http2`; on Windows the
+desktop app's backend passes its environment to the same child, so
+`start_t3code_client.ahk` sets the variable before it launches the app (a T3
+opened by hand from the Start Menu is not pinned). QUIC to the edge fails from
+every machine on the home LAN that has tried it (JasonZephyrus, EliteDesk,
+nukbuntu, and a Windows desktop app) every time (`tls: no application
+protocol`), so the cause is the home network path, not one machine.
 cloudflared falls back to http2 on a cold start (one to three minutes
 unpinned), but after a suspend it retries QUIC only and never reconnects: the
 service stays `active` while the machine is gone from T3 Connect. Check the
@@ -585,7 +589,7 @@ Current fleet:
 | JasonZephyrus | T3 Connect | Fedora: systemd boot service (`t3 service install`), not the SSH card, with agent-activity publishing on. No `t3` on PATH: the CLI is the service's own copy, `T3CODE_HOME=~/.t3 ~/.t3/runtime/versions/<version>/t3` (a bare `npx t3` starts a second server). See [Install (Linux)](#install-linux--always-on-server-via-systemd). |
 | EliteDesk | T3 Connect | Ubuntu: systemd boot service, agent-activity publishing on, node from nvm linked into `~/.local/bin` by the prereq script. Same CLI path as JasonZephyrus. |
 | nukbuntu | T3 Connect | Ubuntu: same setup as EliteDesk. |
-| RyzenWhite | Client only | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve. Its T3 Connect publishing is off; it watches and drives the slotted environments. See [Windows: desktop app only](#windows-desktop-app-only). |
+| RyzenWhite | T3 Connect | Windows: **desktop app only**, the app's own backend on `~/.t3`, no headless serve. The backend runs its own T3 Connect tunnel while the app is open, started at logon by `start_t3code_client.ahk`, which pins it to http2. See [Windows: desktop app only](#windows-desktop-app-only). |
 
 
 
@@ -600,9 +604,9 @@ and the desktop app raises its own notifications for every environment it is
 connected to (`apps/web/src/components/ThreadNotificationCoordinator.tsx`
 upstream); only phone push and Live Activities come from the relay. The
 account holds more than the default three since 2026-11 (see the tunnel cap
-row under the gaps); the slots go to Envy, the work laptop, JasonZephyrus (the
-always-on agent server and dev target), EliteDesk and nukbuntu. RyzenWhite and
-the MacBook are clients only: a thread
+row under the gaps); the slots go to Envy, the work laptops, JasonZephyrus (the
+always-on agent server and dev target), EliteDesk, nukbuntu and RyzenWhite. The
+MacBook is a client only: a thread
 started on the MacBook is finished there. To move a slot: turn T3 Connect off
 on the old host (Settings → Connections), then on any signed-in client open
 the account avatar → **Manage account** → **T3 Connect** and **Deregister**
