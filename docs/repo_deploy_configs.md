@@ -259,6 +259,12 @@ Deploy, status, prune and the map only ever see the expanded entries. Every
 on one path), and an `exclude_repos` name that no context declares is an
 error rather than a silent no-op.
 
+A named context whose repo is not cloned on this machine (an `acme_dev`
+overlay cloned before `acme_credentials`) contributes no repos and prints one
+note per run, instead of failing the whole deploy: none of its checkouts
+could be linked anyway. A context repo that is cloned but has no
+`<context>_repos.yaml` still fails loading.
+
 The links are untracked in the target repos: the global git ignore dotfiles
 deploys (`application_configs/git/ignore`) lists `**/.mcp.json`.
 

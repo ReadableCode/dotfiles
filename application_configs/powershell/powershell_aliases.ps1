@@ -14,6 +14,20 @@ if ($env:OS -eq 'Windows_NT') {
     $env:XDG_CONFIG_HOME = "$env:USERPROFILE\GitHub\dotfiles\application_configs"
 }
 
+# Some Win32-OpenSSH builds (10.4 on Yoga7i) start an ssh session with the
+# machine PATH only, so everything on the user PATH - uv, winget, pyenv,
+# python - is missing over ssh while a desktop shell has it. Append the user
+# PATH entries this session lacks; a desktop shell already has them all, so
+# there this changes nothing. Commands must work the same over ssh.
+if ($env:OS -eq 'Windows_NT') {
+    $have = @($env:PATH -split ';' | Where-Object { $_ } | ForEach-Object { $_.TrimEnd('\').ToLower() })
+    $userEntries = @(([Environment]::GetEnvironmentVariable('Path', 'User') -split ';') | Where-Object { $_ } |
+        ForEach-Object { [Environment]::ExpandEnvironmentVariables($_) })
+    $missing = @($userEntries | Where-Object { $have -notcontains $_.TrimEnd('\').ToLower() })
+    if ($missing.Count -gt 0) { $env:PATH = ($env:PATH.TrimEnd(';') + ';' + ($missing -join ';')) }
+    Remove-Variable have, userEntries, missing
+}
+
 
 ### Terminal Config ###
 

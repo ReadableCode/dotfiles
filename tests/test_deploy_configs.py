@@ -4,6 +4,7 @@
 import glob
 import json
 import os
+import shutil
 import subprocess
 import time
 
@@ -530,6 +531,25 @@ def test_excluding_a_repo_no_context_declares_raises(overlay_tree):
     )
     with pytest.raises(ValueError, match="svc-x"):
         deploy_configs.load_manifests()
+
+
+def test_a_dev_overlay_cloned_before_its_credentials_repo_skips_that_context(overlay_tree, capsys, monkeypatch):
+    # acme_dev is cloned, acme_credentials is not: its entries target acme's repos,
+    # which this machine cannot list, so they expand to nothing and the deploy loads
+    shutil.rmtree(str(overlay_tree / "acme_credentials"))
+    monkeypatch.setattr(deploy_configs, "_NOTED_ABSENT_CONTEXTS", set())
+    write_repos_file(str(overlay_tree / "dotfiles" / "dotfiles_repos.yaml"), ["dotfiles"])
+    write_manifest_at(
+        str(overlay_tree / "acme_dev" / "acme_dev_manifest.yaml"),
+        [
+            per_repo_entry(per_context_repo="acme"),
+            per_repo_entry(name="acme_both", per_context_repo=["acme", "dotfiles"], exclude_repos=["svc-b"]),
+        ],
+    )
+    entries, _ = deploy_configs.load_manifests()
+    assert [e["name"] for e in entries if e.get("_expanded_from")] == ["acme_both__dotfiles"]
+    err = capsys.readouterr().err
+    assert err.count("acme_credentials is not cloned here") == 1
 
 
 def test_per_context_repo_without_a_repos_file_raises(overlay_tree):
