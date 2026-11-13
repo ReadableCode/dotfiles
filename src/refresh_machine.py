@@ -681,14 +681,18 @@ def windows_user_path():
     return [os.path.expandvars(entry) for entry in str(value).split(";") if entry]
 
 
+WINDOWS_PATHSEP = ";"
+
+
 def add_user_path(environ=None, entries=None):
     """Append the user PATH entries this process's PATH lacks. Returns the ones added."""
     environ = os.environ if environ is None else environ
     entries = windows_user_path() if entries is None else entries
-    have = {entry.rstrip("\\").lower() for entry in environ.get("PATH", "").split(os.pathsep) if entry}
+    # A Windows PATH, split on ";" by name: os.pathsep is ":" elsewhere, and every C:\\ entry holds one.
+    have = {entry.rstrip("\\").lower() for entry in environ.get("PATH", "").split(WINDOWS_PATHSEP) if entry}
     added = [entry for entry in entries if entry.rstrip("\\").lower() not in have]
     if added:
-        environ["PATH"] = os.pathsep.join([environ.get("PATH", "").rstrip(os.pathsep)] + added)
+        environ["PATH"] = WINDOWS_PATHSEP.join([environ.get("PATH", "").rstrip(WINDOWS_PATHSEP)] + added)
     return added
 
 

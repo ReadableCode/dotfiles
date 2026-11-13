@@ -548,10 +548,10 @@ def test_bootstrap_argv_on_windows_runs_the_powershell_bootstrap_not_bash():
 
 
 def test_add_user_path_appends_only_the_entries_the_process_lacks():
-    environ = {"PATH": os.pathsep.join(["C:\\Windows", "C:\\Tools\\"])}
+    environ = {"PATH": ";".join(["C:\\Windows", "C:\\Tools\\"])}
     added = refresh_machine.add_user_path(environ, ["C:\\tools", "C:\\Users\\jason\\.local\\bin"])
     assert added == ["C:\\Users\\jason\\.local\\bin"]
-    assert environ["PATH"].split(os.pathsep)[-1] == "C:\\Users\\jason\\.local\\bin"
+    assert environ["PATH"].split(";")[-1] == "C:\\Users\\jason\\.local\\bin"
     assert refresh_machine.add_user_path(environ, ["C:\\Users\\jason\\.local\\bin"]) == []
 
 
