@@ -559,3 +559,20 @@ def test_the_cli_rejects_an_unknown_manager_to_unignore_for():
 def test_the_cli_rejects_an_unknown_manager_to_ignore_for():
     with pytest.raises(SystemExit):
         app_lists.main(["--ignore", "snap", "slack"])
+
+
+# %%
+# What any machine gets #
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["Brewfile", "windows_apps_personal_choco.txt", "windows_apps_base_choco.txt", "windows_apps_personal_winget.txt"],
+)
+def test_no_any_machine_list_installs_tailscale(filename):
+    """These lists reach every machine, client machines included, and a client
+    machine must never get Tailscale: it belongs in the personal context's app
+    list only."""
+    with open(os.path.join(app_lists.APP_LISTS, filename), encoding="utf-8") as handle:
+        entries = [line.split("#")[0].strip().lower() for line in handle]
+    assert not [entry for entry in entries if "tailscale" in entry]

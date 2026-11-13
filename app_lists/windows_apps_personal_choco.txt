@@ -13,5 +13,4 @@ powertoys
 procexp
 putty
 speedtest
-tailscale
 wiztree
