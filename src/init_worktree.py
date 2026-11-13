@@ -96,10 +96,11 @@ import subprocess
 import sys
 
 TICKET_RE = re.compile(r"\b[A-Z][A-Z0-9]+-\d+\b")
-# Where deploy-managed links live in a checkout: the root, .claude/ for settings.local.json, and
-# .claude/commands/ for slash commands. A repo that tracks commands of its own carries them into the
-# worktree through git, and Claude Code then reads only those, so the linked ones have to be mirrored.
-LINK_SCAN_DIRS = ("", ".claude", os.path.join(".claude", "commands"))
+# Where deploy-managed links live in a checkout: the root, .claude/ for settings.local.json,
+# .claude/commands/ for slash commands and .claude/rules/ for a context's rules file. A repo that
+# tracks commands of its own carries them into the worktree through git, and Claude Code then reads
+# only those, so the linked ones have to be mirrored.
+LINK_SCAN_DIRS = ("", ".claude", os.path.join(".claude", "commands"), os.path.join(".claude", "rules"))
 # Project skills deploy as one file link per skill, .claude/skills/<name>/SKILL.md; each <name> is scanned too.
 SKILLS_DIR = os.path.join(".claude", "skills")
 # Ignored files that are noise, not config: never worth a "not mirrored" line.

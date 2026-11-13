@@ -15,6 +15,9 @@
 # Name tracked command files (or use git add -u) when staging them:
 # git add .claude/commands, naming the folder, refuses because it is ignored
 **/.claude/commands/
+# a context's rules file deploys into checkouts as a .claude/rules/<context>.md
+# link from its dev overlay; a repo that tracks its own rules is unaffected
+**/.claude/rules/
 # T3 Code project file and the sidebar icon it names, linked into the root of
 # every checkout by each context's dev overlay (root-anchored so the payloads
 # in the dev repos stay visible); a tracked t3.json is unaffected

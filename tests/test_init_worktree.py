@@ -160,6 +160,19 @@ def test_a_linked_command_is_mirrored_beside_the_repos_own_commands(repos):
     assert os.path.realpath(os.path.join(worktree, linked)) == os.path.realpath(source)
 
 
+def test_a_linked_rules_file_is_mirrored(repos):
+    repo_parent, main, worktree = repos
+    source = os.path.join(repo_parent, "acme_dev", "claude", "CLAUDE.acme.md")
+    write(source, "# acme rules\n")
+    linked = os.path.join(".claude", "rules", "acme.md")
+    os.makedirs(os.path.join(main, ".claude", "rules"))
+    os.symlink(source, os.path.join(main, linked))
+    entries = {e[0]: e for e in init_worktree.local_only_entries(main)}
+    assert entries[linked] == (linked, "link", os.path.realpath(source))
+    assert init_worktree.mirror_entry(entries[linked], worktree) == "linked"
+    assert os.path.realpath(os.path.join(worktree, linked)) == os.path.realpath(source)
+
+
 def test_second_run_is_a_no_op(repos):
     _, main, worktree = repos
     entries = init_worktree.local_only_entries(main)
