@@ -49,7 +49,7 @@ ssmtp
 texlive-collection-fontsextra  # texlive-fonts-extra
 texlive-collection-fontsrecommended  # texlive-fonts-recommended
 texlive-collection-latex  # texlive-latex-base
-texlive-collection-latexextra  # texlive-latex-ext
+texlive-collection-latexextra  # texlive-latex-extra
 tldr
 tmux
 tree

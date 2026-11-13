@@ -33,7 +33,7 @@ ssmtp
 texlive-fonts-extra
 texlive-fonts-recommended
 texlive-latex-base
-texlive-latex-ext
+texlive-latex-extra
 tldr
 tmux
 tree

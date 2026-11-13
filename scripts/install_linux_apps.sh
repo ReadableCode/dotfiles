@@ -17,6 +17,9 @@ if [ -z "$APP_PHASE" ]; then
 fi
 
 list_installed() { dpkg-query -W -f='${Package}\n' 2>/dev/null; }
+# every package name this machine's apt sources carry, so a name the release
+# lacks is reported instead of failing the batch it is installed with
+list_available() { apt-cache pkgnames 2>/dev/null; }
 install_apps() { sudo apt install -fy "$@"; }
 
 install_from_list "apt" "$APP_LIST" apt

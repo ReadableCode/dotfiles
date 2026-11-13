@@ -107,10 +107,25 @@ install_planned() {
     fi
     if install_apps "${planned[@]}"; then
         report_apps "app.installed" "$label" "${planned[@]}"
-    else
+        return 0
+    fi
+    if [ "${#planned[@]}" -eq 1 ]; then
         report_apps "app.install-failed" "$label" "${planned[@]}"
         return 1
     fi
+    # One bad name fails a whole batch, so the others go one at a time and the
+    # page names only the ones that really failed.
+    echo "The batch failed; installing the $label apps one at a time."
+    local failed=0
+    for app in "${planned[@]}"; do
+        if install_apps "$app"; then
+            report_apps "app.installed" "$label" "$app"
+        else
+            report_apps "app.install-failed" "$label" "$app"
+            failed=1
+        fi
+    done
+    return "$failed"
 }
 
 # One line per app for refresh_machine's closing page (src/refresh_report.py);
@@ -210,6 +225,30 @@ install_from_list() {
     local -a offered_ignored=()
     if [ -n "$OFFER_IGNORED" ] && [ "${#ignored_here[@]}" -gt 0 ]; then
         offered_ignored=("${ignored_here[@]}")
+    fi
+
+    # A name this machine's package sources do not carry (a package newer than
+    # the release, or one a release dropped) can only fail, and in a batch it
+    # fails every other package with it. Callers that can list what their
+    # sources offer define list_available; the rest skip this check.
+    if declare -F list_available > /dev/null && [ "${#pending[@]}" -gt 0 ]; then
+        local available
+        available="$(list_available | tr -d '\r' | sort -u)"
+        local -a unavailable=() offerable=()
+        for app in "${pending[@]}"; do
+            if printf '%s\n' "$available" | grep -qxF "$app"; then
+                offerable+=("$app")
+            else
+                unavailable+=("$app")
+            fi
+        done
+        if [ "${#unavailable[@]}" -gt 0 ]; then
+            echo
+            echo "Not in this machine's $label sources, so not offered (${#unavailable[@]}):"
+            printf '  %s\n' "${unavailable[@]}"
+        fi
+        pending=()
+        [ "${#offerable[@]}" -eq 0 ] || pending=("${offerable[@]}")
     fi
 
     if [ "${#pending[@]}" -eq 0 ]; then
