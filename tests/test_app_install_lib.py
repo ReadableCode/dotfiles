@@ -6,8 +6,17 @@ LIB = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
 
 # Stands in for an installer script: the caller-defined functions the library
 # calls, with installs that fail for any name in $BAD and log every call.
+# src/app_lists.py is stubbed too: $LIST is what --packages names, and this
+# machine ignores nothing.
 CALLER = """
 source "$LIB"
+app_lists_py() {
+    case "$1" in
+        --packages) cat "$LIST" ;;
+        --ignored) cat > /dev/null ;;
+        *) return 1 ;;
+    esac
+}
 list_installed() { :; }
 list_available() { printf '%s\\n' $AVAILABLE; }
 install_apps() {
@@ -16,7 +25,7 @@ install_apps() {
         case " $BAD " in *" $app "*) return 1 ;; esac
     done
 }
-install_from_list "apt" "$LIST"
+install_from_list "apt" apt
 """
 
 

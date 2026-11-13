@@ -8,7 +8,7 @@ apps. Source: [github.com/pingdotgg/t3code](https://github.com/pingdotgg/t3code)
 
 ## Requirements
 
-- Node.js `^22.16 || ^23.11 || >=24.10` (the Brewfile's `brew "node"` covers
+- Node.js `^22.16 || ^23.11 || >=24.10` (`node` in the brew list covers
   this) — only for the headless `npx t3` / `t3 serve` paths; the desktop
   app is self-contained
 - At least one coding agent CLI installed and authenticated (see below) —
@@ -33,8 +33,9 @@ own `keybindings.json` lacks and saves the file, and that file is its own
 
 ## Install (macOS)
 
-Included in `app_lists/Brewfile`, so `brew bundle` installs it. To install
-standalone:
+Listed as the cask `t3-code` in the context app lists
+(`<context>_app_lists.yaml`), so `scripts/install_mac_apps.sh` installs it on a
+member Mac. To install standalone:
 
 ```bash
 brew install --cask t3-code
@@ -335,8 +336,8 @@ sections below; this is the order that matters.
    installed and authed (`claude auth login`), `gh` signed in to the
    personal account if this machine should have GitHub integration
    (`gh auth status` to check). **On a Mac, install T3 Code with brew** —
-   `brew bundle` from `app_lists/Brewfile` (it's in there as
-   `cask "t3-code"`), or standalone `brew install --cask t3-code`. Don't use
+   `scripts/install_mac_apps.sh` (the context app lists carry it as the cask
+   `t3-code`), or standalone `brew install --cask t3-code`. Don't use
    the downloaded installer or `npx t3` on a Mac; brew keeps it tracked and
    updatable with everything else.
 2. **Launch T3 Code once** ("T3 Code (Alpha)" in /Applications) so it creates
@@ -899,10 +900,10 @@ to prepare fixes.
 Reading the source needs nothing beyond the clone. Building or running it needs:
 
 - `vp` (Vite+), installed with the vendor script `curl -fsSL https://vite.plus | bash`.
-  Not in the Brewfile because it is not a formula; add it to
+  Not in the brew list because it is not a formula; add it to
   `app_lists/mac_apps_non_brew.md` before installing it on any machine.
 - Node `^24.13.1` (`package.json` engines) and `pnpm@11.10.0`, which `vp`
-  provisions. The Brewfile's `node` is 26 here, so expect an engines warning.
+  provisions. The brew list's `node` is 26 here, so expect an engines warning.
 - `vp i` in the checkout, then `vp run dev --home-dir /tmp/t3code-dev` (server
   plus web) or `vp run dev:desktop`. **Never run a dev server against
   `~/.t3/userdata`**; the main checkout defaults to `~/.t3/dev/userdata` and a

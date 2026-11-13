@@ -7,12 +7,13 @@
 #   install_apps            installs the package names passed as arguments
 #
 #   source "$SCRIPT_DIR/app_install_lib.sh"
-#   install_from_list "apt" "$APP_LIST" apt
+#   install_from_list "apt" apt
 #
-# The optional third argument is the package manager, as src/app_lists.py names
-# it; with it, the names this machine's contexts add for that manager (each
-# member context's <context>_app_lists.yaml) join the list. A lookup that fails
-# installs nothing rather than a list that only looks complete.
+# The second argument is the package manager, as src/app_lists.py names it.
+# `src/app_lists.py --packages <manager>` gives the names: app_lists/base_app_lists.yaml
+# plus each member context's <context>_app_lists.yaml, gated for this machine.
+# A lookup that fails installs nothing rather than a list that only looks
+# complete.
 #
 # The list is shown as already-installed vs pending, then one question asks
 # whether to go through the pending apps at all. Saying yes asks about each
@@ -20,9 +21,7 @@
 # the last answer does anything install, all of it in one go. An ignored app is
 # written to ~/.dotfiles_ignored_apps (src/app_lists.py owns that file) and
 # never offered here again; every run that leaves one out names the file at its
-# end, since deleting the line is how to be offered it again. Ignoring needs
-# the manager argument, so the installers without one (Termux, MSYS2) offer
-# only yes or no.
+# end, since deleting the line is how to be offered it again.
 #
 # OFFER_IGNORED=1 is the other way back, and what installmissing sets: the
 # ignored apps are asked about with the rest, marked, and each one answered
@@ -40,18 +39,12 @@
 #                  for every package manager before the first install starts.
 #   APP_PLAN       the file the two phases share
 
-read_app_list() {
-    # Strips CRs, blank lines, "#" comment lines and trailing "# ..." comments, so an
-    # app can be commented out for one run and the file reverted afterwards.
-    tr -d '\r' < "$1" | awk '{sub(/#.*/, ""); gsub(/^[ \t]+|[ \t]+$/, ""); if (length) print}'
-}
-
-# src/app_lists.py with the given arguments: context app lists and the ignore file.
+# src/app_lists.py with the given arguments: the app lists and the ignore file.
 app_lists_py() {
     local dotfiles
     dotfiles="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
     if ! command -v uv >/dev/null 2>&1; then
-        echo "uv not found, so this machine's context app lists cannot be read" >&2
+        echo "uv not found, so this machine's app lists cannot be read" >&2
         return 1
     fi
     uv run --project "$dotfiles" python "$dotfiles/src/app_lists.py" "$@"
@@ -69,19 +62,16 @@ ignored_note() {
 # not now, and q leaves the rest for next time. An app in offered_ignored is
 # one this machine ignores, asked about because OFFER_IGNORED is set.
 ask_each_app() {
-    local manager="$1" app answer
-    shift
+    local app answer
     for app in "$@"; do
         if [ "${#offered_ignored[@]}" -gt 0 ] && printf '%s\n' "${offered_ignored[@]}" | grep -qxF "$app"; then
             read -r -p "  $app (ignored here): [y]es, and stop ignoring / [N]ot now / [q]uit asking: " answer || answer=q
-        elif [ -n "$manager" ]; then
-            read -r -p "  $app: [y]es / [N]ot now / [i]gnore here / [q]uit asking: " answer || answer=q
         else
-            read -r -p "  $app: [y]es / [N]o / [q]uit asking: " answer || answer=q
+            read -r -p "  $app: [y]es / [N]ot now / [i]gnore here / [q]uit asking: " answer || answer=q
         fi
         case "$answer" in
             [Yy]*) chosen+=("$app") ;;
-            [Ii]*) [ -n "$manager" ] && to_ignore+=("$app") ;;
+            [Ii]*) to_ignore+=("$app") ;;
             [Qq]*) echo "  The rest are offered again next time."; return 0 ;;
         esac
     done
@@ -140,15 +130,16 @@ report_apps() {
 }
 
 install_from_list() {
-    local label="$1" list_file="$2" manager="$3"
+    local label="$1" manager="$2"
 
     if [ "$APP_PHASE" = "install" ]; then
         install_planned "$label"
         return
     fi
 
-    if [ ! -f "$list_file" ]; then
-        echo "App list not found: $list_file" >&2
+    local names
+    if ! names="$(app_lists_py --packages "$manager")"; then
+        echo "Could not read this machine's app lists for $manager; installing nothing." >&2
         return 1
     fi
 
@@ -159,25 +150,11 @@ install_from_list() {
     pending=()
     local line
     while IFS= read -r line; do
-        apps+=("$line")
-    done < <(read_app_list "$list_file")
-
-    if [ -n "$manager" ]; then
-        local extra
-        if ! extra="$(app_lists_py --overlay "$manager")"; then
-            echo "Could not read this machine's context app lists for $manager; installing nothing." >&2
-            return 1
-        fi
-        while IFS= read -r line; do
-            [ -n "$line" ] || continue
-            if [ "${#apps[@]}" -eq 0 ] || ! printf '%s\n' "${apps[@]}" | grep -qixF "$line"; then
-                apps+=("$line")
-            fi
-        done <<< "$extra"
-    fi
+        [ -n "$line" ] && apps+=("$line")
+    done <<< "$names"
 
     if [ "${#apps[@]}" -eq 0 ]; then
-        echo "No apps listed in $list_file — nothing to do."
+        echo "No $manager apps listed for this machine - nothing to do."
         return 0
     fi
 
@@ -194,7 +171,7 @@ install_from_list() {
     done
 
     echo
-    echo "########## $label: ${#apps[@]} apps in $(basename "$list_file")${manager:+ plus the context app lists} ##########"
+    echo "########## $label: ${#apps[@]} apps in app_lists/base_app_lists.yaml plus the context app lists ##########"
 
     if [ "${#installed[@]}" -gt 0 ]; then
         echo
@@ -203,7 +180,7 @@ install_from_list() {
     fi
 
     local -a ignored_here=()
-    if [ -n "$manager" ] && [ "${#pending[@]}" -gt 0 ]; then
+    if [ "${#pending[@]}" -gt 0 ]; then
         local skipped
         if ! skipped="$(printf '%s\n' "${pending[@]}" | app_lists_py --ignored "$manager")"; then
             echo "Could not read this machine's ignore file; installing nothing." >&2
@@ -278,7 +255,7 @@ install_from_list() {
         case "$answer" in
             [Yy]*)
                 chosen=()
-                ask_each_app "$manager" "${pending[@]}"
+                ask_each_app "${pending[@]}"
                 ;;
             *)
                 echo "Skipping $label for now; it is offered again next time."

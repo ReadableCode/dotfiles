@@ -1,14 +1,13 @@
-# Install Windows apps from a winget package id list.
+# Install the winget entries of app_lists/base_app_lists.yaml plus the ones this
+# machine's contexts add (src/app_lists.py --packages winget).
 # Set-ExecutionPolicy RemoteSigned may be needed to trust running this file.
 #
-# Usage: .\install_windows_apps_with_winget.ps1 [-AppList <path>] [-OfferIgnored] [-AssumeYes] [-DryRun]
-# Defaults to app_lists\windows_apps_personal_winget.txt relative to the repo root.
+# Usage: .\install_windows_apps_with_winget.ps1 [-OfferIgnored] [-AssumeYes] [-DryRun]
 #
 # winget does not need an elevated shell for most packages, but individual
 # installers may still prompt for elevation.
 
 param(
-    [string]$AppList,
     [switch]$OfferIgnored,
     [switch]$AssumeYes,
     [switch]$DryRun
@@ -16,16 +15,12 @@ param(
 
 . (Join-Path $PSScriptRoot 'AppInstallLib.ps1')
 
-if (-not $AppList) {
-    $AppList = Join-Path $PSScriptRoot '..\app_lists\windows_apps_personal_winget.txt'
-}
-
 if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Error "winget not found. Install App Installer from the Microsoft Store."
     exit 1
 }
 
-Install-FromList -Label 'winget' -AppList $AppList -Manager winget -OfferIgnored:$OfferIgnored -AssumeYes:$AssumeYes -DryRun:$DryRun `
+Install-FromList -Label 'winget' -Manager winget -OfferIgnored:$OfferIgnored -AssumeYes:$AssumeYes -DryRun:$DryRun `
     -ListInstalled {
         # winget list is fixed-width columns, so the Id is read by column offset taken
         # from the header. Pattern matching a dotted token instead picks up versions in

@@ -35,30 +35,128 @@ def write(directory, name, text):
     return path
 
 
+BASE = "base_app_lists.yaml"
+WSL = "5.15.167.4-microsoft-standard-WSL2"
+NOT_WSL = "6.8.0-45-generic"
+
+
+def base_file(directory):
+    """Where a test's own base_app_lists.yaml lives."""
+    return os.path.join(str(directory), BASE)
+
+
+def fake_run(responses):
+    def run(argv):
+        return responses.get(argv[0], (None, ""))
+
+    return run
+
+
 # %%
 # Dotfiles app lists #
 
 
-def test_app_list_drops_comments_and_blanks(tmp_path):
-    path = write(tmp_path, "linux_apps.txt", "# header\n\ntmux\nbtop # inline note\n  \n")
-    assert app_lists.read_app_list(path) == ["tmux", "btop"]
+def test_base_packages_reads_only_this_managers_entries(tmp_path):
+    path = write(tmp_path, BASE, "brew: [tmux]\ncask: [firefox]\n# cask: [commented]\napt:\n  - btop  # inline note\n")
+    assert app_lists.base_packages("brew", path) == {"tmux"}
+    assert app_lists.base_packages("cask", path) == {"firefox"}
+    assert app_lists.base_packages("apt", path) == {"btop"}
+    assert app_lists.base_packages("dnf", path) == set()
 
 
-def test_brewfile_separates_formulae_from_casks(tmp_path):
-    path = write(tmp_path, "Brewfile", 'brew "tmux"\ncask "firefox"\n# cask "commented"\n')
-    assert app_lists.read_brewfile(path, "brew") == ["tmux"]
-    assert app_lists.read_brewfile(path, "cask") == ["firefox"]
+def test_base_packages_sees_every_entry_whatever_its_gates(tmp_path):
+    """The "named anywhere" question removals ask: a hosts or wsl gate never hides a name from it."""
+    path = write(
+        tmp_path,
+        BASE,
+        "apt:\n  - samba\n  - {package: tmux, wsl: true}\n  - {package: barrier, hosts: [ELITEDESK]}\n",
+    )
+    assert app_lists.base_packages("apt", path) == {"samba", "tmux", "barrier"}
 
 
-def test_base_packages_reads_only_this_managers_lists(tmp_path):
-    write(tmp_path, "Brewfile", 'brew "tmux"\ncask "firefox"\n')
-    write(tmp_path, "linux_apps.txt", "btop\n")
-    assert app_lists.base_packages("cask", str(tmp_path)) == {"firefox"}
-    assert app_lists.base_packages("apt", str(tmp_path)) == {"btop"}
+def test_a_missing_base_app_lists_file_is_an_error(tmp_path):
+    """Installing nothing because the file moved would look like a machine with nothing to install."""
+    with pytest.raises(FileNotFoundError):
+        app_lists.base_packages("apt", base_file(tmp_path))
 
 
-def test_a_missing_app_list_is_not_an_error(tmp_path):
-    assert app_lists.base_packages("apt", str(tmp_path)) == set()
+def test_the_dotfiles_file_and_a_context_file_share_one_parser(tmp_path):
+    base = write(tmp_path, BASE, "choco: [7zip]\n")
+    overlay = write(tmp_path, "acme_app_lists.yaml", "choco: [slack, 7ZIP]\n")
+    assert app_lists.machine_packages("choco", base, [overlay], hostname="X") == ["7zip", "slack"]
+
+
+def test_the_installer_only_keys_are_read_but_not_managers(tmp_path):
+    path = write(tmp_path, BASE, "termux: [git]\nmsys2: [tmux]\n")
+    assert app_lists.machine_packages("termux", path, [], hostname="X") == ["git"]
+    assert app_lists.machine_packages("msys2", path, [], hostname="X") == ["tmux"]
+    assert "termux" not in app_lists.MANAGERS and "msys2" not in app_lists.MANAGERS
+
+
+# %%
+# The wsl flag #
+
+
+def test_on_wsl_only_the_wsl_apt_entries_apply(tmp_path):
+    path = write(tmp_path, BASE, "apt:\n  - samba\n  - {package: tmux, wsl: true}\n")
+    assert app_lists.machine_packages("apt", path, [], hostname="X", release=WSL) == ["tmux"]
+
+
+def test_off_wsl_every_apt_entry_applies(tmp_path):
+    path = write(tmp_path, BASE, "apt:\n  - samba\n  - {package: tmux, wsl: true}\n")
+    assert app_lists.machine_packages("apt", path, [], hostname="X", release=NOT_WSL) == ["samba", "tmux"]
+
+
+def test_wsl_detection_reads_the_kernel_release():
+    assert app_lists.on_wsl(WSL)
+    assert app_lists.on_wsl("4.4.0-19041-Microsoft")
+    assert not app_lists.on_wsl(NOT_WSL)
+
+
+def test_the_wsl_gate_leaves_other_managers_alone(tmp_path):
+    path = write(tmp_path, BASE, "dnf: [samba]\nbrew: [tmux]\n")
+    assert app_lists.machine_packages("dnf", path, [], hostname="X", release=WSL) == ["samba"]
+    assert app_lists.machine_packages("brew", path, [], hostname="X", release=WSL) == ["tmux"]
+
+
+def test_a_context_apt_entry_follows_the_same_wsl_gate(tmp_path):
+    base = write(tmp_path, BASE, "apt: [{package: tmux, wsl: true}]\n")
+    overlay = write(tmp_path, "acme_app_lists.yaml", "apt:\n  - steam\n  - {package: unixodbc, wsl: true}\n")
+    assert app_lists.machine_packages("apt", base, [overlay], hostname="X", release=WSL) == ["tmux", "unixodbc"]
+    assert app_lists.overlay_packages("apt", [overlay], hostname="X", release=NOT_WSL) == ["steam", "unixodbc"]
+
+
+def test_wsl_and_hosts_gate_one_entry_together(tmp_path):
+    path = write(tmp_path, BASE, "apt:\n  - {package: tmux, wsl: true, hosts: [WSLBOX]}\n")
+    assert app_lists.machine_packages("apt", path, [], hostname="WSLBOX", release=WSL) == ["tmux"]
+    assert app_lists.machine_packages("apt", path, [], hostname="OTHER", release=WSL) == []
+    assert app_lists.machine_packages("apt", path, [], hostname="WSLBOX", release=NOT_WSL) == ["tmux"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "apt:\n  - {package: tmux, wsl: false}\n",
+        "apt:\n  - {package: tmux, wsl: yes please}\n",
+        "brew:\n  - {package: tmux, wsl: true}\n",
+    ],
+)
+def test_wsl_takes_true_and_only_on_apt(tmp_path, text):
+    path = write(tmp_path, BASE, text)
+    with pytest.raises(ValueError, match=r"wsl: true \(apt only\)"):
+        app_lists.read_lists(path)
+
+
+def test_missing_on_wsl_reads_only_the_wsl_entries(tmp_path):
+    write(tmp_path, BASE, "apt:\n  - samba\n  - {package: tmux, wsl: true}\n  - {package: htop, wsl: true}\n")
+    missing, _, _, _ = app_lists.missing_packages(
+        which=lambda name: name == "apt-get",
+        run=fake_run({"dpkg-query": (0, "htop\n")}),
+        lists_file=base_file(tmp_path),
+        overlay_paths=[],
+        release=WSL,
+    )
+    assert missing == ["apt:tmux"]
 
 
 # %%
@@ -81,9 +179,9 @@ def test_the_same_name_in_two_contexts_is_offered_once_whatever_its_case(tmp_pat
 
 
 def test_wanted_packages_is_the_union_of_both_sources(tmp_path):
-    write(tmp_path, "windows_apps_personal_choco.txt", "7zip\n")
+    base = write(tmp_path, BASE, "choco: [7zip]\n")
     overlay = write(tmp_path, "acme_app_lists.yaml", "choco: [slack]\n")
-    assert app_lists.wanted_packages("choco", str(tmp_path), [overlay]) == {"7zip", "slack"}
+    assert app_lists.wanted_packages("choco", base, [overlay]) == {"7zip", "slack"}
 
 
 def test_a_hosts_scoped_entry_exists_only_on_those_hosts(tmp_path):
@@ -95,10 +193,10 @@ def test_a_hosts_scoped_entry_exists_only_on_those_hosts(tmp_path):
 
 
 def test_a_scoped_entry_is_not_wanted_elsewhere_so_a_removal_may_take_it(tmp_path):
-    write(tmp_path, "windows_apps_personal_choco.txt", "7zip\n")
+    base = write(tmp_path, BASE, "choco: [7zip]\n")
     overlay = write(tmp_path, "acme_app_lists.yaml", "choco:\n  - package: tightvnc\n    hosts: [RYZENWHITE]\n")
-    assert app_lists.wanted_packages("choco", str(tmp_path), [overlay], hostname="RYZENWHITE") == {"7zip", "tightvnc"}
-    assert app_lists.wanted_packages("choco", str(tmp_path), [overlay], hostname="ULTRAPOCKET") == {"7zip"}
+    assert app_lists.wanted_packages("choco", base, [overlay], hostname="RYZENWHITE") == {"7zip", "tightvnc"}
+    assert app_lists.wanted_packages("choco", base, [overlay], hostname="ULTRAPOCKET") == {"7zip"}
 
 
 def test_a_scoped_entry_needs_a_hosts_list_and_nothing_else(tmp_path):
@@ -108,7 +206,7 @@ def test_a_scoped_entry_needs_a_hosts_list_and_nothing_else(tmp_path):
         "choco:\n  - package: tightvnc\n    hosts: [X]\n    note: y\n",
     ):
         path = write(tmp_path, "acme_app_lists.yaml", text)
-        with pytest.raises(ValueError, match="non-empty hosts list and nothing else"):
+        with pytest.raises(ValueError, match="non-empty hosts list"):
             app_lists.load_overlay([path], hostname="X")
 
 
@@ -146,38 +244,41 @@ def test_discovery_reads_only_member_overlays(tmp_path, monkeypatch):
     assert app_lists.discover_app_lists() == [os.path.join(str(member), "acme_app_lists.yaml")]
 
 
-def test_the_cli_prints_one_overlay_name_per_line(tmp_path, monkeypatch, capsys):
+def test_the_cli_prints_the_base_names_then_the_contexts_one_per_line(tmp_path, monkeypatch, capsys):
+    base = write(tmp_path, BASE, "choco: [7zip, slack]\n")
     overlay = write(tmp_path, "acme_app_lists.yaml", "choco: [awscli, slack]\n")
+    monkeypatch.setattr(app_lists, "BASE_APP_LISTS", base)
     monkeypatch.setattr(app_lists, "discover_app_lists", lambda: [overlay])
-    assert app_lists.main(["--overlay", "choco"]) == 0
-    assert capsys.readouterr().out.splitlines() == ["awscli", "slack"]
+    assert app_lists.main(["--packages", "choco"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["7zip", "slack", "awscli"]
 
 
-def test_every_base_list_the_resolver_names_exists():
-    """A renamed or deleted app list must not silently drop out of the protection set."""
-    for manager, filenames in app_lists.BASE_LISTS.items():
-        for filename in filenames:
-            assert os.path.exists(os.path.join(app_lists.APP_LISTS, filename)), f"{manager}: {filename}"
+def test_the_cli_prints_an_installer_only_key(tmp_path, monkeypatch, capsys):
+    base = write(tmp_path, BASE, "msys2: [tmux, rsync]\n")
+    monkeypatch.setattr(app_lists, "BASE_APP_LISTS", base)
+    monkeypatch.setattr(app_lists, "discover_app_lists", lambda: [])
+    assert app_lists.main(["--packages", "msys2"]) == 0
+    assert capsys.readouterr().out.splitlines() == ["tmux", "rsync"]
+
+
+def test_the_committed_base_app_lists_load_with_every_key():
+    """A key renamed or dropped from the file must not silently drop out of the installs and the protection set."""
+    lists = app_lists.read_lists(app_lists.BASE_APP_LISTS)
+    assert set(lists) == set(app_lists.LIST_KEYS)
+    assert all(lists[key] for key in app_lists.LIST_KEYS)
 
 
 # %%
 # Missing apps #
 
 
-def fake_run(responses):
-    def run(argv):
-        return responses.get(argv[0], (None, ""))
-
-    return run
-
-
 def test_missing_lists_what_the_manager_does_not_report(tmp_path):
-    write(tmp_path, "windows_apps_personal_choco.txt", "7zip\nfirefox\n")
+    write(tmp_path, BASE, "choco: [7zip, firefox]\n")
     overlay = write(tmp_path, "acme_app_lists.yaml", "choco: [dbeaver]\n")
     missing, _, unanswered, _ = app_lists.missing_packages(
         which=lambda name: name == "choco",
         run=fake_run({"choco": (0, "7zip|24.0\n")}),
-        app_lists=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[overlay],
     )
     assert missing == ["choco:dbeaver", "choco:firefox"]
@@ -185,23 +286,26 @@ def test_missing_lists_what_the_manager_does_not_report(tmp_path):
 
 
 def test_missing_skips_managers_this_machine_does_not_have(tmp_path):
-    write(tmp_path, "windows_apps_personal_choco.txt", "7zip\n")
+    write(tmp_path, BASE, "choco: [7zip]\n")
     missing, _, unanswered, _ = app_lists.missing_packages(
-        which=lambda name: None, run=fake_run({}), app_lists=str(tmp_path), overlay_paths=[]
+        which=lambda name: None, run=fake_run({}), lists_file=base_file(tmp_path), overlay_paths=[]
     )
     assert (missing, unanswered) == ([], [])
 
 
 def test_a_manager_that_cannot_answer_is_reported(tmp_path):
-    write(tmp_path, "windows_apps_personal_choco.txt", "7zip\n")
+    write(tmp_path, BASE, "choco: [7zip]\n")
     missing, _, unanswered, _ = app_lists.missing_packages(
-        which=lambda name: name == "choco", run=fake_run({"choco": (1, "")}), app_lists=str(tmp_path), overlay_paths=[]
+        which=lambda name: name == "choco",
+        run=fake_run({"choco": (1, "")}),
+        lists_file=base_file(tmp_path),
+        overlay_paths=[],
     )
     assert unanswered == ["choco"]
 
 
 def test_missing_reads_winget_ids_from_its_list(tmp_path):
-    write(tmp_path, "windows_apps_personal_winget.txt", "T3Tools.T3Code\nMicrosoft.OpenSSH.Preview\n")
+    write(tmp_path, BASE, "winget: [T3Tools.T3Code, Microsoft.OpenSSH.Preview]\n")
     listing = (
         "Name     Id                        Version  Source\n"
         "-------------------------------------------------\n"
@@ -210,18 +314,18 @@ def test_missing_reads_winget_ids_from_its_list(tmp_path):
     missing, _, _, _ = app_lists.missing_packages(
         which=lambda name: name == "winget",
         run=fake_run({"winget": (0, listing)}),
-        app_lists=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
     )
     assert missing == ["winget:T3Tools.T3Code"]
 
 
 def test_a_versioned_formula_counts_as_installed(tmp_path):
-    write(tmp_path, "Brewfile", 'brew "python"\nbrew "tmux"\n')
+    write(tmp_path, BASE, "brew: [python, tmux]\n")
     missing, _, _, _ = app_lists.missing_packages(
         which=lambda name: name == "brew",
         run=fake_run({"brew": (0, "python@3.14\n")}),
-        app_lists=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
     )
     assert "brew:python" not in missing
@@ -230,7 +334,7 @@ def test_a_versioned_formula_counts_as_installed(tmp_path):
 
 def test_a_tap_formula_counts_as_installed_by_its_full_name(tmp_path):
     """brew lists a tap formula as "user/repo/formula" only with --full-name."""
-    write(tmp_path, "Brewfile", "")
+    write(tmp_path, BASE, "")
     overlay = write(tmp_path, "acme_app_lists.yaml", "brew: [acme/tools/widget, acme/tools/gadget]\n")
 
     def run(argv):
@@ -239,18 +343,13 @@ def test_a_tap_formula_counts_as_installed_by_its_full_name(tmp_path):
         return (0, "widget\njq\n") if argv[0] == "brew" else (None, "")
 
     missing, _, _, _ = app_lists.missing_packages(
-        which=lambda name: name == "brew", run=run, app_lists=str(tmp_path), overlay_paths=[overlay]
+        which=lambda name: name == "brew", run=run, lists_file=base_file(tmp_path), overlay_paths=[overlay]
     )
     assert missing == ["brew:acme/tools/gadget"]
 
 
-def test_wsl_reads_the_wsl_apt_list():
-    assert app_lists.installer_lists("apt", release="5.15.167.4-microsoft-standard-WSL2") == ("linux_apps_wsl.txt",)
-    assert app_lists.installer_lists("apt", release="6.8.0-45-generic") == ("linux_apps.txt",)
-
-
 def test_a_choco_app_installed_another_way_is_elsewhere_not_missing(tmp_path):
-    write(tmp_path, "windows_apps_personal_choco.txt", "tailscale\ndbeaver\n")
+    write(tmp_path, BASE, "choco: [tailscale, dbeaver]\n")
     listing = (
         "Name       Id                  Version  Source\n"
         "---------------------------------------------\n"
@@ -259,7 +358,7 @@ def test_a_choco_app_installed_another_way_is_elsewhere_not_missing(tmp_path):
     missing, elsewhere, _, _ = app_lists.missing_packages(
         which=lambda name: name in ("choco", "winget"),
         run=fake_run({"choco": (0, ""), "winget": (0, listing)}),
-        app_lists=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
     )
     assert missing == ["choco:dbeaver"]
@@ -349,11 +448,11 @@ def upgrade_run(choco_list="", terminal_open=False):
 
 
 def winget_plan(tmp_path, listed, choco_list="", terminal_open=False, holds=None):
-    write(tmp_path, "windows_apps_personal_winget.txt", "".join(f"{name}\n" for name in listed))
+    write(tmp_path, BASE, "winget: [" + ", ".join(listed) + "]\n")
     return app_lists.winget_upgrades(
         run=upgrade_run(choco_list, terminal_open),
         which=lambda name: True,
-        app_lists=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
         holds=holds or {},
     )
@@ -504,12 +603,12 @@ def test_a_missing_file_ignores_nothing():
 
 
 def test_an_ignored_app_is_not_reported_missing(tmp_path, own_ignore_file):
-    write(tmp_path, "Brewfile", 'brew "docker"\nbrew "tmux"\n')
+    write(tmp_path, BASE, "brew: [docker, tmux]\n")
     app_lists.record_ignored("brew", ["docker"])
     missing, _, _, ignored = app_lists.missing_packages(
         which=lambda name: name == "brew",
         run=fake_run({"brew": (0, "")}),
-        app_lists=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
     )
     assert missing == ["brew:tmux"]
@@ -564,15 +663,13 @@ def test_the_cli_rejects_an_unknown_manager_to_ignore_for():
 # %%
 # What any machine gets #
 
+# Apps a client machine must never get from a list every machine reads: they
+# belong in the personal context's app list only.
+PERSONAL_ONLY = ("tailscale", "angryip", "docker-desktop", "virtualbox", "nmap", "ollama")
 
-@pytest.mark.parametrize(
-    "filename",
-    ["Brewfile", "windows_apps_personal_choco.txt", "windows_apps_base_choco.txt", "windows_apps_personal_winget.txt"],
-)
-def test_no_any_machine_list_installs_tailscale(filename):
-    """These lists reach every machine, client machines included, and a client
-    machine must never get Tailscale: it belongs in the personal context's app
-    list only."""
-    with open(os.path.join(app_lists.APP_LISTS, filename), encoding="utf-8") as handle:
-        entries = [line.split("#")[0].strip().lower() for line in handle]
-    assert not [entry for entry in entries if "tailscale" in entry]
+
+@pytest.mark.parametrize("manager", app_lists.LIST_KEYS)
+def test_no_any_machine_list_installs_a_personal_only_app(manager):
+    """base_app_lists.yaml reaches every machine, client machines included, whatever an entry's gates."""
+    entries = [name.lower() for name in app_lists.base_packages(manager)]
+    assert not [entry for entry in entries for name in PERSONAL_ONLY if name in entry]

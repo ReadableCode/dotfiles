@@ -11,7 +11,7 @@ beta); non-beta differences are noted where relevant.
 
 ## Which Macs get Xcode
 
-Xcode is a per-host install, not a fleet one. Nothing in `app_lists/Brewfile`
+Xcode is a per-host install, not a fleet one. Nothing in `app_lists/base_app_lists.yaml`
 or a context's `<context>_app_lists.yaml` installs it, so bootstrap and
 myupdater never put it on a Mac; this page is the only way it arrives.
 
@@ -78,7 +78,7 @@ formula, which signs in to that same Apple ID and fetches the same `.xip`.
 
 `brew install xcodesorg/made/xcodes` **fails to build on macOS 27 beta**: no bottle exists for the pre-release OS, brew compiles from source, and the build dies linking an x86_64 slice against the macOS 27 SDK (`ld: symbol(s) not found for architecture x86_64`). Homebrew classifies beta macOS as Tier 2 (unsupported), and the tap's only bottles are tagged `mojave` (checked 2026-10-16 against xcodes 2.1.0), so every newer macOS builds it from source. The browser download is the method this page uses.
 
-If `xcodes` is wanted anyway, use the prebuilt binary from the project's GitHub releases instead of brew. On a **release** macOS with a bottle, `brew install xcodesorg/made/xcodes aria2` is the alternative (Brewfile syntax: `tap "xcodesorg/made"` + `brew "xcodesorg/made/xcodes"`), scoped to the Xcode host through its context's app list with `hosts:`, never the shared Brewfile.
+If `xcodes` is wanted anyway, use the prebuilt binary from the project's GitHub releases instead of brew. On a **release** macOS with a bottle, `brew install xcodesorg/made/xcodes aria2` is the alternative (app list entry: `{package: xcodesorg/made/xcodes, hosts: [<host>]}` under `brew`, which the installer taps and trusts), scoped to the Xcode host through its context's app list with `hosts:`, never the shared `app_lists/base_app_lists.yaml`.
 
 ---
 

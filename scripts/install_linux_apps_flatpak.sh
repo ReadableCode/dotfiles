@@ -1,15 +1,13 @@
 #!/bin/bash
-# Install flatpak applications from an app list.
-# Usage: install_linux_apps_flatpak.sh [app_list_file]
-# Defaults to app_lists/linux_apps_flatpak.txt relative to the repo root.
+# Install the flatpak entries of the app lists (src/app_lists.py --packages flatpak).
+# Usage: install_linux_apps_flatpak.sh
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-APP_LIST="${1:-$SCRIPT_DIR/../app_lists/linux_apps_flatpak.txt}"
 
 source "$SCRIPT_DIR/app_install_lib.sh"
 
 if ! command -v flatpak >/dev/null 2>&1; then
-    echo "flatpak not found - install it first (it is in linux_apps_dnf.txt)." >&2
+    echo "flatpak not found - install it first (it is in the dnf list of app_lists/base_app_lists.yaml)." >&2
     exit 1
 fi
 
@@ -22,4 +20,4 @@ sudo flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub
 list_installed() { flatpak list --app --columns=application; }
 install_apps() { sudo flatpak install -y flathub "$@"; }
 
-install_from_list "flatpak" "$APP_LIST" flatpak
+install_from_list "flatpak" flatpak

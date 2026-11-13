@@ -1,13 +1,13 @@
-# macOS installs that are not a Brewfile entry
+# macOS installs that are not a Homebrew list entry
 
 Everything that *is* a plain Homebrew formula or cask lives in a list with an installer:
 
 | List | Installer |
 |------|-----------|
-| `Brewfile` | `scripts/install_mac_apps.sh` |
+| `brew` and `cask` in `app_lists/base_app_lists.yaml` | `scripts/install_mac_apps.sh` |
 
 What is left here needs a vendor installer or the App Store, neither of which a
-Brewfile can express. `scripts/bootstrap.sh` prints a pointer
+package list can express. `scripts/bootstrap.sh` prints a pointer
 to this file at the end of a run.
 
 ## Logitech apps

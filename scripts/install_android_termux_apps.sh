@@ -1,10 +1,8 @@
 #!/bin/bash
-# Install Termux apps from an app list.
-# Usage: install_android_termux_apps.sh [app_list_file]
-# Defaults to app_lists/android_termux_apps.txt relative to the repo root.
+# Install the termux entries of the app lists (src/app_lists.py --packages termux).
+# Usage: install_android_termux_apps.sh
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-APP_LIST="${1:-$SCRIPT_DIR/../app_lists/android_termux_apps.txt}"
 
 source "$SCRIPT_DIR/app_install_lib.sh"
 
@@ -19,4 +17,4 @@ install_apps() {
     done
 }
 
-install_from_list "termux" "$APP_LIST"
+install_from_list "termux" termux

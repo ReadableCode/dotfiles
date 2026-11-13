@@ -17,7 +17,6 @@
 #   -DryRun             report what would happen and change nothing
 #   -AssumeYes          never prompt
 #   -SkipApps           skip the package install step
-#   -ChocoList PATH     which choco profile to install (default: the personal list)
 #   -Only TOOL          install one tool (git, uv or claude) and exit, without
 #                       touching anything else; refresh_machine.py offers this
 #                       when a step needs a tool the machine lacks
@@ -28,7 +27,6 @@ param(
     [switch]$DryRun,
     [switch]$AssumeYes,
     [switch]$SkipApps,
-    [string]$ChocoList,
     [ValidateSet('git', 'uv', 'claude')]
     [string]$Only
 )
@@ -293,9 +291,7 @@ if ($SkipApps) {
     } elseif (-not $isAdmin) {
         Write-Warn "choco packages skipped (needs an elevated shell)"
     } else {
-        $chocoArgs = @{ AssumeYes = $AssumeYes; DryRun = $DryRun }
-        if ($ChocoList) { $chocoArgs['AppList'] = $ChocoList }
-        & $chocoScript @chocoArgs
+        & $chocoScript -AssumeYes:$AssumeYes -DryRun:$DryRun
     }
 
     if (-not (Test-Path $wingetScript)) {

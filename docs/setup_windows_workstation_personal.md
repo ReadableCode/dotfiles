@@ -19,17 +19,16 @@ skipped rather than failing halfway through. It installs chocolatey, git and uv 
 missing, clones dotfiles to `%USERPROFILE%\GitHub`, runs `uv sync`, `clone_repos.py` and
 `deploy_configs.py`, then installs packages:
 
-| List | Installer |
+| List in `app_lists/base_app_lists.yaml` | Installer |
 | ------ | ----------- |
-| `app_lists\windows_apps_personal_choco.txt` (default) | `scripts\install_windows_apps_with_chocolatey.ps1` |
-| `app_lists\windows_apps_base_choco.txt` | same, via `-ChocoList` |
-| `app_lists\windows_apps_personal_winget.txt` | `scripts\install_windows_apps_with_winget.ps1` |
+| `choco` | `scripts\install_windows_apps_with_chocolatey.ps1` |
+| `winget` | `scripts\install_windows_apps_with_winget.ps1` |
 
-Each reports what is already installed and prompts once for the rest. Pass
-`-ChocoList <path>` to bootstrap to pick a different choco profile. Whichever
-list runs, the choco and winget apps this machine's contexts add (each member
-context's `<context>_app_lists.yaml`, through `src/app_lists.py`) join it: a
-client's cloud tools and chat app live there, not in these files.
+Each reports what is already installed and prompts once for the rest. Every
+Windows machine gets the same two lists, and the choco and winget apps this
+machine's contexts add (each member context's `<context>_app_lists.yaml`,
+through `src/app_lists.py --packages`) join them: a client's cloud tools and
+chat app live there, not in the base list.
 
 **What bootstrap does not do**, and you still need from the rest of this document:
 
@@ -194,8 +193,8 @@ were linked since the last login and were never launched.
 
 ### Which manager an app goes on
 
-An app sits on exactly one of `windows_apps_personal_choco.txt` and
-`windows_apps_personal_winget.txt` (or one key of a context's
+An app sits on exactly one of the `choco` and `winget` lists of
+`app_lists/base_app_lists.yaml` (or one key of a context's
 `<context>_app_lists.yaml`): the manager whose package offers the newer version.
 A tie goes to winget, which ships with Windows 11, needs no admin for per-user
 installs and no bootstrap; Chocolatey is kept where its package is ahead or
@@ -213,7 +212,7 @@ lets go.  Two contexts
 naming the same app on the same manager is fine: a machine in both is offered
 it once, so a client's list can grow to a full profile without a clash.
 
-The dotfiles lists hold what any Windows box gets; the home apps (games,
+The base list holds what any Windows box gets; the home apps (games,
 media, streaming, the VNC viewer and server) live in the personal context's
 list.
 
@@ -344,7 +343,7 @@ apps, Claude). Pins whose identity is an AUMID are packaged apps and have no
 
 - Follow instructions in [setup_windows_chocolatey.md](setup_windows_chocolatey.md)
 
-##### Or Use Bootstrap Script to Automatically Install Chocolatey and Install Apps From: [windows_apps_personal_choco.txt](../app_lists/windows_apps_personal_choco.txt)
+##### Or Use Bootstrap Script to Automatically Install Chocolatey and Install Apps From the `choco` List in [app_lists/base_app_lists.yaml](../app_lists/base_app_lists.yaml)
 
 - Open powershell as admin in the directory where you have the script saved and run command to use bootstrap script to install apps:
 

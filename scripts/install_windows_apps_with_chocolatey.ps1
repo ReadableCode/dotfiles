@@ -2,13 +2,11 @@
 # Set-ExecutionPolicy RemoteSigned
 # run by either double clicking or running the following command in an elevated powershell prompt
 #
-# Usage: .\install_windows_apps_with_chocolatey.ps1 [-AppList <path>] [-OfferIgnored] [-AssumeYes] [-DryRun]
-# Defaults to app_lists\windows_apps_personal_choco.txt relative to the repo root.
-# The base list is installed by passing -AppList. Either way, the choco names
-# this machine's contexts add (src/app_lists.py) join the list.
+# Usage: .\install_windows_apps_with_chocolatey.ps1 [-OfferIgnored] [-AssumeYes] [-DryRun]
+# Installs the choco entries of app_lists/base_app_lists.yaml plus the ones this
+# machine's contexts add (src/app_lists.py --packages choco).
 
 param(
-    [string]$AppList,
     [switch]$OfferIgnored,
     [switch]$AssumeYes,
     [switch]$DryRun
@@ -21,10 +19,6 @@ if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 . (Join-Path $PSScriptRoot 'AppInstallLib.ps1')
-
-if (-not $AppList) {
-    $AppList = Join-Path $PSScriptRoot '..\app_lists\windows_apps_personal_choco.txt'
-}
 
 # Check if Chocolatey is installed
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
@@ -41,7 +35,7 @@ if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     }
 }
 
-Install-FromList -Label 'choco' -AppList $AppList -Manager choco -OfferIgnored:$OfferIgnored -AssumeYes:$AssumeYes -DryRun:$DryRun `
+Install-FromList -Label 'choco' -Manager choco -OfferIgnored:$OfferIgnored -AssumeYes:$AssumeYes -DryRun:$DryRun `
     -ListInstalled {
         # "choco list" output is "<id> <version>" lines plus a trailing summary line.
         choco list --limit-output | ForEach-Object { ($_ -split '\|')[0] }

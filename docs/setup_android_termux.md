@@ -9,12 +9,16 @@ curl -fsSL https://raw.githubusercontent.com/ReadableCode/dotfiles/master/script
 ```
 
 Add `--dry-run` first to see what it would do without changing anything. Bootstrap
-detects Termux, installs git if missing, clones dotfiles to `~/GitHub`, and installs
-`app_lists/android_termux_apps.txt` via `scripts/install_android_termux_apps.sh`, which
-reports what is already installed and prompts once for the rest.
+detects Termux, installs git if missing, clones dotfiles to `~/GitHub`, and runs
+`scripts/install_android_termux_apps.sh` for the `termux` list in
+`app_lists/base_app_lists.yaml`, which reports what is already installed and prompts once
+for the rest.
 
-**Termux has no uv build**, so bootstrap skips the python steps there — `uv sync`,
-`clone_repos.py` and `deploy_configs.py` do not run, and it says so. Configs are not
+**Bootstrap does not set up uv on Termux** (Termux does package it, `pkg install uv`),
+so it skips the python steps there: `uv sync`, `clone_repos.py` and `deploy_configs.py`
+do not run, and it says so. The package installer reads its list through
+`src/app_lists.py --packages termux`, which runs under uv too, so it needs uv and a
+synced dotfiles environment before it can install anything. Configs are not
 deployed on Termux; treat it as a shell-and-tools machine.
 
 The rest of this page is the reference detail.

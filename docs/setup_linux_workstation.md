@@ -19,12 +19,12 @@ Bootstrap installs git, uv and claude code if missing, clones dotfiles to `~/Git
 `clone_repos.py`, `sync_python_envs.py` and `deploy_configs.py`, then installs packages
 with whichever manager the machine has:
 
-| Machine | List | Installer |
+| Machine | List in `app_lists/base_app_lists.yaml` | Installer |
 |---------|------|-----------|
-| Debian/Ubuntu | `app_lists/linux_apps.txt` | `scripts/install_linux_apps.sh` |
-| WSL | `app_lists/linux_apps_wsl.txt` | `scripts/install_linux_apps_wsl.sh` |
-| Fedora | `app_lists/linux_apps_dnf.txt` | `scripts/install_linux_apps_dnf.sh` |
-| any, if flatpak present | `app_lists/linux_apps_flatpak.txt` | `scripts/install_linux_apps_flatpak.sh` |
+| Debian/Ubuntu | `apt` | `scripts/install_linux_apps.sh` |
+| WSL | `apt`, only the entries marked `wsl: true` | `scripts/install_linux_apps.sh` |
+| Fedora | `dnf` | `scripts/install_linux_apps_dnf.sh` |
+| any, if flatpak present | `flatpak` | `scripts/install_linux_apps_flatpak.sh` |
 
 Each reports what is already installed and prompts once for the rest.
 
@@ -500,24 +500,23 @@ procedure, install with `apt install ./file.deb` rather than `dpkg -i`:
 
 ### Ubuntu/Debian
 
-Install all apps listed in `app_lists/linux_apps.txt`:
+Install the apt list of `app_lists/base_app_lists.yaml` (on WSL, only its
+`wsl: true` entries) plus the apt names this machine's contexts add:
 
 ```bash
-xargs sudo apt install -y < ~/GitHub/dotfiles/app_lists/linux_apps.txt
+~/GitHub/dotfiles/scripts/install_linux_apps.sh
 ```
 
 ### Raspberry Pi
 
-Same as above, but some packages may not be available for ARM (e.g. `steam`, `golang-go`). Skip those as needed:
-
-```bash
-xargs sudo apt install -y < ~/GitHub/dotfiles/app_lists/linux_apps.txt
-```
+Same as above. Some packages may not be available for ARM (e.g. `steam`,
+`golang-go`); the installer lists the names this machine's apt sources lack and
+does not offer them.
 
 ### Fedora
 
-Install all apps listed in `app_lists/linux_apps_dnf.txt`, the Fedora twin of
-`linux_apps.txt` under Fedora's package names:
+Install the dnf list of `app_lists/base_app_lists.yaml`, the Fedora twin of the apt
+list under Fedora's package names:
 
 ```bash
 ~/GitHub/dotfiles/scripts/install_linux_apps_dnf.sh

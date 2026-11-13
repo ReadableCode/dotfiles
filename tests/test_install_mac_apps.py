@@ -22,8 +22,6 @@ def run_install_phase(tmp_path, planned):
     brew = bin_dir / "brew"
     brew.write_text(FAKE_BREW)
     brew.chmod(brew.stat().st_mode | stat.S_IEXEC)
-    brewfile = tmp_path / "Brewfile"
-    brewfile.write_text("")
     plan = tmp_path / "plan.tsv"
     plan.write_text("".join(f"brew\t{name}\n" for name in planned))
     log = tmp_path / "brew.log"
@@ -34,7 +32,7 @@ def run_install_phase(tmp_path, planned):
         "APP_PLAN": str(plan),
         "BREW_LOG": str(log),
     }
-    subprocess.run(["bash", SCRIPT, str(brewfile)], env=env, check=True, capture_output=True, text=True)
+    subprocess.run(["bash", SCRIPT], env=env, check=True, capture_output=True, text=True)
     return log.read_text().splitlines()
 
 

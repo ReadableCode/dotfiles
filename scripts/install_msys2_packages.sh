@@ -1,10 +1,9 @@
 #!/bin/bash
-# Install MSYS2 packages from an app list. Run inside an MSYS2 shell.
-# Usage: install_msys2_packages.sh [app_list_file]
-# Defaults to app_lists/msys2_packages.txt relative to the repo root.
+# Install the msys2 entries of the app lists (src/app_lists.py --packages msys2).
+# Run inside an MSYS2 shell.
+# Usage: install_msys2_packages.sh
 
 SCRIPT_DIR="$(dirname "$(realpath "$0")")"
-APP_LIST="${1:-$SCRIPT_DIR/../app_lists/msys2_packages.txt}"
 
 source "$SCRIPT_DIR/app_install_lib.sh"
 
@@ -18,4 +17,4 @@ pacman -Syu --noconfirm
 list_installed() { pacman -Qq; }
 install_apps() { pacman -S --needed --noconfirm "$@"; }
 
-install_from_list "msys2" "$APP_LIST"
+install_from_list "msys2" msys2

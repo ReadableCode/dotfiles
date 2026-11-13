@@ -6,12 +6,13 @@ on this machine. It is the app-list twin of `deploy_configs.py prune`, and
 
 ## Why an explicit list and not "absent from the app list"
 
-The files in `app_lists/` name what should be **installed**. They are not an
-inventory of everything allowed to exist, so the negation is not a removal list:
+The app lists (`app_lists/base_app_lists.yaml` and each context's) name what should
+be **installed**. They are not an inventory of everything allowed to exist, so
+the negation is not a removal list:
 
 - most of `brew list` and nearly all of `dpkg -l` is dependencies nobody named
-- each platform keeps its manual installs in `linux_apps_non_apt.md` and
-  `mac_apps_non_brew.md` on purpose
+- each platform keeps its manual installs in `app_lists/linux_apps_non_apt.md`
+  and `app_lists/mac_apps_non_brew.md` on purpose
 
 Inverting an app list would propose uninstalling most of the machine. Retiring
 an app is therefore an explicit, committed line, exactly like retiring a config
@@ -69,11 +70,11 @@ run, rather than reading as "not installed".
 
 ## Context app lists
 
-`app_lists/` holds what every machine of a platform gets. What only one
-context's machines get - a client's cloud CLI, database client and chat app,
-the personal context's game, media and streaming apps - lives in that
-context's own repo as `<context>_app_lists.yaml`, keyed by the same manager
-names as the removals schema:
+`app_lists/base_app_lists.yaml` holds what every machine of a platform gets. What
+only one context's machines get - a client's cloud CLI, database client and
+chat app, the personal context's game, media and streaming apps - lives in that
+context's own repo as `<context>_app_lists.yaml`. Both are read by one parser,
+keyed by the same manager names as the removals schema:
 
 ```yaml
 choco: [awscli, dbeaver, slack]
@@ -82,15 +83,29 @@ cask: [slack]
 
 `src/app_lists.py` reads it from each overlay repo this machine is a member of,
 with the same gate as the overlay manifests, so a box holding a credentials repo
-only as its git hub gets none of it. Every installer in `scripts/` adds
-`app_lists.py --overlay <manager>` to the list it reads, and a lookup that fails
-installs nothing rather than a list that only looks complete. The removals side
+only as its git hub gets none of it. Every installer in `scripts/` gets its
+names from `app_lists.py --packages <manager>`: the base list, then each
+context's, gated for this machine. A lookup that fails installs nothing rather
+than a list that only looks complete.
+
+An entry can be scoped with `hosts:`, and an apt entry can carry `wsl: true`.
+On a WSL machine only the `wsl: true` apt entries apply (the CLI tools), and
+everywhere else every apt entry does. The gates hold in every file, a
+context's included:
+
+```yaml
+apt:
+  - samba
+  - {package: tmux, wsl: true}
+```
+
+The removals side asks a wider question of the base list: any entry it
+names protects that package, whatever its gates. The removals side
 protects the union: a package any context list names is never offered.
 `app_lists.py` with no arguments prints the whole list for this machine, and
-`--where` prints the context files it read. Two contexts may name the same
-app: the overlay is deduplicated case-insensitively, both installers add only
-the names their dotfiles list lacks, and the installed check runs before the
-prompt, so a machine in both contexts sees the app once and never installs it
+`--where` prints the context files it read. Two lists may name the same
+app: `--packages` deduplicates case-insensitively, keeping the first spelling,
+and the installed check runs before the prompt, so a machine in both contexts sees the app once and never installs it
 twice. The one clash is the same app on two managers, below. A context lists each of its apps for
 every OS its machines run - a client's chat app on macOS and on Windows alike.
 
@@ -326,7 +341,7 @@ what is present without asking.
 
 ## Workflow
 
-1. drop the package from its `app_lists/` file (or scope the entry with
+1. drop the package from its app list (or scope the entry with
    `hosts:` so it stays on the machines that should keep it)
 2. add an entry here
 3. every machine is offered the removal on its next `myupdater`

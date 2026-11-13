@@ -2,12 +2,11 @@
 
 Everything that *is* a plain package name now lives in a list with an installer:
 
-| List | Installer |
+| List in `app_lists/base_app_lists.yaml` | Installer |
 |------|-----------|
-| `linux_apps.txt` | `scripts/install_linux_apps.sh` (apt) |
-| `linux_apps_wsl.txt` | `scripts/install_linux_apps_wsl.sh` (apt, CLI subset) |
-| `linux_apps_dnf.txt` | `scripts/install_linux_apps_dnf.sh` (Fedora) |
-| `linux_apps_flatpak.txt` | `scripts/install_linux_apps_flatpak.sh` (flathub) |
+| `apt` | `scripts/install_linux_apps.sh` (on WSL only the `wsl: true` entries) |
+| `dnf` | `scripts/install_linux_apps_dnf.sh` (Fedora) |
+| `flatpak` | `scripts/install_linux_apps_flatpak.sh` (flathub) |
 
 What is left here needs a third-party repo, a vendor script, hardware-specific
 packages, or a step after the install — none of which a package list can express.
@@ -33,7 +32,7 @@ deploys `~/.config/uv/uv.toml` with `python-downloads = "automatic"` and
 `python-preference = "managed"`, which take precedence, so uv picks and downloads Pythons
 the same way it does on macOS.
 
-On Fedora, uv needs `libxcrypt-compat` (in `linux_apps_dnf.txt`) or it fails to start.
+On Fedora, uv needs `libxcrypt-compat` (in the dnf list) or it fails to start.
 Then, in a repo:
 
 ```bash
@@ -44,13 +43,13 @@ uv sync
 ## Tailscale
 
 Needs Tailscale's own package repo, which its vendor script adds, so it cannot go in
-`linux_apps.txt`. Install and setup, including subnet routers:
+the apt list. Install and setup, including subnet routers:
 [setup_tailscale.md](../docs/setup_tailscale.md).
 
 ## VS Code on Fedora
 
 Needs the Microsoft repo added before `dnf install code` will resolve, so it cannot go
-in `linux_apps_dnf.txt`:
+in the dnf list:
 
 ```bash
 sudo rpm --import https://packages.microsoft.com/keys/microsoft.asc
@@ -63,7 +62,7 @@ The yum repo can lag the current release by up to three hours.
 
 ## Parsec on Fedora: GPU drivers
 
-Parsec itself is in `linux_apps_flatpak.txt`. Hardware acceleration is not — the driver
+Parsec itself is in the flatpak list. Hardware acceleration is not: the driver
 packages depend on the GPU in the machine.
 
 NVIDIA:

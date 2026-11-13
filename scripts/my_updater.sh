@@ -23,14 +23,14 @@
 # package updates live in scripts/my_updater.ps1.
 #
 # NO PER-PACKAGE OR PER-CONTEXT SPECIAL CASES HERE. Individual packages are
-# installed by the app_lists/ + scripts/install_*.sh path and upgraded by the
-# bulk apt/dnf/brew commands below, whatever they are. If a package needs a
+# installed by the app_lists/base_app_lists.yaml + scripts/install_*.sh path and
+# upgraded by the bulk apt/dnf/brew commands below, whatever they are. If a package needs a
 # third-party apt source first (VS Code, Chrome) that is one-time machine setup
 # and belongs in docs/setup_linux_workstation.md, not here. A check that only
 # one context's machines need (a work VPN client, say) lives in a repo that
 # context owns and is wired up per host through the inventory, never inline
 # here, where it would run as a no-op on every other machine. An install path
-# for a package the app_lists already carry is duplication. Don't add their
+# for a package the app lists already carry is duplication. Don't add their
 # like.
 #
 # One exception, and why it is not a per-package case: uv. bootstrap installs
@@ -1440,9 +1440,9 @@ fi
 
 echo "############ System Info ############"
 
-# Display only. fastfetch is an ordinary entry in app_lists/ (linux_apps.txt,
-# linux_apps_wsl.txt, Brewfile, android_termux_apps.txt), so the install scripts
-# own installing it like anything else — this script does not.
+# Display only. fastfetch is an ordinary entry in app_lists/base_app_lists.yaml (brew,
+# apt with wsl: true, dnf, termux), so the install scripts own installing it
+# like anything else; this script does not.
 if command -v fastfetch &> /dev/null; then
     fastfetch
 else

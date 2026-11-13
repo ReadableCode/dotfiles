@@ -1,2 +1,0 @@
-# What any Windows box gets; see windows_apps_personal_choco.txt for the split.
-Microsoft.OpenSSH.Preview

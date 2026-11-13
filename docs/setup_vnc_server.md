@@ -321,7 +321,7 @@ mkdir -p ~/.vnc
 tigervncpasswd
 ```
 
-`tigervnc-standalone-server` is deliberately not in `app_lists/linux_apps.txt`:
+`tigervnc-standalone-server` is deliberately not in the apt list of `app_lists/base_app_lists.yaml`:
 that list installs on every Linux box, and not every Linux box should answer on
 a VNC port.
 

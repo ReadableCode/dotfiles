@@ -23,6 +23,14 @@ def write_removals(directory, entries, name="app_removals.yaml"):
     return path
 
 
+BASE = "base_app_lists.yaml"
+
+
+def base_file(directory):
+    """Where a test's own base_app_lists.yaml lives."""
+    return os.path.join(str(directory), BASE)
+
+
 def write_list(directory, name, lines):
     os.makedirs(str(directory), exist_ok=True)
     path = os.path.join(str(directory), name)
@@ -107,13 +115,13 @@ def test_a_removals_file_must_be_a_list(tmp_path):
 
 
 def test_an_installed_listed_app_is_removable(tmp_path):
-    write_list(tmp_path, "Brewfile", [])
+    write_list(tmp_path, BASE, [])
     removable, protected = pair(
         app_removals.candidates(
             [dict(CASK_ENTRY)],
             system="Darwin",
             hostname="ENVY",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"brew": (0, "vnc-viewer\nslack\n")}),
         )
@@ -124,13 +132,13 @@ def test_an_installed_listed_app_is_removable(tmp_path):
 
 def test_an_app_list_still_naming_the_package_wins(tmp_path):
     """The whole point of the guard: re-adding a package beats a stale removal line."""
-    write_list(tmp_path, "Brewfile", ['cask "vnc-viewer"'])
+    write_list(tmp_path, BASE, ["cask: [vnc-viewer]"])
     removable, protected = pair(
         app_removals.candidates(
             [dict(CASK_ENTRY)],
             system="Darwin",
             hostname="ENVY",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"brew": (0, "vnc-viewer\n")}),
         )
@@ -141,7 +149,7 @@ def test_an_app_list_still_naming_the_package_wins(tmp_path):
 
 def test_a_tap_formula_in_an_app_list_protects_its_installed_name(tmp_path):
     """A context lists a tap formula in full; brew and a removal name it by its last segment."""
-    write_list(tmp_path, "Brewfile", [])
+    write_list(tmp_path, BASE, [])
     overlay = write_list(tmp_path, "acme_app_lists.yaml", ["brew: [acme/tools/widget]"])
     entry = {"name": "retired_widget", "manager": "brew", "package": "widget"}
     removable, protected = pair(
@@ -149,7 +157,7 @@ def test_a_tap_formula_in_an_app_list_protects_its_installed_name(tmp_path):
             [entry],
             system="Darwin",
             hostname="ENVY",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[overlay],
             run=fake_run({"brew": (0, "widget\n")}),
         )
@@ -159,13 +167,13 @@ def test_a_tap_formula_in_an_app_list_protects_its_installed_name(tmp_path):
 
 
 def test_a_package_that_is_not_installed_is_not_offered(tmp_path):
-    write_list(tmp_path, "Brewfile", [])
+    write_list(tmp_path, BASE, [])
     removable, _ = pair(
         app_removals.candidates(
             [dict(CASK_ENTRY)],
             system="Darwin",
             hostname="ENVY",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"brew": (0, "slack\n")}),
         )
@@ -174,13 +182,13 @@ def test_a_package_that_is_not_installed_is_not_offered(tmp_path):
 
 
 def test_entries_for_another_platform_are_skipped(tmp_path):
-    write_list(tmp_path, "Brewfile", [])
+    write_list(tmp_path, BASE, [])
     removable, protected = pair(
         app_removals.candidates(
             [dict(CASK_ENTRY)],
             system="Linux",
             hostname="NUKBUNTU",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"brew": (0, "vnc-viewer\n")}),
         )
@@ -189,17 +197,22 @@ def test_entries_for_another_platform_are_skipped(tmp_path):
 
 
 def test_the_hosts_filter_gates_an_entry(tmp_path):
-    write_list(tmp_path, "Brewfile", [])
+    write_list(tmp_path, BASE, [])
     entry = dict(CASK_ENTRY, hosts=["MacBookProM5"])
     responses = fake_run({"brew": (0, "vnc-viewer\n")})
     on_envy, _ = pair(
         app_removals.candidates(
-            [entry], system="Darwin", hostname="ENVY", lists_dir=str(tmp_path), overlay_paths=[], run=responses
+            [entry], system="Darwin", hostname="ENVY", lists_file=base_file(tmp_path), overlay_paths=[], run=responses
         )
     )
     on_macbook, _ = pair(
         app_removals.candidates(
-            [entry], system="Darwin", hostname="MACBOOKPROM5", lists_dir=str(tmp_path), overlay_paths=[], run=responses
+            [entry],
+            system="Darwin",
+            hostname="MACBOOKPROM5",
+            lists_file=base_file(tmp_path),
+            overlay_paths=[],
+            run=responses,
         )
     )
     assert on_envy == []
@@ -208,25 +221,30 @@ def test_the_hosts_filter_gates_an_entry(tmp_path):
 
 def test_a_manager_that_is_not_installed_offers_nothing(tmp_path):
     """A box with no flatpak has no flatpak removals; that is not a failure."""
-    write_list(tmp_path, "linux_apps_flatpak.txt", [])
+    write_list(tmp_path, BASE, [])
     entry = {"name": "gone", "manager": "flatpak", "package": "com.example.App"}
     removable, _ = pair(
         app_removals.candidates(
-            [entry], system="Linux", hostname="NUKBUNTU", lists_dir=str(tmp_path), overlay_paths=[], run=fake_run({})
+            [entry],
+            system="Linux",
+            hostname="NUKBUNTU",
+            lists_file=base_file(tmp_path),
+            overlay_paths=[],
+            run=fake_run({}),
         )
     )
     assert removable == []
 
 
 def test_choco_output_is_split_on_its_separator(tmp_path):
-    write_list(tmp_path, "windows_apps_personal_choco.txt", [])
+    write_list(tmp_path, BASE, [])
     entry = {"name": "gone", "manager": "choco", "package": "vnc-viewer"}
     removable, _ = pair(
         app_removals.candidates(
             [entry],
             system="Windows",
             hostname="RYZENWHITE",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"choco": (0, "vnc-viewer|8.5.0\ntightvnc|2.8.88\n")}),
         )
@@ -236,14 +254,14 @@ def test_choco_output_is_split_on_its_separator(tmp_path):
 
 def test_winget_presence_is_asked_per_id(tmp_path):
     """winget list is fixed-width columns, so presence is an exit code, not parsed text."""
-    write_list(tmp_path, "windows_apps_personal_winget.txt", [])
+    write_list(tmp_path, BASE, [])
     entry = {"name": "gone", "manager": "winget", "package": "RealVNC.VNC-Connect"}
     removable, _ = pair(
         app_removals.candidates(
             [entry],
             system="Windows",
             hostname="RYZENWHITE",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"winget": (0, "")}),
         )
@@ -252,14 +270,14 @@ def test_winget_presence_is_asked_per_id(tmp_path):
 
 
 def test_installed_lookup_is_case_insensitive(tmp_path):
-    write_list(tmp_path, "windows_apps_personal_choco.txt", [])
+    write_list(tmp_path, BASE, [])
     entry = {"name": "gone", "manager": "choco", "package": "VNC-Viewer"}
     removable, _ = pair(
         app_removals.candidates(
             [entry],
             system="Windows",
             hostname="RYZENWHITE",
-            lists_dir=str(tmp_path),
+            lists_file=base_file(tmp_path),
             overlay_paths=[],
             run=fake_run({"choco": (0, "vnc-viewer|8.5.0\n")}),
         )
@@ -505,7 +523,7 @@ def test_a_capability_is_removable_once_its_replacement_is_installed(tmp_path):
         [dict(CAPABILITY_ENTRY)],
         system="Windows",
         hostname="RYZENWHITE",
-        lists_dir=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
         run=windows_run(),
     )
@@ -518,7 +536,7 @@ def test_a_capability_waits_while_its_replacement_is_missing(tmp_path):
         [dict(CAPABILITY_ENTRY)],
         system="Windows",
         hostname="SHELLY",
-        lists_dir=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
         run=windows_run(winget_code=1),
     )
@@ -532,7 +550,7 @@ def test_a_capability_query_that_fails_is_reported_not_absent(tmp_path):
         [dict(CAPABILITY_ENTRY)],
         system="Windows",
         hostname="RYZENWHITE",
-        lists_dir=str(tmp_path),
+        lists_file=base_file(tmp_path),
         overlay_paths=[],
         run=windows_run(capabilities=(1, "Access is denied")),
     )
@@ -602,8 +620,8 @@ def duplicate_run(choco="slack|4.51.191\n"):
 
 
 def test_the_choco_owned_copy_is_kept_and_the_other_offered(tmp_path):
-    write_list(tmp_path, "windows_apps_personal_choco.txt", ["slack"])
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, ["choco: [slack]"])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_file=base_file(tmp_path), overlay_paths=[])
     assert [group.id for group in groups] == ["SlackTechnologies.Slack"]
     group = groups[0]
     assert group.owned_by == "choco:slack"
@@ -612,29 +630,33 @@ def test_the_choco_owned_copy_is_kept_and_the_other_offered(tmp_path):
 
 
 def test_a_context_app_list_can_own_the_copy(tmp_path):
+    write_list(tmp_path, BASE, [])
     overlay = tmp_path / "acme_app_lists.yaml"
     overlay.write_text("choco: [slack]\n")
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[str(overlay)])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_file=base_file(tmp_path), overlay_paths=[str(overlay)])
     assert groups[0].owned_by == "choco:slack"
 
 
 def test_an_app_no_list_names_is_flagged_and_left_alone(tmp_path):
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, [])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_file=base_file(tmp_path), overlay_paths=[])
     assert groups[0].owner is None
     assert "no app list names" in groups[0].reason
 
 
 def test_a_winget_listed_duplicate_is_flagged_not_guessed(tmp_path):
     """Both rows answer to the winget id, so which one winget installed cannot be told."""
-    write_list(tmp_path, "windows_apps_personal_winget.txt", ["SlackTechnologies.Slack"])
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(choco=""), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, ["winget: [SlackTechnologies.Slack]"])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(choco=""), lists_file=base_file(tmp_path), overlay_paths=[])
     assert groups[0].owner is None
     assert "which one winget installed" in groups[0].reason
 
 
 def test_a_choco_version_matching_no_row_names_no_owner(tmp_path):
-    write_list(tmp_path, "windows_apps_personal_choco.txt", ["slack"])
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(choco="slack|4.40.0\n"), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, ["choco: [slack]"])
+    groups = REAL_DUPLICATE_GROUPS(
+        run=duplicate_run(choco="slack|4.40.0\n"), lists_file=base_file(tmp_path), overlay_paths=[]
+    )
     assert groups[0].owner is None
     assert "matches no copy" in groups[0].reason
 
@@ -713,9 +735,8 @@ def test_duplicates_are_not_looked_for_off_windows(monkeypatch):
 
 def test_an_app_on_both_lists_is_a_conflict_not_an_offer(tmp_path):
     """choco's claude and winget's Anthropic.Claude are both the repo's; removing either fights myupdater."""
-    write_list(tmp_path, "windows_apps_personal_choco.txt", ["slack"])
-    write_list(tmp_path, "windows_apps_personal_winget.txt", ["SlackTechnologies.Slack"])
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, ["choco: [slack]", "winget: [SlackTechnologies.Slack]"])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_file=base_file(tmp_path), overlay_paths=[])
     assert groups[0].owner is None
     assert groups[0].listed
     assert "two app lists install it" in groups[0].reason
@@ -740,8 +761,8 @@ def test_show_all_lists_the_unlisted_duplicates(capsys):
 
 def test_an_app_the_winget_list_owns_offers_chocos_leftover_to_choco(tmp_path):
     """Moved from choco to winget: the copy choco installed goes, and choco removes its own."""
-    write_list(tmp_path, "windows_apps_personal_winget.txt", ["SlackTechnologies.Slack"])
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, ["winget: [SlackTechnologies.Slack]"])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_file=base_file(tmp_path), overlay_paths=[])
     group = groups[0]
     assert group.owned_by == "winget:SlackTechnologies.Slack"
     assert group.owner.version == "4.52.162"
@@ -752,8 +773,8 @@ def test_an_app_the_winget_list_owns_offers_chocos_leftover_to_choco(tmp_path):
 
 def test_the_owner_is_the_listed_choco_package_even_when_its_copy_is_older(tmp_path):
     """myupdater upgrades before it removes, so the choco copy is current by the time this runs."""
-    write_list(tmp_path, "windows_apps_personal_choco.txt", ["slack"])
-    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_dir=str(tmp_path), overlay_paths=[])
+    write_list(tmp_path, BASE, ["choco: [slack]"])
+    groups = REAL_DUPLICATE_GROUPS(run=duplicate_run(), lists_file=base_file(tmp_path), overlay_paths=[])
     assert groups[0].owner.version == "4.51.191.0"
 
 

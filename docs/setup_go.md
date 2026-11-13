@@ -7,7 +7,7 @@ Go installs itself on this fleet. `scripts/ensure_go.sh` (and
 the machine has none:
 
 - `scripts/bootstrap.sh` / `bootstrap.ps1` run it as their own step.
-- `go` is on every platform app list (`app_lists/*`), so the normal package
+- `go` is on every platform app list (`app_lists/base_app_lists.yaml`), so the normal package
   install covers it too.
 
 The rest of this page is what those scripts do, for when one of them cannot.

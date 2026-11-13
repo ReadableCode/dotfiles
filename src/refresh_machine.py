@@ -79,7 +79,7 @@ HELP_PAGE = """# refresh_machine
    on windows, also offer the extra copy of an app an app list installs, found by winget, not declared
    runs `src/app_removals.py`
 7b. with `--packages` only: offer the app list entries this machine does not have
-   the dotfiles `app_lists/` plus each member context's `<context>_app_lists.yaml`
+   `app_lists/base_app_lists.yaml` plus each member context's `<context>_app_lists.yaml`
    asks once per package manager whether to go through them, then about each app: yes, not now, or ignore here
    an ignored app is never offered on this machine again, via `~/.dotfiles_ignored_apps`
    every question for every manager comes first, then everything chosen installs in one go

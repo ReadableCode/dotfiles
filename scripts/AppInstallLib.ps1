@@ -6,7 +6,7 @@
 #   -InstallApps     installs the package ids passed to it as a string array
 #
 #   . (Join-Path $PSScriptRoot 'AppInstallLib.ps1')
-#   Install-FromList -Label choco -AppList $path -ListInstalled {...} -InstallApps {...}
+#   Install-FromList -Label choco -Manager choco -ListInstalled {...} -InstallApps {...}
 #
 # The list is shown as already-installed vs pending, then one question asks
 # whether to go through the pending apps at all. Saying yes asks about each
@@ -14,8 +14,7 @@
 # the last answer does anything install, all of it in one go. An ignored app is
 # written to ~/.dotfiles_ignored_apps (src/app_lists.py owns that file) and
 # never offered here again; every run that leaves one out names the file at its
-# end, since deleting the line is how to be offered it again. Ignoring needs
-# -Manager.
+# end, since deleting the line is how to be offered it again.
 #
 # -OfferIgnored is the other way back, and what installmissing passes: the
 # ignored apps are asked about with the rest, marked, and each one answered
@@ -25,30 +24,18 @@
 # same way as in app_install_lib.sh, which describes them.
 #
 # Parameters:
-#   -Manager     the package manager as src/app_lists.py names it (choco, winget);
-#                with it, the names this machine's contexts add for that manager
-#                (each member context's <context>_app_lists.yaml) join the list.
-#                A lookup that fails installs nothing rather than a list that
-#                only looks complete.
+#   -Manager     the package manager as src/app_lists.py names it (choco, winget).
+#                `src/app_lists.py --packages <manager>` gives the names:
+#                app_lists/base_app_lists.yaml plus each member context's
+#                <context>_app_lists.yaml, gated for this machine. A lookup that
+#                fails installs nothing rather than a list that only looks complete.
 #   -OfferIgnored  ask about the apps this machine ignores too; a yes un-ignores the app
 #   -AssumeYes   install everything pending without prompting (used by bootstrap)
 #   -DryRun      print what would be installed and change nothing
 
-function Read-AppList {
-    param(
-        [Parameter(Mandatory = $true)][string]$AppList
-    )
-
-    # Strips blank lines, "#" comment lines and trailing "# ..." comments, so an app
-    # can be commented out for one run and the file reverted afterwards.
-    Get-Content -Path $AppList |
-        ForEach-Object { ($_ -replace '#.*', '').Trim() } |
-        Where-Object { $_ -ne '' }
-}
-
 function Invoke-AppListsPy {
-    # src/app_lists.py with the given arguments (context app lists and the
-    # ignore file), piping -InputLines to it. $null when it could not run, so
+    # src/app_lists.py with the given arguments (the app lists and the ignore
+    # file), piping -InputLines to it. $null when it could not run, so
     # the caller can tell a failure from an empty answer.
     param(
         [Parameter(Mandatory = $true)][string[]]$Arguments,
@@ -56,7 +43,7 @@ function Invoke-AppListsPy {
     )
 
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
-        Write-Error "uv not found, so this machine's context app lists cannot be read"
+        Write-Error "uv not found, so this machine's app lists cannot be read"
         return $null
     }
     $dotfiles = Split-Path $PSScriptRoot -Parent
@@ -109,10 +96,9 @@ function Install-Planned {
 function Install-FromList {
     param(
         [Parameter(Mandatory = $true)][string]$Label,
-        [Parameter(Mandatory = $true)][string]$AppList,
+        [Parameter(Mandatory = $true)][string]$Manager,
         [Parameter(Mandatory = $true)][scriptblock]$ListInstalled,
         [Parameter(Mandatory = $true)][scriptblock]$InstallApps,
-        [string]$Manager,
         [switch]$OfferIgnored,
         [switch]$AssumeYes,
         [switch]$DryRun
@@ -123,24 +109,14 @@ function Install-FromList {
         return
     }
 
-    if (-not (Test-Path $AppList)) {
-        Write-Error "App list not found: $AppList"
+    $apps = Invoke-AppListsPy -Arguments @('--packages', $Manager)
+    if ($null -eq $apps) {
+        Write-Error "Could not read this machine's app lists for $Manager; installing nothing."
         return
     }
-
-    $apps = @(Read-AppList -AppList $AppList)
-    $source = Split-Path $AppList -Leaf
-    if ($Manager) {
-        $extra = Invoke-AppListsPy -Arguments @('--overlay', $Manager)
-        if ($null -eq $extra) {
-            Write-Error "Could not read this machine's context app lists for $Manager; installing nothing."
-            return
-        }
-        $apps = @($apps + @($extra | Where-Object { $apps -notcontains $_ }))
-        $source = "$source plus the context app lists"
-    }
+    $apps = @($apps)
     if ($apps.Count -eq 0) {
-        Write-Host "No apps listed in $AppList - nothing to do."
+        Write-Host "No $Manager apps listed for this machine - nothing to do."
         return
     }
 
@@ -149,7 +125,7 @@ function Install-FromList {
     $pending = @($apps | Where-Object { $already -notcontains $_ })
 
     Write-Host ""
-    Write-Host "########## $Label`: $($apps.Count) apps in $source ##########"
+    Write-Host "########## $Label`: $($apps.Count) apps in app_lists/base_app_lists.yaml plus the context app lists ##########"
 
     if ($installed.Count -gt 0) {
         Write-Host ""
@@ -158,7 +134,7 @@ function Install-FromList {
     }
 
     $ignoredHere = @()
-    if ($Manager -and $pending.Count -gt 0) {
+    if ($pending.Count -gt 0) {
         $skipped = Invoke-AppListsPy -Arguments @('--ignored', $Manager) -InputLines $pending
         if ($null -eq $skipped) {
             Write-Error "Could not read this machine's ignore file; installing nothing."
@@ -174,7 +150,7 @@ function Install-FromList {
 
     # Installed by hand or by another manager: this manager's own list does not
     # show it, and installing it here would make a second copy.
-    if ($Manager -and $pending.Count -gt 0) {
+    if ($pending.Count -gt 0) {
         $elsewhere = Invoke-AppListsPy -Arguments @('--elsewhere', $Manager) -InputLines $pending
         if ($null -eq $elsewhere) {
             Write-Error "Could not check which apps are installed outside $Label; installing nothing."
@@ -220,14 +196,11 @@ function Install-FromList {
             if ($offeredIgnored -contains $app) {
                 $answer = Read-Host "  $app (ignored here)`: [y]es, and stop ignoring / [N]ot now / [q]uit asking"
             }
-            elseif ($Manager) {
+            else {
                 $answer = Read-Host "  $app`: [y]es / [N]ot now / [i]gnore here / [q]uit asking"
             }
-            else {
-                $answer = Read-Host "  $app`: [y]es / [N]o / [q]uit asking"
-            }
             if ($answer -match '^\s*[Yy]') { $chosen += $app }
-            elseif ($Manager -and $answer -match '^\s*[Ii]') { $toIgnore += $app }
+            elseif ($answer -match '^\s*[Ii]') { $toIgnore += $app }
             elseif ($answer -match '^\s*[Qq]') {
                 Write-Host "  The rest are offered again next time."
                 break

@@ -8,8 +8,8 @@ Set up MSYS2 and install the package list by following [setup_msys2.md](./msys2.
 
 ## GTK3 stack inside MSYS2
 
-WeasyPrint needs these packages from
-[app_lists/msys2_packages.txt](../app_lists/msys2_packages.txt):
+WeasyPrint needs these packages from the `msys2` list in
+[app_lists/base_app_lists.yaml](../app_lists/base_app_lists.yaml):
 
 - `mingw-w64-x86_64-gtk3`
 - `mingw-w64-x86_64-gobject-introspection`

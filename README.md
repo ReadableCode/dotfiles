@@ -30,8 +30,8 @@ versus in sibling repos.
   OS packages, offers to clone missing repos, syncs each uv project to its
   lock, deploys, prunes, and offers installs and uninstalls from the app
   lists. `--check` reports what would change and writes nothing.
-- **Keeps package lists per platform.** `app_lists/` holds the Brewfile,
-  apt, dnf, flatpak, Chocolatey, winget, MSYS2 and Termux lists;
+- **Keeps package lists per platform.** `app_lists/base_app_lists.yaml` holds the
+  Homebrew, apt, dnf, flatpak, Chocolatey, winget, MSYS2 and Termux lists;
   `app_removals.yaml` retires packages across the fleet.
 - **Bootstraps a bare machine.** `scripts/bootstrap.sh` (macOS, Linux, WSL,
   Termux) and `scripts/bootstrap.ps1` (Windows) clone, sync, deploy and
@@ -43,8 +43,6 @@ versus in sibling repos.
   machine) and local MCP servers for Google and macOS apps.
 - **Documents setups.** `docs/` has one how-to per topic, indexed in
   [`docs/README.md`](docs/README.md).
-
-![refresh_machine help page](docs/screenshots/refresh_machine_help.svg)
 
 The calendar board (`src/calendar_board.py`), shown here with sample data,
 puts several calendar accounts side by side with attendance badges and
@@ -59,7 +57,8 @@ flags meetings that overlap across accounts:
 | `src/` | Python tools: the deploy pipeline, machine refresh, calendar and Gmail tools, MCP servers, and the stdlib-only helpers the shells call at startup. Shared helpers come from the [`readable-utils`](https://github.com/ReadableCode/readable_utils) package. |
 | `scripts/` | Shell, PowerShell and AutoHotkey scripts for install and maintenance tasks, including the bootstrap and package installers. |
 | `application_configs/` | Source-of-truth configs for bash, zsh, nvim, tmux, git, PowerShell, ssh, Claude Code and more. |
-| `app_lists/` | Package manifests per platform. |
+| `app_lists/base_app_lists.yaml` | Package lists per package manager. |
+| `app_lists/` | Notes on the installs a package list cannot express. |
 | `go_apps/` | Small Go tools (`git_puller`, a cleanup of Syncthing conflict and temp files) with prebuilt binaries committed so a fresh machine needs no Go toolchain. |
 | `docs/` | Setup and how-to docs, one topic per file. |
 | `tests/` | pytest suite. |

@@ -153,9 +153,10 @@ ensure_uv() {
         return 0
     fi
     if [ "$PLATFORM" = "termux" ]; then
-        # uv has no termux build; the src/ tooling is skipped there instead of failing.
-        warn "uv is not available on termux - skipping the python steps"
-        note_manual "termux: src/ tooling (clone_repos, deploy_configs) needs uv and is not run here"
+        # termux packages uv (pkg install uv), but this script has never set up
+        # the src/ tooling there, so those steps are skipped instead of failing.
+        warn "uv is not set up on termux by this script - skipping the python steps"
+        note_manual "termux: src/ tooling (clone_repos, deploy_configs) needs uv and is not run here; the app installer reads its list through uv too"
         return 0
     fi
     warn "uv missing"
@@ -181,8 +182,8 @@ ensure_claude() {
     fi
     case "$PLATFORM" in
         mac)
-            # The Brewfile's claude-code@latest cask tracks the same channel.
-            warn "claude missing - install_mac_apps.sh (Brewfile cask claude-code@latest) owns it on mac"
+            # The cask claude-code@latest in the app lists tracks the same channel.
+            warn "claude missing - install_mac_apps.sh (cask claude-code@latest) owns it on mac"
             return 0 ;;
         termux)
             warn "claude has no termux build - skipping"
@@ -388,7 +389,7 @@ else
     installers=""
     case "$PLATFORM" in
         mac)    installers="install_mac_apps.sh" ;;
-        wsl)    installers="install_linux_apps_wsl.sh" ;;
+        wsl)    installers="install_linux_apps.sh" ;;
         termux) installers="install_android_termux_apps.sh" ;;
         linux)
             # Debian and Fedora families take different lists; flatpak is separate

@@ -2,11 +2,12 @@
 """
 Uninstall the packages a removals file says must not be on this machine.
 
-The app-list twin of ``deploy_configs.py prune``. The ``app_lists/`` files name
-what should be installed; they are not an inventory of everything that may
-legitimately exist, so "not in the Brewfile" can never mean "uninstall it" -
-most of ``brew list`` is dependencies nobody named, and whole platforms keep
-their manual installs in ``linux_apps_non_apt.md`` / ``mac_apps_non_brew.md``.
+The app-list twin of ``deploy_configs.py prune``. The app lists
+(``app_lists/base_app_lists.yaml`` and each context's) name what should be installed;
+they are not an inventory of everything that may legitimately exist, so "not in
+the brew list" can never mean "uninstall it" - most of ``brew list`` is
+dependencies nobody named, and whole platforms keep their manual installs in
+``app_lists/linux_apps_non_apt.md`` / ``app_lists/mac_apps_non_brew.md``.
 Retiring an app is therefore an explicit, committed line, exactly like retiring
 a config path.
 
@@ -279,11 +280,11 @@ def winget_present(package, run=run_capture):
 # Candidates #
 
 
-def wanted_packages(manager, lists_dir=app_lists.APP_LISTS, overlay_paths=None, hostname=None):
+def wanted_packages(manager, lists_file=None, overlay_paths=None, hostname=None):
     """Every package an app list names for this manager on this machine, which no removal may touch."""
-    if manager.name not in app_lists.BASE_LISTS:
+    if manager.name not in app_lists.MANAGERS:
         return set()
-    wanted = app_lists.wanted_packages(manager.name, lists_dir, overlay_paths, hostname)
+    wanted = app_lists.wanted_packages(manager.name, lists_file, overlay_paths, hostname)
     if manager.name == "brew":
         # A tap formula is listed as "user/repo/formula" but installed, and
         # named in a removal, as its last segment.
@@ -333,7 +334,7 @@ class Candidates:
     unknown: list = field(default_factory=list)  # the manager could not say whether it is installed
 
 
-def candidates(entries, system=None, hostname=None, lists_dir=app_lists.APP_LISTS, overlay_paths=None, run=run_capture):
+def candidates(entries, system=None, hostname=None, lists_file=None, overlay_paths=None, run=run_capture):
     """
     Sort this machine's entries into ``Candidates``.
 
@@ -351,7 +352,7 @@ def candidates(entries, system=None, hostname=None, lists_dir=app_lists.APP_LIST
         manager = manager_for(entry["manager"])
         if manager.system != system or not host_allowed(entry, hostname):
             continue
-        if entry["package"] in wanted_packages(manager, lists_dir, overlay_paths, hostname):
+        if entry["package"] in wanted_packages(manager, lists_file, overlay_paths, hostname):
             found.protected.append(entry)
             continue
         present = package_present(entry, cache, run=run)
@@ -607,7 +608,7 @@ def find_owner(group, installed_choco, wanted_choco, wanted_winget):
     return group
 
 
-def duplicate_groups(run=run_capture, lists_dir=app_lists.APP_LISTS, overlay_paths=None):
+def duplicate_groups(run=run_capture, lists_file=None, overlay_paths=None):
     """Every winget id installed more than once, each with its owner when an app list names one."""
     code, output = run(["winget", "list", "--disable-interactivity", "--accept-source-agreements"])
     if code is None:
@@ -619,8 +620,8 @@ def duplicate_groups(run=run_capture, lists_dir=app_lists.APP_LISTS, overlay_pat
     if not groups:
         return []
     installed_choco = choco_versions(run=run)
-    wanted_choco = wanted_packages(MANAGERS["choco"], lists_dir, overlay_paths)
-    wanted_winget = wanted_packages(MANAGERS["winget"], lists_dir, overlay_paths)
+    wanted_choco = wanted_packages(MANAGERS["choco"], lists_file, overlay_paths)
+    wanted_winget = wanted_packages(MANAGERS["winget"], lists_file, overlay_paths)
     return [find_owner(group, installed_choco, wanted_choco, wanted_winget) for group in groups]
 
 

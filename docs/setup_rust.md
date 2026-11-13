@@ -63,8 +63,8 @@ use the **GNU toolchain** (which links against MinGW gcc) so we don't need MSVC
 at all.
 
 Prerequisite: MSYS2 (set it up by following [setup_msys2.md](./msys2.md)) with the
-`mingw-w64-x86_64-gcc` package from
-[app_lists/msys2_packages.txt](../app_lists/msys2_packages.txt) installed:
+`mingw-w64-x86_64-gcc` package from the `msys2` list in
+[app_lists/base_app_lists.yaml](../app_lists/base_app_lists.yaml) installed:
 
 ```powershell
 C:\msys64\usr\bin\bash.exe -lc "pacman -S --needed --noconfirm mingw-w64-x86_64-gcc"

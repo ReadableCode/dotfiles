@@ -20,7 +20,7 @@ The test is **where the code can run**:
 
 That covers:
 
-- **Configs** (`application_configs/`, `app_lists/`) — shell, editor, tmux,
+- **Configs** (`application_configs/`, `app_lists/base_app_lists.yaml`) — shell, editor, tmux,
   git, packages per platform.
 - **Setup and how-to docs** (`docs/`) — one topic per file. Docs that codify
   knowledge are in scope even when the subject is homelab infrastructure

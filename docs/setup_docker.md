@@ -2,45 +2,12 @@
 
 ## Installing Docker on Windows
 
-- Check System Requirements:
-
-- Enable Hyper-V: Docker for Windows requires Hyper-V to be enabled. Check if your system supports Hyper-V by running the command `systeminfo.exe` in Command Prompt and looking for "Hyper-V Requirements".
-  - If it is not installed:
-    - Make sure enabled in BIOS
-      - AMD
-        - SVM Mode
-      - Intel
-        - VT-x
-        - VT-d
-    - Enable Hyper-V in Windows Features
-      - Hit the Windows key and type "Windows Features".
-      - Check the box next to "Hyper-V" and click "OK".
-
-- Download Docker Desktop for Windows:
-  - To install using winget:
-    - Open PowerShell as an administrator and run the following command:
-
-        ```powershell
-        winget install Docker
-        ```
-  
-  - To Install with Chocolatey:
-    - Open PowerShell as an administrator and run the following command:
-
-        ```powershell
-        choco install docker-desktop
-        ```
-
-  - To install using the Docker Desktop for Windows page:
-    - Go to the Docker Desktop for Windows page: Docker Desktop for Windows.
-    - Click on "Download Docker Desktop for Windows".
-    - Run the installer you downloaded.
-    - Follow the prompts to install Docker Desktop.
-    - When prompted, select the "Use Windows containers" option if you want to use Windows containers. If unsure, you can choose the default option to use Linux containers.
-    - Finish Installation:
-
-      - After installation, Docker Desktop will start automatically. It may take a few minutes to start.
-      - Once Docker Desktop is running, you'll see a Docker icon in the system tray. Docker is now installed and running on your Windows machine.
+Docker Desktop is not used here: no machine needs it, and its license does not
+cover company use. `app_removals.yaml` offers to uninstall it (and VirtualBox)
+on the next myupdater. A Windows machine that needs Docker runs Docker Engine
+inside WSL instead: install an Ubuntu distro (`wsl --install -d Ubuntu`), then
+follow "Installing Docker on Ubuntu" below inside it. Macs use Colima from the
+brew list in `app_lists/base_app_lists.yaml`.
 
 ## Installing Docker on Ubuntu
 
@@ -83,7 +50,7 @@
   sudo apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
   ```
 
-  Compose comes with the engine, not from `app_lists/linux_apps.txt`: the
+  Compose comes with the engine, not from the apt list: the
   plugin package must match the engine's repo (`docker-compose-plugin` with
   Docker's `docker-ce`, `docker-compose-v2` with Ubuntu's `docker.io`), and
   the two conflict. The legacy Python `docker-compose` v1 is retired in

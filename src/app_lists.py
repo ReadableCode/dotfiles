@@ -4,14 +4,15 @@ The packages this machine's app lists name, per package manager.
 
 Two sources, the same split every other declaration in this repo follows:
 
-- ``app_lists/`` in dotfiles: what every machine of a platform gets.
+- ``app_lists/base_app_lists.yaml`` in dotfiles: what every machine of a
+  platform gets.
 - ``<context>_app_lists.yaml`` at the root of each overlay repo this machine is
   a member of: what only that context's machines get - a client's cloud CLI,
   its chat app. Same discovery and membership gate as the overlay manifests
   (``deploy_configs.member_overlay_dirs``), so a credentials repo a box holds
   only as its git hub adds nothing.
 
-The overlay file is a mapping of manager to package names::
+Every file is a mapping of manager to package names, read by one parser::
 
     choco: [slack, awscli]
     cask: [slack]
@@ -26,13 +27,26 @@ protected from a removal::
       - package: tightvnc
         hosts: [RYZENWHITE]
 
+An apt entry may carry ``wsl: true``. On a WSL machine (``platform.release()``
+names Microsoft) only those apt entries apply, the CLI tools a WSL machine
+wants; everywhere else every apt entry does. Both gates may sit on one entry::
+
+    apt:
+      - samba
+      - {package: tmux, wsl: true}
+
 A brew name may be a third-party tap's formula in full (``user/repo/formula``):
 ``install_mac_apps.sh`` taps it and trusts that one formula before installing.
 
-Every installer in ``scripts/`` appends ``--overlay <manager>`` to the list it
-already reads, and ``app_removals.py`` asks ``wanted_packages`` so a package any
-of them names is never offered for removal. One answer to "what should this
-machine have", whichever direction asks.
+Besides the managers below, a file may hold ``termux`` (Termux's pkg) and
+``msys2`` (MSYS2's pacman). Only their own installers read those; no removal,
+upgrade or missing-app report covers them.
+
+Every installer in ``scripts/`` gets its names from ``--packages <manager>``,
+the base list plus every member context's, gated for this machine, and
+``app_removals.py`` asks ``wanted_packages`` so a package any of them names is
+never offered for removal. One answer to "what should this machine have",
+whichever direction asks.
 
 One machine can turn an app down for good: ``~/.dotfiles_ignored_apps`` holds
 ``manager:package`` lines, written when an installer's question about an app
@@ -60,36 +74,10 @@ from readable_utils.host_tools import get_uppercase_hostname
 from deploy_configs import REPO_ROOT, host_allowed, member_overlay_dirs
 from utils.inventory_tools import overlay_context
 
-APP_LISTS = os.path.join(REPO_ROOT, "app_lists")
+BASE_APP_LISTS = os.path.join(REPO_ROOT, "app_lists", "base_app_lists.yaml")
 
-# The dotfiles app lists each manager reads. A manager with several files reads
-# every one of them here: this is the "named anywhere" question removals ask,
-# not the one profile an installer happens to be installing.
-BASE_LISTS = {
-    "brew": ("Brewfile",),
-    "cask": ("Brewfile",),
-    "apt": ("linux_apps.txt", "linux_apps_wsl.txt"),
-    "dnf": ("linux_apps_dnf.txt",),
-    "flatpak": ("linux_apps_flatpak.txt",),
-    "choco": ("windows_apps_personal_choco.txt", "windows_apps_base_choco.txt"),
-    "winget": ("windows_apps_personal_winget.txt",),
-}
-
-MANAGERS = tuple(BASE_LISTS)
-
-# The list each installer reads when nobody passes it another one: what this
-# machine is supposed to have, as opposed to BASE_LISTS' "named anywhere".
-INSTALLER_LISTS = {
-    "brew": ("Brewfile",),
-    "cask": ("Brewfile",),
-    "apt": ("linux_apps.txt",),
-    "dnf": ("linux_apps_dnf.txt",),
-    "flatpak": ("linux_apps_flatpak.txt",),
-    "choco": ("windows_apps_personal_choco.txt",),
-    "winget": ("windows_apps_personal_winget.txt",),
-}
-
-# The executable whose presence means this machine uses the manager.
+# The managers the installers, removals, upgrades and missing-app report work
+# with, and the executable whose presence means this machine uses one.
 MANAGER_COMMANDS = {
     "brew": "brew",
     "cask": "brew",
@@ -100,51 +88,112 @@ MANAGER_COMMANDS = {
     "winget": "winget",
 }
 
+MANAGERS = tuple(MANAGER_COMMANDS)
+
+# Keys an app lists file may also hold that only their own installer reads.
+INSTALLER_ONLY = ("termux", "msys2")
+
+LIST_KEYS = MANAGERS + INSTALLER_ONLY
+
 # %%
-# Dotfiles app lists #
+# Reading app lists #
 
-_BREWFILE_LINE = re.compile(r'^\s*(brew|cask)\s+"([^"]+)"')
+_ENTRY_KEYS = {"package", "hosts", "wsl"}
 
 
-def read_app_list(path):
+def _entry(manager, item, path):
+    """``(package, hosts, wsl)`` from one list item: a bare name, or ``{package, hosts and/or wsl}``."""
+    if isinstance(item, str) and item.strip():
+        return item.strip(), None, False
+    if isinstance(item, dict) and isinstance(item.get("package"), str) and item["package"].strip():
+        hosts = item.get("hosts", [])
+        well_formed = (
+            set(item) - {"package"}
+            and set(item) <= _ENTRY_KEYS
+            and isinstance(hosts, list)
+            and ("hosts" not in item or hosts)
+            and all(isinstance(host, str) and host.strip() for host in hosts)
+            and ("wsl" not in item or (item["wsl"] is True and manager == "apt"))
+        )
+        if not well_formed:
+            raise ValueError(
+                f"'{item['package']}' under '{manager}' in {path} must carry a non-empty hosts list,"
+                " wsl: true (apt only), or both, and nothing else"
+            )
+        return item["package"].strip(), [host.strip() for host in hosts] or None, "wsl" in item
+    raise ValueError(f"'{manager}' in {path} must be a list of package names")
+
+
+def read_lists(path):
     """
-    The package names one app list holds. Strips CRs, blank lines, whole-line
-    comments and trailing ``# ...`` comments - the same shape
-    ``scripts/app_install_lib.sh`` reads, so a name commented out for one run is
-    read the same way by both.
+    ``{manager: [(package, hosts, wsl), ...]}`` from one app lists file, every
+    entry whatever its gates.
+
+    A missing file, an unknown manager or a value that is not a list of names
+    is a hard error: a typo here would otherwise quietly install nothing on
+    every machine that reads the file.
     """
-    names = []
     with open(path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            line = line.replace("\r", "").split("#", 1)[0].strip()
-            if line:
-                names.append(line)
-    return names
+        parsed = yaml.safe_load(handle) or {}
+    if not isinstance(parsed, dict):
+        raise ValueError(f"App lists file {path} must be a mapping of manager to package names")
+    found = {}
+    for manager, items in parsed.items():
+        if manager not in LIST_KEYS:
+            raise ValueError(f"Unknown manager '{manager}' in {path}; expected one of {', '.join(LIST_KEYS)}")
+        if not isinstance(items, list):
+            raise ValueError(f"'{manager}' in {path} must be a list of package names")
+        found[manager] = [_entry(manager, item, path) for item in items]
+    return found
 
 
-def read_brewfile(path, kind):
-    """The formula ('brew') or cask ('cask') names a Brewfile declares."""
-    names = []
-    with open(path, "r", encoding="utf-8") as handle:
-        for line in handle:
-            match = _BREWFILE_LINE.match(line)
-            if match and match.group(1) == kind:
-                names.append(match.group(2))
-    return names
+def on_wsl(release=None):
+    """Whether this kernel is WSL's (``release`` defaults to this machine's)."""
+    release = platform.release() if release is None else release
+    return "microsoft" in release.lower()
 
 
-def base_packages(manager, app_lists=APP_LISTS, filenames=None):
-    """Every package the dotfiles app lists name for this manager (``filenames`` narrows which lists)."""
-    names = set()
-    for filename in BASE_LISTS[manager] if filenames is None else filenames:
-        path = os.path.join(app_lists, filename)
-        if not os.path.exists(path):
-            continue
-        if filename == "Brewfile":
-            names.update(read_brewfile(path, manager))
-        else:
-            names.update(read_app_list(path))
-    return names
+def applies_here(manager, hosts, wsl, hostname, release=None):
+    """Whether an entry exists on this machine: its hosts gate lets it in, and on WSL an apt entry is marked wsl."""
+    if not host_allowed({"hosts": hosts}, hostname):
+        return False
+    return wsl or manager != "apt" or not on_wsl(release)
+
+
+def load_entries(paths, hostname=None, release=None):
+    """``{manager: [(package, source file), ...]}`` across ``paths``, only the entries that exist on this machine."""
+    hostname = hostname or get_uppercase_hostname()
+    found: dict = {}
+    for path in paths:
+        for manager, entries in read_lists(path).items():
+            bucket = found.setdefault(manager, [])
+            for name, hosts, wsl in entries:
+                if applies_here(manager, hosts, wsl, hostname, release):
+                    bucket.append((name, path))
+    return found
+
+
+def _unique(names):
+    """``names`` in order without repeats. Every manager here treats names case-insensitively, so this does too."""
+    kept, seen = [], set()
+    for name in names:
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            kept.append(name)
+    return kept
+
+
+# %%
+# Base app lists #
+
+
+def base_packages(manager, lists_file=None):
+    """
+    Every package ``app_lists/base_app_lists.yaml`` (or ``lists_file``) names for
+    this manager, whatever its hosts and wsl gates: the "named anywhere"
+    question removals ask, not what one machine installs.
+    """
+    return {name for name, _, _ in read_lists(lists_file or BASE_APP_LISTS).get(manager, [])}
 
 
 # %%
@@ -161,71 +210,37 @@ def discover_app_lists():
     return files
 
 
-def _overlay_entry(manager, item, path):
-    """``(package, hosts)`` from one list item: a bare name, or ``{package, hosts}``."""
-    if isinstance(item, str) and item.strip():
-        return item.strip(), None
-    if isinstance(item, dict) and isinstance(item.get("package"), str) and item["package"].strip():
-        hosts = item.get("hosts")
-        well_formed = (
-            isinstance(hosts, list) and hosts and all(isinstance(host, str) and host.strip() for host in hosts)
-        )
-        if set(item) != {"package", "hosts"} or not well_formed:
-            raise ValueError(
-                f"'{item['package']}' under '{manager}' in {path} must carry a non-empty hosts list and nothing else"
-            )
-        return item["package"].strip(), [host.strip() for host in hosts]
-    raise ValueError(f"'{manager}' in {path} must be a list of package names")
-
-
-def load_overlay(paths=None, hostname=None):
+def load_overlay(paths=None, hostname=None, release=None):
     """
-    ``{manager: [(package, source file), ...]}`` across every discovered file,
-    for this machine (``hostname`` defaults to it): an entry scoped with
-    ``hosts`` to other machines is left out here.
-
-    An unknown manager or a value that is not a list of names is a hard error:
-    a typo here would otherwise quietly install nothing on every machine of
-    that context.
+    ``{manager: [(package, source file), ...]}`` across every discovered
+    context file, for this machine (``hostname`` and ``release`` default to
+    it): an entry its hosts or wsl gate keeps off this machine is left out.
     """
-    hostname = hostname or get_uppercase_hostname()
-    found: dict = {}
-    for path in discover_app_lists() if paths is None else paths:
-        with open(path, "r", encoding="utf-8") as handle:
-            parsed = yaml.safe_load(handle) or {}
-        if not isinstance(parsed, dict):
-            raise ValueError(f"App lists file {path} must be a mapping of manager to package names")
-        for manager, items in parsed.items():
-            if manager not in BASE_LISTS:
-                raise ValueError(f"Unknown manager '{manager}' in {path}; expected one of {', '.join(MANAGERS)}")
-            if not isinstance(items, list):
-                raise ValueError(f"'{manager}' in {path} must be a list of package names")
-            bucket = found.setdefault(manager, [])
-            for item in items:
-                name, hosts = _overlay_entry(manager, item, path)
-                if host_allowed({"hosts": hosts}, hostname):
-                    bucket.append((name, path))
-    return found
+    return load_entries(discover_app_lists() if paths is None else paths, hostname, release)
 
 
-def overlay_packages(manager, paths=None, hostname=None):
+def overlay_packages(manager, paths=None, hostname=None, release=None):
     """
     The package names this machine's contexts add for one manager, in file
     order, without repeats. Two contexts may name the same app (a machine in
-    both is offered it once, under the first spelling); every manager here
-    treats names case-insensitively, so the repeat check does too.
+    both is offered it once, under the first spelling).
     """
-    names, seen = [], set()
-    for name, _ in load_overlay(paths, hostname).get(manager, []):
-        if name.lower() not in seen:
-            seen.add(name.lower())
-            names.append(name)
-    return names
+    return _unique(name for name, _ in load_overlay(paths, hostname, release).get(manager, []))
 
 
-def wanted_packages(manager, app_lists=APP_LISTS, overlay_paths=None, hostname=None):
+def machine_packages(manager, lists_file=None, overlay_paths=None, hostname=None, release=None):
+    """
+    What this machine's installer for one manager offers: the base list's
+    names, then each member context's, gated by hosts and wsl, without repeats.
+    """
+    overlays = discover_app_lists() if overlay_paths is None else list(overlay_paths)
+    entries = load_entries([lists_file or BASE_APP_LISTS] + overlays, hostname, release).get(manager, [])
+    return _unique(name for name, _ in entries)
+
+
+def wanted_packages(manager, lists_file=None, overlay_paths=None, hostname=None):
     """Every package any app list names for this manager on this machine."""
-    return base_packages(manager, app_lists) | set(overlay_packages(manager, overlay_paths, hostname))
+    return base_packages(manager, lists_file) | set(overlay_packages(manager, overlay_paths, hostname))
 
 
 # %%
@@ -248,7 +263,9 @@ def read_ignored(path=None):
     path = path or IGNORE_FILE
     if not os.path.exists(path):
         return set()
-    return {line.lower() for line in read_app_list(path) if ":" in line}
+    with open(path, "r", encoding="utf-8") as handle:
+        entries = [line.replace("\r", "").split("#", 1)[0].strip() for line in handle]
+    return {entry.lower() for entry in entries if ":" in entry}
 
 
 def ignored_packages(manager, names, path=None):
@@ -297,14 +314,6 @@ def forget_ignored(manager, names, path=None):
 # Missing apps #
 
 
-def installer_lists(manager, release=None):
-    """The dotfiles lists this machine's installer for one manager reads by default."""
-    release = platform.release() if release is None else release
-    if manager == "apt" and "microsoft" in release.lower():
-        return ("linux_apps_wsl.txt",)
-    return INSTALLER_LISTS[manager]
-
-
 def installed_names(manager, run):
     """Lowercased names the manager reports installed, or None when it could not answer."""
     # The per-manager queries live with the removals, which import this module.
@@ -318,7 +327,7 @@ def installed_names(manager, run):
     names = app_removals.installed_packages(app_removals.MANAGERS[manager], run=run)
     if names is None or manager != "brew":
         return names
-    # A versioned formula installs under a suffixed name (Brewfile "python" is
+    # A versioned formula installs under a suffixed name (listed "python" is
     # "python@3.14"), and a third-party tap's formula is listed as
     # "user/repo/formula" only by --full-name; install_mac_apps.sh makes the
     # same two allowances.
@@ -404,7 +413,7 @@ def choco_name(package):
     return CHOCO_VARIANT.sub("", package)
 
 
-def winget_upgrades(run=None, which=shutil.which, app_lists=APP_LISTS, overlay_paths=None, holds=None, versions=None):
+def winget_upgrades(run=None, which=shutil.which, lists_file=None, overlay_paths=None, holds=None, versions=None):
     """
     ``(upgrade, held)`` for what `winget upgrade` offers, or None when winget
     could not be asked. ``upgrade`` is the winget ids to upgrade; ``held`` is
@@ -436,7 +445,7 @@ def winget_upgrades(run=None, which=shutil.which, app_lists=APP_LISTS, overlay_p
     # Only the first table: after its count winget lists what it cannot or will not upgrade.
     end = UPGRADES_END.search(output)
     rows = app_removals.parse_winget_list(output[: end.start()] if end else output)
-    listed = {name.lower() for name in wanted_packages("winget", app_lists, overlay_paths)}
+    listed = {name.lower() for name in wanted_packages("winget", lists_file, overlay_paths)}
     holds = load_upgrade_holds() if holds is None else holds
     choco = sorted(app_removals.choco_versions(run=run)) if which("choco") and rows else []
     upgrade, held = [], []
@@ -540,9 +549,7 @@ def print_upgrades(manager):
     return 0
 
 
-def missing_packages(
-    which=shutil.which, run=None, app_lists=APP_LISTS, overlay_paths=None, release=None, ignore_file=None
-):
+def missing_packages(which=shutil.which, run=None, lists_file=None, overlay_paths=None, release=None, ignore_file=None):
     """
     ``(missing, elsewhere, unanswered, ignored)`` for this machine's lists.
 
@@ -563,8 +570,7 @@ def missing_packages(
     for manager in MANAGERS:
         if not which(MANAGER_COMMANDS[manager]):
             continue
-        base = base_packages(manager, app_lists, installer_lists(manager, release))
-        wanted = sorted(base | set(overlay_packages(manager, overlay_paths)))
+        wanted = sorted(machine_packages(manager, lists_file, overlay_paths, release=release))
         if not wanted:
             continue
         installed = installed_names(manager, run)
@@ -589,10 +595,11 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(description="Print the packages this machine's app lists name.")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument(
-        "--overlay",
+        "--packages",
         metavar="MANAGER",
-        choices=MANAGERS,
-        help="print only what this machine's contexts add for one manager, one per line (what the installers read)",
+        choices=LIST_KEYS,
+        help="print what this machine's installer for one manager offers, one per line: app_lists/base_app_lists.yaml"
+        " then each member context's file, gated by hosts and wsl",
     )
     mode.add_argument("--where", action="store_true", help="print the context app list files consulted")
     mode.add_argument(
@@ -603,7 +610,7 @@ def parse_args(argv):
     mode.add_argument(
         "--ignored",
         metavar="MANAGER",
-        choices=MANAGERS,
+        choices=LIST_KEYS,
         help="read package names on stdin, print the ones this machine ignores for that manager",
     )
     mode.add_argument(
@@ -633,8 +640,8 @@ def parse_args(argv):
     mode.add_argument("--ignore-path", action="store_true", help="print this machine's ignore file path")
     args = parser.parse_args(argv)
     for flag, given in (("--ignore", args.ignore), ("--unignore", args.unignore)):
-        if given and given[0] not in MANAGERS:
-            parser.error(f"{flag} takes a manager first, one of {', '.join(MANAGERS)}")
+        if given and given[0] not in LIST_KEYS:
+            parser.error(f"{flag} takes a manager first, one of {', '.join(LIST_KEYS)}")
     return args
 
 
@@ -652,7 +659,7 @@ def print_missing():
 
 def print_everything():
     overlay = load_overlay()
-    for manager in MANAGERS:
+    for manager in LIST_KEYS:
         added = overlay.get(manager, [])
         names = sorted(base_packages(manager) | {name for name, _ in added})
         if not names:
@@ -684,8 +691,8 @@ def main(argv=None):
         lines = [IGNORE_FILE]
     elif args.where:
         lines = discover_app_lists()
-    elif args.overlay:
-        lines = overlay_packages(args.overlay)
+    elif args.packages:
+        lines = machine_packages(args.packages)
     else:
         return print_everything()
     for line in lines:

@@ -1,11 +1,12 @@
 # App removals — the committed list of packages that must NOT be installed.
 # Consumed by `src/app_removals.py` (see docs/repo_app_removals.md).
 #
-# The app_lists/ files are the other direction: they name what should be
-# installed. They are NOT an inventory of everything allowed to exist, so
-# "absent from the Brewfile" can never mean "uninstall it" — most of `brew list`
-# is dependencies nobody named, and each platform keeps its manual installs in
-# linux_apps_non_apt.md / mac_apps_non_brew.md. Retiring an app is an explicit
+# The app lists (app_lists/base_app_lists.yaml and each context's) are the other
+# direction: they name what should be installed. They are NOT an inventory of
+# everything allowed to exist, so "absent from the brew list" can never mean
+# "uninstall it": most of `brew list` is dependencies nobody named, and each
+# platform keeps its manual installs in app_lists/linux_apps_non_apt.md /
+# app_lists/mac_apps_non_brew.md. Retiring an app is an explicit
 # line here, the same way retiring a config path is a line in
 # deploy_removals.yaml.
 #
@@ -41,7 +42,7 @@
   manager: cask
   package: realvnc-connect-viewer
   note: >-
-    The current cask name. Was `cask "vnc-viewer"` in app_lists/Brewfile until
+    The current cask name. Was `vnc-viewer` in the cask list until
     2026-09-18; macOS needs no replacement because Screen Sharing is built in
     and the `vnc<host>` aliases already open it.
 
@@ -55,13 +56,13 @@
 - name: realvnc_connect_choco
   manager: choco
   package: vnc-connect
-  note: RealVNC Connect. Dropped from app_lists/windows_apps_personal_choco.txt.
+  note: RealVNC Connect. Dropped from the choco list (app_lists/base_app_lists.yaml).
 
 - name: realvnc_viewer_choco
   manager: choco
   package: vnc-viewer
   note: >-
-    RealVNC Viewer. Dropped from app_lists/windows_apps_personal_choco.txt in
+    RealVNC Viewer. Dropped from the choco list (app_lists/base_app_lists.yaml) in
     favour of tigervnc. TightVNC stays as the Windows server.
 
 - name: realvnc_vnc_server_apt
@@ -81,11 +82,11 @@
 # --- In-box OpenSSH server, retired 2026-09-24 ---
 #
 # The personal Windows machines run the Win32-OpenSSH release from winget
-# (Microsoft.OpenSSH.Preview, on windows_apps_personal_winget.txt), which owns
-# the sshd service from C:\Program Files\OpenSSH. The in-box optional feature
-# is an older build left beside it in System32\OpenSSH. Nothing lists
-# optional features, so the duplicate finder cannot see this pair; the line
-# says it once.
+# (Microsoft.OpenSSH.Preview, in the winget list of app_lists/base_app_lists.yaml),
+# which owns the sshd service from C:\Program Files\OpenSSH. The in-box
+# optional feature is an older build left beside it in System32\OpenSSH.
+# Nothing lists optional features, so the duplicate finder cannot see this
+# pair; the line says it once.
 
 - name: inbox_openssh_server
   manager: capability
@@ -108,12 +109,12 @@
 - name: gsconnect_apt
   manager: apt
   package: gnome-shell-extension-gsconnect
-  note: Dropped from app_lists/linux_apps.txt.
+  note: Dropped from the apt list (app_lists/base_app_lists.yaml).
 
 - name: gsconnect_dnf
   manager: dnf
   package: gnome-shell-extension-gsconnect
-  note: Dropped from app_lists/linux_apps_dnf.txt.
+  note: Dropped from the dnf list (app_lists/base_app_lists.yaml).
 
 # --- Rescue boot image, retired 2026-10-02 ---
 #
@@ -141,22 +142,22 @@
 - name: krb5_user_apt
   manager: apt
   package: krb5-user
-  note: Dropped from app_lists/linux_apps.txt.
+  note: Dropped from the apt list (app_lists/base_app_lists.yaml).
 
 - name: libkrb5_dev_apt
   manager: apt
   package: libkrb5-dev
-  note: Dropped from app_lists/linux_apps.txt.
+  note: Dropped from the apt list (app_lists/base_app_lists.yaml).
 
 - name: krb5_workstation_dnf
   manager: dnf
   package: krb5-workstation
-  note: Dropped from app_lists/linux_apps_dnf.txt.
+  note: Dropped from the dnf list (app_lists/base_app_lists.yaml).
 
 - name: krb5_devel_dnf
   manager: dnf
   package: krb5-devel
-  note: Dropped from app_lists/linux_apps_dnf.txt.
+  note: Dropped from the dnf list (app_lists/base_app_lists.yaml).
 
 # --- Claude Code from chocolatey, retired 2026-10-02 ---
 #
@@ -210,10 +211,34 @@
   manager: apt
   package: docker-compose
   replaced_by: apt:docker-compose-v2
-  note: Dropped from app_lists/linux_apps.txt. Ubuntu's docker.io engine (elitedesk).
+  note: Dropped from the apt list (app_lists/base_app_lists.yaml). Ubuntu's docker.io engine (elitedesk).
 
 - name: docker_compose_v1_apt_docker_ce
   manager: apt
   package: docker-compose
   replaced_by: apt:docker-compose-plugin
-  note: Dropped from app_lists/linux_apps.txt. Docker's docker-ce engine (nukbuntu, the pis).
+  note: Dropped from the apt list (app_lists/base_app_lists.yaml). Docker's docker-ce engine (nukbuntu, the pis).
+
+# --- Docker Desktop and VirtualBox, retired 2026-11-13 ---
+#
+# Neither is used anywhere: Macs run Docker through Colima, Linux through Docker
+# Engine, and the homelab apps run on the docker host, so nothing on a Windows
+# machine needs Docker Desktop (whose license also does not cover company use).
+# A Windows box that ever needs Docker runs Docker Engine inside WSL
+# (docs/setup_docker.md). VirtualBox has no use left either.
+
+- name: docker_desktop_choco
+  manager: choco
+  package: docker-desktop
+
+- name: docker_desktop_winget
+  manager: winget
+  package: Docker.DockerDesktop
+
+- name: virtualbox_choco
+  manager: choco
+  package: virtualbox
+
+- name: virtualbox_winget
+  manager: winget
+  package: Oracle.VirtualBox

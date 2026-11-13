@@ -1,0 +1,268 @@
+# What every machine of a platform gets, whichever context owns it: the tools,
+# the browsers, the ssh server.
+#
+# Read by src/app_lists.py, which every installer in scripts/ asks for the
+# names of its package manager. On a member machine it adds what each
+# context's <context>_app_lists.yaml lists, in the same format; a name two
+# lists both carry is offered once.
+#
+# Keys are package managers; each maps to the package names that manager
+# knows. An entry may be limited to named machines with the same hosts gate
+# the manifests and removals use ({package: name, hosts: [HOST]}), and an apt
+# entry a WSL machine gets carries wsl: true (see apt below). An entry can be
+# commented out for one run and the file reverted.
+#
+# Installs needing more than a plain entry (a third-party repo, a vendor
+# installer, an App Store app) stay in app_lists/mac_apps_non_brew.md and
+# app_lists/linux_apps_non_apt.md: a list cannot express them.
+
+# macOS Homebrew formulae, installed by scripts/install_mac_apps.sh. A
+# third-party tap's formula may be listed in full (user/repo/formula): the
+# installer taps it and trusts that one formula before installing it.
+brew:
+  - bat
+  - bitwarden-cli
+  - black
+  - btop
+  - colima
+  - docker
+  - docker-compose
+  - exiftool
+  - fastfetch
+  - fd
+  - fzf
+  - gdu
+  - gh
+  - git
+  - go
+  - htop
+  - iperf3
+  - jq
+  - mosh
+  - ncdu
+  - neovim
+  - node
+  - pandoc
+  # pango pulls glib/cairo/harfbuzz/fontconfig - the native stack WeasyPrint
+  # dlopens for PDF generation (any repo using weasyprint needs these on mac)
+  - pango
+  # poppler: pdftoppm, which Claude Code's Read tool needs to render PDF pages
+  - poppler
+  # pwsh exists ONLY so powershell_aliases.ps1 edits can be parse-checked
+  # (`pwsh -NoProfile`) before they ship to the Windows machines. It never
+  # becomes a login shell or default anything - just a prefix-contained binary
+  # (formula, not cask: no pkg installer, no sudo; pulls in dotnet).
+  - powershell
+  - pylint
+  - python
+  - ripgrep
+  - speedtest-cli
+  - tldr
+  - tmux
+  - tree
+  - uv
+  - wget
+  - yq
+
+# macOS Homebrew casks, installed by scripts/install_mac_apps.sh.
+cask:
+  - dockdoor
+  - firefox
+  - google-chrome
+  - hammerspoon
+  - maccy
+  - visual-studio-code
+
+# Debian/Ubuntu packages, installed by scripts/install_linux_apps.sh.
+#
+# wsl: true marks the WSL subset: CLI tools only, no desktop, media, gaming or
+# homelab packages. On a WSL machine only those entries apply; everywhere else
+# every apt entry does. Adding a CLI tool does not add it to WSL; give it
+# wsl: true as well.
+apt:
+  - barrier
+  - btop
+  - {package: cargo, wsl: true}
+  - cifs-utils
+  - {package: curl, wsl: true}
+  - {package: fastfetch, wsl: true}
+  - {package: fzf, wsl: true}
+  - {package: gh, wsl: true}
+  - {package: git-all, wsl: true}
+  - {package: golang-go, wsl: true}
+  - {package: htop, wsl: true}
+  - {package: iperf3, wsl: true}
+  # pango and harfbuzz's subsetter - the native stack WeasyPrint dlopens for PDF
+  # generation (brew's pango on mac; any repo using weasyprint needs it)
+  - libharfbuzz-subset0
+  - libpango-1.0-0
+  - libpangoft2-1.0-0
+  - mailutils
+  - {package: ncdu, wsl: true}
+  - {package: neovim, wsl: true}
+  - {package: net-tools, wsl: true}
+  - npm
+  - openssh-server
+  - pandoc
+  - {package: python3, wsl: true}
+  - python3-isort
+  - {package: python3-pip, wsl: true}
+  - ripgrep
+  - rsync
+  - samba
+  - {package: speedtest-cli, wsl: true}
+  - ssmtp
+  - texlive-fonts-extra
+  - texlive-fonts-recommended
+  - texlive-latex-base
+  - texlive-latex-extra
+  - {package: tldr, wsl: true}
+  - {package: tmux, wsl: true}
+  - {package: tree, wsl: true}
+  - {package: unzip, wsl: true}
+
+# Fedora packages, installed by scripts/install_linux_apps_dnf.sh.
+#
+# Packages needing a third-party repo first (VS Code, NVIDIA drivers) stay in
+# app_lists/linux_apps_non_apt.md - they cannot be installed from a plain list.
+#
+# The Fedora twin of apt: the same set under Fedora's names, so a Fedora
+# workstation gets what an Ubuntu one does, plus what Fedora lacks by default.
+# Where the name differs, the apt name follows in a comment.
+dnf:
+  - barrier
+  - btop
+  - cargo
+  - cifs-utils
+  - curl
+  - fastfetch
+  - flatpak
+  - fzf
+  # the T3 Code server's node-pty has no linux-x64 prebuild and compiles from source
+  - gcc-c++
+  - gh
+  - git-all
+  - golang  # golang-go
+  - htop
+  - iperf3
+  - libxcrypt-compat
+  - make
+  - ncdu
+  - neovim
+  - net-tools
+  - nodejs-npm  # npm
+  - openssh-server
+  - pandoc-cli  # pandoc
+  # WeasyPrint's native stack; pulls harfbuzz, whose subsetter Ubuntu packages apart
+  - pango  # libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0
+  # containerd unpacks image layers with unpigz once it has seen it; a
+  # `dnf autoremove` took pigz on JasonZephyrus and every pull failed after.
+  - pigz
+  - python3
+  - python3-isort
+  - python3-pip
+  - ripgrep
+  - rsync
+  - s-nail  # mailutils
+  - samba
+  - speedtest-cli
+  - ssmtp
+  - texlive-collection-fontsextra  # texlive-fonts-extra
+  - texlive-collection-fontsrecommended  # texlive-fonts-recommended
+  - texlive-collection-latex  # texlive-latex-base
+  - texlive-collection-latexextra  # texlive-latex-extra
+  - tldr
+  - tmux
+  - tree
+  - unzip
+
+# Flatpak application ids, installed from flathub by
+# scripts/install_linux_apps_flatpak.sh, which adds the flathub remote first.
+flatpak:
+  - com.discordapp.Discord
+  - com.moonlight_stream.Moonlight
+  - com.parsecgaming.parsec
+  - com.sindresorhus.Caprine
+
+# Chocolatey packages, installed by scripts/install_windows_apps_with_chocolatey.ps1.
+# What any Windows box gets, whichever context owns it.
+choco:
+  - 7zip
+  - autohotkey
+  - firefox
+  - fzf
+  - gh
+  - git.install
+  - glow
+  - golang
+  - googlechrome
+  - grep
+  - gsudo
+  - logitech-options
+  - neovim
+  - nodejs-lts
+  - notepadplusplus
+  - powertoys
+  - procexp
+  - putty
+  - python313
+  - speedtest
+  - uv
+  - vscode
+  - wiztree
+
+# winget package ids, installed by scripts/install_windows_apps_with_winget.ps1.
+# What any Windows box gets, like choco above; an app sits on exactly one of
+# the two.
+winget:
+  - Microsoft.OpenSSH.Preview
+
+# Termux (Android) packages, installed with pkg by
+# scripts/install_android_termux_apps.sh. Only that installer reads this key:
+# no removal, upgrade or missing-app report covers Termux.
+termux:
+  - binutils-is-llvm
+  - build-essential
+  - clang
+  - cmake
+  - fastfetch
+  - git
+  - golang
+  - htop
+  - libandroid-execinfo
+  - libcrypt
+  - libffi
+  - libopenblas
+  - libxml2
+  - libxslt
+  - make
+  - man
+  - ncdu
+  - neovim
+  - ninja
+  - openssl
+  - patchelf
+  - python
+  - python3
+  - tmux
+  - tree
+  - which
+
+# MSYS2 packages, installed with pacman by scripts/install_msys2_packages.sh
+# from an MSYS2 shell. Only that installer reads this key: no removal, upgrade
+# or missing-app report covers MSYS2.
+msys2:
+  - mingw-w64-x86_64-bat
+  - mingw-w64-x86_64-bottom
+  - mingw-w64-x86_64-fd
+  - mingw-w64-x86_64-gcc
+  - mingw-w64-x86_64-gdk-pixbuf2
+  - mingw-w64-x86_64-go
+  - mingw-w64-x86_64-gobject-introspection
+  - mingw-w64-x86_64-gtk3
+  - mingw-w64-x86_64-pango
+  - mingw-w64-x86_64-ripgrep
+  - ncdu
+  - openssh
+  - rsync
+  - tmux

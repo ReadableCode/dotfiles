@@ -16,9 +16,9 @@ repo.
 
 Bootstrap installs Homebrew, git and uv if missing, clones dotfiles to `~/GitHub`, runs
 `uv sync`, `clone_repos.py`, `sync_python_envs.py` and `deploy_configs.py`, then installs
-everything in `app_lists/Brewfile` via `scripts/install_mac_apps.sh` (which reports what is
-already installed and prompts once for the rest). `brew bundle --file=app_lists/Brewfile` still
-works if you just want a straight install of everything.
+the `brew` and `cask` lists of `app_lists/base_app_lists.yaml`, plus what this Mac's contexts add,
+via `scripts/install_mac_apps.sh` (which reports what is already installed and prompts once
+for the rest).
 
 **What bootstrap does not do**, and you still need from the rest of this document:
 
@@ -288,22 +288,15 @@ brew upgrade --cask
 brew cleanup
 ```
 
-- Use Brewfile in ../app_lists/Brewfile to install apps:
-
-Either install everything straight from the Brewfile:
-
-```bash
-brew bundle --file=~/GitHub/dotfiles/app_lists/Brewfile
-```
-
-or use the installer, which lists what is already present and prompts once for the
-rest (this is what bootstrap runs):
+- Install the `brew` and `cask` lists of `app_lists/base_app_lists.yaml` with the installer,
+  which lists what is already present and prompts once for the rest (this is what
+  bootstrap runs):
 
 ```bash
 bash ~/GitHub/dotfiles/scripts/install_mac_apps.sh
 ```
 
-- See [mac_apps_non_brew.md](../app_lists/mac_apps_non_brew.md) for tools not in the Brewfile
+- See [mac_apps_non_brew.md](../app_lists/mac_apps_non_brew.md) for tools not in the brew lists
 
 ### Cleaning up brew to get disk space back
 

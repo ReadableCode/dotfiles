@@ -7,7 +7,7 @@ Guidance for Claude Code (and other AI agents) working in this repository.
 Personal **dotfiles + cross-machine configuration management**. It stores app
 configs, OS package lists, setup docs, and a set of Python/Go/shell utilities
 used to sync configs and pull data from various devices and services. It targets
-many environments: Linux, Windows (PowerShell/choco/winget), macOS (Brewfile),
+many environments: Linux, Windows (PowerShell/choco/winget), macOS (Homebrew),
 WSL, Android (Termux), Raspberry Pi, and iPad/Pythonista.
 
 There is no single "app" — it's a toolbox. Most entry points are individual
@@ -30,7 +30,8 @@ that same `<context>_dev` repo. See
 | `src/` | Python utilities: the deploy pipeline (`deploy_configs.py`, `deploy_map.py`, `claude_mcp.py`), the calendar / Gmail tools, the stdlib-only helpers the shells call at startup, and the data pullers. One paragraph per tool in **Tool index** below; shared helpers come from the `readable-utils` package, `src/utils/` holds only dotfiles-specific modules. |
 | `scripts/` | Standalone shell / PowerShell / AHK scripts for install & maintenance tasks. |
 | `application_configs/` | Source-of-truth dotfiles for bash, zsh, nvim, tmux, vscode, zed, git, claude, etc. |
-| `app_lists/` | Package manifests per platform (Brewfile, choco, winget, apt, Termux): what every machine of a platform gets. A context's own apps live in its `<context>_app_lists.yaml` (see `app_lists.py`). |
+| `app_lists/base_app_lists.yaml` | Package lists per manager (brew, cask, apt, dnf, flatpak, choco, winget, termux, msys2): what every machine of a platform gets. A context's own apps live in its `<context>_app_lists.yaml`, same format (see `app_lists.py`). |
+| `app_lists/` | Prose notes for the installs a list cannot express (`linux_apps_non_apt.md`, `mac_apps_non_brew.md`). |
 | `go_apps/` | Small Go tools: `git_puller` and the syncthing cleanup, both committing prebuilt binaries. |
 | `docs/` | Setup/how-to docs (one per topic), indexed in `docs/README.md`. |
 | `tests/` | pytest suite: one `tests/test_<tool>.py` per tool; `tests/test_utils/` holds shared helpers. |
@@ -176,8 +177,8 @@ is the one-paragraph orientation so an agent knows which file to open.
   uninstalls the packages `app_removals.yaml` (plus each overlay repo's
   `<context>_app_removals.yaml`) says must not be installed, one prompt per
   package after the manager's own dry run. Deliberately an explicit committed
-  list and not the negation of `app_lists/`: those name what should be
-  installed, so "absent from the Brewfile" would propose uninstalling every
+  list and not the negation of the app lists: those name what should be
+  installed, so "absent from the brew list" would propose uninstalling every
   dependency nobody named. A package an app list still names is never a
   candidate, so re-adding beats a stale removal line. A `capability` entry
   retires a Windows optional feature, and `replaced_by:` holds a removal back
@@ -191,11 +192,13 @@ is the one-paragraph orientation so an agent knows which file to open.
   of `refresh_machine.py`, `--packages` only, so myupdater and not every
   gitpullall. Doc: `docs/repo_app_removals.md`.
 - **`app_lists.py`** — the one answer to "what should this machine have" per
-  package manager: the dotfiles `app_lists/` files plus each member overlay
-  repo's `<context>_app_lists.yaml` (manager -> package names, same membership
-  gate as the overlay manifests), so a client's cloud CLI and chat app install
-  only on that client's machines. Every installer in `scripts/` appends
-  `--overlay <manager>`, and `app_removals.py` protects the union.
+  package manager: `app_lists/base_app_lists.yaml` plus each member overlay repo's
+  `<context>_app_lists.yaml` (manager -> package names, one parser, same
+  membership gate as the overlay manifests), so a client's cloud CLI and chat
+  app install only on that client's machines. An entry can carry `hosts:`,
+  and an apt entry `wsl: true`: on WSL only those apt entries apply. Every
+  installer in `scripts/` gets its names from `--packages <manager>`, and
+  `app_removals.py` protects the union.
   `--missing` lists what the lists name and the managers do not report
   installed, which myupdater prints in its closing summary. An app ignored
   at an installer's per-app question is written to
@@ -351,7 +354,7 @@ Path setup lives in the repo-root `conftest.py`; don't re-add per-file
 ## Conventions
 
 - Keep platform-specific things in their existing buckets (e.g. a new package
-  goes in the right `app_lists/*` file; a new config goes under
+  goes under the right key of `app_lists/base_app_lists.yaml`; a new config goes under
   `application_configs/<app>/`).
 - **Config variant naming**: host-, platform-, and context-specific configs use
   the suffix scheme `<base>.<token>.<ext>` with a single lowercase token —
