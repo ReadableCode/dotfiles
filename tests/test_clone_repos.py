@@ -148,3 +148,24 @@ def test_repos_of_a_context_the_host_record_is_not_in_are_not_offered(git_dir, m
         file_handle.write('{"hosts": [{"name": "HUB", "contexts": ["acme"]}]}')
     assert clone_repos.run(list_only=True) == 0
     assert "acme-app" in capsys.readouterr().out
+
+
+def test_a_repo_cloned_while_the_prompt_waits_is_not_a_failure(git_dir, monkeypatch, capsys):
+    # the nukbuntu case: the host's own `clone_repos.py --yes` cron cloned the
+    # repo between the list and the answer, and git refused the existing folder
+    write_repos_config(
+        str(git_dir / "acme_credentials"),
+        "acme",
+        {"defaults": {"provider": "github", "org": "acme"}, "repos": [{"name": "acme-app"}]},
+    )
+    monkeypatch.setattr(clone_repos, "get_uppercase_hostname", lambda: "ANYBOX")
+    monkeypatch.setattr(clone_repos.sys.stdin, "isatty", lambda: True)
+
+    def answer_after_the_cron_cloned_it(question):
+        os.makedirs(str(git_dir / "acme-app"))
+        return "y"
+
+    monkeypatch.setattr(clone_repos, "prompt_yes_no_quit", answer_after_the_cron_cloned_it)
+    monkeypatch.setattr(clone_repos, "clone_repo", lambda entry: pytest.fail("cloned over an existing checkout"))
+    assert clone_repos.run() == 0
+    assert "acme-app was cloned meanwhile" in capsys.readouterr().out

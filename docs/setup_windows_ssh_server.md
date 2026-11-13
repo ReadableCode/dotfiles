@@ -97,18 +97,21 @@
     PubkeyAuthentication yes
     ```
 
-  * Key-only logins on portable machines (UltraPocket): once a
-    key login from another machine works, add these two lines ABOVE the
-    `Match Group administrators` block (anything below a `Match` applies
-    only inside it), validate with
-    `& 'C:\Program Files\OpenSSH\sshd.exe' -t -f C:\ProgramData\ssh\sshd_config`,
-    then `Restart-Service sshd`. Confirm from the other machine that
-    `ssh -o PubkeyAuthentication=no jason@<host>` is refused.
+  * Key-only logins on portable machines (UltraPocket, Yoga7i): once a
+    key login from every machine that needs one works (passwords stop
+    working after this), run this in admin PowerShell. It adds
+    `PasswordAuthentication no` and `KbdInteractiveAuthentication no` ABOVE
+    the `Match Group administrators` block (anything below a `Match` applies
+    only inside it) unless they are already there, validates the config and
+    restarts sshd only if it passes, so a bad edit cannot lock you out:
 
-    ```bash
-    PasswordAuthentication no
-    KbdInteractiveAuthentication no
+    ```powershell
+    $f = 'C:\ProgramData\ssh\sshd_config'; $lines = Get-Content $f; if (-not ($lines -match '^\s*PasswordAuthentication\s+no')) { $i = [array]::FindIndex($lines, [Predicate[string]]{ param($l) $l -match '^\s*Match\s' }); if ($i -lt 0) { $i = $lines.Count }; $new = @($lines[0..($i-1)]) + 'PasswordAuthentication no' + 'KbdInteractiveAuthentication no' + @($lines[$i..($lines.Count-1)] | Where-Object { $_ -ne $null }); Set-Content -Path $f -Value $new -Encoding ascii }; & 'C:\Program Files\OpenSSH\sshd.exe' -t -f $f; if ($?) { Restart-Service sshd; 'restarted' }
     ```
+
+    Confirm from another machine that a key login still works and that
+    `ssh -o PubkeyAuthentication=no jason@<host>` is refused with
+    `Permission denied (publickey)`.
 
 * Run these commands in admin powershell to set the default shell to powershell:
 

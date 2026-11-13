@@ -17,7 +17,7 @@ param(
 # Check for administrative privileges
 if (-NOT ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Error "Please run this script as an Administrator."
-    exit
+    exit 1
 }
 
 . (Join-Path $PSScriptRoot 'AppInstallLib.ps1')
@@ -37,7 +37,7 @@ if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     }
     Catch {
         Write-Error "Failed to install Chocolatey. Error: $_"
-        exit
+        exit 1
     }
 }
 

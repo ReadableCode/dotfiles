@@ -299,6 +299,11 @@ def run(list_only=False, assume_yes=False):
         if answer == "n":
             print(paint(f"  skipped {entry['name']}", "dim"))
             continue
+        # Checked again here, not only above: a prompt can wait for minutes, and
+        # the host's own crontab (clone_repos.py --yes) may clone it meanwhile.
+        if os.path.isdir(clone_dest(entry)):
+            print(paint(f"  {entry['name']} was cloned meanwhile (another run got there first)", "green"))
+            continue
         if clone_repo(entry):
             print(paint(f"  cloned {entry['name']}", "green"))
             refresh_report.record("clone.cloned", entry["name"])

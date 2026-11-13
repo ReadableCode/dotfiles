@@ -22,7 +22,7 @@ if (-not $AppList) {
 
 if (!(Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Error "winget not found. Install App Installer from the Microsoft Store."
-    exit
+    exit 1
 }
 
 Install-FromList -Label 'winget' -AppList $AppList -Manager winget -OfferIgnored:$OfferIgnored -AssumeYes:$AssumeYes -DryRun:$DryRun `
