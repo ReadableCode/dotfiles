@@ -44,10 +44,6 @@ authorized_keys
 
 # Tools that drop auth/state into XDG_CONFIG_HOME alongside the configs we track
 application_configs/github-copilot/
-# uv's standalone installer records each machine's install here (Windows points
-# XDG_CONFIG_HOME at this folder so uv reads the tracked uv.toml); `uv self
-# update` needs it, so it stays on disk and out of git
-application_configs/uv/uv-receipt.json
 
 
 # window layout data is private (window titles name real hosts and client

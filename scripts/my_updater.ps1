@@ -585,9 +585,15 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
 # --check`) are missing. A winget or choco uv refuses self-update and names
 # that manager, which already upgraded it above, so that refusal is one line
 # and never fails the run. Same rule as update_uv() in my_updater.sh.
+# XDG_CONFIG_HOME is cleared for the call: the profile points it at the
+# repo's application_configs (for nvim), and self update would write its
+# install receipt there instead of %LOCALAPPDATA%\uv, where it belongs.
 if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Host "updating uv..."
-    $uvOut = (& uv self update 2>&1 | Out-String).Trim()
+    $xdg = $env:XDG_CONFIG_HOME
+    Remove-Item Env:XDG_CONFIG_HOME -ErrorAction SilentlyContinue
+    try { $uvOut = (& uv self update 2>&1 | Out-String).Trim() }
+    finally { if ($xdg) { $env:XDG_CONFIG_HOME = $xdg } }
     if ($LASTEXITCODE -eq 0) {
         if ($uvOut) { Write-Host $uvOut }
     }
