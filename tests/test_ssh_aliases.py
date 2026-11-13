@@ -2,6 +2,7 @@
 
 import json
 import os
+import shlex
 
 import config_test_utils  # noqa F401
 import pytest
@@ -45,6 +46,15 @@ def test_ssh_user_wins_over_user_and_name_stands_in_for_hostname(tmp_path):
     host = {"name": "box.local", "user": "generic", "ssh_user": "svc", "aliases": ["sshbox"]}
     write_inventory(tmp_path, "personal", [host])
     assert aliases(tmp_path)["sshbox"] == "ssh svc@box.local"
+
+
+def test_domain_user_keeps_its_backslash_through_the_shell(tmp_path):
+    """bash and zsh eval the alias, so an unquoted DOMAIN\\user would lose its backslash."""
+    host = {"name": "box", "hostname": "10.0.0.5", "user": "ACME\\svc", "aliases": ["sshbox"]}
+    write_inventory(tmp_path, "acme", [host])
+    command = aliases(tmp_path)["sshbox"]
+    assert command == "ssh 'ACME\\svc@10.0.0.5'"
+    assert shlex.split(command) == ["ssh", "ACME\\svc@10.0.0.5"]
 
 
 def test_host_with_no_user_makes_no_ssh_alias(tmp_path):

@@ -153,6 +153,51 @@
   `ed25519` key.
 * Diagnose offered/accepted keys from the client with `ssh -v <host> hostname`.
 
+## Entra ID (Azure AD) accounts: key login for the machine's own user
+
+A work laptop joined to Entra ID has no on-prem domain: the account is
+`azuread\<name>` (`whoami`), and `nltest /dsgetdc:` answers
+`ERROR_NO_SUCH_DOMAIN`. Win32-OpenSSH 9.4 running as the SYSTEM service cannot
+serve that account with a key, and fails in three places, each one a bare
+"Connection reset" on the client with nothing in the OpenSSH log:
+
+* Any `DOMAIN\name` login whose domain does not exist (an old on-prem name in
+  the inventory or in `AllowUsers`) crashes the session process.
+* `Match Group administrators` crashes while looking up the Entra ID
+  account's groups. Drop the block and set
+  `AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys`
+  globally; with `AllowUsers azuread\<name>` the machine admits only that
+  user anyway.
+* After the key is accepted (`Authenticated ... using "publickey"` in
+  `ssh -v`), the service cannot start a session for the account without its
+  password, and resets again.
+
+The working setup runs the same `sshd.exe`, config and host keys as the user
+instead of as SYSTEM, from a scheduled task at logon with highest privileges,
+and disables the service so port 22 is free (admin PowerShell):
+
+```powershell
+$me = "$env:USERDOMAIN\$env:USERNAME"
+$a = New-ScheduledTaskAction -Execute 'C:\Program Files\OpenSSH\sshd.exe' -Argument '-D'
+$t = New-ScheduledTaskTrigger -AtLogOn -User $me
+$p = New-ScheduledTaskPrincipal -UserId $me -LogonType Interactive -RunLevel Highest
+$s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+Register-ScheduledTask -TaskName 'sshd as me' -Action $a -Trigger $t -Principal $p -Settings $s -Force
+Stop-Service sshd; Set-Service sshd -StartupType Disabled
+Start-ScheduledTask 'sshd as me'
+```
+
+SSH is then up whenever the user is logged in, with the key and no second
+account, and the session is elevated. The inventory's `user` is
+`azuread\<name>`; `src/ssh_aliases.py` quotes it so the backslash survives the
+shell. Undo: `Set-Service sshd -StartupType Automatic`, start it, and
+`Unregister-ScheduledTask 'sshd as me'`.
+
+To find where sshd dies, run it in the foreground as the user for one login
+(`Stop-Service sshd`, then `sshd.exe -ddd -E <log>` from admin PowerShell), or
+add `SyslogFacility LOCAL0` and `LogLevel DEBUG3` to the service config, which
+writes `C:\ProgramData\ssh\logs\sshd.log`.
+
 ## Setting up portable SSH server on Windows (no admin)
 
 * Download portable openssh from:

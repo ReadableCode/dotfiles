@@ -67,6 +67,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import socket
 import sys
 
@@ -165,7 +166,7 @@ def jump_spec(host, hosts, local_short):
     user = host_user(jump)
     target = host_target(jump)
     spec = "{}@{}".format(user, target) if user else str(target)
-    return "{}:{}".format(spec, jump["port"]) if jump.get("port") else spec
+    return shlex.quote("{}:{}".format(spec, jump["port"]) if jump.get("port") else spec)
 
 
 def ssh_command(host, hosts, local_short):
@@ -176,7 +177,9 @@ def ssh_command(host, hosts, local_short):
         parts += ["-J", spec]
     if host.get("port"):
         parts += ["-p", str(host["port"])]
-    parts.append("{}@{}".format(host_user(host), host_target(host)))
+    # Quoted, since the shells eval the line: a domain account (DOMAIN\\user)
+    # otherwise loses its backslash and ssh sends a user that does not exist.
+    parts.append(shlex.quote("{}@{}".format(host_user(host), host_target(host))))
     return " ".join(parts)
 
 
