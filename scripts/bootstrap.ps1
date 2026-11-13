@@ -18,6 +18,9 @@
 #   -AssumeYes          never prompt
 #   -SkipApps           skip the package install step
 #   -ChocoList PATH     which choco profile to install (default: the personal list)
+#   -Only TOOL          install one tool (git, uv or claude) and exit, without
+#                       touching anything else; refresh_machine.py offers this
+#                       when a step needs a tool the machine lacks
 
 param(
     [string[]]$Credentials = @(),
@@ -25,7 +28,9 @@ param(
     [switch]$DryRun,
     [switch]$AssumeYes,
     [switch]$SkipApps,
-    [string]$ChocoList
+    [string]$ChocoList,
+    [ValidateSet('git', 'uv', 'claude')]
+    [string]$Only
 )
 
 $DotfilesUrl = 'https://github.com/ReadableCode/dotfiles.git'
@@ -50,6 +55,65 @@ function Confirm-Step {
 }
 
 function Test-Have { param($Name) return [bool](Get-Command $Name -ErrorAction SilentlyContinue) }
+
+# %%
+# Tool steps #
+
+# Each is idempotent: present means skip. The full run calls them in order
+# below; -Only calls one and exits before anything else changes.
+
+function Install-GitTool {
+    Write-Step "git"
+    if (Test-Have git) {
+        Write-Skip "git present ($(git --version))"
+    } elseif ($DryRun) {
+        Write-Todo "winget install --id Git.Git"
+    } elseif (Test-Have winget) {
+        winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements
+    } else {
+        Write-Fail "cannot install git without winget"
+    }
+}
+
+function Install-UvTool {
+    Write-Step "uv"
+    if (Test-Have uv) {
+        Write-Skip "uv present ($(uv --version))"
+    } elseif ($DryRun) {
+        Write-Todo "install uv"
+    } elseif (Confirm-Step "install uv?") {
+        Invoke-Expression (Invoke-RestMethod https://astral.sh/uv/install.ps1)
+        $uvBin = Join-Path $HOME '.local\bin'
+        if (Test-Path $uvBin) { $env:PATH = "$uvBin;$env:PATH" }
+    }
+}
+
+# Anthropic's own installer, not the choco or winget package: both repackage
+# releases days late and T3 Code rejects a stale claude outright (see the
+# claude_code_choco entry in app_removals.yaml). It self-updates on launch.
+function Install-ClaudeTool {
+    Write-Step "claude"
+    if (Test-Have claude) {
+        Write-Skip "claude present ($(claude --version))"
+    } elseif ($DryRun) {
+        Write-Todo "install claude code"
+    } elseif (Confirm-Step "install claude code?") {
+        Invoke-Expression (Invoke-RestMethod https://claude.ai/install.ps1)
+        $claudeBin = Join-Path $HOME '.local\bin'
+        if (Test-Path $claudeBin) { $env:PATH = "$claudeBin;$env:PATH" }
+    }
+}
+
+if ($Only) {
+    switch ($Only) {
+        'git'    { Install-GitTool }
+        'uv'     { Install-UvTool }
+        'claude' { Install-ClaudeTool }
+    }
+    if (Test-Have $Only) { exit 0 }
+    Write-Fail "$Only is still not on PATH"
+    exit 1
+}
 
 # %%
 # Environment #
@@ -112,41 +176,11 @@ if (Test-Have choco) {
     Write-Ok "chocolatey installed"
 }
 
-Write-Step "git"
-if (Test-Have git) {
-    Write-Skip "git present ($(git --version))"
-} elseif ($DryRun) {
-    Write-Todo "winget install --id Git.Git"
-} elseif (Test-Have winget) {
-    winget install --id Git.Git --exact --accept-package-agreements --accept-source-agreements
-} else {
-    Write-Fail "cannot install git without winget"
-}
+Install-GitTool
 
-Write-Step "uv"
-if (Test-Have uv) {
-    Write-Skip "uv present ($(uv --version))"
-} elseif ($DryRun) {
-    Write-Todo "install uv"
-} elseif (Confirm-Step "install uv?") {
-    Invoke-Expression (Invoke-RestMethod https://astral.sh/uv/install.ps1)
-    $uvBin = Join-Path $HOME '.local\bin'
-    if (Test-Path $uvBin) { $env:PATH = "$uvBin;$env:PATH" }
-}
+Install-UvTool
 
-# Anthropic's own installer, not the choco or winget package: both repackage
-# releases days late and T3 Code rejects a stale claude outright (see the
-# claude_code_choco entry in app_removals.yaml). It self-updates on launch.
-Write-Step "claude"
-if (Test-Have claude) {
-    Write-Skip "claude present ($(claude --version))"
-} elseif ($DryRun) {
-    Write-Todo "install claude code"
-} elseif (Confirm-Step "install claude code?") {
-    Invoke-Expression (Invoke-RestMethod https://claude.ai/install.ps1)
-    $claudeBin = Join-Path $HOME '.local\bin'
-    if (Test-Path $claudeBin) { $env:PATH = "$claudeBin;$env:PATH" }
-}
+Install-ClaudeTool
 
 # %%
 # dotfiles #

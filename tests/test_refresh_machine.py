@@ -453,6 +453,8 @@ def test_a_missing_tool_is_offered_and_the_step_then_runs(tmp_path, monkeypatch)
     """The Pi case: no uv, so nothing could deploy and nothing offered to fix it."""
     monkeypatch.setattr(refresh_machine.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(refresh_machine, "ask_yes_no", lambda question: True)
+    monkeypatch.setattr(refresh_machine.platform, "system", lambda: "Linux")
+    monkeypatch.setenv("PATH", os.environ.get("PATH", ""))  # restored after the offer re-reads the user PATH
     ran = []
     installed = {"uv": False}
 
@@ -522,8 +524,35 @@ def test_a_failed_install_still_fails_the_step(tmp_path, monkeypatch):
 
 
 def test_bootstrap_argv_asks_the_repos_own_installer():
-    argv = refresh_machine.bootstrap_argv("/repos/dotfiles", "uv")
+    argv = refresh_machine.bootstrap_argv("/repos/dotfiles", "uv", system="Linux")
     assert argv == ["bash", os.path.join("/repos/dotfiles", "scripts", "bootstrap.sh"), "--only", "uv", "--yes"]
+
+
+def test_bootstrap_argv_on_windows_runs_the_powershell_bootstrap_not_bash():
+    # a bare "bash" on Windows is System32's WSL launcher, which mangles the Windows path
+    argv = refresh_machine.bootstrap_argv(
+        "C:/repos/dotfiles", "uv", system="Windows", which=lambda n: "C:/pwsh.exe" if n == "pwsh" else None
+    )
+    assert argv == [
+        "C:/pwsh.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        os.path.join("C:/repos/dotfiles", "scripts", "bootstrap.ps1"),
+        "-Only",
+        "uv",
+        "-AssumeYes",
+    ]
+    assert "bash" not in argv
+
+
+def test_add_user_path_appends_only_the_entries_the_process_lacks():
+    environ = {"PATH": os.pathsep.join(["C:\\Windows", "C:\\Tools\\"])}
+    added = refresh_machine.add_user_path(environ, ["C:\\tools", "C:\\Users\\jason\\.local\\bin"])
+    assert added == ["C:\\Users\\jason\\.local\\bin"]
+    assert environ["PATH"].split(os.pathsep)[-1] == "C:\\Users\\jason\\.local\\bin"
+    assert refresh_machine.add_user_path(environ, ["C:\\Users\\jason\\.local\\bin"]) == []
 
 
 # ------------------------------------------------- app-list installs

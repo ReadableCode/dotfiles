@@ -650,9 +650,46 @@ def run_pull(argv, out, log=None):
     return proc.returncode, unpulled
 
 
-def bootstrap_argv(dotfiles, need):
-    """The repo's own installer asked for one tool, so a tool has one install path and not two."""
+def bootstrap_argv(dotfiles, need, system=None, which=shutil.which):
+    """
+    The repo's own installer asked for one tool, so a tool has one install path
+    and not two: bootstrap.ps1 on Windows, where a bare "bash" is System32's WSL
+    launcher (it mangles a Windows path), and bootstrap.sh everywhere else.
+    """
+    if (system or platform.system()) == "Windows":
+        shell = which("pwsh") or which("powershell") or "powershell"
+        script = os.path.join(dotfiles, "scripts", "bootstrap.ps1")
+        return [shell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-Only", need, "-AssumeYes"]
     return ["bash", os.path.join(dotfiles, "scripts", "bootstrap.sh"), "--only", need, "--yes"]
+
+
+def windows_user_path():
+    """
+    The user PATH as Windows stores it (HKCU\\Environment), entries expanded,
+    or [] off Windows. An installer run from here adds its folder there, and
+    this process's own PATH never sees that until something reads it again.
+    """
+    try:
+        import winreg
+    except ImportError:
+        return []
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
+            value, _ = winreg.QueryValueEx(key, "Path")
+    except OSError:
+        return []
+    return [os.path.expandvars(entry) for entry in str(value).split(";") if entry]
+
+
+def add_user_path(environ=None, entries=None):
+    """Append the user PATH entries this process's PATH lacks. Returns the ones added."""
+    environ = os.environ if environ is None else environ
+    entries = windows_user_path() if entries is None else entries
+    have = {entry.rstrip("\\").lower() for entry in environ.get("PATH", "").split(os.pathsep) if entry}
+    added = [entry for entry in entries if entry.rstrip("\\").lower() not in have]
+    if added:
+        environ["PATH"] = os.pathsep.join([environ.get("PATH", "").rstrip(os.pathsep)] + added)
+    return added
 
 
 def ask_yes_no(question):
@@ -681,13 +718,17 @@ def offer_dependency(need, dotfiles, out, color, run=run_plain, which=shutil.whi
     ask = ask or ask_yes_no
     if dotfiles is None or not sys.stdin.isatty():
         return False
-    out.write(paint(f"   {need} is missing; scripts/bootstrap.sh can install it", "amber", color) + "\n")
+    argv = bootstrap_argv(dotfiles, need, which=which)
+    script = os.path.basename(next(arg for arg in argv if arg.endswith((".sh", ".ps1"))))
+    out.write(paint(f"   {need} is missing; scripts/{script} can install it", "amber", color) + "\n")
     out.flush()
     if not ask(f"   install {need} now? [y/N] "):
         return False
-    if run(bootstrap_argv(dotfiles, need)):
+    if run(argv):
         out.write(paint(f"   bootstrap could not install {need}", "red", color) + "\n")
         return False
+    # an installer on Windows puts its folder on the user PATH, which this run cannot see yet
+    add_user_path()
     return bool(which(need))
 
 
