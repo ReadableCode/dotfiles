@@ -194,6 +194,16 @@ starts it, which stops the task's sshd, so the same myupdater run puts it
 back and OpenSSH stays current with no manual step. A myupdater run over
 SSH survives the upgrade: the session process outlives the sshd it came from.
 
+OpenSSH 10.x's installer also opts `sshd.exe` into RedirectionGuard (its
+`Image File Execution Options\sshd.exe` `MitigationOptions` value, bit 0x10 of
+byte 18), and every process an SSH session starts inherits it: none can follow
+a symlink or junction a non-elevated user made, which is every link the
+deploy makes, so `uv` and myupdater fail over SSH with error 448 ("untrusted
+mount point"). `sshd_as_user` clears that bit after each upgrade and restarts
+the task's sshd. That reopens the local link-planting attack on the sshd
+process tree, accepted for a single-user, key-only machine. A process started
+on the desktop (a T3 thread, a console) never had the guard.
+
 SSH is then up whenever the user is logged in, with the key and no second
 account, and the session is elevated. Each SSH session opens a console window
 on the user's desktop, since sshd runs in that session. The inventory's

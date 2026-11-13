@@ -304,17 +304,43 @@ function Get-SshdAsUserDrift {
         $drift += [pscustomobject]@{ Kind = 'sshd_service'; Key = 'sshd_as_user'; Path = 'sshd'; Name = 'sshd'
             Text = "the sshd service is $($service.Status) and $($service.StartType), inventory runs sshd as the user" }
     }
+    $guard = Get-SshdRedirectionGuard
+    if ($guard) {
+        $drift += [pscustomobject]@{ Kind = 'sshd_guard'; Key = 'sshd_as_user'; Path = $SshdIfeoKey; Name = 'MitigationOptions'
+            Text = "RedirectionGuard is on for sshd.exe, so SSH sessions cannot follow the deployed links" }
+    }
     $task = Get-ScheduledTask -TaskName $SshdTaskName -ErrorAction SilentlyContinue
     $action = if ($task) { $task.Actions | Select-Object -First 1 }
     if (-not $task -or $action.Execute -ne $SshdExe -or $action.Arguments -ne '-D') {
         $drift += [pscustomobject]@{ Kind = 'sshd_task'; Key = 'sshd_as_user'; Path = $SshdTaskName; Name = $SshdTaskName
             Text = "the task '$SshdTaskName' is $(if ($task) { 'not running sshd.exe -D' } else { 'missing' })" }
     }
-    if (-not $task -or $task.State -ne 'Running') {
+    if (-not $task -or $task.State -ne 'Running' -or $guard) {
         $drift += [pscustomobject]@{ Kind = 'sshd_start'; Key = 'sshd_as_user'; Path = $SshdTaskName; Name = $SshdTaskName
-            Text = "the task '$SshdTaskName' is not running" }
+            Text = "the task '$SshdTaskName' is $(if ($task -and $task.State -eq 'Running') { 'running with RedirectionGuard on' } else { 'not running' })" }
     }
     return , @($drift)
+}
+
+# OpenSSH's installer opts sshd.exe into RedirectionGuard through this IFEO
+# value (19 bytes; bit 0x10 of the last byte), and every process an SSH
+# session starts inherits it: none of them can follow a symlink or junction a
+# non-elevated user made, which is every link deploy_configs makes, so uv and
+# myupdater fail over SSH with error 448 ("untrusted mount point"). Each
+# OpenSSH upgrade writes the bit back. Clearing it reopens the local link-
+# planting attack on the sshd process tree, accepted for a single-user,
+# key-only machine.
+$SshdIfeoKey = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\sshd.exe'
+
+function Get-SshdRedirectionGuard {
+    $bytes = (Get-ItemProperty -Path $SshdIfeoKey -Name MitigationOptions -ErrorAction SilentlyContinue).MitigationOptions
+    return ($null -ne $bytes) -and ($bytes.Count -ge 19) -and (($bytes[18] -band 0x10) -ne 0)
+}
+
+function Clear-SshdRedirectionGuard {
+    $bytes = [byte[]](Get-ItemProperty -Path $SshdIfeoKey -Name MitigationOptions).MitigationOptions
+    $bytes[18] = $bytes[18] -band 0xEF
+    Set-ItemProperty -Path $SshdIfeoKey -Name MitigationOptions -Value $bytes -Type Binary
 }
 
 function Register-SshdAsUser {
@@ -420,7 +446,16 @@ function Set-DriftRow {
             Register-SshdAsUser
             Write-Host "  windows.$($Row.Key): registered the task '$SshdTaskName'"
         }
+        'sshd_guard' {
+            Clear-SshdRedirectionGuard
+            Write-Host "  windows.$($Row.Key): turned RedirectionGuard off for sshd.exe"
+        }
         'sshd_start' {
+            # A restart when it is already running, so sshd picks up a cleared
+            # guard; sessions already open outlive the sshd that started them.
+            if ((Get-ScheduledTask -TaskName $SshdTaskName).State -eq 'Running') {
+                Stop-ScheduledTask -TaskName $SshdTaskName
+            }
             Start-ScheduledTask -TaskName $SshdTaskName
             Write-Host "  windows.$($Row.Key): started the task '$SshdTaskName'"
         }
