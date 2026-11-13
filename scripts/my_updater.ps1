@@ -579,6 +579,27 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
     }
 }
 
+# A standalone uv (bootstrap's installer, in ~\.local\bin) upgrades only
+# itself, with `uv self update`; no manager above owns it, so without this it
+# stays on its install version and newer flags other tools rely on (`uv sync
+# --check`) are missing. A winget or choco uv refuses self-update and names
+# that manager, which already upgraded it above, so that refusal is one line
+# and never fails the run. Same rule as update_uv() in my_updater.sh.
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    Write-Host "updating uv..."
+    $uvOut = (& uv self update 2>&1 | Out-String).Trim()
+    if ($LASTEXITCODE -eq 0) {
+        if ($uvOut) { Write-Host $uvOut }
+    }
+    elseif ($uvOut -like "*external package manager*") {
+        Write-Host "  uv is package-manager owned; the package upgrades above cover it."
+    }
+    else {
+        Write-Host $uvOut
+        $settingsFailed = $true
+    }
+}
+
 Restore-LogonApps $logonAppsRunning
 
 # An upgrade that did not go through fails this step, and so does a setting

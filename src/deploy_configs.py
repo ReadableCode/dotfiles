@@ -1100,6 +1100,31 @@ def load_context_repo_names(context, overlay_root=None):
     return names, path
 
 
+def context_repo_cloned(context, overlay_root=None):
+    """
+    Whether the repo that holds a context's ``<context>_repos.yaml`` is cloned
+    here: dotfiles itself, a ``<context>_credentials`` repo, or an opt-in
+    overlay named after the context.
+    """
+    overlay_root = overlay_root or grandparent_dir
+    return any(overlay_context(directory) == context for directory in [REPO_ROOT] + find_overlay_dirs(overlay_root))
+
+
+_NOTED_ABSENT_CONTEXTS: set = set()
+
+
+def note_absent_context(entry_name, context):
+    """Say once per run that a per-repo entry skips a context whose repos file is not on this machine."""
+    if context in _NOTED_ABSENT_CONTEXTS:
+        return
+    _NOTED_ABSENT_CONTEXTS.add(context)
+    print(
+        f"note: {entry_name} and any other per-repo entry skip the {context} repos: "
+        f"{context}_credentials is not cloned here, so its {context}_repos.yaml cannot be read",
+        file=sys.stderr,
+    )
+
+
 def expand_context_repo_entries(entries, base_dir, overlay_root=None):
     """
     Replace every ``per_context_repo`` entry with one plain entry per repo.
@@ -1115,6 +1140,11 @@ def expand_context_repo_entries(entries, base_dir, overlay_root=None):
     Each expansion is named ``<entry>__<repo>``, has {context_repo} replaced in
     dest and requires, and gates on the checkout existing - a repo this machine
     never cloned is a clean skip, never a folder created for it.
+
+    A context whose repos file lives in a repo not cloned here (a dev overlay
+    cloned before its credentials repo) contributes no repos, with one note,
+    rather than failing the whole deploy: its checkouts would all skip anyway.
+    A cloned context repo that lacks the file still raises.
     """
     expanded = []
     for entry in entries:
@@ -1127,11 +1157,17 @@ def expand_context_repo_entries(entries, base_dir, overlay_root=None):
         else:
             contexts = [spec] if isinstance(spec, str) else list(spec)
         names: list = []
+        absent = [context for context in contexts if not context_repo_cloned(context, overlay_root)]
+        for context in absent:
+            note_absent_context(entry["name"], context)
         for context in contexts:
+            if context in absent:
+                continue
             names.extend(name for name in load_context_repo_names(context, overlay_root)[0] if name not in names)
         names.extend(name for name in entry.get("extra_repos") or [] if name not in names)
         excluded = list(entry.get("exclude_repos") or [])
-        unknown = [name for name in excluded if name not in names]
+        # an absent context's repos are unknown here, so an exclusion naming one cannot be checked
+        unknown = [name for name in excluded if name not in names] if not absent else []
         if unknown:
             raise ValueError(
                 f"Manifest entry {entry['name']} excludes repos none of its contexts "
