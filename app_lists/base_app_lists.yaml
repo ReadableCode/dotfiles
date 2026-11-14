@@ -70,6 +70,7 @@ cask:
   - firefox
   - google-chrome
   - hammerspoon
+  - hoppscotch
   - maccy
   - visual-studio-code
 
@@ -215,6 +216,8 @@ choco:
 # What any Windows box gets, like choco above; an app sits on exactly one of
 # the two.
 winget:
+  # winget over choco for Hoppscotch: 26.8.1 vs 25.2.2 on 2026-09-24.
+  - hoppscotch.Hoppscotch
   - Microsoft.OpenSSH.Preview
 
 # Termux (Android) packages, installed with pkg by
