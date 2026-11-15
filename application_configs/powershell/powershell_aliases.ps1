@@ -511,9 +511,17 @@ function weather {
     Invoke-RestMethod "https://wttr.in"
 }
 
-# Public IP via ifconfig.me.
+# Public IPv4 and IPv6 on labeled lines. api.ipify.org has only A records and
+# api6.ipify.org only AAAA records, so each lookup answers for one address family.
 function getpubip {
-    (Invoke-WebRequest -Uri "https://ifconfig.me/ip" -UseBasicParsing).Content.Trim()
+    foreach ($family in @(@("ipv4", "https://api.ipify.org"), @("ipv6", "https://api6.ipify.org"))) {
+        try {
+            $ip = (Invoke-WebRequest -Uri $family[1] -UseBasicParsing -TimeoutSec 8).Content.Trim()
+        } catch {
+            $ip = "none"
+        }
+        "$($family[0]): $ip"
+    }
 }
 
 # Run a speedtest.
