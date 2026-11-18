@@ -601,8 +601,33 @@ one window's worth of git diff rather than reshuffling the whole file.
 
 The same server backs the Stream Deck keys (Website action, "GET request in
 background"): `/applyLayouts`, `/apply?space=N`, `/snapshot`, `/snapshotApp`,
-`/gather`, `/fixAssign` (`?force=1&dock=1` for enforce all), `/learnAssign`,
-`/reload`. It binds to localhost only.
+`/gather`, `/pull`, `/fixAssign` (`?force=1&dock=1` for enforce all),
+`/learnAssign`, `/reload`. It binds to localhost only.
+
+#### One screen: pulling windows onto one desktop
+
+With the landscape monitor on the KVM's other machine, the windows that
+normally share the portrait slot across desktops are wanted side by side on
+one desktop. The top-level `"pull"` names the desktop to gather on and the
+windows to bring, each with the desktop it is taken from (`"from"`) and its
+rectangle there. `/pull` (the Stream Deck's Desk folder, "One Screen") walks
+the desktops, drags each named window onto the pull desktop, applies the
+attached display set's layout for that desktop, places the pulled windows over
+it and leaves you standing there. It is not tied to a display set, since its
+rectangles are all on the portrait screen, so it works before or after the
+KVM switch.
+
+An entry's optional `"press"` names a button inside the window to click once
+it is placed, by its accessibility label: `"Calendar"` switches the Outlook
+web app off Mail. It is a real click at the button's centre, since Outlook
+reports AXPress as done and stays put. Pressing One Screen again reuses the
+windows already pulled rather than looking for more.
+
+`"from"` picks the window instead of a title match because Chrome web apps
+report no window title, so a personal and a work calendar window of the same
+web app differ only by desktop. Each pulled window is remembered (in
+`hs.settings`, so a reload keeps it) with the desktop it came from, and gather
+sends it back there ahead of every other rule: `Ctrl+Shift+L` undoes a pull.
 
 #### Enforcing assignments
 
@@ -666,7 +691,11 @@ init.lua drags the window by its header while pressing ctrl+N. The grab point
 is read from the window's accessibility tree each time: the widest strip of the
 top 44px with no control in it, because a press on a control (Slack's search
 box) focuses the control and the window stays put, and apps move their
-controls between releases, so a fixed grab point stops working. Before pressing
+controls between releases, so a fixed grab point stops working. A
+control-free point is not always draggable either: Teams marks only part of
+its header as the window's drag region, so each candidate (the gaps, the fixed
+spots, then every 60px across) is first tested with a small drag in place, and
+only a point that lifts the window is used for the move. Before pressing
 it checks what is under the cursor and skips a point that belongs to another
 window, since a stranded window can share its rectangle with the one that
 belongs there. The console line per attempt names the point and what it

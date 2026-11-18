@@ -125,10 +125,14 @@ end)
 --
 -- File shape:
 --   { "assign": { "Mail": "all", "Microsoft Edge": 3 },
+--     "pull": { "desktop": 1, "windows": [ {app, from, screen, unit}, ... ] },
 --     "displays": {
 --       "<display set>": {
 --         "all":    [ {app, screen, unit{x,y,w,h}}, ... ],
 --         "1": [...], "2": [...], "3": [...] } } }
+--
+-- "pull" is optional: the windows /pull brings onto one desktop (see "Pull
+-- onto one desktop").
 --
 -- "all" is the shared layout. An app assigned to All Desktops has ONE window
 -- that shows up everywhere, so it cannot be in two places at once and a
@@ -170,6 +174,21 @@ end)
 wl = {}  -- global so hs -c / the console can reach it
 
 hs.window.animationDuration = 0
+
+-- hs.timer.doAfter, holding the timer until it fires. A timer nothing refers
+-- to can be garbage-collected before it fires, and the desktop walks are
+-- chains of them: one collected mid-chain stopped a Ctrl+Shift+L after its
+-- third window with no error. Every wl timer goes through here.
+local pendingTimers = {}
+function wl.after(sec, fn)
+    local t
+    t = hs.timer.doAfter(sec, function()
+        pendingTimers[t] = nil
+        fn()
+    end)
+    pendingTimers[t] = true
+    return t
+end
 
 wl.PORT = 21212
 
@@ -280,6 +299,12 @@ local function encodeLayout(list)
         if item.match and item.match ~= "" then
             match = string.format('\n      "match": %s,', str(item.match))
         end
+        if tonumber(item.from) then
+            match = match .. string.format('\n      "from": %d,', tonumber(item.from))
+        end
+        if item.press and item.press ~= "" then
+            match = match .. string.format('\n      "press": %s,', str(item.press))
+        end
         if item.unit then
             rows[#rows + 1] = string.format(
                 '    {\n      "app": %s,%s\n      "screen": %s,\n      "unit": { "x": %s, "y": %s, "w": %s, "h": %s }\n    }',
@@ -351,7 +376,13 @@ function wl.saveAll(doc)
 
     local f = io.open(wl.file(), "w")
     if not f then return false end
-    f:write("{\n" .. encodeAssign(file.assign) .. ',\n  "displays": {\n' .. table.concat(sets, ",\n") .. "\n  }\n}\n")
+    local pull = ""
+    local p = file.pull
+    if type(p) == "table" and tonumber(p.desktop) then
+        pull = string.format(',\n  "pull": {\n    "desktop": %d,\n    "windows": %s\n  }',
+            tonumber(p.desktop), (encodeLayout(p.windows):gsub("\n", "\n  ")))
+    end
+    f:write("{\n" .. encodeAssign(file.assign) .. pull .. ',\n  "displays": {\n' .. table.concat(sets, ",\n") .. "\n  }\n}\n")
     f:close()
     return true
 end
@@ -635,7 +666,7 @@ local function placeWindow(win, orientation, unit)
     -- Apps with a minimum size can refuse the requested width/height and end
     -- up hanging off the screen edge; shift them back fully on-screen. Deferred
     -- because some apps apply the resize (and their min-size clamp) async.
-    hs.timer.doAfter(0.3, function()
+    wl.after(0.3, function()
         local wf = win:frame()
         local x = math.max(f.x, math.min(wf.x, f.x + f.w - wf.w))
         local y = math.max(f.y, math.min(wf.y, f.y + f.h - wf.h))
@@ -776,6 +807,29 @@ end
 -- fn(i, next) is called standing on desktop i and must call next() when it is
 -- finished, which is what lets a step do its own desktop switching (gather has
 -- to). wl.walk wraps a plain fn(i) for the synchronous case.
+-- Switch to desktop i and call fn() once the switch has landed, or onFail()
+-- if it never does. Running before the switch lands would act on the WRONG
+-- desktop. The extra settle after arrival is for the switch animation: the
+-- space ID flips as it starts, before that desktop's windows are all
+-- enumerable.
+local function whenOn(i, fn, onFail)
+    local _, ids = wl.spaceIndex()
+    if wl.spaceIndex() ~= i then wl.gotoIndex(i, ids[i]) end
+    local tries = 0
+    local function check()
+        if wl.spaceIndex() == i then
+            wl.after(0.4, fn)
+        elseif tries < 12 then
+            tries = tries + 1
+            wl.after(0.25, check)
+        else
+            hs.alert.show("Switch to desktop " .. i .. " didn't land")
+            if onFail then onFail() end
+        end
+    end
+    wl.after(0.3, check)
+end
+
 function wl.walkAsync(fn, done)
     local startIdx, ids = wl.spaceIndex()
     if not startIdx then
@@ -795,28 +849,11 @@ function wl.walkAsync(fn, done)
         if not i then
             wl.log("walk done, returning to desktop %d", startIdx)
             wl.gotoIndex(startIdx, ids[startIdx])
-            if done then hs.timer.doAfter(0.5, done) end
+            if done then wl.after(0.5, done) end
             return
         end
         wl.log("walk -> desktop %d", i)
-        wl.gotoIndex(i, ids[i])
-        -- Running before the switch lands would act on the WRONG desktop; verify
-        -- arrival first. The extra settle after arrival is for the switch
-        -- animation — the space ID flips as it starts, before that desktop's
-        -- windows are all enumerable.
-        local tries = 0
-        local function waitRun()
-            if wl.spaceIndex() == i then
-                hs.timer.doAfter(0.4, function() fn(i, step) end)
-            elseif tries < 12 then
-                tries = tries + 1
-                hs.timer.doAfter(0.25, waitRun)
-            else
-                hs.alert.show("Switch to desktop " .. i .. " didn't land — skipped")
-                step()
-            end
-        end
-        hs.timer.doAfter(0.3, waitRun)
+        whenOn(i, function() fn(i, step) end, step)
     end
     fn(startIdx, step)
 end
@@ -906,7 +943,8 @@ local CONTROL_ROLES = {
 -- Controls in the top 44px of a window, as x ranges relative to the window's
 -- left edge. Walks only the branches that reach the strip, and gives up after
 -- a bounded number of nodes or seconds: Slack's whole header is ~50 nodes, and
--- a Chromium app builds its AX tree lazily on the first query.
+-- a Chromium app builds its AX tree lazily on the first query. Teams' search
+-- box sits 18 levels below its window, so the depth limit has room past that.
 local function headerControls(win)
     local f = win:frame()
     local ax = hs.axuielement.windowElement(win)
@@ -923,7 +961,7 @@ local function headerControls(win)
             and CONTROL_ROLES[el:attributeValue("AXRole") or ""] then
             ranges[#ranges + 1] = { fr.x - f.x, fr.x - f.x + fr.w }
         end
-        if reachesStrip and depth < 14 then
+        if reachesStrip and depth < 24 then
             for _, c in ipairs(el:attributeValue("AXChildren") or {}) do queue[#queue + 1] = { c, depth + 1 } end
         end
     end
@@ -958,6 +996,9 @@ function wl.grabPoints(win)
         { "left",  math.min(f.w - 30, 120) },
         { "right", math.max(100, f.w * 0.85) },
     }) do points[#points + 1] = p end
+    -- then every 60px across the header, for an app that marks only part of
+    -- its empty strip as draggable (Teams); dragToDesktop tests each in place
+    for x = 140, f.w - 40, 60 do points[#points + 1] = { "scan", x } end
     return points
 end
 
@@ -1005,83 +1046,153 @@ local function dragOnce(win, n, ids, x, y)
     return false, what, isControl
 end
 
--- Up to four attempts: the two widest header gaps, then the fixed spots. A
--- press that landed on a control has usually opened something (Slack's search
--- overlay), which the next press would land on instead of the header, so that
--- is dismissed with Escape once the window is focused again. A skipped
--- attempt never switched desktops, so it does not come home first.
+-- Does a press-and-drag here lift the window? A control-free spot is not
+-- always a draggable one: Teams' header is a web page that only marks some
+-- of its empty strip as the window's drag region, so the widest gap (right of
+-- its search box) takes the press and does nothing, while the strip left of
+-- the search box drags. Pressing, dragging a few pixels and reading the frame
+-- answers it on this desktop, with no desktop switch to undo; the window is
+-- put back before the real drag.
+local function dragsHere(win, x, y)
+    local ev = hs.eventtap.event
+    local f = win:frame()
+    ev.newMouseEvent(ev.types.leftMouseDown, hs.geometry.point(x, y)):post()
+    hs.timer.usleep(150000)
+    ev.newMouseEvent(ev.types.leftMouseDragged, hs.geometry.point(x + 10, y + 6)):post()
+    hs.timer.usleep(100000)
+    ev.newMouseEvent(ev.types.leftMouseDragged, hs.geometry.point(x + 20, y + 12)):post()
+    hs.timer.usleep(250000)
+    local g = win:frame()
+    ev.newMouseEvent(ev.types.leftMouseUp, hs.geometry.point(x + 20, y + 12)):post()
+    hs.timer.usleep(200000)
+    local lifted = g.x ~= f.x or g.y ~= f.y
+    if lifted then
+        win:setTopLeft({ x = f.x, y = f.y })
+        hs.timer.usleep(200000)
+    end
+    return lifted
+end
+
+-- Try the grab points in order. A point covered by another window or by a
+-- control is skipped without pressing, and a point that does not lift the
+-- window in place is skipped before any desktop switch, so only a point
+-- known to drag is used for the real move. A real move that still fails has
+-- switched desktops, so come home before the next.
 function wl.dragToDesktop(win, n)
     local home, ids = wl.spaceIndex()
     if not (win and home and ids[n]) then return false end
     local f = win:frame()
-    local away, dismiss, tried = false, false, 0
+    local name = win:application():name()
+    local probes, drags = 0, 0
     for _, g in ipairs(wl.grabPoints(win)) do
-        if tried >= 4 then break end
-        tried = tried + 1
-        if away then
-            wl.gotoIndex(home, ids[home])
-            hs.timer.usleep(800000)
+        if probes >= 14 or drags >= 2 then break end
+        local x, y = f.x + g[2], f.y + 10
+        win:focus()
+        win:raise()
+        hs.timer.usleep(250000)
+        local app, what, isControl = underCursor(x, y)
+        local verdict
+        if app and app:pid() ~= win:application():pid() then
+            verdict = "skipped, not this window"
+        elseif isControl then
+            verdict = "skipped, a control"
+        else
+            probes = probes + 1
+            if not dragsHere(win, x, y) then
+                verdict = "does not lift the window"
+            else
+                drags = drags + 1
+                local ok = dragOnce(win, n, ids, x, y)
+                wl.log("drag %s -> desktop %d at %s (x+%d, on %s): %s (%s)", name, n, g[1],
+                    math.floor(g[2]), what or "?", ok and "ok" or "no move", (win:title() or ""):sub(1, 40))
+                if ok then return true end
+                wl.gotoIndex(home, ids[home])
+                hs.timer.usleep(800000)
+            end
         end
-        if dismiss then
-            win:focus()
-            hs.timer.usleep(200000)
-            hs.eventtap.keyStroke({}, "escape", 0)
-            hs.timer.usleep(200000)
+        if verdict then
+            wl.log("drag %s at %s (x+%d, on %s): %s", name, g[1], math.floor(g[2]), what or "?", verdict)
         end
-        local ok, what, isControl = dragOnce(win, n, ids, f.x + g[2], f.y + 10)
-        wl.log("drag %s -> desktop %d at %s (x+%d, on %s): %s (%s)", win:application():name(), n, g[1],
-            math.floor(g[2]), what or "?", ok and "ok" or "no move", (win:title() or ""):sub(1, 40))
-        if ok then return true end
-        away = what == nil or not what:find("skipped", 1, true)
-        dismiss = isControl or false
     end
     return false
 end
 
--- Which windows visible from here are on the wrong desktop?
+-- Windows a pull (below) brought onto its desktop, by window id, with the
+-- desktop each came from. Kept in hs.settings so a config reload between the
+-- pull and the Ctrl+Shift+L that undoes it does not forget them.
+local PULLED_KEY = "wl.pulled"
+
+function wl.pulledMap()
+    local m = hs.settings.get(PULLED_KEY)
+    return type(m) == "table" and m or {}
+end
+
+local function setPulled(id, desktop)
+    local m = wl.pulledMap()
+    m[tostring(id)] = desktop
+    hs.settings.set(PULLED_KEY, m)
+end
+
+-- Which windows visible from here are on the wrong desktop? A pulled window
+-- goes back where the pull took it from, ahead of every other rule: that is
+-- the only record of where it lives when the config cannot tell (two
+-- untitled windows of one web app on two desktops).
 function wl.gatherPlan()
     local doc = wl.desktopRules()
+    local pulled = wl.pulledMap()
     local _, ids = wl.spaceIndex()
     local plan = {}
     for _, win in ipairs(currentWindows()) do
         local sp = hs.spaces.windowSpaces(win) or {}
         if #sp < #ids then                       -- an all-desktops window is already everywhere
-            local target = wl.targetDesktop(win, doc)
+            local back = tonumber(pulled[tostring(win:id())])
+            local target = back or wl.targetDesktop(win, doc)
             if target and ids[target] and not (#sp == 1 and sp[1] == ids[target]) then
-                plan[#plan + 1] = { win = win, target = target }
+                plan[#plan + 1] = { win = win, target = target,
+                    moved = back and function() setPulled(win:id(), nil) end }
+            elseif back then
+                setPulled(win:id(), nil)         -- already home
             end
         end
     end
     return plan
 end
 
--- Send every window visible from here to the desktop the config names, then
--- come back. This is the login fix: VS Code reopens all of its windows on one
--- desktop, and that desktop is the only place anything can see all of them.
--- Each drag leaves you standing on the target, so it returns home between
--- moves, otherwise the rest of the plan would no longer be on screen.
-function wl.gather(done)
+-- Drag each planned window to its desktop, coming back between moves, then
+-- call done(moved). Each drag leaves you standing on the target, so it returns
+-- home between moves, otherwise the rest of the plan would no longer be on
+-- screen. A job's optional moved() runs after its window has gone.
+local function moveWindows(plan, done)
     local home, ids = wl.spaceIndex()
-    local plan = wl.gatherPlan()
     if #plan == 0 then
         if done then done(0) end
         return
     end
-    wl.log("gather: %d window(s) to move from desktop %s", #plan, tostring(home))
+    wl.log("moving %d window(s) from desktop %s", #plan, tostring(home))
     local i, moved = 0, 0
     local function step()
         i = i + 1
         local job = plan[i]
         if not job then
             if wl.spaceIndex() ~= home then wl.gotoIndex(home, ids[home]) end
-            hs.timer.doAfter(0.6, function() if done then done(moved) end end)
+            wl.after(0.6, function() if done then done(moved) end end)
             return
         end
-        if wl.dragToDesktop(job.win, job.target) then moved = moved + 1 end
+        if wl.dragToDesktop(job.win, job.target) then
+            moved = moved + 1
+            if job.moved then job.moved() end
+        end
         wl.gotoIndex(home, ids[home])
-        hs.timer.doAfter(0.8, step)
+        wl.after(0.8, step)
     end
     step()
+end
+
+-- Send every window visible from here to the desktop the config names, then
+-- come back. This is the login fix: VS Code reopens all of its windows on one
+-- desktop, and that desktop is the only place anything can see all of them.
+function wl.gather(done)
+    moveWindows(wl.gatherPlan(), done)
 end
 
 -- Gather from EVERY desktop first, then lay everything out. Two passes on
@@ -1108,6 +1219,145 @@ function wl.gatherHere()
     wl.gather(function(moved)
         hs.alert.show(moved > 0 and ("Moved " .. moved .. " window" .. (moved == 1 and "" or "s"))
             or "Nothing to move from here")
+    end)
+end
+
+----------Pull onto one desktop----------
+-- With one screen gone (the KVM showing it another machine), windows that
+-- normally sit in the same slot on different desktops are wanted side by side
+-- on ONE desktop. "pull", at the top of the file, names that desktop and the
+-- windows to bring, each with the desktop it is taken from and where it sits
+-- once there. It is not tied to a display set: its rectangles are on the
+-- portrait screen, which is attached either way, so it can be run before the
+-- KVM switches as well as after:
+--
+--   "pull": { "desktop": 1,
+--             "windows": [ {app, from, screen, unit}, ... ] }
+--
+-- "from" picks the window rather than a title match because Chrome web apps
+-- report no window title: two profiles' windows of one web app are told apart
+-- only by the desktop each lives on. "from" may be left out to take the app's
+-- first window from any desktop.
+
+--
+-- "press" names a button inside the window to click once it is placed, by
+-- its accessibility label: "Calendar" switches Outlook's web app from mail to
+-- its calendar.
+--
+-- Each window moved is remembered with the desktop it came from, and gather
+-- sends it back there, so Ctrl+Shift+L undoes a pull. The "all" layout of the
+-- display set is applied on the pull desktop first, then the pulled windows
+-- are placed and raised over it.
+-- Click the control in a window whose accessibility title or description is
+-- exactly `label`. A real click at its centre, not AXPress: Outlook's
+-- Calendar switch reports AXPress as done and stays on Mail. Web apps build
+-- their tree lazily and deep (that switch is 19 levels down), so the walk is
+-- bounded by nodes and seconds rather than depth alone. The pointer is put
+-- back where it was.
+local PRESSABLE = { AXButton = true, AXCheckBox = true, AXRadioButton = true, AXLink = true, AXTab = true }
+
+function wl.pressLabel(win, label)
+    local ax = win and hs.axuielement.windowElement(win)
+    if not ax then return false end
+    local t0 = hs.timer.secondsSinceEpoch()
+    local queue, n = { { ax, 0 } }, 0
+    while #queue > 0 and n < 2000 and hs.timer.secondsSinceEpoch() - t0 < 5 do
+        local item = table.remove(queue, 1)
+        local el, depth = item[1], item[2]
+        n = n + 1
+        if PRESSABLE[el:attributeValue("AXRole") or ""]
+            and (el:attributeValue("AXDescription") == label or el:attributeValue("AXTitle") == label) then
+            local fr = el:attributeValue("AXFrame")
+            if not fr then return false end
+            local back = hs.mouse.absolutePosition()
+            win:focus()
+            hs.timer.usleep(200000)
+            hs.eventtap.leftClick({ x = fr.x + fr.w / 2, y = fr.y + fr.h / 2 })
+            hs.mouse.absolutePosition(back)
+            return true
+        end
+        if depth < 30 then
+            for _, c in ipairs(el:attributeValue("AXChildren") or {}) do queue[#queue + 1] = { c, depth + 1 } end
+        end
+    end
+    return false
+end
+
+function wl.pull()
+    local p = loadFile().pull
+    if type(p) ~= "table" or not tonumber(p.desktop) or type(p.windows) ~= "table" then
+        wl.log("pull: no \"pull\" in %s", wl.file())
+        hs.alert.show("No pull layout in window_layouts.json")
+        return
+    end
+    local target = tonumber(p.desktop)
+    local chosen, taken, moved = {}, {}, 0
+    wl.walkAsync(function(i, next_)
+        local _, ids = wl.spaceIndex()
+        local wins, plan = currentWindows(), {}
+        -- On the pull desktop, a window an earlier pull already brought from
+        -- the entry's desktop counts as found, so pressing it twice does not
+        -- go looking for a second window to carry over.
+        local pulled = wl.pulledMap()
+        local function fits(item, win, sp)
+            if #sp ~= 1 or sp[1] ~= ids[i] or win:application():name() ~= item.app or not titleMatches(item, win) then
+                return false
+            end
+            local from = tonumber(item.from)
+            if not from or from == i then return true end
+            return i == target and tonumber(pulled[tostring(win:id())]) == from
+        end
+        for idx, item in ipairs(p.windows) do
+            local from = tonumber(item.from)
+            if not chosen[idx] and (not from or from == i or i == target) then
+                for _, win in ipairs(wins) do
+                    local sp = hs.spaces.windowSpaces(win) or {}
+                    if not taken[win:id()] and fits(item, win, sp) then
+                        taken[win:id()] = true
+                        chosen[idx] = win
+                        if i ~= target then
+                            plan[#plan + 1] = { win = win, target = target,
+                                moved = function() setPulled(win:id(), i) end }
+                        end
+                        break
+                    end
+                end
+            end
+        end
+        moveWindows(plan, function(n) moved = moved + n; next_() end)
+    end, function()
+        whenOn(target, function()
+            if wl.hasLayout() then wl.apply(tostring(target)) end
+            local _, ids = wl.spaceIndex()
+            local placed, missing = 0, {}
+            for idx, item in ipairs(p.windows) do
+                local win = chosen[idx]
+                local here = false
+                for _, id in ipairs(win and hs.spaces.windowSpaces(win) or {}) do
+                    if id == ids[target] then here = true end
+                end
+                -- a window whose drag failed is still on its own desktop, and
+                -- placing it would only rearrange that desktop
+                if not here then
+                    missing[#missing + 1] = item.app
+                else
+                    if item.unit then
+                        placeWindow(win, item.screen, item.unit)
+                        win:raise()
+                        placed = placed + 1
+                    end
+                    if item.press and item.press ~= "" then
+                        local pressed = wl.pressLabel(win, item.press)
+                        wl.log("pull: press %s in %s: %s", item.press, item.app, pressed and "ok" or "not found")
+                    end
+                end
+            end
+            wl.log("pull: %d moved, %d placed on desktop %d, not brought: %s",
+                moved, placed, target, table.concat(missing, ", "))
+            local msg = string.format("Pulled %d window%s onto desktop %d", placed, placed == 1 and "" or "s", target)
+            if #missing > 0 then msg = msg .. "\nNot brought: " .. table.concat(missing, ", ") end
+            hs.alert.show(msg)
+        end)
     end)
 end
 
@@ -1342,9 +1592,9 @@ function wl.fixAssign(opts)
         local ok, err = wl.repin(name)
         wl.log("repin %s -> %s", name, ok and "ok" or tostring(err))
         if ok then fixed[#fixed + 1] = name end
-        hs.timer.doAfter(0.2, step)
+        wl.after(0.2, step)
     end
-    hs.timer.doAfter(0, step)
+    wl.after(0, step)
 end
 
 -- Write the Dock's numbered assignments. macOS resolves "This Desktop" against
@@ -1495,13 +1745,14 @@ function wl.handle(method, rawPath, headers, body)
         ["/snapshot"]     = function() wl.snapshot(q.space) end,
         ["/snapshotApp"]  = function() wl.snapshotApp(q.app, q.space) end,
         ["/gather"]       = function() wl.gatherHere() end,
+        ["/pull"]         = function() wl.pull() end,
         ["/fixAssign"]    = function() wl.fixAssign({ force = q.force == "1", dock = q.dock == "1" }) end,
         ["/learnAssign"]  = function() wl.learnAssign() end,
         ["/reload"]       = function() hs.reload() end,
     }
     local fn = actions[path]
     if fn then
-        hs.timer.doAfter(0, fn)
+        wl.after(0, fn)
         return hs.json.encode({ ok = true, action = path }), 200, JSON_HDR
     end
 
