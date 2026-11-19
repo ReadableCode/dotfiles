@@ -103,13 +103,22 @@ no screen server of any kind, and is a client only, the same rule
 
 1. The app comes from the personal app list (`cask: rustdesk`), so
    `installmissing` places it. Start it once so it writes its config.
-2. Run `gitpullall` (or `uv run python src/rustdesk_server.py`) to set the
+2. Install RustDesk's service from the app at the machine, approving it with
+   the account password. Without it the host answers only while someone keeps
+   the app open: once the app quits, nothing listens on 21118 and the phone
+   gets "Failed to connect ... Please try later" even though Tailscale and the
+   subnet route are fine. The service is installed when
+   `/Library/LaunchDaemons/com.carriez.RustDesk_service.plist` and
+   `/Library/LaunchAgents/com.carriez.RustDesk_server.plist` exist; it then
+   starts at login and comes back if the app quits. To check whether a host is
+   answering, run `nc -z -G 3 <tailscale ip> 21118`.
+3. Run `gitpullall` (or `uv run python src/rustdesk_server.py`) to set the
    direct IP options, then restart RustDesk so it re-reads the file.
-3. Grant macOS permissions. RustDesk needs **Screen Recording** to capture,
+4. Grant macOS permissions. RustDesk needs **Screen Recording** to capture,
    **Accessibility** to inject keyboard and mouse, and **Input Monitoring** on
    newer releases. They are prompted on the first connection and have to be
    approved at the machine.
-4. Set the security options below.
+5. Set the security options below.
 
 ### Where the settings are
 
