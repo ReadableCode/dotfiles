@@ -52,6 +52,10 @@ delete only on your own single events (never meetings with attendees or
 recurring series). Calendar.app sends no invitations from here, and calendar
 delete is not recoverable. Mail search matches subject, sender and Mail's stored
 preview, not whole bodies.
+
+Reminders are read from the same accounts' Reminders stores. reminders_add
+creates one in a list by name through the "Add Reminder" shortcut; it cannot
+put a reminder into a section, so it lands in the list outside any section.
 """.strip()
 
 server = MCPServer(name="mac", instructions=SERVER_INSTRUCTIONS, version="0.1.0")
@@ -397,6 +401,44 @@ def calendar_update_event(
 )
 def calendar_delete_event(event_id: str, calendar_id: str, account: str = "") -> dict:
     return mtools.calendar_delete_event(_scope(account), event_id, calendar_id)
+
+
+# %%
+# Reminders tools #
+
+
+@tool(description="Every Reminders list in the accounts, with its sections and how many open reminders it holds.")
+def reminders_list_lists(account: str = "") -> list:
+    return mtools.reminders_list_lists(_scope(account))
+
+
+@tool(
+    description=(
+        "Reminders in the accounts, newest first, each with its list and section. query matches title and notes; "
+        "list_name is a list from reminders_list_lists. Completed ones are skipped unless include_completed."
+    )
+)
+def reminders_search(
+    query: str = "", list_name: str = "", include_completed: bool = False, max_results: int = 50, account: str = ""
+) -> list:
+    return mtools.reminders_search(
+        _scope(account),
+        query_text=query,
+        list_name=list_name,
+        include_completed=include_completed,
+        max_results=max_results,
+    )
+
+
+@tool(
+    description=(
+        "Add a reminder to the Reminders list named list_name (from reminders_list_lists), with optional notes and "
+        "url. It goes through the 'Add Reminder' shortcut and cannot be placed in a section: it lands in the list "
+        "outside any section. Returns the new reminder as stored."
+    )
+)
+def reminders_add(title: str, list_name: str, notes: str = "", url: str = "", account: str = "") -> dict:
+    return mtools.reminders_add(_scope(account), title, list_name, notes=notes, url=url)
 
 
 # %%

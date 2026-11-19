@@ -6,11 +6,15 @@ import email.policy
 import glob
 import gzip
 import html
+import json
 import os
 import re
 import sqlite3
 import subprocess
 import sys
+import tempfile
+import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import unquote, urlparse
 from zoneinfo import ZoneInfo
@@ -35,6 +39,9 @@ ACCOUNTS_DB = os.path.join(LIBRARY_DIR, "Accounts", "Accounts4.sqlite")
 ADDRESS_BOOK_DIR = os.path.join(LIBRARY_DIR, "Application Support", "AddressBook")
 ADDRESS_BOOK_NAME = "AddressBook-v22.abcddb"
 NOTES_DB = os.path.join(LIBRARY_DIR, "Group Containers", "group.com.apple.notes", "NoteStore.sqlite")
+REMINDERS_STORES_DIR = os.path.join(
+    LIBRARY_DIR, "Group Containers", "group.com.apple.reminders", "Container_v1", "Stores"
+)
 
 # Core Data and Messages count from 2001-01-01 UTC, not the Unix epoch.
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -113,6 +120,13 @@ SCHEDULING_MAILBOX_PATTERN = re.compile(r"/(inbox|outbox)/?$")
 
 OSASCRIPT_TIMEOUT = 60
 MAX_RESULTS = 500
+
+# Reminders writes go through this shortcut (application_configs/shortcuts/add_reminder.plist):
+# neither AppleScript nor EventKit can write Reminders from a process T3 Code launches.
+ADD_REMINDER_SHORTCUT = "Add Reminder"
+SHORTCUTS_TIMEOUT = 90
+# How long to wait for a reminder the shortcut made to show up in the store.
+REMINDER_APPEAR_SECONDS = 10
 
 
 # %%
@@ -1675,6 +1689,219 @@ def calendar_delete_event(accounts, event_id, calendar_id, calendar_db=None):
     event = _write_guard(accounts, event_id, calendar_id, calendar_db)
     run_osascript(DELETE_SCRIPT, [calendar_id, event_id])
     return {"event_id": event_id, "calendar_id": calendar_id, "deleted": event["title"]}
+
+
+# %%
+# Reminders #
+
+# Reminders keeps one Core Data store per account (iCloud, Exchange, the local
+# "On My Mac" ones). A store's account row holds, as a 16-byte UUID, the
+# identifier of the Internet Account it syncs, which is what ties it to the
+# address the config names, as with Notes. A list's custom sections and which
+# reminder sits in which are a JSON blob on the list row: memberID is the
+# reminder's ZCKIDENTIFIER, groupID the section's.
+
+
+def _reminder_entities(path):
+    return {row["name"]: row["ent"] for row in query(path, "SELECT Z_NAME AS name, Z_ENT AS ent FROM Z_PRIMARYKEY")}
+
+
+def _uuid_text(value):
+    if isinstance(value, bytes) and len(value) == 16:
+        return str(uuid.UUID(bytes=value)).upper()
+    return value or ""
+
+
+def scoped_reminder_stores(accounts, stores_dir=None):
+    """[(store path, account name)] for every Reminders store whose account a configured entry covers."""
+    stores = []
+    for path in sorted(glob.glob(os.path.join(stores_dir or REMINDERS_STORES_DIR, "Data-*.sqlite"))):
+        entities = _reminder_entities(path)
+        if "REMCDAccount" not in entities:
+            continue
+        rows = query(
+            path, "SELECT ZIDENTIFIER AS identifier FROM ZREMCDOBJECT WHERE Z_ENT = ?", (entities["REMCDAccount"],)
+        )
+        owner = next((owner_of(_uuid_text(row["identifier"]), accounts) for row in rows), None)
+        if owner:
+            stores.append((path, owner))
+    return stores
+
+
+def _reminder_lists(path):
+    """pk -> {name, sections: {section id: name}, section_of: {reminder id: section name}} for live lists."""
+    entities = _reminder_entities(path)
+    lists = {}
+    for row in query(
+        path,
+        "SELECT Z_PK AS pk, ZNAME AS name, ZMEMBERSHIPSOFREMINDERSINSECTIONSASDATA AS memberships "
+        "FROM ZREMCDBASELIST WHERE Z_ENT = ? AND COALESCE(ZMARKEDFORDELETION, 0) = 0 AND ZNAME IS NOT NULL",
+        (entities["REMCDList"],),
+    ):
+        lists[row["pk"]] = {"name": row["name"], "sections": {}, "memberships": row["memberships"]}
+    for row in query(
+        path,
+        "SELECT ZLIST AS list, ZDISPLAYNAME AS name, ZCKIDENTIFIER AS section_id FROM ZREMCDBASESECTION "
+        "WHERE Z_ENT = ? AND COALESCE(ZMARKEDFORDELETION, 0) = 0 ORDER BY Z_PK",
+        (entities["REMCDListSection"],),
+    ):
+        if row["list"] in lists:
+            lists[row["list"]]["sections"][row["section_id"]] = row["name"]
+    for entry in lists.values():
+        raw = entry.pop("memberships")
+        try:
+            members = json.loads(raw).get("memberships", []) if raw else []
+        except (ValueError, AttributeError):
+            members = []
+        entry["section_of"] = {
+            m["memberID"]: entry["sections"][m["groupID"]] for m in members if m.get("groupID") in entry["sections"]
+        }
+    return lists
+
+
+def reminders_list_lists(accounts, stores_dir=None):
+    """Every Reminders list in the accounts, with its sections and how many open reminders it holds."""
+    result = []
+    for path, owner in scoped_reminder_stores(accounts, stores_dir):
+        lists = _reminder_lists(path)
+        counts = {
+            row["list"]: row["total"]
+            for row in query(
+                path,
+                "SELECT ZLIST AS list, COUNT(*) AS total FROM ZREMCDREMINDER "
+                "WHERE COALESCE(ZMARKEDFORDELETION, 0) = 0 AND COALESCE(ZCOMPLETED, 0) = 0 GROUP BY ZLIST",
+            )
+        }
+        for pk, entry in lists.items():
+            result.append(
+                {
+                    "account": owner,
+                    "list": entry["name"],
+                    "sections": list(entry["sections"].values()),
+                    "open": counts.get(pk, 0),
+                }
+            )
+    return sorted(result, key=lambda item: (item["account"], item["list"].lower()))
+
+
+def _reminder_rows(path, lists, where="", params=(), limit=MAX_RESULTS):
+    if not lists:
+        return []
+    return query(
+        path,
+        "SELECT ZCKIDENTIFIER AS reminder_id, ZTITLE AS title, ZNOTES AS notes, ZLIST AS list, "
+        "ZCOMPLETED AS completed, ZFLAGGED AS flagged, ZPRIORITY AS priority, ZDUEDATE AS due, "
+        "ZCREATIONDATE AS created FROM ZREMCDREMINDER "
+        f"WHERE COALESCE(ZMARKEDFORDELETION, 0) = 0 AND ZLIST IN ({placeholders(lists)}) {where} "
+        "ORDER BY ZCREATIONDATE DESC LIMIT ?",
+        [*lists, *params, limit],
+    )
+
+
+def _serialize_reminder(row, lists, owner):
+    entry = lists[row["list"]]
+    return {
+        "reminder_id": row["reminder_id"],
+        "title": row["title"],
+        "notes": row["notes"] or "",
+        "account": owner,
+        "list": entry["name"],
+        "section": entry["section_of"].get(row["reminder_id"]),
+        "completed": bool(row["completed"]),
+        "flagged": bool(row["flagged"]),
+        "priority": row["priority"] or 0,
+        "due": local_iso(from_apple_seconds(row["due"])) if row["due"] else None,
+        "created": local_iso(from_apple_seconds(row["created"])) if row["created"] else None,
+    }
+
+
+def _lists_named(lists, list_name):
+    """The pks of the lists called ``list_name`` (any case), or every list when no name is given."""
+    if not list_name:
+        return list(lists)
+    return [pk for pk, entry in lists.items() if entry["name"].lower() == list_name.lower()]
+
+
+def reminders_search(accounts, query_text="", list_name="", include_completed=False, max_results=50, stores_dir=None):
+    """Reminders in the accounts, newest first; query_text matches title and notes."""
+    limit = max(1, min(max_results, MAX_RESULTS))
+    found = []
+    for path, owner in scoped_reminder_stores(accounts, stores_dir):
+        lists = _reminder_lists(path)
+        pks = _lists_named(lists, list_name)
+        where, params = "", []
+        if not include_completed:
+            where += " AND COALESCE(ZCOMPLETED, 0) = 0"
+        if query_text:
+            where += " AND (ZTITLE LIKE ? OR ZNOTES LIKE ?)"
+            params += [f"%{query_text}%", f"%{query_text}%"]
+        found += [_serialize_reminder(row, lists, owner) for row in _reminder_rows(path, pks, where, params, limit)]
+    found.sort(key=lambda item: item["created"] or "", reverse=True)
+    return found[:limit]
+
+
+def run_shortcut(name, payload):
+    """Run a Shortcuts.app shortcut with a JSON dict as its input; returns its output text."""
+    require_macos()
+    with tempfile.TemporaryDirectory() as tmp:
+        input_path = os.path.join(tmp, "input.json")
+        output_path = os.path.join(tmp, "output.txt")
+        with open(input_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        try:
+            completed = subprocess.run(
+                ["shortcuts", "run", name, "--input-path", input_path, "--output-path", output_path],
+                capture_output=True,
+                text=True,
+                timeout=SHORTCUTS_TIMEOUT,
+                check=False,
+            )
+        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"the '{name}' shortcut did not finish within {SHORTCUTS_TIMEOUT}s")
+        if completed.returncode != 0:
+            raise RuntimeError(
+                f"the '{name}' shortcut failed: {completed.stderr.strip() or completed.returncode} - is it imported? "
+                "see docs/setup_mac_mcp.md"
+            )
+        if os.path.exists(output_path):
+            with open(output_path, encoding="utf-8", errors="replace") as handle:
+                return handle.read().strip()
+        return ""
+
+
+def reminders_add(accounts, title, list_name, notes="", url="", stores_dir=None, runner=None):
+    """
+    Add a reminder to a list (by name) through the Add Reminder shortcut, then
+    read it back from the store. The shortcut cannot place it in a section, so
+    it lands in the list outside any section.
+    """
+    if not title.strip():
+        raise ValueError("title is required")
+    target = None
+    for path, owner in scoped_reminder_stores(accounts, stores_dir):
+        lists = _reminder_lists(path)
+        pks = _lists_named(lists, list_name)
+        if list_name and pks:
+            target = (path, owner, lists, pks[0])
+            break
+    if not target:
+        known = ", ".join(item["list"] for item in reminders_list_lists(accounts, stores_dir)) or "none"
+        raise ValueError(f"no Reminders list named '{list_name}' in these accounts (lists: {known})")
+    path, owner, lists, pk = target
+    started = to_apple_seconds(datetime.now(timezone.utc)) - 5
+    payload = {"title": title, "list": lists[pk]["name"], "notes": notes, "url": url}
+    (runner or run_shortcut)(ADD_REMINDER_SHORTCUT, payload)
+    deadline = time.monotonic() + REMINDER_APPEAR_SECONDS
+    while True:
+        rows = _reminder_rows(path, [pk], " AND ZTITLE = ? AND ZCREATIONDATE >= ?", [title, started], 1)
+        if rows:
+            return {**_serialize_reminder(rows[0], _reminder_lists(path), owner), "url": url}
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                f"the shortcut ran but no reminder '{title}' appeared in '{lists[pk]['name']}' within "
+                f"{REMINDER_APPEAR_SECONDS}s - check the Add Reminder shortcut"
+            )
+        time.sleep(0.5)
 
 
 # %%

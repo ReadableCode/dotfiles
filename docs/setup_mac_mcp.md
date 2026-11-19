@@ -1,9 +1,9 @@
-# Mac MCP - Mail.app, Calendar.app, Messages and Notes in Claude Code
+# Mac MCP - Mail.app, Calendar.app, Messages, Notes and Reminders in Claude Code
 
 `src/mac_mcp.py` is a stdio MCP server that lets Claude Code read the mail,
-calendars, texts and notes already synced onto a Mac, and add events to those
-calendars. It reads the local copies Mail.app, Calendar.app, Messages and Notes
-keep,
+calendars, texts, notes and reminders already synced onto a Mac, add events to
+those calendars, and add reminders. It reads the local copies Mail.app,
+Calendar.app, Messages, Notes and Reminders keep,
 so it reaches any account signed in under System Settings > Internet Accounts
 (Exchange, Google Workspace, iCloud, IMAP) with no OAuth app of its own.
 
@@ -81,6 +81,16 @@ Calendar: the first write prompts "T3 Code wants to control Calendar". Not a
 Calendars permission: the app itself would have to declare one, T3 Code does
 not, and Calendar.app already has access to every calendar anyway.
 
+Reminders writes need the **Add Reminder** shortcut imported into Shortcuts.app
+on that Mac. Its source is `application_configs/shortcuts/add_reminder.plist`;
+make an importable file with
+`uv run python src/shortcuts_export.py --sign application_configs/shortcuts/add_reminder.plist ~/Downloads/Add\ Reminder.shortcut`,
+double-click it, and choose Add Shortcut. Keep the name exactly `Add Reminder`:
+the server runs it by name. The shortcut runs with the Shortcuts app's own
+Reminders access, which is why no permission for T3 Code is involved: scripting
+Reminders from T3 Code times out, and Reminders access through EventKit is
+refused because T3 Code does not declare that it uses Reminders.
+
 ## How each app is read
 
 **Mail** - `~/Library/Mail/V<n>/MailData/Envelope Index` (SQLite) for search,
@@ -113,6 +123,14 @@ zone so a 09:00 meeting stays at 09:00 across a DST change. Calendar.app's own
 occurrences. A rule part the server does not know is refused by name rather
 than guessed.
 
+**Reminders** - one Core Data store per account under
+`~/Library/Group Containers/group.com.apple.reminders/Container_v1/Stores/Data-*.sqlite`.
+A store's account row holds the Internet Account identifier it syncs (a
+16-byte UUID), which is what ties it to the configured address, as with Notes;
+the local "On My Mac" stores match nothing. A list's custom sections, and which
+reminder sits in which, are a JSON blob on the list row. Reminders' own grocery
+categories are not read.
+
 Every store is opened with SQLite `mode=ro`, which still reads the WAL, so
 results match what the apps show. Nothing here ever writes to an Apple
 database.
@@ -133,6 +151,14 @@ arguments, never spliced into the script.
   series edit moves every occurrence, so both are refused. Delete is not
   recoverable.
 
+`reminders_add` runs the Add Reminder shortcut with
+`shortcuts run "Add Reminder" --input-path <json>`, the JSON holding `title`,
+`list`, `notes` and `url`, after checking the list exists in scope, then reads
+the new reminder back from the store. The shortcut's New Reminder action takes
+the list by name but has no section field, and no Reminders action Shortcuts
+offers on macOS 27 can move a reminder into a section, so it lands in the list
+outside any section.
+
 Mail, Messages and Notes have no write tools.
 
 ## Tools
@@ -142,7 +168,8 @@ messages: `messages_list_chats`, `messages_get_chat`, `messages_search`;
 notes: `notes_list_folders`, `notes_search`, `notes_get_note`;
 calendar: `calendar_list_calendars`, `calendar_agenda`, `calendar_search_events`,
 `calendar_get_event`, `calendar_create_event`, `calendar_update_event`,
-`calendar_delete_event`. `account` defaults to every entry of the context.
+`calendar_delete_event`; reminders: `reminders_list_lists`, `reminders_search`,
+`reminders_add`. `account` defaults to every entry of the context.
 
 ## Limits
 

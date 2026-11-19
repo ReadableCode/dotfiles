@@ -2,9 +2,11 @@
 # Imports #
 
 import gzip
+import json
 import os
 import sqlite3
 import time
+import uuid
 from datetime import date, datetime, timedelta, timezone
 
 import config_test_utils  # noqa F401
@@ -784,6 +786,139 @@ def test_messages_dates_accept_seconds_and_nanoseconds():
     assert mtools.from_messages_date(seconds) == moment
     assert mtools.from_messages_date(int(seconds * 1e9)) == moment
     assert date(2026, 1, 1) == mtools.from_messages_date(int(seconds * 1e9)).date()
+
+
+# %%
+# Reminders #
+
+REMINDERS_SCHEMA = """
+CREATE TABLE Z_PRIMARYKEY (Z_ENT INTEGER PRIMARY KEY, Z_NAME TEXT);
+INSERT INTO Z_PRIMARYKEY VALUES (3, 'REMCDList'), (6, 'REMCDListSection'), (14, 'REMCDAccount');
+CREATE TABLE ZREMCDOBJECT (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZIDENTIFIER BLOB);
+CREATE TABLE ZREMCDBASELIST (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZNAME TEXT, ZMARKEDFORDELETION INTEGER,
+    ZMEMBERSHIPSOFREMINDERSINSECTIONSASDATA BLOB);
+CREATE TABLE ZREMCDBASESECTION (Z_PK INTEGER PRIMARY KEY, Z_ENT INTEGER, ZLIST INTEGER, ZDISPLAYNAME TEXT,
+    ZCKIDENTIFIER TEXT, ZMARKEDFORDELETION INTEGER);
+CREATE TABLE ZREMCDREMINDER (Z_PK INTEGER PRIMARY KEY, ZCKIDENTIFIER TEXT, ZTITLE TEXT, ZNOTES TEXT, ZLIST INTEGER,
+    ZCOMPLETED INTEGER, ZFLAGGED INTEGER, ZPRIORITY INTEGER, ZDUEDATE REAL, ZCREATIONDATE REAL,
+    ZMARKEDFORDELETION INTEGER);
+"""
+REMINDER_INSERT = "INSERT INTO ZREMCDREMINDER VALUES (?, ?, ?, ?, ?, ?, 0, 0, NULL, ?, ?)"
+
+
+@pytest.fixture
+def reminders_dir(tmp_path):
+    """Two account stores (acme by its 16-byte UUID form, home by text) and an unowned local one."""
+    stores = tmp_path / "Stores"
+    created = apple_seconds(datetime(2026, 11, 1, 12, tzinfo=timezone.utc))
+    memberships = json.dumps({"memberships": [{"memberID": "R-KEYBOARD", "groupID": "S-TECH", "modifiedOn": 1.0}]})
+    build(
+        stores / "Data-ACME.sqlite",
+        REMINDERS_SCHEMA,
+        [
+            ("INSERT INTO ZREMCDOBJECT VALUES (?, ?, ?)", (1, 14, uuid.UUID(ACME_UUID).bytes)),
+            ("INSERT INTO ZREMCDBASELIST VALUES (?, ?, ?, ?, ?)", (3, 3, "Shopping", 0, memberships)),
+            ("INSERT INTO ZREMCDBASELIST VALUES (?, ?, ?, ?, ?)", (4, 3, "Old", 1, None)),
+            ("INSERT INTO ZREMCDBASESECTION VALUES (?, ?, ?, ?, ?, ?)", (5, 6, 3, "Tech", "S-TECH", 0)),
+            ("INSERT INTO ZREMCDBASESECTION VALUES (?, ?, ?, ?, ?, ?)", (6, 6, 3, "Groceries", "S-GROC", 0)),
+            (REMINDER_INSERT, (10, "R-KEYBOARD", "Keyboard", "split", 3, 0, created, 0)),
+            (REMINDER_INSERT, (11, "R-MILK", "Milk", "", 3, 0, created + 60, 0)),
+            (REMINDER_INSERT, (12, "R-DONE", "Old keyboard", "", 3, 1, created - 60, 0)),
+            (REMINDER_INSERT, (13, "R-GONE", "Deleted keyboard", "", 3, 0, created, 1)),
+        ],
+    )
+    build(
+        stores / "Data-HOME.sqlite",
+        REMINDERS_SCHEMA,
+        [
+            ("INSERT INTO ZREMCDOBJECT VALUES (?, ?, ?)", (1, 14, HOME_ID)),
+            ("INSERT INTO ZREMCDBASELIST VALUES (?, ?, ?, ?, ?)", (3, 3, "House", 0, None)),
+            (REMINDER_INSERT, (10, "R-HOME", "Keyboard tray", "", 3, 0, created - 30, 0)),
+        ],
+    )
+    build(
+        stores / "Data-LOCAL.sqlite",
+        REMINDERS_SCHEMA,
+        [("INSERT INTO ZREMCDOBJECT VALUES (?, ?, ?)", (1, 14, "LOCAL-ONLY"))],
+    )
+    return str(stores)
+
+
+ACME_UUID = "65788F16-4D6A-4722-B07B-697CB9C015BA"
+
+
+def reminders_scope(accounts_db):
+    accounts = scope(accounts_db, "acme", "home")
+    accounts[0]["_identifiers"].add(ACME_UUID)
+    return accounts
+
+
+def test_reminders_list_lists_is_scoped_with_sections_and_open_counts(accounts_db, reminders_dir):
+    lists = mtools.reminders_list_lists(reminders_scope(accounts_db), stores_dir=reminders_dir)
+    assert lists == [
+        {"account": "acme", "list": "Shopping", "sections": ["Tech", "Groceries"], "open": 2},
+        {"account": "home", "list": "House", "sections": [], "open": 1},
+    ]
+    only_acme = mtools.reminders_list_lists(scope(accounts_db, "home"), stores_dir=reminders_dir)
+    assert [item["list"] for item in only_acme] == ["House"]
+
+
+def test_reminders_search_matches_text_reports_sections_and_skips_done_and_deleted(accounts_db, reminders_dir):
+    found = mtools.reminders_search(reminders_scope(accounts_db), query_text="keyboard", stores_dir=reminders_dir)
+    assert [(item["title"], item["list"], item["section"]) for item in found] == [
+        ("Keyboard", "Shopping", "Tech"),
+        ("Keyboard tray", "House", None),
+    ]
+    with_done = mtools.reminders_search(
+        reminders_scope(accounts_db),
+        query_text="keyboard",
+        list_name="shopping",
+        include_completed=True,
+        stores_dir=reminders_dir,
+    )
+    assert [item["reminder_id"] for item in with_done] == ["R-KEYBOARD", "R-DONE"]
+
+
+def test_reminders_add_runs_the_shortcut_and_reads_the_new_reminder_back(accounts_db, reminders_dir):
+    calls = []
+
+    def runner(name, payload):
+        calls.append((name, payload))
+        connection = sqlite3.connect(os.path.join(reminders_dir, "Data-ACME.sqlite"))
+        now = mtools.to_apple_seconds(datetime.now(timezone.utc))
+        connection.execute(REMINDER_INSERT, (20, "R-NEW", payload["title"], payload["notes"], 3, 0, now, 0))
+        connection.commit()
+        connection.close()
+
+    added = mtools.reminders_add(
+        reminders_scope(accounts_db),
+        "Battery",
+        "shopping",
+        notes="RB1290X2",
+        url="https://x.test",
+        stores_dir=reminders_dir,
+        runner=runner,
+    )
+    assert calls == [
+        ("Add Reminder", {"title": "Battery", "list": "Shopping", "notes": "RB1290X2", "url": "https://x.test"})
+    ]
+    assert (added["reminder_id"], added["list"], added["section"], added["notes"]) == (
+        "R-NEW",
+        "Shopping",
+        None,
+        "RB1290X2",
+    )
+
+
+def test_reminders_add_refuses_a_list_outside_the_scope(accounts_db, reminders_dir):
+    with pytest.raises(ValueError, match="no Reminders list named 'House'.*lists: Shopping"):
+        mtools.reminders_add(
+            reminders_scope(accounts_db)[:1],
+            "x",
+            "House",
+            stores_dir=reminders_dir,
+            runner=lambda *_: pytest.fail("shortcut must not run"),
+        )
 
 
 # %%
