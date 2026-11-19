@@ -300,6 +300,13 @@ is the one-paragraph orientation so an agent knows which file to open.
   re-import through the Bookmark Manager and a dateless outline to read and diff, collapsing the duplicate folders
   Chrome Sync leaves when a device reconnects. Doc:
   `docs/repo_chrome_bookmarks.md`.
+- **`shortcuts_export.py`** — saves every Shortcuts.app shortcut on this Mac
+  into `personal_credentials/shortcuts/` as one XML plist each (the same dict
+  a `.shortcut` file holds), read-only on the library at
+  `~/Library/Shortcuts/Shortcuts.sqlite` (needs Full Disk Access on the app
+  running it), and removes the plist of a shortcut no longer in the library.
+  `--sign <plist> <out.shortcut>` turns one back into a file Shortcuts imports
+  by double-click, through the system `shortcuts sign`.
 - **`src/utils/`** — dotfiles-specific modules only: `inventory_tools`,
   `secret_tools`, `calendarboard_tools`, `google_oauth_tools`,
   `googlemcp_tools`, `macmcp_tools`, `mcp_tool_errors` (the one wrapper both
