@@ -244,6 +244,16 @@
     deploy_removals.yaml and must stay gone: either one merges with the
     per-context file and re-registers servers deleted from the declarations.
 
+- name: shortcut_add_reminder
+  repo: application_configs/shortcuts/add_reminder.plist
+  method: none
+  note: >-
+    The Add Reminder shortcut the mac server's reminders_add runs by name with
+    `shortcuts run`. Shortcuts.app keeps its library in its own database, so no
+    link or copy can place it: sign this file with
+    `src/shortcuts_export.py --sign` and import the result once per Mac. See
+    docs/setup_mac_mcp.md, "Granting access".
+
 - name: claude_cloud_session_env_vars
   repo: application_configs/claude/cloud_session_env_vars.txt
   method: none
