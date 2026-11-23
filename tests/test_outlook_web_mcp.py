@@ -94,39 +94,90 @@ def test_a_live_token_for_the_sign_in_is_accepted(monkeypatch):
     assert otools.ensure_session(ACCOUNT) == state
 
 
-def test_request_starts_in_the_tab_and_polls_for_the_answer(monkeypatch):
-    monkeypatch.setattr(otools, "ensure_session", lambda account: {})
-    monkeypatch.setattr(otools, "POLL_SECONDS", 0)
+def test_the_tab_that_answered_is_remembered_and_a_sleeping_one_skipped(monkeypatch):
+    monkeypatch.setattr(otools, "_tab", {"id": "", "hung": set()})
     scripts = []
 
-    def run_js(account, js):
-        scripts.append(js)
-        if "fetch(" in js:
+    def osascript(script):
+        scripts.append(script)
+        return "OK\nT7\nT3\nfirst line\nsecond line"
+
+    monkeypatch.setattr(otools, "_osascript", osascript)
+    assert otools.run_js(ACCOUNT, "1") == "first line\nsecond line"
+    otools.run_js(ACCOUNT, "1")
+    assert 'set preferred to "T7"' in scripts[1] and 'set hung to {"T3"}' in scripts[1]
+
+
+def test_no_tab_awake_is_unavailable(monkeypatch):
+    monkeypatch.setattr(otools, "_tab", {"id": "T7", "hung": set()})
+    monkeypatch.setattr(otools, "_osascript", lambda script: "NONE\nT3,T7")
+    assert otools._on_tab(ACCOUNT, "1") == otools.UNAVAILABLE
+    assert otools._tab == {"id": "", "hung": {"T3", "T7"}}
+    with pytest.raises(RuntimeError, match="open and awake"):
+        otools.run_js(ACCOUNT, "1")
+
+
+def test_a_fresh_tab_is_opened_when_none_is_awake(monkeypatch):
+    monkeypatch.setattr(otools, "require_macos", lambda: None)
+    monkeypatch.setattr(otools.time, "sleep", lambda seconds: None)
+    states = [None, None, {"state": "ok", "user": "jason@acme-corp.test", "expires": 5000, "now": 1000}]
+    monkeypatch.setattr(otools, "_token_state", lambda account: states.pop(0))
+    opened = []
+    monkeypatch.setattr(otools, "open_tab", lambda account: opened.append(account["profile"]))
+    assert otools.ensure_session(ACCOUNT)["state"] == "ok"
+    assert opened == ["Profile 1"]
+
+
+def fake_tab(monkeypatch, status=200, text='{"value": [1]}', lose_first=0):
+    """A tab that starts each request and answers its poll; the first `lose_first` polls find another tab."""
+    monkeypatch.setattr(otools, "ensure_session", lambda account: {})
+    monkeypatch.setattr(otools, "POLL_SECONDS", 0)
+    monkeypatch.setattr(otools, "_tab", {"id": "T1", "hung": set()})
+    calls = {"started": 0, "lost": lose_first}
+
+    def on_tab(account, expression):
+        if "fetch(" in expression:
+            calls["started"] += 1
+            otools._tab["id"] = "T1"
             return "started"
-        if js.startswith("JSON.stringify"):
-            return json.dumps({"done": True, "status": 200, "text": '{"value": [1]}'})
+        if "JSON.stringify" in expression:
+            if calls["lost"]:
+                calls["lost"] -= 1
+                otools._tab["id"] = "T2"
+                return "null"
+            return json.dumps({"done": True, "status": status, "text": text})
         return "ok"
 
-    monkeypatch.setattr(otools, "run_js", run_js)
+    monkeypatch.setattr(otools, "_on_tab", on_tab)
+    return calls
+
+
+def test_request_starts_in_the_tab_and_polls_for_the_answer(monkeypatch):
+    fake_tab(monkeypatch)
     assert otools.request(ACCOUNT, "GET", "https://outlook.office.com/api/v2.0/me/calendars") == {"value": [1]}
-    # the token is read and used inside the page; the script carries the request, never a token
-    assert "Bearer " in scripts[0] and "localStorage" in scripts[0]
+
+
+def test_the_script_reads_the_token_in_the_page():
+    assert "Bearer " in otools.REQUEST_JS and "localStorage" in otools.REQUEST_JS
 
 
 def test_a_refused_request_raises_with_the_status(monkeypatch):
-    monkeypatch.setattr(otools, "ensure_session", lambda account: {})
-    monkeypatch.setattr(otools, "POLL_SECONDS", 0)
-
-    def run_js(account, js):
-        if "fetch(" in js:
-            return "started"
-        if js.startswith("JSON.stringify"):
-            return json.dumps({"done": True, "status": 403, "text": "Forbidden"})
-        return "ok"
-
-    monkeypatch.setattr(otools, "run_js", run_js)
+    fake_tab(monkeypatch, status=403, text="Forbidden")
     with pytest.raises(RuntimeError, match="403 Forbidden"):
         otools.request(ACCOUNT, "GET", "https://outlook.office.com/api/v2.0/me/calendars")
+
+
+def test_a_read_whose_tab_fell_asleep_runs_again(monkeypatch):
+    calls = fake_tab(monkeypatch, lose_first=1)
+    assert otools.request(ACCOUNT, "GET", "https://outlook.office.com/api/v2.0/me/calendars") == {"value": [1]}
+    assert calls["started"] == 2
+
+
+def test_a_write_whose_tab_fell_asleep_is_not_repeated(monkeypatch):
+    calls = fake_tab(monkeypatch, lose_first=1)
+    with pytest.raises(otools.TabLost, match="read it back before retrying"):
+        otools.request(ACCOUNT, "POST", "https://outlook.office.com/api/v2.0/me/events", body={})
+    assert calls["started"] == 1
 
 
 # %%

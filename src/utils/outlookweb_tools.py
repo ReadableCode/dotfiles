@@ -126,24 +126,73 @@ def _hosts_clause():
     return " or ".join(f"(URL of tb) contains {_applescript_string(host)}" for host in OUTLOOK_HOSTS)
 
 
-def _on_tab(account, action):
-    """Run one AppleScript line against the first Outlook tab, found by URL on every call, never by index."""
-    return _osascript(
+# The tab that answered last, tried first on the next call. A tab Edge has put
+# to sleep accepts no script and only times out, so any other Outlook tab of
+# the same profile is used instead.
+_tab: dict = {"id": "", "hung": set()}
+TAB_TIMEOUT_SECONDS = 5
+# What _on_tab returns when no Outlook tab can take a script: none is open, or
+# every open one is asleep. Either way the cure is a fresh tab.
+UNAVAILABLE = "UNAVAILABLE"
+
+
+def _applescript_list(items):
+    return "{" + ", ".join(_applescript_string(item) for item in sorted(items)) + "}"
+
+
+def _on_tab(account, expression):
+    """
+    Evaluate one AppleScript expression against an Outlook tab (``tb``), found
+    by URL on every call and never by index: the tab that answered last if it
+    still does, else the first other one that answers within
+    TAB_TIMEOUT_SECONDS. A tab that times out is asleep (macOS and Edge put
+    background tabs to sleep, and a sleeping tab takes no script); it is
+    remembered and not tried again in this process. Returns UNAVAILABLE when
+    no tab answers, so the caller can open a fresh one.
+    """
+    raw = _osascript(
         f"tell application {_applescript_string(account['browser'])}\n"
+        f"set preferred to {_applescript_string(_tab['id'])}\n"
+        f"set hung to {_applescript_list(_tab['hung'])}\n"
+        "repeat with pass from 1 to 2\n"
         "repeat with win in windows\n"
         "repeat with tb in tabs of win\n"
-        f"if {_hosts_clause()} then\n"
-        f"{action}\n"
+        "set tabId to (id of tb as text)\n"
+        f"if ({_hosts_clause()}) and (pass = 2 or tabId = preferred) and hung does not contain tabId then\n"
+        "try\n"
+        f"with timeout of {TAB_TIMEOUT_SECONDS} seconds\n"
+        f"set answer to ({expression})\n"
+        "end timeout\n"
+        'set AppleScript\'s text item delimiters to ","\n'
+        'return "OK" & linefeed & tabId & linefeed & (hung as text) & linefeed & answer\n'
+        "on error message number code\n"
+        "if code is not -1712 then error message number code\n"
+        "set end of hung to tabId\n"
+        "end try\n"
         "end if\n"
         "end repeat\n"
         "end repeat\n"
-        'return "NO_TAB"\n'
+        "end repeat\n"
+        'set AppleScript\'s text item delimiters to ","\n'
+        'return "NONE" & linefeed & (hung as text)\n'
         "end tell"
     )
+    lines = raw.split("\n", 3)
+    if lines[0] == "OK":
+        _tab["id"] = lines[1]
+        _tab["hung"].update(item for item in lines[2].split(",") if item)
+        return lines[3] if len(lines) > 3 else ""
+    if len(lines) > 1:
+        _tab["hung"].update(item for item in lines[1].split(",") if item)
+    _tab["id"] = ""
+    return UNAVAILABLE
 
 
 def run_js(account, js):
-    return _on_tab(account, f"return (execute tb javascript {_applescript_string(js)})")
+    answer = _on_tab(account, f"execute tb javascript {_applescript_string(js)}")
+    if answer == UNAVAILABLE:
+        raise RuntimeError(f"no Outlook tab in {account['browser']} is open and awake")
+    return answer
 
 
 def open_tab(account):
@@ -195,27 +244,33 @@ REQUEST_JS = """
 
 
 def _token_state(account):
-    raw = run_js(account, TOKEN_JS.replace("SCOPE", TOKEN_SCOPE))
-    if raw == "NO_TAB":
+    """The page's token identity and expiry, or None when no Outlook tab is open and awake."""
+    raw = _on_tab(account, f"execute tb javascript {_applescript_string(TOKEN_JS.replace('SCOPE', TOKEN_SCOPE))}")
+    if raw == UNAVAILABLE:
         return None
     return json.loads(raw)
 
 
 def ensure_session(account):
     """
-    An Outlook tab signed in as the account's sign-in name with a live token. Opens
-    a tab in the account's profile when none is open, and reloads the tab once
-    when its token is about to expire. Refuses a tab signed in as anyone else.
+    An Outlook tab signed in as the account's sign-in name with a live token.
+    When no tab is open and awake, a fresh one is opened in the account's own
+    profile (a new tab is in front, so it is awake), and opened again if the
+    first has not come up halfway through the wait. A token about to expire
+    gets the tab reloaded once. A tab signed in as anyone else is refused.
     """
     require_macos()
-    deadline = time.monotonic() + TAB_WAIT_SECONDS
-    opened = reloaded = False
+    started = time.monotonic()
+    deadline = started + TAB_WAIT_SECONDS
+    opened = 0
+    reloaded = False
     while True:
         state = _token_state(account)
-        if state is None and not opened:
-            open_tab(account)
-            opened = True
-        elif state is not None and state["state"] == "ok":
+        if state is None:
+            if opened == 0 or (opened == 1 and time.monotonic() - started > TAB_WAIT_SECONDS / 2):
+                open_tab(account)
+                opened += 1
+        elif state["state"] == "ok":
             if state["user"] != account["sign_in"].lower():
                 raise PermissionError(
                     f"the open Outlook tab is signed in as {state['user'] or 'nobody'}, not {account['sign_in']} - "
@@ -224,30 +279,40 @@ def ensure_session(account):
             if state["expires"] - state["now"] > TOKEN_MARGIN_SECONDS:
                 return state
             if not reloaded:
-                _on_tab(account, 'tell tb to reload\nreturn "reloaded"')
+                run_js(account, "setTimeout(() => location.reload(), 0); 'reloading'")
                 reloaded = True
         if time.monotonic() > deadline:
             raise RuntimeError(
                 f"no signed-in Outlook tab for {account['address']} in {account['browser']} after "
-                f"{TAB_WAIT_SECONDS}s - open {OPEN_URL} in the profile {account['profile']} and sign in"
+                f"{TAB_WAIT_SECONDS}s (opened {opened}) - open {OPEN_URL} in the profile {account['profile']} "
+                "and sign in"
             )
         time.sleep(2)
 
 
-def request(account, method, url, body=None, headers=None):
-    """One Outlook REST call made from inside the tab. Returns the decoded JSON (or None for an empty reply)."""
+class TabLost(RuntimeError):
+    """The tab a request was started in stopped answering before the reply came back."""
+
+
+def _request_once(account, method, url, body, headers):
     ensure_session(account)
     identifier = uuid.uuid4().hex
     spec = {"id": identifier, "method": method, "url": url, "body": body, "headers": headers or {}}
     started = run_js(account, REQUEST_JS.replace("SCOPE", TOKEN_SCOPE).replace("REQUEST", json.dumps(spec)))
     if started != "started":
         raise RuntimeError(f"the Outlook tab did not start the request ({started})")
+    # the reply lands in that tab's page; any other tab answering the poll means it is lost
+    tab_id = _tab["id"]
     deadline = time.monotonic() + REQUEST_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         time.sleep(POLL_SECONDS)
-        raw = run_js(account, f"JSON.stringify((window.__outlookweb || {{}})['{identifier}'] || null)")
-        result = json.loads(raw) if raw not in ("", "NO_TAB") else None
-        if result and result["done"]:
+        raw = _on_tab(account, f"execute tb javascript {_applescript_string(POLL_JS.replace('ID', identifier))}")
+        if raw == UNAVAILABLE or _tab["id"] != tab_id:
+            raise TabLost(f"the Outlook tab went to sleep during {method} {url.split('?')[0]}")
+        result = json.loads(raw)
+        if result is None:
+            raise TabLost(f"the Outlook tab reloaded during {method} {url.split('?')[0]}")
+        if result["done"]:
             run_js(account, f"delete window.__outlookweb['{identifier}']; 'ok'")
             if not 200 <= result["status"] < 300:
                 raise RuntimeError(
@@ -255,6 +320,28 @@ def request(account, method, url, body=None, headers=None):
                 )
             return json.loads(result["text"]) if result["text"].strip() else None
     raise RuntimeError(f"Outlook did not answer {method} {url.split('?')[0]} within {REQUEST_TIMEOUT_SECONDS}s")
+
+
+POLL_JS = "JSON.stringify((window.__outlookweb || {})['ID'] || null)"
+
+
+def request(account, method, url, body=None, headers=None):
+    """
+    One Outlook REST call made from inside the tab. Returns the decoded JSON
+    (or None for an empty reply). A read whose tab went to sleep mid-call is
+    run again in a fresh one; a write is not, since it may have landed, and
+    says so instead.
+    """
+    attempts = 3 if method == "GET" else 1
+    for attempt in range(attempts):
+        try:
+            return _request_once(account, method, url, body, headers)
+        except TabLost as error:
+            if attempt + 1 == attempts:
+                if method != "GET":
+                    raise TabLost(f"{error}; it may have been applied, so read it back before retrying") from error
+                raise
+    raise AssertionError("unreachable")
 
 
 def get_all(account, url, headers=None, limit=None):

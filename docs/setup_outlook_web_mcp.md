@@ -22,6 +22,14 @@ in its localStorage. Each call runs JavaScript inside the tab over AppleScript
 leaves the browser and nothing is stored on disk. The tab refreshes its own
 token; one about to expire gets the tab reloaded once.
 
+macOS and Edge put background tabs to sleep, and a sleeping tab takes no
+script: it only times out. Each call goes to the tab that answered last, skips
+any tab that does not answer within 5 seconds (remembered for the rest of the
+process), and when no Outlook tab is open and awake it opens a fresh one in
+the configured profile and waits for it to sign in. A read whose tab falls
+asleep mid-call runs again; a write does not, since it may have landed, and
+says to read it back first.
+
 ## Registering it
 
 Each credentials repo that needs it declares its own instance, pinned with
