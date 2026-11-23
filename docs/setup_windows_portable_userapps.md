@@ -59,7 +59,14 @@ What the block does, in order:
 2. Prepends `System32`, then each `userapps` entry, then the MSYS2 bins — so
    MSYS2 wins, then the portable tools, then the system copies.
 3. Skips anything not on disk and says so, rather than failing.
-4. Sets the toolchain state vars: `RUSTUP_HOME`, `CARGO_HOME`, `GOPATH`,
+4. Moves `C:\Windows\System32\OpenSSH` back to the very front. The `msys2`
+   package list installs `openssh` (for MSYS2's rsync), and with MSYS2 first a
+   plain `ssh` in PowerShell becomes MSYS2's, which looks for keys and
+   `known_hosts` under `/home/<user>/.ssh` instead of `%USERPROFILE%\.ssh`,
+   finds none and asks for a password. `db_home: windows` in nsswitch.conf did
+   not change that on a domain account. MSYS2's own shells keep `/usr/bin` first
+   on their PATH, so rsync there still gets MSYS2's ssh.
+5. Sets the toolchain state vars: `RUSTUP_HOME`, `CARGO_HOME`, `GOPATH`,
    `GOCACHE`, and `CC=gcc`.
 
 Generic form, as it stands. A new locked-down machine starts from this, with
@@ -126,6 +133,11 @@ if ($env:COMPUTERNAME -eq 'WORK-LAPTOP') {
             $env:Path = "$p;$env:Path"
         }
     }
+
+    # Windows OpenSSH ahead of MSYS2's ssh, which reads keys from /home/<user>/.ssh
+    $openSsh = 'C:\Windows\System32\OpenSSH'
+    $rest = ($env:Path -split ';') | Where-Object { $_ -and ($_.TrimEnd('\') -ne $openSsh) }
+    $env:Path = (@($openSsh) + $rest) -join ';'
     Remove-Item Env:\GIT_SSH -ErrorAction SilentlyContinue
 
     # Set CC to gcc so anything with a C build step picks up MSYS2's MinGW
@@ -146,11 +158,15 @@ this is current.
 ## Adding a tool
 
 Extract it into `%USERPROFILE%\userapps\<folder>`, add one line to
-`$userappPaths` in that shard, commit the credentials repo, pull it on the
-machine, restart PowerShell. Tools whose folder name carries a version go
+`$userappPaths` in that shard, commit the credentials repo, run `pullrepos`
+(`src/refresh_machine.py`) on the machine, restart PowerShell. Not a bare
+`git pull`: the shard is deployed as a hard link on a locked-down machine, the
+pull orphans it, and the old copy keeps loading until the deploy step
+re-links it. Tools whose folder name carries a version go
 through `Get-NewestUserApp` instead of a literal string.
 
 ## Verifying
 
 Restart PowerShell (and VS Code) after a pull, then `where.exe <tool>` — it
 should resolve under `userapps`, not to a Store shim or a system copy.
+`(Get-Command ssh).Source` should be `C:\Windows\System32\OpenSSH\ssh.exe`.

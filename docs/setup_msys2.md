@@ -86,3 +86,4 @@ C:\msys64\usr\bin\bash.exe -lc "tmux attach" # reattach after disconnect
 - MSYS2 on this host is user-scope and requires no admin to install/update packages.
 - The mingw-w64-x86_64-* packages install Windows-native binaries to C:\msys64\mingw64\bin\ which is on PATH via $PROFILE.
 - Core Unix utilities (less, grep, sed, etc.) live in C:\msys64\usr\bin\ which is also on PATH.
+- The list's `openssh` puts an `ssh.exe` in C:\msys64\usr\bin\. A PowerShell PATH that puts that folder ahead of `C:\Windows\System32\OpenSSH` makes plain `ssh` MSYS2's, which reads `/home/<user>/.ssh` and asks for a password; keep Windows OpenSSH first (see [setup_windows_portable_userapps.md](./setup_windows_portable_userapps.md)).
