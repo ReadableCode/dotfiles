@@ -2798,3 +2798,22 @@ def test_bb_find_member_lists_near_names_when_nothing_matches(monkeypatch):
     assert user is None
     assert near == ["Alex Rivera (alexr)"]
     assert ticket_pr.bb_find_member("acme", {}, "nobody") == (None, [])
+
+
+def test_bb_resolve_pr_by_branch_refetches_for_reviewers(monkeypatch):
+    # The list endpoint omits reviewers; the PR found by branch has to be
+    # fetched again by id, or a requested reviewer reads as no reviewers.
+    calls = []
+
+    def fake_http(method, url, headers, **kwargs):
+        calls.append(url)
+        if "?q=" in url:
+            return {"values": [{"id": 4, "title": "listed"}]}
+        return {"id": 4, "title": "full", "reviewers": [{"display_name": "Sam Reviewer"}]}
+
+    monkeypatch.setattr(ticket_pr, "http_json", fake_http)
+    monkeypatch.setattr(ticket_pr, "git_output", lambda *a: "ACME-1-branch")
+    pull = ticket_pr.bb_resolve_pr("acme/repo", {}, None)
+    assert pull["reviewers"] == [{"display_name": "Sam Reviewer"}]
+    assert calls[-1].endswith("/repositories/acme/repo/pullrequests/4")
+    assert ticket_pr.review_rollup_bitbucket(pull)["awaiting"] == ["Sam Reviewer"]

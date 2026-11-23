@@ -663,16 +663,20 @@ def bb_paginate(url, headers):
 
 
 def bb_resolve_pr(repo, headers, number):
-    """Fetch the Bitbucket PR by id, or find the open PR for the current branch."""
+    """Fetch the Bitbucket PR by id, or find the open PR for the current branch.
+
+    The list endpoint leaves reviewers and participants out of each PR, so a
+    PR found by branch is fetched again by id to get the whole record.
+    """
     base_url = f"{BITBUCKET_API}/repositories/{repo}/pullrequests"
-    if number:
-        return http_json("GET", f"{base_url}/{number}", headers)
-    branch = git_output("rev-parse", "--abbrev-ref", "HEAD")
-    query = urllib.parse.urlencode({"q": f'source.branch.name = "{branch}" AND state = "OPEN"'})
-    pulls = list(bb_paginate(f"{base_url}?{query}", headers))
-    if not pulls:
-        raise SystemExit(f"no open PR found for branch {branch!r} in {repo}")
-    return pulls[0]
+    if not number:
+        branch = git_output("rev-parse", "--abbrev-ref", "HEAD")
+        query = urllib.parse.urlencode({"q": f'source.branch.name = "{branch}" AND state = "OPEN"'})
+        pulls = list(bb_paginate(f"{base_url}?{query}", headers))
+        if not pulls:
+            raise SystemExit(f"no open PR found for branch {branch!r} in {repo}")
+        number = pulls[0]["id"]
+    return http_json("GET", f"{base_url}/{number}", headers)
 
 
 def bb_pr_url(pull, repo):
