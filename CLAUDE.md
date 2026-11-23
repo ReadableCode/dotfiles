@@ -117,6 +117,14 @@ is the one-paragraph orientation so an agent knows which file to open.
   its addresses in `<context>_macaccounts.yaml`. Needs Full Disk Access on the
   app launching Claude. Readers in `src/utils/macmcp_tools.py`. Doc:
   `docs/setup_mac_mcp.md`.
+- **`outlook_web_mcp.py`** - stdio MCP server over one Exchange mailbox and
+  calendar through the Outlook on the web tab signed in in a browser profile,
+  for a tenant that blocks consent once the account is no longer in Mail.app.
+  Runs JavaScript in the tab over AppleScript and calls the Outlook REST API
+  with the page's own token, which never leaves the browser. Same tool names
+  as the mac server's mail and calendar tools. Each credentials repo declares
+  `<context>_outlook_web` and names the account in `<context>_outlookweb.yaml`.
+  Code in `src/utils/outlookweb_tools.py`. Doc: `docs/setup_outlook_web_mcp.md`.
 - **`calendar_board.py`** — calendar TUI: Google Calendar and Outlook-on-the-web
   (Microsoft Graph) accounts as side-by-side day columns with attendance
   badges and cross-source overlap flags; sources from
